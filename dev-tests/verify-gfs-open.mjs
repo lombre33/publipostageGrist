@@ -13,7 +13,7 @@
 //   sans l'extension, un document en lecture seule : l'ordre habituel, sans message.
 //  « NOUVEAU > IMPORTER » (consigne 035 : `raison` `importer` et `importation: { valeur, fichier: File }`, js/gfs-link.js `normalizeOpening`, js/gfs-open.js, js/main.js `importFileFromGfs`) : l'importation est gardée pour cette
 //   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des six valeurs (Excel, Markdown, HTML, PowerPoint, Word, OpenDocument) lit SON fichier par le chemin
-//   du menu « + » (mêmes phrases du coin d'état, mêmes refus, même question d'enregistrement après une lecture réussie) et le modèle importé est sans nom, sans rien d'écrit, JAMAIS remplacé par un modèle vierge ; un fichier
+//   du menu « + » (mêmes phrases du coin d'état, mêmes refus, même question d'enregistrement après une lecture réussie) et le document importé est ENREGISTRÉ dans Grist sous le nom de son fichier (20/11 : « il doit s'enregistrer une fois complètement lu et reprendre le nom original » ; rien d'autre n'est écrit : ni ★, ni option de la vue), JAMAIS remplacé par un modèle vierge ; un fichier
 //   refusé, une valeur inconnue, une importation illisible, une personne qui annule ou un document en lecture seule : `{ ouvert: false }` ; au démarrage, le modèle habituel s'ouvre, « Widget prêt. » se dit, puis l'import suit
 //   (avant les appels `ouvrir` reçus pendant le démarrage) ; seule, rien ne change.
 //  SEUL (adresse sans `gfs=`) : rien n'est envoyé, aucun appel `ouvrir` n'est écouté, l'ordre d'arrivée est celui d'avant.
@@ -27,6 +27,7 @@
 // GFS_OPEN_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
 import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
+import { makeUnsaved } from './load-lib.mjs';
 
 const SHOTS = process.env.GFS_OPEN_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -85,6 +86,10 @@ const closeMacroModal = async (page) => {
 };
 // Ce que le faux Grist a reçu : les écritures dans la table des modèles (aucune ne doit partir d'une ouverture), les options de la vue.
 const writes = page => page.evaluate(() => ({ models: window.__gristStub.countActions('UpdateRecord', 'Publipostage_Modeles') + window.__gristStub.countActions('AddRecord', 'Publipostage_Modeles'), options: JSON.stringify(window.__gristStub.state.options) }));
+// Les six modèles d'avant (seedModels) n'ont pas bougé et le ★ est resté « Départ A défaut » : un import n'écrit que sa propre ligne.
+const seedsIntact = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; const rows = t.id.map((id, i) => ({ id, name: t.Nom[i], def: !!t.EstParDefaut[i] })); return rows.filter(r => r.id <= 6).map(r => r.name + (r.def ? '*' : '')).join('|') === 'Départ A défaut*|Départ B|Départ C|Départ E email|Départ M macro|Futur'; });
+// Les lignes que les imports ont ajoutées (après les six d'avant) : leur nom et la taille de leur texte, relus dans la table.
+const importedRows = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })).filter(r => r.id > 6); });
 // L'appel de GFS et sa réponse ; `sans-reponse` si l'app n'a rien répondu dans le délai.
 const ask = (page, args, name = 'ouvrir', ms = 6000) => page.evaluate(({ args, name, ms }) => Promise.race([window.__gfsStub.call(name, args), new Promise(r => setTimeout(() => r({ type: 'sans-reponse' }), ms))]), { args, name, ms });
 const answers = page => page.evaluate(() => window.__gfsStub.answers.slice());
@@ -165,12 +170,20 @@ const pressDialog = async (page, label) => {
 const waitStatus = (page, pattern, ms = 40000) => page.waitForFunction(source => new RegExp(source).test(document.getElementById('status-msg').textContent), pattern.source, { timeout: ms }).catch(() => {});
 // Les phrases du coin d'état d'un import réussi ou refusé (js/i18n.js), identiques à celles du menu « + ».
 const IMPORTED = {
-  markdown: { fr: 'Markdown importé. Nommez le document puis enregistrez-le.', en: 'Markdown imported. Name the document, then save it.' },
-  excel: { fr: 'Excel importé : 3 lignes, 2 colonnes. Nommez le document puis enregistrez-le.', en: 'Excel imported: 3 rows, 2 columns. Name the document, then save it.' },
-  powerpoint: { fr: 'PowerPoint importé : 2 diapositives. Nommez le document puis enregistrez-le.', en: 'PowerPoint imported: 2 slides. Name the document, then save it.' },
-  word: { fr: 'Word importé. Nommez le document puis enregistrez-le.', en: 'Word imported. Name the document, then save it.' },
-  html: { fr: 'HTML importé. Nommez le document puis enregistrez-le.', en: 'HTML imported. Name the document, then save it.' },
-  opendocument: { fr: 'OpenDocument importé. Nommez le document puis enregistrez-le.', en: 'OpenDocument imported. Name the document, then save it.' },
+  markdown: { fr: 'Markdown importé.', en: 'Markdown imported.' },
+  excel: { fr: 'Excel importé : 3 lignes, 2 colonnes.', en: 'Excel imported: 3 rows, 2 columns.' },
+  powerpoint: { fr: 'PowerPoint importé : 2 diapositives.', en: 'PowerPoint imported: 2 slides.' },
+  word: { fr: 'Word importé.', en: 'Word imported.' },
+  html: { fr: 'HTML importé.', en: 'HTML imported.' },
+  opendocument: { fr: 'OpenDocument importé.', en: 'OpenDocument imported.' },
+};
+// Le nom que prend l'import : celui du fichier de GFS, sans l'extension (« nom (2) » quand il est déjà pris dans le document).
+const BASE = { markdown: 'note', excel: 'ventes', powerpoint: 'bilan', word: 'bilan', opendocument: 'bilan', html: 'page' };
+const savedAs = (got, valeur) => got.current != null && got.list === String(got.current) && new RegExp('^' + BASE[valeur] + '( \\(\\d+\\))?$').test(got.name);
+// Le coin d'état d'un import enregistré : « Enregistré dans Grist sous « nom ». <la phrase du menu « + »> » (« … (le nom existait déjà) » quand le nom était pris).
+const savedStatus = (got, valeur, lang = 'fr') => {
+  const m = (lang === 'fr' ? /^Enregistré dans Grist sous « (.+?) »(?: \(le nom existait déjà\))?\. (.*)$/ : /^Saved to Grist as “(.+?)”(?: \(the name was already taken\))?\. (.*)$/).exec(got.status);
+  return !!m && m[1] === got.name && m[2] === IMPORTED[valeur][lang];
 };
 const REFUSED = {
   markdown: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
@@ -737,7 +750,8 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   const fixtures = await buildFixtures(page);
   SOURCES = { markdown: MARKDOWN, excel: { name: 'ventes.xlsx', mime: MIME.excel, base64: fixtures.xlsx }, powerpoint: { name: 'bilan.pptx', mime: MIME.powerpoint, base64: fixtures.deck }, word: { name: 'bilan.docx', mime: MIME.word, base64: fixtures.word }, opendocument: { name: 'bilan.odt', mime: MIME.opendocument, base64: fixtures.odt }, html: HTML_PAGE, zip: { name: 'page.zip', mime: MIME.zip, base64: fixtures.zip } };
   const installs = () => page.evaluate(() => window.__gfsStub.calls.filter(c => c.nom === 'installer').map(c => c.args));
-  const nothingWritten = async () => { const w = await writes(page); return w.models === 0 && w.options === 'null'; };
+  // Ce que l'import n'a PAS le droit d'écrire : le ★ (le modèle par défaut), les modèles d'avant, les options de la vue. Le document importé, lui, est écrit (une ligne chacun).
+  const nothingWritten = async () => { const w = await writes(page); return w.options === 'null' && await seedsIntact(page); };
   const blanksOpened = state => state.opened.filter(id => id === 'null').length;
 
   let before = await importState(page);
@@ -746,19 +760,21 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   // Markdown, rien n'attend : l'import se fait tout de suite.
   let reply = await askImport(page, 'markdown', SOURCES.markdown);
   let got = await importState(page);
-  check('markdown : `{ ouvert: true }` avec l’`id` de l’appel, le document importé est à l’écran : sans nom, sans modèle courant, le texte du fichier', reply.type === 'reponse' && reply.gfs === 0 && Number.isInteger(reply.id) && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && got.text === MARKDOWN_TEXT && !got.grid, { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « Markdown importé. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.markdown.fr, got);
+  check('markdown : `{ ouvert: true }` avec l’`id` de l’appel, le document importé est à l’écran : enregistré sous le nom du fichier (« note »), choisi dans la liste, le texte du fichier', reply.type === 'reponse' && reply.gfs === 0 && Number.isInteger(reply.id) && reply.data.ouvert === true && savedAs(got, 'markdown') && got.text === MARKDOWN_TEXT && !got.grid, { reply, got });
+  check('le coin d’état commence par l’enregistrement (« Enregistré dans Grist sous « note ». ») puis dit la phrase du menu « + » : « Markdown importé. »', savedStatus(got, 'markdown'), got);
   check('le fichier reçu est lu tel quel, sans sélecteur : une lecture, celle de note.md, aucun clic sur un champ de fichier, aucun champ dans la page', got.mdReads.length === 1 && got.mdReads[0].name === 'note.md' && got.mdReads[0].size === new TextEncoder().encode(MARKDOWN.text).length && got.picker === 0 && got.fileInputs === 0, got);
   check('aucun modèle vierge n’a été ouvert à la place (« Nouveau » du type n’est pas ce que GFS demande) : un seul modèle sans identifiant est passé par `setCurrentId`, celui de l’import', blanksOpened(got) === 1, got.opened);
-  check('rien n’est écrit avant le premier « Enregistrer » : ni modèle, ni ★, ni option de la vue', await nothingWritten(), await writes(page));
+  const rowsMd = await importedRows(page);
+  check('le document importé est écrit dans Grist, relu : une ligne de plus sous le nom « note », et rien d’autre (ni ★ changé, ni modèle d’avant touché, ni option de la vue)', rowsMd.length === 1 && rowsMd[0].name === 'note' && rowsMd[0].length > 20 && await nothingWritten(), { rowsMd, writes: await writes(page) });
 
   // Excel : le modèle importé attend d'être enregistré, la question se pose après la lecture réussie.
+  await makeUnsaved(page);   // le nom retapé : le document enregistré par son import est de nouveau « à enregistrer »
   let pending = askImport(page, 'excel', SOURCES.excel);
   await waitDialog(page);
   let d = await dialogOf(page);
   got = await importState(page);
   await sleep(600);
-  check('excel, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture du classeur, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom)', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text === MARKDOWN_TEXT, { d, got });
+  check('excel, avec le document importé modifié depuis : la question se pose APRÈS la lecture du classeur, dans le panneau, avec « Annuler » et « Ne pas enregistrer » (et « Enregistrer », le document ayant un nom)', d.open && d.inPanel && ['Annuler', 'Ne pas enregistrer', 'Enregistrer'].every(l => d.buttons.some(b => b.label === l)) && got.text === MARKDOWN_TEXT, { d, got });
   check('GFS n’a pas de réponse tant que la personne n’a pas choisi (pas de délai)', (await answers(page)).length === 1, await answers(page));
   await pressDialog(page, 'Annuler');
   reply = await pending;
@@ -770,9 +786,9 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   await pressDialog(page, 'Ne pas enregistrer');
   reply = await pending;
   got = await importState(page);
-  check('« Ne pas enregistrer » : `{ ouvert: true }`, la grille du classeur est à l’écran avec ses cases, sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.grid && got.current == null && got.name === '' && ['Produit', 'Quantité', 'Vis', '12', 'Clou', '7'].every(text => got.cells.includes(text)), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « Excel importé : 3 lignes, 2 colonnes. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.excel.fr, got);
-  check('aucun sélecteur de fichier, aucune lecture Markdown de plus, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && got.mdReads.length === 1 && await nothingWritten(), got);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, la grille du classeur est à l’écran avec ses cases, enregistrée sous « ventes »', reply.type === 'reponse' && reply.data.ouvert === true && got.grid && savedAs(got, 'excel') && ['Produit', 'Quantité', 'Vis', '12', 'Clou', '7'].every(text => got.cells.includes(text)), { reply, got });
+  check('le coin d’état commence par l’enregistrement sous « ventes » puis dit la phrase du menu « + » : « Excel importé : 3 lignes, 2 colonnes. »', savedStatus(got, 'excel'), got);
+  check('aucun sélecteur de fichier, aucune lecture Markdown de plus, rien d’écrit de plus que les documents importés (ni ★, ni modèle d’avant, ni option de la vue)', got.picker === 0 && got.fileInputs === 0 && got.mdReads.length === 1 && await nothingWritten(), got);
 
   // PowerPoint, l'extension « diapositives » étant éteinte : refusé proprement, comme le menu qui explique.
   reply = await askImport(page, 'powerpoint', SOURCES.powerpoint);
@@ -781,22 +797,24 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   check('… et GFS reçoit la demande d’installation de l’extension, comme au clic de la ligne grisée du menu « + »', JSON.stringify(await installs()) === JSON.stringify([{ extension: 'diapositives' }]), await installs());
   await page.evaluate(() => window.__gfsStub.setExtensions(['graphique', 'diapositives']));
   await page.waitForFunction(() => SlidesEntry.isAvailable(), null, { timeout: 4000 });
+  await makeUnsaved(page);
   pending = askImport(page, 'powerpoint', SOURCES.powerpoint);
   await waitDialog(page);
   await pressDialog(page, 'Ne pas enregistrer');
   reply = await pending;
   got = await importState(page);
-  check('powerpoint, l’extension étant active : `{ ouvert: true }`, la présentation est à l’écran avec la bande de ses deux diapositives, sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.strip && got.slides === 2 && got.current == null && got.name === '' && /Bilan GFS/.test(got.text) && /Suite/.test(got.text) && !got.grid, { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « PowerPoint importé : 2 diapositives. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.powerpoint.fr, got);
-  check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
+  check('powerpoint, l’extension étant active : `{ ouvert: true }`, la présentation est à l’écran avec la bande de ses deux diapositives, enregistrée sous « bilan »', reply.type === 'reponse' && reply.data.ouvert === true && got.strip && got.slides === 2 && savedAs(got, 'powerpoint') && /Bilan GFS/.test(got.text) && /Suite/.test(got.text) && !got.grid, { reply, got });
+  check('le coin d’état commence par l’enregistrement sous « bilan » puis dit la phrase du menu « + » : « PowerPoint importé : 2 diapositives. »', savedStatus(got, 'powerpoint'), got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit de plus que les documents importés', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
 
   // Un fichier refusé : `{ ouvert: false }`, la phrase du menu « + » en erreur, et aucune question même quand le modèle attend d'être enregistré (« un fichier refusé ne coûte rien »).
+  await makeUnsaved(page);
   for (const [valeur, src, label] of [['markdown', EMPTY_MARKDOWN, 'un Markdown vide'], ['excel', NOT_A_BOOK, 'un fichier qui n’est pas un classeur'], ['powerpoint', NOT_A_DECK, 'un fichier qui n’est pas une présentation']]) {
     reply = await askImport(page, valeur, src);
     got = await importState(page);
     check(`${label} : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED[valeur]} » en erreur, la présentation importée reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED[valeur] && got.statusClass === 'error-msg' && got.slides === 2 && /Bilan GFS/.test(got.text) && !(await dialogOf(page)).open, { reply, got });
   }
-  check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', (await importState(page)).picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
+  check('aucun sélecteur de fichier, rien d’écrit de plus (trois documents importés : « note », « ventes », « bilan »), aucune boîte native', (await importState(page)).picker === 0 && await nothingWritten() && (await importedRows(page)).map(r => r.name).join('|') === 'note|ventes|bilan' && o.natives.length === 0, { natives: o.natives, rows: await importedRows(page) });
 
   // Ce que l'app ne sait pas importer : rien ne s'ouvre, et JAMAIS un modèle vierge à la place (il ferait perdre le fichier sans un mot).
   before = await importState(page);
@@ -811,6 +829,7 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   }
 
   // Une autre raison avec une importation : l'importation n'est pas lue, c'est « Nouveau » du type comme avant (la question se pose, le présentation attend d'être enregistrée).
+  await makeUnsaved(page);
   pending = askImport(page, 'markdown', MARKDOWN, { raison: 'nouveau' });
   await waitDialog(page);
   await pressDialog(page, 'Ne pas enregistrer');
@@ -836,12 +855,13 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   const wordSize = Buffer.from(SOURCES.word.base64, 'base64').length;
   const answeredBefore = (await answers(page)).length;
   const blanksBefore = blanksOpened(await importState(page));
+  await makeUnsaved(page);
   pending = askImport(page, 'word', SOURCES.word);
   await waitDialog(page);
   d = await dialogOf(page);
   got = await importState(page);
   await sleep(600);
-  check('word, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture du fichier, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom), le document reste', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text === MARKDOWN_TEXT, { d, got });
+  check('word, avec le document modifié depuis son import : la question se pose APRÈS la lecture du fichier, dans le panneau, avec « Annuler » et « Ne pas enregistrer » (et « Enregistrer »), le document reste', d.open && d.inPanel && ['Annuler', 'Ne pas enregistrer', 'Enregistrer'].every(l => d.buttons.some(b => b.label === l)) && got.text === MARKDOWN_TEXT, { d, got });
   check('… et le fichier reçu est lu tel quel, une seule fois, sans sélecteur', JSON.stringify(await wordReads()) === JSON.stringify([{ name: 'bilan.docx', size: wordSize }]) && got.picker === 0 && got.fileInputs === 0, { reads: await wordReads(), got });
   check('GFS n’a pas de réponse tant que la personne n’a pas choisi (pas de délai)', (await answers(page)).length === answeredBefore, await answers(page));
   await pressDialog(page, 'Annuler');
@@ -854,27 +874,29 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   await pressDialog(page, 'Ne pas enregistrer');
   reply = await pending;
   got = await importState(page);
-  check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier Word est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « Word importé. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.word.fr, got);
-  check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
-  check('un seul modèle sans identifiant de plus est passé par `setCurrentId` (celui de l’import) : « Nouveau » du type n’est pas ce que GFS demande', blanksOpened(got) === blanksBefore + 1, got.opened);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier Word est à l’écran (son titre et son texte), enregistré sous « bilan »', reply.type === 'reponse' && reply.data.ouvert === true && savedAs(got, 'word') && !got.grid && got.slides === 0 && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT), { reply, got });
+  check('le coin d’état commence par l’enregistrement sous « bilan » puis dit la phrase du menu « + » : « Word importé. »', savedStatus(got, 'word'), got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport (le fichier est repris en entier), rien d’écrit de plus que les documents importés', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten(), got);
+  check('un seul modèle sans identifiant de plus est passé par `setCurrentId` (celui de l’import, avant son enregistrement) : « Nouveau » du type n’est pas ce que GFS demande', blanksOpened(got) === blanksBefore + 1, got.opened);
 
   // Un fichier Word refusé : `{ ouvert: false }`, la phrase du menu « + » en erreur, aucune question même quand le document attend d'être enregistré.
+  await makeUnsaved(page);
   reply = await askImport(page, 'word', NOT_A_DOC);
   got = await importState(page);
   check(`un fichier qui n’est pas un document Word : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED.word} » en erreur, le document Word reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED.word && got.statusClass === 'error-msg' && got.text.includes(WORD_TEXT) && !(await dialogOf(page)).open, { reply, got });
-  check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', got.picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
+  check('aucun sélecteur de fichier, rien d’écrit de plus que les documents importés, aucune boîte native', got.picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
 
   // HTML (13/11, la valeur `html` que GFS déclare dans `actions.importer`) : lu par le chemin de la ligne « Importer un HTML… » du menu « + », sans extension à installer. Le document Word importé attend d'être
   // enregistré : la question se pose APRÈS la lecture du fichier, et un fichier refusé ne coûte rien.
   const htmlAnsweredBefore = (await answers(page)).length;
   const htmlBlanksBefore = blanksOpened(await importState(page));
+  await makeUnsaved(page);
   pending = askImport(page, 'html', SOURCES.html);
   await waitDialog(page);
   d = await dialogOf(page);
   got = await importState(page);
   await sleep(600);
-  check('html, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture de la page, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom), le document reste', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text.includes(WORD_TEXT) && !got.text.includes(HTML_TEXT), { d, got });
+  check('html, avec le document Word modifié depuis son import : la question se pose APRÈS la lecture de la page, dans le panneau, avec « Annuler » et « Ne pas enregistrer » (et « Enregistrer »), le document reste', d.open && d.inPanel && ['Annuler', 'Ne pas enregistrer', 'Enregistrer'].every(l => d.buttons.some(b => b.label === l)) && got.text.includes(WORD_TEXT) && !got.text.includes(HTML_TEXT), { d, got });
   check('GFS n’a pas de réponse tant que la personne n’a pas choisi (pas de délai), aucun sélecteur', (await answers(page)).length === htmlAnsweredBefore && got.picker === 0 && got.fileInputs === 0, await answers(page));
   await pressDialog(page, 'Annuler');
   reply = await pending;
@@ -886,20 +908,22 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   await pressDialog(page, 'Ne pas enregistrer');
   reply = await pending;
   got = await importState(page);
-  check('« Ne pas enregistrer » : `{ ouvert: true }`, la page est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « HTML importé. Nommez le document puis enregistrez-le. »', got.status === IMPORTED.html.fr, got);
-  check('aucun sélecteur de fichier, aucune fenêtre de rapport (la page est reprise en entier), rien d’écrit, un seul modèle sans identifiant de plus', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten() && blanksOpened(got) === htmlBlanksBefore + 1, got);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, la page est à l’écran (son titre et son texte), enregistrée sous « page »', reply.type === 'reponse' && reply.data.ouvert === true && savedAs(got, 'html') && !got.grid && got.slides === 0 && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT), { reply, got });
+  check('le coin d’état commence par l’enregistrement sous « page » puis dit la phrase du menu « + » : « HTML importé. »', savedStatus(got, 'html'), got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport (la page est reprise en entier), rien d’écrit de plus que les documents importés, un seul modèle sans identifiant de plus', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(page)).open && await nothingWritten() && blanksOpened(got) === htmlBlanksBefore + 1, got);
 
   // L'archive ZIP de la page (la page et son dossier d'images) arrive par la MÊME valeur `html` : l'app la reconnaît à ses premiers octets, pas à son extension.
+  await makeUnsaved(page);
   pending = askImport(page, 'html', SOURCES.zip, {}, 30000);
   await waitDialog(page);
   await pressDialog(page, 'Ne pas enregistrer');
   reply = await pending;
   got = await importState(page);
-  check('html, une archive ZIP : `{ ouvert: true }`, la page de l’archive est à l’écran avec son image reprise (une image en base 64, celle du dossier `images`), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.name === '' && got.text.includes('Archive HTML de GFS') && got.text.includes(ZIP_TEXT) && got.images === 1, { reply, got });
-  check('le coin d’état dit la même phrase, aucune fenêtre de rapport, aucun sélecteur, rien d’écrit', got.status === IMPORTED.html.fr && !(await dialogOf(page)).open && got.picker === 0 && await nothingWritten(), got);
+  check('html, une archive ZIP : `{ ouvert: true }`, la page de l’archive est à l’écran avec son image reprise (une image en base 64, celle du dossier `images`), enregistrée sous le nom de l’archive (« page »)', reply.type === 'reponse' && reply.data.ouvert === true && savedAs(got, 'html') && got.text.includes('Archive HTML de GFS') && got.text.includes(ZIP_TEXT) && got.images === 1, { reply, got });
+  check('le coin d’état dit la même phrase après l’enregistrement, aucune fenêtre de rapport, aucun sélecteur, rien d’écrit de plus que les documents importés', savedStatus(got, 'html') && !(await dialogOf(page)).open && got.picker === 0 && await nothingWritten(), got);
 
   // Un fichier refusé : `{ ouvert: false }`, la phrase du menu « + » en erreur, aucune question même quand le document attend d'être enregistré, le document de l'archive reste.
+  await makeUnsaved(page);
   for (const [label, src, sentence] of [['une archive qui n’en est pas une', NOT_A_ZIP, REFUSED.html], ['une page vide', EMPTY_HTML, REFUSED.htmlEmpty]]) {
     reply = await askImport(page, 'html', src);
     got = await importState(page);
@@ -907,20 +931,22 @@ console.log('\n== « Nouveau > Importer » : l’appel `ouvrir` avec le fichier 
   }
   // OpenDocument (17/11, la valeur `opendocument` que GFS déclare dans `actions.importer`) : lu par le chemin de la ligne « Importer un OpenDocument… » du menu « + », sans extension à installer. Le document de l'archive HTML
   // attend d'être enregistré : la question se pose APRÈS la lecture du fichier, et un fichier refusé ne coûte rien.
+  await makeUnsaved(page);
   pending = askImport(page, 'opendocument', SOURCES.opendocument);
   await waitDialog(page);
   d = await dialogOf(page);
   got = await importState(page);
-  check('opendocument, avec le document importé qui attend d’être enregistré : la question se pose APRÈS la lecture du fichier, dans le panneau, sans « Enregistrer » (le modèle n’a pas de nom), le document reste', d.open && d.inPanel && d.buttons.map(b => b.label).join('|') === 'Annuler|Ne pas enregistrer' && got.text.includes(ZIP_TEXT) && !got.text.includes(ODT_TEXT), { d, got });
+  check('opendocument, avec le document de l’archive modifié depuis son import : la question se pose APRÈS la lecture du fichier, dans le panneau, avec « Annuler » et « Ne pas enregistrer » (et « Enregistrer »), le document reste', d.open && d.inPanel && ['Annuler', 'Ne pas enregistrer', 'Enregistrer'].every(l => d.buttons.some(b => b.label === l)) && got.text.includes(ZIP_TEXT) && !got.text.includes(ODT_TEXT), { d, got });
   await pressDialog(page, 'Ne pas enregistrer');
   reply = await pending;
   got = await importState(page);
-  check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant', reply.type === 'reponse' && reply.data.ouvert === true && got.current == null && got.list === '' && got.name === '' && !got.grid && got.slides === 0 && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT), { reply, got });
-  check('le coin d’état dit la phrase du menu « + » : « OpenDocument importé. Nommez le document puis enregistrez-le. », aucune fenêtre de rapport (rien n’est resté de côté), aucun sélecteur, rien d’écrit', got.status === IMPORTED.opendocument.fr && !(await dialogOf(page)).open && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(), got);
+  check('« Ne pas enregistrer » : `{ ouvert: true }`, le document du fichier est à l’écran (son titre et son texte), enregistré sous « bilan »', reply.type === 'reponse' && reply.data.ouvert === true && savedAs(got, 'opendocument') && !got.grid && got.slides === 0 && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT), { reply, got });
+  check('le coin d’état commence par l’enregistrement sous « bilan » puis dit la phrase du menu « + » : « OpenDocument importé. », aucune fenêtre de rapport (rien n’est resté de côté), aucun sélecteur, rien d’écrit de plus que les documents importés', savedStatus(got, 'opendocument') && !(await dialogOf(page)).open && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(), got);
+  await makeUnsaved(page);
   reply = await askImport(page, 'opendocument', NOT_AN_ODT);
   got = await importState(page);
   check(`un fichier qui n’est pas un OpenDocument : \`{ ouvert: false }\`, le coin d’état dit « ${REFUSED.opendocument} » en erreur, le document reste, aucune question`, reply.type === 'reponse' && reply.data.ouvert === false && got.status === REFUSED.opendocument && got.statusClass === 'error-msg' && got.text.includes(ODT_TEXT) && !(await dialogOf(page)).open, { reply, got });
-  check('aucun sélecteur de fichier, rien d’écrit, aucune boîte native', (await importState(page)).picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
+  check('aucun sélecteur de fichier, rien d’écrit de plus que les documents importés, aucune boîte native', (await importState(page)).picker === 0 && await nothingWritten() && o.natives.length === 0, o.natives);
   await o.context.close();
 
   // Un document en lecture seule refuse, sans même lire le fichier.
@@ -951,92 +977,92 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
     return o;
   };
   const SLIDES = ['graphique', 'diapositives'];
-  const nothingWritten = async page => { const w = await writes(page); return w.models === 0 && w.options === 'null'; };
+  const nothingWritten = async page => { const w = await writes(page); return w.options === 'null' && await seedsIntact(page); };
   const usualOrder = (got, label) => check(`${label} : l’ordre habituel reste (le ★ « Départ A défaut »), aucun modèle vierge n’a pris sa place`, got.name === 'Départ A défaut' && String(got.current) === '1' && got.opened.join() === '1', got);
 
   let o = await startImporting('markdown', SOURCES.markdown);
-  await waitStatus(o.page, /^Markdown importé/);
+  await waitStatus(o.page, /Markdown importé/);
   let got = await importState(o.page);
-  check('markdown : le document du fichier est à l’écran, sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text === MARKDOWN_TEXT && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « Markdown importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.markdown.fr, got);
-  check('le fichier reçu est lu tel quel, sans sélecteur, rien d’écrit', got.mdReads.length === 1 && got.mdReads[0].name === 'note.md' && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
+  check('markdown : le document du fichier est à l’écran, enregistré sous « note » (le ★ s’était ouvert avant, l’import a suivi)', savedAs(got, 'markdown') && got.text === MARKDOWN_TEXT && /^1,null,\d+$/.test(got.opened.join()), got);
+  check('le coin d’état dit « Enregistré dans Grist sous « note ». Markdown importé. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', savedStatus(got, 'markdown'), got);
+  check('le fichier reçu est lu tel quel, sans sélecteur, rien d’écrit de plus que le document importé (une ligne « note », ni ★ ni modèle d’avant touché)', (await importedRows(o.page)).map(r => r.name).join('|') === 'note' && got.mdReads.length === 1 && got.mdReads[0].name === 'note.md' && got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
   check('GFS a reçu l’appel `contexte` et rien d’autre (hors le `relais` du kit, `securite`) : ni appel, ni réponse', JSON.stringify(await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom).filter(nom => nom !== 'securite'))) === JSON.stringify(['contexte']) && (await answers(o.page)).length === 0, await o.page.evaluate(() => window.__gfsStub.calls.map(c => c.nom)));
   check('`GfsLink.opening()` garde l’importation (une valeur, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'markdown' && i.fichier instanceof File && i.fichier.name === 'note.md'; }));
   await o.context.close();
 
   o = await startImporting('excel', SOURCES.excel);
-  await waitStatus(o.page, /^Excel importé/);
+  await waitStatus(o.page, /Excel importé/);
   got = await importState(o.page);
-  check('excel : la grille du classeur est à l’écran, sans nom ni modèle courant, avec ses cases et la phrase du menu « + »', got.grid && got.current == null && got.name === '' && ['Produit', 'Quantité', 'Vis', '12', 'Clou', '7'].every(text => got.cells.includes(text)) && got.status === IMPORTED.excel.fr, got);
-  check('aucun sélecteur de fichier, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
+  check('excel : la grille du classeur est à l’écran, enregistrée sous « ventes », avec ses cases et la phrase du menu « + »', got.grid && savedAs(got, 'excel') && ['Produit', 'Quantité', 'Vis', '12', 'Clou', '7'].every(text => got.cells.includes(text)) && savedStatus(got, 'excel'), got);
+  check('aucun sélecteur de fichier, rien d’écrit de plus que le document importé', got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
   await o.context.close();
 
   o = await startImporting('powerpoint', SOURCES.powerpoint, { extensions: SLIDES });
-  await waitStatus(o.page, /^PowerPoint importé/);
+  await waitStatus(o.page, /PowerPoint importé/);
   got = await importState(o.page);
-  check('powerpoint (extension active) : la présentation est à l’écran avec la bande de ses deux diapositives, sans nom ni modèle courant, avec la phrase du menu « + »', got.strip && got.slides === 2 && got.current == null && got.name === '' && /Bilan GFS/.test(got.text) && got.status === IMPORTED.powerpoint.fr, got);
-  check('aucun sélecteur de fichier, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
+  check('powerpoint (extension active) : la présentation est à l’écran avec la bande de ses deux diapositives, enregistrée sous « bilan », avec la phrase du menu « + »', got.strip && got.slides === 2 && savedAs(got, 'powerpoint') && /Bilan GFS/.test(got.text) && savedStatus(got, 'powerpoint'), got);
+  check('aucun sélecteur de fichier, rien d’écrit de plus que le document importé', got.picker === 0 && got.fileInputs === 0 && await nothingWritten(o.page), got);
   await o.context.close();
 
   // Word (choix du porteur du 07/11) : aucune extension à installer, le document du fichier suit le ★ comme les autres.
   o = await startImporting('word', SOURCES.word);
-  await waitStatus(o.page, /^Word importé/);
+  await waitStatus(o.page, /Word importé/);
   got = await importState(o.page);
-  check('word : le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT) && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « Word importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.word.fr, got);
+  check('word : le document du fichier est à l’écran (son titre et son texte), enregistré sous « bilan » (le ★ s’était ouvert avant, l’import a suivi)', savedAs(got, 'word') && got.text.includes('Bilan Word GFS') && got.text.includes(WORD_TEXT) && /^1,null,\d+$/.test(got.opened.join()), got);
+  check('le coin d’état dit « Enregistré dans Grist sous « bilan ». Word importé. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', savedStatus(got, 'word'), got);
   check('le fichier reçu est lu tel quel, une fois, sans sélecteur, aucune fenêtre de rapport, rien d’écrit', JSON.stringify(await o.page.evaluate(() => window.__docxReads)) === JSON.stringify([{ name: 'bilan.docx', size: Buffer.from(SOURCES.word.base64, 'base64').length }]) && got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `word`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'word' && i.fichier instanceof File && i.fichier.name === 'bilan.docx'; }));
   await o.context.close();
 
   // HTML (13/11) : aucune extension à installer, la page (ou l'archive ZIP de la page) suit le ★ comme les autres.
   o = await startImporting('html', SOURCES.html);
-  await waitStatus(o.page, /^HTML importé/);
+  await waitStatus(o.page, /HTML importé/);
   got = await importState(o.page);
-  check('html : la page du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT) && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « HTML importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.html.fr, got);
-  check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
+  check('html : la page du fichier est à l’écran (son titre et son texte), enregistrée sous « page » (le ★ s’était ouvert avant, l’import a suivi)', savedAs(got, 'html') && got.text.includes('Page HTML de GFS') && got.text.includes(HTML_TEXT) && /^1,null,\d+$/.test(got.opened.join()), got);
+  check('le coin d’état dit « Enregistré dans Grist sous « page ». HTML importé. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', savedStatus(got, 'html'), got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit de plus que le document importé', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `html`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'html' && i.fichier instanceof File && i.fichier.name === 'page.html'; }));
   await o.context.close();
 
   o = await startImporting('html', SOURCES.zip);
-  await waitStatus(o.page, /^HTML importé/);
+  await waitStatus(o.page, /HTML importé/);
   got = await importState(o.page);
-  check('html, une archive ZIP : la page de l’archive est à l’écran avec son image reprise, sans nom ni modèle courant, avec la phrase du menu « + »', got.current == null && got.name === '' && got.text.includes('Archive HTML de GFS') && got.text.includes(ZIP_TEXT) && got.images === 1 && got.status === IMPORTED.html.fr, got);
+  check('html, une archive ZIP : la page de l’archive est à l’écran avec son image reprise, enregistrée sous le nom de l’archive (« page »), avec la phrase du menu « + »', savedAs(got, 'html') && got.text.includes('Archive HTML de GFS') && got.text.includes(ZIP_TEXT) && got.images === 1 && savedStatus(got, 'html'), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `html`, une archive : un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'html' && i.fichier instanceof File && i.fichier.name === 'page.zip'; }));
   await o.context.close();
 
   // OpenDocument (17/11) : aucune extension à installer, le document du fichier suit le ★ comme les autres.
   o = await startImporting('opendocument', SOURCES.opendocument);
-  await waitStatus(o.page, /^OpenDocument importé/);
+  await waitStatus(o.page, /OpenDocument importé/);
   got = await importState(o.page);
-  check('opendocument : le document du fichier est à l’écran (son titre et son texte), sans nom ni modèle courant (le ★ s’était ouvert avant, l’import a suivi)', got.current == null && got.name === '' && got.list === '' && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT) && got.opened.join() === '1,null', got);
-  check('le coin d’état dit « OpenDocument importé. Nommez le document puis enregistrez-le. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', got.status === IMPORTED.opendocument.fr, got);
-  check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
+  check('opendocument : le document du fichier est à l’écran (son titre et son texte), enregistré sous « bilan » (le ★ s’était ouvert avant, l’import a suivi)', savedAs(got, 'opendocument') && got.text.includes('Bilan OpenDocument GFS') && got.text.includes(ODT_TEXT) && /^1,null,\d+$/.test(got.opened.join()), got);
+  check('le coin d’état dit « Enregistré dans Grist sous « bilan ». OpenDocument importé. » : ni « Widget prêt. » ni une phrase de GFS ne le recouvre', savedStatus(got, 'opendocument'), got);
+  check('aucun sélecteur de fichier, aucune fenêtre de rapport, rien d’écrit de plus que le document importé', got.picker === 0 && got.fileInputs === 0 && !(await dialogOf(o.page)).open && await nothingWritten(o.page), got);
   check('`GfsLink.opening()` garde l’importation (la valeur `opendocument`, un `File`)', await o.page.evaluate(() => { const i = GfsLink.opening().importation; return !!i && i.valeur === 'opendocument' && i.fichier instanceof File && i.fichier.name === 'bilan.odt'; }));
   await o.context.close();
 
   o = await startImporting('opendocument', SOURCES.opendocument, { lang: 'en' });
-  await waitStatus(o.page, /^OpenDocument imported/);
+  await waitStatus(o.page, /OpenDocument imported/);
   got = await importState(o.page);
-  check('en anglais : « OpenDocument imported. Name the document, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.opendocument.en && got.text.includes(ODT_TEXT) && got.current == null, got);
+  check('en anglais : « Saved to Grist as “bilan”. OpenDocument imported. », le document du fichier est à l’écran', savedStatus(got, 'opendocument', 'en') && got.text.includes(ODT_TEXT) && savedAs(got, 'opendocument'), got);
   await o.context.close();
 
   o = await startImporting('html', SOURCES.html, { lang: 'en' });
-  await waitStatus(o.page, /^HTML imported/);
+  await waitStatus(o.page, /HTML imported/);
   got = await importState(o.page);
-  check('en anglais : « HTML imported. Name the document, then save it. », la page du fichier est à l’écran', got.status === IMPORTED.html.en && got.text.includes(HTML_TEXT) && got.current == null, got);
+  check('en anglais : « Saved to Grist as “page”. HTML imported. », la page du fichier est à l’écran', savedStatus(got, 'html', 'en') && got.text.includes(HTML_TEXT) && savedAs(got, 'html'), got);
   await o.context.close();
 
   o = await startImporting('markdown', SOURCES.markdown, { lang: 'en' });
-  await waitStatus(o.page, /^Markdown imported/);
+  await waitStatus(o.page, /Markdown imported/);
   got = await importState(o.page);
-  check('en anglais : « Markdown imported. Name the document, then save it. », le document du fichier est à l’écran', got.status === IMPORTED.markdown.en && got.text === MARKDOWN_TEXT && got.current == null, got);
+  check('en anglais : « Saved to Grist as “note”. Markdown imported. », le document du fichier est à l’écran', savedStatus(got, 'markdown', 'en') && got.text === MARKDOWN_TEXT && savedAs(got, 'markdown'), got);
   await o.context.close();
 
   o = await startImporting('word', SOURCES.word, { lang: 'en' });
-  await waitStatus(o.page, /^Word imported/);
+  await waitStatus(o.page, /Word imported/);
   got = await importState(o.page);
-  check('en anglais : « Word imported. Name the document, then save it. », le document du fichier Word est à l’écran', got.status === IMPORTED.word.en && got.text.includes(WORD_TEXT) && got.current == null, got);
+  check('en anglais : « Saved to Grist as “bilan”. Word imported. », le document du fichier Word est à l’écran', savedStatus(got, 'word', 'en') && got.text.includes(WORD_TEXT) && savedAs(got, 'word'), got);
   await o.context.close();
 
   // Un fichier refusé : le modèle habituel reste, l'erreur reste à l'écran (« Widget prêt. » ne la recouvre pas), jamais un modèle vierge.
@@ -1127,15 +1153,11 @@ console.log('\n== « Nouveau > Importer » au démarrage : le fichier est dans l
       });`,
   });
   await started(o.page);
-  await waitDialog(o.page);
-  got = await importState(o.page);
-  const d = await dialogOf(o.page);
-  check('un appel `ouvrir` reçu pendant le démarrage passe après l’import : le document importé est là quand la question d’enregistrement se pose, rien n’a répondu à GFS', d.open && got.text === MARKDOWN_TEXT && got.opened.join() === '1,null' && !(await o.page.evaluate(() => !!window.__early)), { d, got });
-  await pressDialog(o.page, 'Ne pas enregistrer');
-  await o.page.waitForFunction(() => !!window.__early, null, { timeout: 20000 }).catch(() => {});
+  await o.page.waitForFunction(() => !!window.__early, null, { timeout: 30000 }).catch(() => {});
   const early = await o.page.evaluate(() => window.__early || null);
   got = await importState(o.page);
-  check('« Ne pas enregistrer » : le modèle demandé s’ouvre (`{ ouvert: true }`), après le ★ puis l’import', !!early && early.message.data.ouvert === true && String(early.current) === '3' && got.opened.join() === '1,null,3', { early, got });
+  const rowsEarly = await importedRows(o.page);
+  check('un appel `ouvrir` reçu pendant le démarrage passe après l’import : le document importé est déjà enregistré (« note », une ligne) quand le modèle demandé s’ouvre, donc aucune question d’enregistrement : `{ ouvert: true }`, le modèle 3, après le ★ puis l’import', !!early && early.message.data.ouvert === true && String(early.current) === '3' && /^1,null,\d+,3$/.test(got.opened.join()) && rowsEarly.map(r => r.name).join('|') === 'note' && !(await dialogOf(o.page)).open, { early, got, rowsEarly });
   await o.context.close();
 
   // Seule (adresse sans `gfs=`) : un appel `ouvrir` qui porte un fichier n'est pas écouté, rien ne s'importe.

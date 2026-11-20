@@ -11,6 +11,9 @@ import { createRequire } from 'node:module';
 export const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Une vraie modification du document ouvert : son nom change à la frappe, comme quand une personne le retape (ASCII : le Chromium des essais ne sait pas nommer un téléchargement accentué, il propose « download ») (le texte reste le même, les comparaisons de contenu tiennent). Le document devient « à enregistrer ».
+// À poser après un import (déjà enregistré sous le nom de son fichier) et enregistrement automatique coupé (open({ storage: { pp_autosave_enabled: 'false' } })), pour qu'il reste à enregistrer.
+export const makeUnsaved = async page => { await page.evaluate(() => { const el = document.getElementById('template-name'); el.value = (el.value || 'document') + ' edit'; el.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(250); };
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -66,7 +69,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/n
 // open({ spec, width, height, port, theme, lang }) -> { page, errors, stats(), resetStats(), ready, close }
 //   spec : la description du document (voir dev-tests/load-doc.js). `ready` : millisecondes depuis le début de la navigation jusqu'à « Widget prêt. ».
 //   onPage(page, context) : appelé dès que la page existe, avant sa première navigation (pour écouter les requêtes du chargement, par exemple).
-export async function open({ spec = {}, width = 700, height = 400, port = Number(process.env.LOAD_PORT || 8971), theme = 'light', lang = 'fr', acceptDownloads = true, settleMs = 2500, onPage = null } = {}) {
+export async function open({ spec = {}, width = 700, height = 400, port = Number(process.env.LOAD_PORT || 8971), theme = 'light', lang = 'fr', acceptDownloads = true, settleMs = 2500, onPage = null, storage = null } = {}) {
   const base = await startServer(port);
   const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none', '--enable-precise-memory-info', '--js-flags=--expose-gc'] });
   const context = await browser.newContext({ bypassCSP: true, viewport: { width, height }, colorScheme: theme === 'dark' ? 'dark' : 'light', acceptDownloads });
@@ -96,6 +99,8 @@ export async function open({ spec = {}, width = 700, height = 400, port = Number
   await page.addInitScript(({ theme, lang }) => {
     try { localStorage.setItem('pp_theme', theme); localStorage.setItem('pp_lang', lang); } catch (e) { /* stockage refusé : réglages par défaut */ }
   }, { theme, lang });
+  // Des réglages du navigateur posés avant le chargement (ex. { pp_autosave_enabled: 'false' } : l'enregistrement automatique coupé, pour qu'une modification reste « à enregistrer »).
+  if (storage) await page.addInitScript(values => { try { for (const [k, v] of Object.entries(values)) localStorage.setItem(k, v); } catch (e) { /* stockage refusé */ } }, storage);
   await page.addInitScript(s => { window.__LOAD_SPEC = s; }, spec);
   await page.addInitScript({ content: await readFile(join(ROOT, 'dev-tests', 'load-doc.js'), 'utf8') });
   const t0 = Date.now();

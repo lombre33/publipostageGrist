@@ -206,6 +206,10 @@
   async function enterGrid(h) { await h.resetEditor(); h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-grid'); await sleep(250); }
   async function leaveGrid(h) { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await sleep(150); }
   const statusText = () => document.getElementById('status-msg').textContent;
+  // Le coin d'état commence par « Enregistré dans Grist sous « nom » » : l'import écrit le document dans Grist avant de l'afficher (le nom du fichier, « (2) » s'il existait déjà). `rest` rend la suite, le compte rendu de l'import ;
+  // `savedLine` dit si cette première phrase y est.
+  const rest = (text) => String(text || '').replace(/^(Enregistré dans Grist sous « [^»]*»|Saved to Grist as “[^”]*”)( \([^)]*\))?\. /, '');
+  const savedLine = (text) => /^(Enregistré dans Grist sous « [^»]*»|Saved to Grist as “[^”]*”)/.test(String(text || ''));
   async function until(test, ms) {
     const end = Date.now() + (ms || 20000);
     while (Date.now() < end) { if (test()) return true; await sleep(50); }
@@ -252,7 +256,7 @@
         input.files = dt.files;
         input.dispatchEvent(new Event('change'));
         // « Lecture du classeur Excel… » puis la liste des feuilles ou le résultat : un message nouveau qui n'est plus celui de la lecture.
-        const readDone = () => { const t = statusText(); return t !== '' && !/^(Lecture du classeur|Reading the Excel)/.test(t); };
+        const readDone = () => { const t = statusText(); return t !== '' && !/^(Lecture du classeur|Reading the Excel|Enregistrement du document dans Grist|Saving the document to Grist)/.test(t); };
         await until(() => !!sheetPanel() || readDone(), 30000);
         if (sheetPanel()) {
           list = sheetList();
@@ -388,7 +392,7 @@
         const checks = {
           fr: frCells.join('|') === '1234,5|VRAI|1234,5|1234,5Texte|2469|03/10/2026' && frPrice === '12,50 €',
           en: enCells.join('|') === '1234.5|TRUE|1234.5|1234,5Texte|2469|10/3/2026' && enPrice === '12.50 €' && enDate === '10/3/2026', // le texte d'une formule est son résultat enregistré, tel quel
-          statusInLanguage: /^Excel imported: 6 rows, 4 columns\./.test(enInvoice.status) && /^Excel importé : 6 lignes, 4 colonnes\./.test(frInvoice.status),
+          statusInLanguage: /^Excel imported: 6 rows, 4 columns\./.test(rest(enInvoice.status)) && /^Excel importé : 6 lignes, 4 colonnes\./.test(rest(frInvoice.status)) && savedLine(enInvoice.status) && savedLine(frInvoice.status),
         };
         return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, frCells, enCells, frPrice, enPrice, enStatus: enInvoice.status }) };
       } finally { await settle(h); }
@@ -637,7 +641,7 @@
       const checks = {
         unreadableAsksNothing: askedUnreadable.length === 0 && results.unreadable.error && textAfterUnreadable === 'Mon document modifié',
         cancelAsksOnce: askedCancel.length === 1 && textAfterCancel === 'Mon document modifié' && !gridAfterCancel,
-        discardImports: askedDiscard.length === 1 && GridEditor.isActive() && /6 lignes, 4 colonnes/.test(results.discard.status) && cellAt(0, 0).text === 'Facture Alpha',
+        discardImports: askedDiscard.length === 1 && GridEditor.isActive() && /6 lignes, 4 colonnes/.test(rest(results.discard.status)) && cellAt(0, 0).text === 'Facture Alpha',
       };
       await leaveGrid(h);
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, asked: [askedUnreadable.length, askedCancel.length, askedDiscard.length], status: results.discard.status }) };
@@ -645,30 +649,49 @@
   });
 
   cases.push({
-    id: 'gridImport_result_is_a_new_unsaved_unnamed_grid_that_saves_like_any_other',
-    description: 'La grille importée est un NOUVEAU modèle de type grille, sans nom et pas encore enregistré (aucun modèle de la liste n\'est écrasé) ; elle compte comme une modification en attente (quitter pose la question) ; on la nomme, Enregistrer l\'écrit avec son contenu et son type.',
+    id: 'gridImport_result_is_a_new_grid_document_saved_in_grist_under_the_file_name',
+    description: 'Le classeur lu est écrit dans Grist tout de suite : un NOUVEAU document de type grille, au nom du fichier (sans « .xlsx »), relu dans Grist avant que le coin d\'état le dise (« Enregistré dans Grist sous « nom » ») ; aucun document déjà là n\'est touché ; il n\'y a plus rien à enregistrer (quitter ne pose pas la question) tant qu\'on n\'a rien changé ; une modification, elle, la pose ; Enregistrer l\'écrit avec son contenu et son type.',
     run: async (h) => {
       const bytes = await buildXlsx(INVOICE());
       await h.resetEditor();
-      const out = await importThroughMenu(h, bytes);
+      const before = Templates.getCached().map(t => ({ id: String(t.id), nom: t.nom, contenu: t.contenu }));
+      const out = await importThroughMenu(h, bytes, 'Facture avril 2026.xlsx');
       const select = document.getElementById('template-select');
       const state = { selected: select.value, name: document.getElementById('template-name').value, id: Templates.getCurrentId(), grid: GridEditor.isActive() };
-      // quitter maintenant poserait la question (une modification attend)
-      const asked = await withChoose(null, async () => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await sleep(200); });
-      const stillThere = GridEditor.isActive() && cellAt(0, 0) && cellAt(0, 0).text === 'Facture Alpha';
+      const found = Templates.getCached().find(t => String(t.id) === String(state.id));
+      const record = found && { nom: found.nom, typeModele: found.typeModele, contenu: found.contenu }; // une copie : l'enregistrement du cache change quand on renomme plus bas
+      const untouched = before.every(b => { const now = Templates.getCached().find(t => String(t.id) === b.id); return !!now && now.nom === b.nom && now.contenu === b.contenu; });
+      const added = Templates.getCached().length - before.length;
+      // rien n'a changé depuis l'écriture : quitter ne pose aucune question
+      const askedClean = await withChoose(null, async () => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await sleep(250); });
+      const leftWithoutAsking = askedClean.length === 0 && !GridEditor.isActive();
+      // la même grille rouverte depuis la liste, puis une modification (elle, attend d'être enregistrée) : quitter pose la question
+      await h.resetEditor();
+      select.value = String(state.id);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await until(() => GridEditor.isActive(), 5000);
+      await sleep(250);
+      const cell = cellAt(0, 0);
+      const reopened = GridEditor.isActive() && !!cell && cell.text === 'Facture Alpha';
       document.getElementById('template-name').value = 'Facture importée (test d\'import)';
+      document.getElementById('template-name').dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(250);
+      const askedDirty = await withChoose(null, async () => { h.openFlyout('#v2-new-template-group'); await h.clickButton('v2-btn-new-document'); await sleep(250); });
+      const stillThere = GridEditor.isActive() && cellAt(0, 0) && cellAt(0, 0).text === 'Facture Alpha';
       await h.clickButton('btn-save');
       await sleep(700);
-      const id = Templates.getCurrentId();
-      const record = Templates.getCached().find(t => String(t.id) === String(id));
+      const saved = Templates.getCached().find(t => String(t.id) === String(state.id));
       const checks = {
-        imported: out.opened && !out.error,
-        unsaved: state.selected === '' && state.name === '' && state.id === null && state.grid,
-        asksBeforeLeaving: asked.length === 1 && stillThere,
-        saved: !!record && record.typeModele === 'grille' && /Facture Alpha/.test(record.contenu) && /colspan="4"/.test(record.contenu) && record.nom === 'Facture importée (test d\'import)',
+        imported: out.opened && !out.error && savedLine(out.status),
+        savedUnderTheFileName: state.selected === String(state.id) && state.name === 'Facture avril 2026' && state.id !== null && state.grid && /Facture avril 2026/.test(out.status),
+        isGridRecord: !!record && record.typeModele === 'grille' && /Facture Alpha/.test(record.contenu) && /colspan="4"/.test(record.contenu) && record.nom === 'Facture avril 2026',
+        addedOneAndTouchedNothing: added === 1 && untouched,
+        nothingToAskWhenUnchanged: leftWithoutAsking,
+        asksAfterAChange: reopened && askedDirty.length === 1 && stillThere,
+        renamedAndSaved: !!saved && saved.typeModele === 'grille' && saved.nom === 'Facture importée (test d\'import)' && /Facture Alpha/.test(saved.contenu),
       };
       await leaveGrid(h);
-      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, state, asked: asked.length, type: record && record.typeModele }) };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, state, status: out.status, asked: [askedClean.length, askedDirty.length], type: record && record.typeModele }) };
     },
   });
 
@@ -795,10 +818,10 @@
         noMatch: fr.seen.zzz.rows.length === 0 && fr.seen.zzz.emptyShown === 'Aucune feuille ne correspond.',
         clearedAgain: fr.seen.cleared.rows.length === 4,
         chosenBecomesTheGrid: frGrid.active && frGrid.shape === '1,1,1' && frGrid.first === 'Détails' && frGrid.last === 'ligne 2',
-        statusNamesIt: !fr.error && /^Feuille « Détails des lignes » \(2 sur 3\) importée : 3 lignes, 1 colonne\. Les autres ne le sont pas\.$/.test(fr.status),
+        statusNamesIt: !fr.error && /^Feuille « Détails des lignes » \(2 sur 3\) importée : 3 lignes, 1 colonne\. Les autres ne le sont pas\.$/.test(rest(fr.status)) && savedLine(fr.status),
         leftNothing: !leftFr && !leftEn,
         english: en.list.placeholder === 'Search for a sheet…' && en.seen.recap.rows.join('|') === 'Récapitulatif annuel' && en.seen.zzz.emptyShown === 'No sheet matches.',
-        enterPicks: enGrid.active && enGrid.text === 'Récap' && !en.error && /^Sheet “Récapitulatif annuel” \(3 of 3\) imported: 1 row, 1 column\. The others are not\.$/.test(en.status),
+        enterPicks: enGrid.active && enGrid.text === 'Récap' && !en.error && /^Sheet “Récapitulatif annuel” \(3 of 3\) imported: 1 row, 1 column\. The others are not\.$/.test(rest(en.status)) && savedLine(en.status),
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr: { list: fr.list, seen: fr.seen, status: fr.status }, en: { list: en.list, status: en.status }, frGrid, enGrid }) };
     },
@@ -841,8 +864,8 @@
         gridOnFirstSheet: fr.active && fr.first === 'Devis Alpha',
         tabs: fr.names.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel' && fr.barShown,
         allTablesSaved: fr.tables === 3,
-        statusFr: !fr.error && fr.status === 'Excel importé : 3 feuilles, en onglets sous la grille. Nommez le document puis enregistrez-le.',
-        statusEn: !seen.en.error && en.status === 'Excel imported: 3 sheets, as tabs under the grid. Name the document, then save it.' && en.tabs === 3,
+        statusFr: !fr.error && rest(fr.status) === 'Excel importé : 3 feuilles, en onglets sous la grille.' && savedLine(fr.status),
+        statusEn: !seen.en.error && rest(en.status) === 'Excel imported: 3 sheets, as tabs under the grid.' && savedLine(en.status) && en.tabs === 3,
         excelGivesThemBack: exported.join('|') === 'Devis|Détails des lignes|Récapitulatif annuel',
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, fr, en, exported }) };
@@ -909,9 +932,9 @@
         }
       } finally { await settle(h); }
       const checks = {
-        oneVisible: out.oneVisible.list === null && out.oneVisible.grid && !out.oneVisible.error && out.oneVisible.text === 'visibleici' && /^Excel importé : 1 ligne, 2 colonnes\./.test(out.oneVisible.status),
-        allHiddenTakesTheFirst: out.allHidden.list === null && out.allHidden.grid && out.allHidden.text === 'un' && /^Excel importé : 1 ligne, 1 colonne\./.test(out.allHidden.status),
-        single: out.single.list === null && out.single.grid && out.single.text === 'solo' && /^Excel importé/.test(out.single.status),
+        oneVisible: out.oneVisible.list === null && out.oneVisible.grid && !out.oneVisible.error && out.oneVisible.text === 'visibleici' && /^Excel importé : 1 ligne, 2 colonnes\./.test(rest(out.oneVisible.status)),
+        allHiddenTakesTheFirst: out.allHidden.list === null && out.allHidden.grid && out.allHidden.text === 'un' && /^Excel importé : 1 ligne, 1 colonne\./.test(rest(out.allHidden.status)),
+        single: out.single.list === null && out.single.grid && out.single.text === 'solo' && /^Excel importé/.test(rest(out.single.status)),
       };
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, statuses: Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.status])) }) };
     },
@@ -941,7 +964,7 @@
       const checks = {
         listFirst: results.cancel.seen.questionsBefore === 0 && results.discard.seen.questionsBefore === 1,
         cancelKeeps: results.questionsAfterCancel === 1 && results.textAfterCancel === 'Mon document modifié' && results.gridAfterCancel === false,
-        discardImports: questions === 2 && GridEditor.isActive() && cellAt(0, 0).text === 'Détails' && /^Feuille « Détails des lignes » \(2 sur 3\) importée/.test(results.discard.status),
+        discardImports: questions === 2 && GridEditor.isActive() && cellAt(0, 0).text === 'Détails' && /^Feuille « Détails des lignes » \(2 sur 3\) importée/.test(rest(results.discard.status)),
       };
       await settle(h);
       return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, questions, statuses: [results.cancel.status, results.discard.status] }) };
@@ -1025,7 +1048,7 @@
       } finally { SearchSelect.attachSheets = real; console.warn = warn; }
       const checks = {
         imported: out.opened && !out.error && GridEditor.isActive() && cellAt(0, 0).text === 'Devis Alpha',
-        named: /^Feuille « Devis » \(1 sur 3\) importée : 2 lignes, 2 colonnes\. Les autres ne le sont pas\.$/.test(out.status),
+        named: /^Feuille « Devis » \(1 sur 3\) importée : 2 lignes, 2 colonnes\. Les autres ne le sont pas\.$/.test(rest(out.status)) && savedLine(out.status),
         leftNothing: !document.getElementById('v2-xlsx-sheet-search'),
       };
       await settle(h);

@@ -17,7 +17,7 @@
 // Lancé par run-headless.mjs (groupe Node « pptxImportHeavy », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-pptx-import-heavy.mjs
 import { readFile } from 'node:fs/promises';
 import { start, seedModels, WIDTH, HEIGHT } from './gfs-page.mjs';
-import { clickHoverRow } from './load-lib.mjs';
+import { clickHoverRow, makeUnsaved } from './load-lib.mjs';
 
 const t = await start({ name: 'verify-pptx-import-heavy', port: Number(process.env.PPTX_IMPORT_HEAVY_PORT || 9101) });
 const { check } = t;
@@ -116,7 +116,7 @@ const dialogOf = page => page.evaluate(() => {
 async function run(lang) {
   const tag = `[${lang}] `;
   console.log(`\n=== Import d'un gros PowerPoint, ${WIDTH}x${HEIGHT}, ${lang === 'fr' ? 'français' : 'anglais'} ===`);
-  const { page } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme: 'light' });
+  const { page } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme: 'light', storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
   await page.addScriptTag({ url: '/dev-tests/scenarios-pptx-import.js' });
   await page.waitForFunction(sel => { const el = document.querySelector(sel); return !!el && el.getAttribute('aria-disabled') === 'false'; }, ROW, { timeout: 20000 });
@@ -242,8 +242,8 @@ async function run(lang) {
   const firstRead = log.findIndex(text => /^Lecture du fichier PowerPoint… \d+ \/ 6$/.test(text));
   const placing = log.findIndex(text => /^Mise en place des diapositives… 0 \/ 6$/.test(text));
   const placed = log.findIndex(text => /^Mise en place des diapositives… 6 \/ 6$/.test(text));
-  const imported = log.findIndex(text => /^PowerPoint importé : 6 diapositives\./.test(text));
-  check(tag + 'le coin d\'état dit les étapes dans l\'ordre : « Lecture du fichier PowerPoint… n / 6 », « Mise en place des diapositives… 0 / 6 » jusqu\'à « 6 / 6 », puis « PowerPoint importé : 6 diapositives. »', firstRead >= 0 && placing > firstRead && placed > placing && imported > placed, { firstRead, placing, placed, imported, log: log.slice(0, 16) });
+  const imported = log.findIndex(text => /^Enregistré dans Grist sous « photos ». PowerPoint importé : 6 diapositives\./.test(text));
+  check(tag + 'le coin d\'état dit les étapes dans l\'ordre : « Lecture du fichier PowerPoint… n / 6 », « Mise en place des diapositives… 0 / 6 » jusqu\'à « 6 / 6 », puis « Enregistré dans Grist sous « photos ». PowerPoint importé : 6 diapositives. »', firstRead >= 0 && placing > firstRead && placed > placing && imported > placed, { firstRead, placing, placed, imported, log: log.slice(0, 16) });
   // Depuis le 11/11 le voile ne part pas avec le mot « PowerPoint importé » : il reste, « Dernières vérifications », jusqu'à ce que la page ait été calme (js/import-placing.js : settle, whenQuiet).
   await page.waitForFunction(() => { const el = document.getElementById('pp-placing-modal'); return !el || getComputedStyle(el).display === 'none'; }, null, { timeout: 20000 }).catch(() => {});
   const veilTexts = await page.evaluate(() => window.__veilTexts.slice());
@@ -254,20 +254,22 @@ async function run(lang) {
   check(tag + 'après l\'import, un nouvel import est de nouveau possible (le garde est levé)', await page.evaluate(() => document.getElementById('v2-btn-import-pptx').getAttribute('aria-disabled') === 'false'));
   void during;
 
-  // 3b) Un fichier ordinaire importé n'est pas enregistré tout seul : sans identifiant ni nom, la personne nomme puis enregistre (comme avant).
-  check(tag + 'un fichier ordinaire (moins de 15 Mo) importé reste « à nommer » : ni identifiant ni nom, et le coin d\'état le dit', await page.evaluate(() => Templates.getCurrentId() == null && document.getElementById('template-name').value === '' && /Nommez le modèle puis enregistrez-le/.test(document.getElementById('status-msg').textContent)));
+  // 3b) Un fichier ordinaire importé est enregistré tout seul, comme un gros (choix d'Antoine du 20/11, « il doit s'enregistrer une fois complètement lu et reprendre le nom original ») : un identifiant, le nom du fichier, et le coin d'état le dit.
+  check(tag + 'un fichier ordinaire (moins de 15 Mo) importé est ENREGISTRÉ dans Grist sous le nom du fichier « photos » : un identifiant, le nom dans le champ, relu dans la table, et le coin d\'état le dit en commençant par l\'enregistrement',
+    await page.evaluate(() => { const id = Templates.getCurrentId(); const tpl = id == null ? null : Templates.byId(id); const text = document.getElementById('status-msg').textContent; return id != null && !!tpl && tpl.nom === 'photos' && document.getElementById('template-name').value === 'photos' && Templates.verifyStored(id, 'photos') === 'ok' && text.startsWith('Enregistré dans Grist sous « photos ». PowerPoint importé'); }));
   await placingCases(page, tag);
 
   // 3c) Un gros fichier (15 Mo ou plus) est enregistré dans Grist dès que sa mise en place est finie, sous le nom du fichier (choix d'Antoine du 10/11, « enregistrer le modèle au fil de l'import »).
   const rawHeavy = await page.evaluate(() => { const bytes = new Uint8Array(window.__decks.heavy); let text = ''; for (let at = 0; at < bytes.length; at += 8192) text += String.fromCharCode.apply(null, bytes.subarray(at, at + 8192)); return btoa(text); });
   await page.evaluate(() => { window.__status.length = 0; });
+  await makeUnsaved(page); // le nom retapé : le document enregistré par son import est de nouveau « à enregistrer »
   check(tag + 'le vrai sélecteur s\'ouvre pour le gros fichier', await pick({ name: 'Ma grosse présentation.pptx', mimeType: MIME, buffer: Buffer.from(rawHeavy, 'base64') }));
   // Le texte d'avant n'est pas enregistré : la question « Enregistrer / Ne pas enregistrer / Annuler » vient APRÈS la lecture, avant la mise en place (le voile n'est pas encore là) ; « Ne pas enregistrer » la lève.
   const asked = await page.waitForFunction(() => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && getComputedStyle(ov).display !== 'none'; }, null, { timeout: 90000 }).then(() => true, () => false);
   const veilDuringQuestion = await page.evaluate(() => { const el = document.getElementById('pp-placing-modal'); return !!el && getComputedStyle(el).display !== 'none'; });
   check(tag + 'avec un texte non enregistré à l\'écran, la question de départ est posée une fois le gros fichier lu, sans voile par-dessus', asked && !veilDuringQuestion, { asked, veilDuringQuestion });
   if (asked) await page.locator('#pp-dialog-modal .pp-modal-actions button', { hasText: 'Ne pas enregistrer' }).click();
-  await page.waitForFunction(() => window.__status.some(([, text]) => /enregistré sous/.test(text)), null, { timeout: 120000 }).catch(() => {});
+  await page.waitForFunction(() => window.__status.some(([, text]) => /^Enregistré dans Grist sous « Ma grosse/.test(text)), null, { timeout: 120000 }).catch(() => {});
   await sleep(500);
   const kept = await page.evaluate(() => {
     const id = Templates.getCurrentId();
@@ -275,7 +277,7 @@ async function run(lang) {
     return { id, nom: tpl && tpl.nom, type: tpl && tpl.typeModele, breaks: tpl ? (String(tpl.contenu).match(/page-break-marker/g) || []).length : -1, title: document.getElementById('template-name').value, selected: document.getElementById('template-select').value, log: window.__status.map(([, text]) => text).filter(text => /^Enregistrement|enregistré|Enregistré/.test(text)) };
   });
   check(tag + 'un gros fichier importé est enregistré dans Grist sous son nom : un identifiant, « Ma grosse présentation », type présentation, six diapositives dans le contenu écrit', kept.id != null && kept.nom === 'Ma grosse présentation' && kept.type === 'presentation' && kept.breaks === SLIDES - 1 && kept.title === 'Ma grosse présentation' && String(kept.selected) === String(kept.id), kept);
-  check(tag + 'le coin d\'état le dit : « PowerPoint importé : 6 diapositives, enregistré sous « Ma grosse présentation ». »', kept.log.some(text => text === 'PowerPoint importé : 6 diapositives, enregistré sous « Ma grosse présentation ».'), kept.log);
+  check(tag + 'le coin d\'état le dit : « Enregistré dans Grist sous « Ma grosse présentation ». PowerPoint importé : 6 diapositives. »', kept.log.some(text => text === 'Enregistré dans Grist sous « Ma grosse présentation ». PowerPoint importé : 6 diapositives.'), kept.log);
   await page.waitForFunction(() => { const el = document.getElementById('pp-placing-modal'); return !el || getComputedStyle(el).display === 'none'; }, null, { timeout: 20000 }).catch(() => {});
   const noVeil = await page.evaluate(() => !document.getElementById('pp-placing-modal') || getComputedStyle(document.getElementById('pp-placing-modal')).display === 'none');
   check(tag + 'le voile est retiré quand l\'import est fini : le texte se tape de nouveau', noVeil);
@@ -543,9 +545,9 @@ async function veilCases(page, tag) {
 }
 
 async function traceCases(page, tag) {
-  const marks = (await page.evaluate(() => PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)))).slice(1, 5);
-  check(tag + 'le suivi a daté les quatre étapes de l\'import, dans l\'ordre, avec les diapositives lues',
-    marks.map(m => m.label).join('|') === 'import PowerPoint : lecture|import PowerPoint : lu|import PowerPoint : mise en place|import PowerPoint : en place' && marks[1].diapositives === SLIDES && marks.every((m, i) => i === 0 || m.t >= marks[i - 1].t), marks);
+  const marks = (await page.evaluate(() => PerfTrace.events().filter(e => e.kind === 'mark' && /^import PowerPoint/.test(e.label)))).slice(1, 6);
+  check(tag + 'le suivi a daté les cinq étapes de l\'import, dans l\'ordre (dont l\'enregistrement sous le nom du fichier, avant la fin de la mise en place), avec les diapositives lues',
+    marks.map(m => m.label).join('|') === 'import PowerPoint : lecture|import PowerPoint : lu|import PowerPoint : mise en place|import PowerPoint : enregistré|import PowerPoint : en place' && marks[1].diapositives === SLIDES && marks.every((m, i) => i === 0 || m.t >= marks[i - 1].t), marks);
   const gap = await page.evaluate(async () => {
     const before = PerfTrace.totals();
     await new Promise(resolve => setTimeout(() => { const end = performance.now() + 700; while (performance.now() < end) { /* la page est prise */ } resolve(); }, 50));

@@ -1,14 +1,16 @@
 // L'import d'un fichier dans le widget : Excel, Markdown, HTML, PowerPoint et Word, par le menu « + » (le sélecteur de fichier s'ouvre dans le clic) et par le « Nouveau > Importer » de GFS
 // (js/gfs-open.js, consigne GFS 035 : GFS ouvre le sélecteur lui-même et donne le fichier). Sorti de js/main.js (refactorisation du 09/11, découpe 5) : rien de modifiable n'est partagé avec
 // lui, ce qu'il en tire (la question « Enregistrer / Abandonner / Annuler », le coin d'état, le chargement d'un modèle dans l'éditeur...) lui est donné par `api`. Les corps sont ceux de main.js.
+// Depuis le 20/11, tout fichier importé comme NOUVEAU document (Excel, Markdown, HTML, PowerPoint, Word, OpenDocument) s'enregistre dans Grist dès qu'il est lu en entier et affiché, sous le nom du fichier
+// (saveImportedDocument) ; l'import dans le document ouvert (« Remplacer », « Ajouter après », « Insérer ici ») n'a rien à enregistrer de plus : le document garde son nom.
 const MainImport = (function () {
   function create(api) {
     const { askBeforeLeaving, canMergeDocument, hasEditsToConfirmBeforeLeaving, isReadOnly, loadTemplateIntoEditor, markAutosaveDirty, onSave, refocusEditorIfLost, setStatus, templateNameInput, templateSelect, updateSaveStatus } = api;
 
     // « Nouveau > Importer » demandé par GFS (js/gfs-open.js, consigne GFS 035) : GFS a ouvert le sélecteur de fichier lui-même (le cadre isolé de l'app n'a pas le geste de la personne) et donne le fichier choisi, que
     // `valeur` nomme : `excel` (une grille), `markdown` (un document), `html` (un document), `powerpoint` (une présentation, l'extension « diapositives » étant active), `word` (un document), `opendocument` (un document texte .odt, une grille pour un tableur .ods, une présentation pour un .odp, l'extension « diapositives » étant active). Il est lu par le chemin de la ligne du même nom du menu « + » - mêmes
-    // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un modèle sans nom et pas encore enregistré, rien d'écrit avant son premier
-    // « Enregistrer » - sans le sélecteur. true : le modèle importé est à l'écran ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
+    // lectures, mêmes refus et mêmes phrases du coin d'état, même question d'enregistrement après une lecture réussie, même résultat : un document enregistré dans Grist sous le nom du fichier (saveImportedDocument) -
+    // sans le sélecteur. true : le document importé est à l'écran, enregistré (ou son enregistrement a échoué, et le coin d'état le dit) ; false : le document est en lecture seule, la valeur est inconnue, le fichier est refusé, ou la personne a annulé.
     // `word` (choix du porteur du 07/11), `html` (13/11) et `opendocument` (17/11) ne sont proposés par GFS qu'une fois qu'il les déclare dans `actions.importer` de son manifeste : tant qu'il ne le fait pas, aucune de ces valeurs n'arrive, et rien ne change.
     async function importFileFromGfs(kind, file, extras) {
       if (isReadOnly()) return false;
@@ -82,6 +84,32 @@ const MainImport = (function () {
       return importDroppedFile(page.file, { neighbours: set, pagePath: page.path });
     }
 
+    // Un fichier importé comme NOUVEAU document s'enregistre tout seul (demande du 20/11 : « une fois complètement lu et l'éditeur affiché, sous le nom original du fichier »). Le nom est celui du fichier sans son
+    // extension ; pour un dossier déposé, celui du dossier (et de même pour une page `index.html` rangée dans un dossier). Un nom déjà pris devient « nom (2) », comme à tout enregistrement (Templates.uniqueName) :
+    // un document n'en écrase jamais un autre. Le document est d'abord affiché (loadTemplateIntoEditor avec ce nom), puis enregistré par le chemin du bouton Enregistrer (onSave : mêmes tables, mêmes refus,
+    // mêmes phrases d'échec dans le coin d'état) ; le coin d'état ne dit « Enregistré dans Grist » qu'une fois la ligne RELUE dans la table (Templates.verifyStored). Un échec laisse le document à l'écran sous son
+    // nom, « à enregistrer ». Un fichier sans nom lisible (« .docx ») reste à nommer, comme avant.
+    const baseNameOf = fileName => String(fileName || '').replace(/\.[^.]*$/, '').trim();
+    function importedName(file, extras) {
+      const own = baseNameOf(file && file.name);
+      const pagePath = extras && extras.pagePath;
+      if (pagePath && pagePath.indexOf('/') > 0 && /^index$/i.test(own)) return pagePath.split('/')[0].trim() || own;
+      return own;
+    }
+    // `described` : ce que le coin d'état disait de l'import (« Word importé. ») ; il le garde, derrière l'enregistrement. true : la ligne est dans Grist.
+    async function saveImportedDocument(name, described) {
+      if (!name) { setStatus(described + ' ' + I18n.t('status.importNameIt')); return false; }
+      markAutosaveDirty();
+      setStatus(I18n.t('importPlacing.saving'));
+      await onSave();   // dit lui-même son échec dans le coin d'état (tables refusées, Grist qui refuse, erreur) : le document reste alors « à enregistrer »
+      const id = Templates.getCurrentId();
+      if (id == null) return false;
+      const shown = templateNameInput ? templateNameInput.value.trim() : name;
+      if (Templates.verifyStored(id, shown) !== 'ok') { setStatus(I18n.t('status.importNotConfirmed', { name: shown }), true); return false; }
+      setStatus(I18n.t(shown === name ? 'status.importSaved' : 'status.importSavedRenamed', { name: shown, what: described }));
+      return true;
+    }
+
     // Import d'un classeur Excel (js/grid-xlsx-import.js). Le sélecteur de fichier doit s'ouvrir dans le clic ; le classeur est lu ensuite et, s'il a
     // plusieurs feuilles visibles, une liste avec recherche demande laquelle devient la grille. On ne demande de quitter le modèle courant (s'il a des
     // modifications non enregistrées) qu'après ce choix : « Annuler » dans le sélecteur, une liste fermée, un fichier illisible ou une feuille vide ne
@@ -100,7 +128,8 @@ const MainImport = (function () {
       const imported = await readXlsxForImport(file);
       if (!imported) return false;
       if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return false; }
-      openImportedGrid(imported);
+      const name = importedName(file);
+      await saveImportedDocument(name, openImportedGrid(imported, undefined, name));
       await tellXlsxImportReport(imported.report);
       return true;
     }
@@ -144,19 +173,19 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { sheet: chosen, rows: e && e.rows, cols: e && e.cols, maxRows: e && e.maxRows, maxCols: e && e.maxCols, maxCells: e && e.maxCells, size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
     }
 
-    function openImportedGrid(imported, singleKey) {
-      // Une nouvelle grille, sans nom et pas encore enregistrée, comme « Nouvelle grille ».
+    // Une nouvelle grille, au nom du fichier (enregistrée juste après : saveImportedDocument) ; rend ce que le coin d'état en dit.
+    function openImportedGrid(imported, singleKey, name) {
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
+      loadTemplateIntoEditor({ id: null, nom: name || '', contenu: imported.html, typeModele: GridEditor.TYPE, marginsMm: null, suiviModifications: null, headerFooter: null }, GridEditor.TYPE);
       markAutosaveDirty();
       const counts = { rows: imported.rows, cols: imported.cols };
-      if (imported.tabs) {
-        setStatus(I18n.t(imported.skipped ? 'status.xlsxImportedSheetsSkipped' : 'status.xlsxImportedSheets', { n: imported.sheets, skipped: imported.skipped }));
-        return;
-      }
-      setStatus(imported.sheetCount > 1
-        ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
-        : I18n.t(singleKey || 'status.xlsxImported', counts));
+      const text = imported.tabs
+        ? I18n.t(imported.skipped ? 'status.xlsxImportedSheetsSkipped' : 'status.xlsxImportedSheets', { n: imported.sheets, skipped: imported.skipped })
+        : imported.sheetCount > 1
+          ? I18n.t('status.xlsxImportedSheet', Object.assign({ sheet: imported.sheetName, index: imported.sheetIndex + 1, total: imported.sheetCount }, counts))
+          : I18n.t(singleKey || 'status.xlsxImported', counts);
+      setStatus(text);
+      return text;
     }
 
     // Import d'un fichier Markdown (js/markdown-import.js), « Importer un Markdown… » du menu « + », sur le modèle de l'import d'un classeur : le sélecteur s'ouvre dans
@@ -180,7 +209,8 @@ const MainImport = (function () {
         updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
         if (!(await askBeforeLeaving())) return false;
       }
-      openImportedDocument(imported);
+      const name = importedName(file);
+      await saveImportedDocument(name, openImportedDocument(imported, name));
       return true;
     }
 
@@ -201,12 +231,14 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { size: e && e.size ? megabytes(e.size) : '', max: e && e.max ? megabytes(e.max) : '' }), true);
     }
 
-    function openImportedDocument(imported) {
-      // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document ».
+    // Un nouveau document, au nom du fichier (enregistré juste après : saveImportedDocument) ; rend ce que le coin d'état en dit.
+    function openImportedDocument(imported, name) {
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: null, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
+      loadTemplateIntoEditor({ id: null, nom: name || '', contenu: imported.html, typeModele: 'document', marginsMm: null, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
       markAutosaveDirty();
-      setStatus(mdImportedStatus(imported));
+      const text = mdImportedStatus(imported);
+      setStatus(text);
+      return text;
     }
 
     // Ce que le coin d'état dit d'un Markdown importé : les images locales qui n'ont pas été reprises et les {{Table.Colonne}} qui ne sont pas des variables de ce document
@@ -239,7 +271,8 @@ const MainImport = (function () {
         updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
         if (!(await askBeforeLeaving())) return false;
       }
-      openImportedHtml(imported);
+      const name = importedName(file, extras);
+      await saveImportedDocument(name, openImportedHtml(imported, name));
       await tellHtmlImportReport(imported.report);
       return true;
     }
@@ -261,12 +294,14 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.code === 'tooMuchText' ? thousands(e.max) : e && e.max ? importMegabytes(e.max) : '', chars: e && e.chars ? thousands(e.chars) : '' }), true);
     }
 
-    function openImportedHtml(imported) {
-      // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; l'en-tête et le pied de page sont ceux d'un export du widget (sinon aucun).
+    // Un nouveau document, au nom du fichier (enregistré juste après : saveImportedDocument) ; l'en-tête et le pied de page sont ceux d'un export du widget (sinon aucun) ; rend ce que le coin d'état en dit.
+    function openImportedHtml(imported, name) {
       templateSelect.value = '';
-      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: null, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
+      loadTemplateIntoEditor({ id: null, nom: name || '', contenu: imported.html, typeModele: 'document', marginsMm: null, suiviModifications: null, headerFooter: imported.headerFooter }, 'document');
       markAutosaveDirty();
-      setStatus(I18n.t('status.htmlImported'));
+      const text = I18n.t('status.htmlImported');
+      setStatus(text);
+      return text;
     }
 
     // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé.
@@ -288,11 +323,11 @@ const MainImport = (function () {
     const PRESENTATION_FLAVORS = {
       pptx: {
         engines: ['pptxImport'], module: () => PptxImport, perf: 'PowerPoint', errors: PPTX_IMPORT_ERRORS, tell: (imported, file) => tellPptxImportReport(imported, file),
-        keys: { reading: 'status.pptxImporting', progress: 'status.pptxImportingProgress', busy: 'status.pptxImportBusy', imported: 'status.pptxImported', saved: 'status.pptxImportedSaved' },
+        keys: { reading: 'status.pptxImporting', progress: 'status.pptxImportingProgress', busy: 'status.pptxImportBusy', imported: 'status.pptxImported' },
       },
       odp: {
         engines: ['odpImport'], module: () => OdpImport, perf: 'OpenDocument', errors: ODP_IMPORT_ERRORS, tell: imported => tellOdpImportReport(imported),
-        keys: { reading: 'status.odpImporting', progress: 'status.odpImportingProgress', busy: 'status.odpImportBusy', imported: 'status.odpImported', saved: 'status.odpImportedSaved' },
+        keys: { reading: 'status.odpImporting', progress: 'status.odpImportingProgress', busy: 'status.odpImportBusy', imported: 'status.odpImported' },
       },
     };
     function onImportPptx() {
@@ -401,11 +436,10 @@ const MainImport = (function () {
 
     // Une nouvelle présentation, sans nom et pas encore enregistrée, comme « Nouvelle présentation » ; sa page est celle des diapositives du fichier (taille, sens, marges). Les premières diapositives se posent par
     // le chemin habituel (type, page, bande), les autres À LA SUITE, une à une, la page reprenant la main entre deux (ImportPlacing) ; chaque texte est libéré dès que sa diapositive est posée.
-    // Un gros fichier (HEAVY_FILE_BYTES, 15 Mo) est enregistré dans Grist DÈS QUE sa mise en place est finie, sous le nom du fichier (10/11, « enregistrer le modèle au fil de l'import ») : le modèle est
-    // dans la liste avant que quoi que ce soit d'autre se passe, et l'enregistrement automatique prend le relais. Un fichier ordinaire garde son parcours : la personne nomme puis enregistre.
-    const baseNameOf = fileName => String(fileName || '').replace(/\.[^.]*$/, '').trim();
+    // La présentation est enregistrée dans Grist DÈS QUE sa mise en place est finie, sous le nom du fichier, quelle que soit sa taille (10/11 pour un gros fichier, « enregistrer le modèle au fil de l'import » ; 20/11
+    // pour tous, comme les autres imports : saveImportedDocument) : le document est dans la liste avant que quoi que ce soit d'autre se passe, et l'enregistrement automatique prend le relais.
     async function placeImportedPresentation(imported, progress, file, flavor) {
-      const keepName = file && file.size >= flavor.module().HEAVY_FILE_BYTES ? baseNameOf(file.name) : '';
+      const keepName = importedName(file);
       const texts = ImportPlacing.slidesOf(imported);
       const total = texts.length;
       const note = (placed) => {
@@ -432,16 +466,16 @@ const MainImport = (function () {
         if (item) item.n += failed; else imported.report.push({ key: 'unreadable', n: failed });
       }
       markAutosaveDirty();
-      setStatus(I18n.t(flavor.keys.imported, { n: imported.slideCount }));
-      if (!keepName) return;
+      const described = I18n.t(flavor.keys.imported, { n: imported.slideCount });
+      setStatus(described);
+      if (!keepName) { setStatus(described + ' ' + I18n.t('status.importNameIt')); return; }
       const saving = I18n.t('importPlacing.saving');
       setStatus(saving);
       progress.update(saving, PPTX_STEP_READ + PPTX_STEP_PLACE + PPTX_STEP_CLOSE);
       // le texte du document s'écrit d'avance, par tranches : l'enregistrement le trouve prêt ; s'il échoue, l'enregistrement le refait lui-même, d'un bloc
       await ImportPlacing.prepareSave().catch(error => console.warn('[main] import de présentation : texte non préparé d’avance', error));
-      await onSave();     // dit lui-même son échec dans le coin d'état (tables refusées, Grist qui refuse, erreur) : le modèle reste alors « à enregistrer »
+      await saveImportedDocument(keepName, described);   // dit lui-même son échec dans le coin d'état : le document reste alors « à enregistrer »
       PerfTrace.mark('import ' + flavor.perf + ' : enregistré', { id: Templates.getCurrentId() });
-      if (Templates.getCurrentId() != null) setStatus(I18n.t(flavor.keys.saved, { n: imported.slideCount, name: templateNameInput ? templateNameInput.value : keepName }));
     }
 
     // Ce que l'import n'a pas repris tel quel, une ligne par genre d'objet ; rien à dire quand tout est arrivé. Chaque ligne se déplie (js/import-report.js) pour dire où (les diapositives, le masque) et quoi (les noms), et
@@ -513,7 +547,8 @@ const MainImport = (function () {
         updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
         if (!(await askBeforeLeaving())) return false;
       }
-      openImportedDocx(imported);
+      const name = importedName(file);
+      await saveImportedDocument(name, openImportedDocx(imported, undefined, name));
       await tellDocxImportReport(imported.report);
       return true;
     }
@@ -535,15 +570,17 @@ const MainImport = (function () {
       setStatus(I18n.t(key, { size: e && e.size ? importMegabytes(e.size) : '', max: e && e.max ? importMegabytes(e.max) : '' }), true);
     }
 
-    function openImportedDocx(imported, statusKey) {
-      // Un nouveau document, sans nom et pas encore enregistré, comme « Nouveau document » ; sa page (format, sens, marges) et ses en-têtes et pieds de page sont ceux du fichier.
+    // Un nouveau document, au nom du fichier (enregistré juste après : saveImportedDocument) ; sa page (format, sens, marges) et ses en-têtes et pieds de page sont ceux du fichier ; rend ce que le coin d'état en dit.
+    function openImportedDocx(imported, statusKey, name) {
       templateSelect.value = '';
       // Les modifications suivies du fichier (auteur et date) restent en attente de validation ; ses commentaires sont marqués dans le texte, leurs messages attendent le premier enregistrement (ils vont dans la table
       // des fils, qui a besoin du numéro du modèle : adoptStaged, plus bas).
-      loadTemplateIntoEditor({ id: null, nom: '', contenu: imported.html, typeModele: 'document', marginsMm: imported.page, suiviModifications: imported.suiviModifications || null, headerFooter: imported.headerFooter }, 'document');
+      loadTemplateIntoEditor({ id: null, nom: name || '', contenu: imported.html, typeModele: 'document', marginsMm: imported.page, suiviModifications: imported.suiviModifications || null, headerFooter: imported.headerFooter }, 'document');
       Comments.stageImported(imported.comments);
       markAutosaveDirty();
-      setStatus(I18n.t(statusKey || 'status.docxImported'));
+      const text = I18n.t(statusKey || 'status.docxImported');
+      setStatus(text);
+      return text;
     }
 
     // Ce que l'import n'a pas repris tel quel, une ligne par genre ; rien à dire quand tout est arrivé.
@@ -576,7 +613,8 @@ const MainImport = (function () {
         updateSaveStatus(); // la lecture est finie : « Lecture… » serait faux pendant la question
         if (!(await askBeforeLeaving())) return false;
       }
-      openImportedDocx(imported, 'status.odtImported');
+      const name = importedName(file);
+      await saveImportedDocument(name, openImportedDocx(imported, 'status.odtImported', name));
       await tellOdfImportReport(imported.report);
       return true;
     }
@@ -597,7 +635,8 @@ const MainImport = (function () {
       const imported = await readOdsForImport(file);
       if (!imported) return false;
       if (hasEditsToConfirmBeforeLeaving() && !(await askBeforeLeaving())) { updateSaveStatus(); return false; }
-      openImportedGrid(imported, 'status.odsImported');
+      const name = importedName(file);
+      await saveImportedDocument(name, openImportedGrid(imported, 'status.odsImported', name));
       await tellXlsxImportReport(imported.report);
       return true;
     }

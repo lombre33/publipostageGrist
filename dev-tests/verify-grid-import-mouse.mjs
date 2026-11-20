@@ -314,19 +314,26 @@ const focusInText = page => page.evaluate(() => !!document.activeElement && !!do
 
 const docText = page => page.evaluate(() => EditorCore.getEditor().state.doc.textContent);
 const gridActive = page => page.evaluate(() => GridEditor.isActive());
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
 
 const TEXTS = {
   fr: { row: 'Importer un Excel…', allSheets: 'Toutes les feuilles (onglets)', placeholder: 'Rechercher une feuille…', noMatch: 'Aucune feuille ne correspond.', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportMessage: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :\n• 1 formule remplacée par son résultat',
-    imported: /^Feuille « Facture » \(1 sur 2\) importée : 5 lignes, 5 colonnes\./, unreadable: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', euro: /^12,50\s€$/, total: /^20,50\s€$/ },
+    imported: /^Enregistré dans Grist sous « facture »\. Feuille « Facture » \(1 sur 2\) importée : 5 lignes, 5 colonnes\./, importedAgain: /^Enregistré dans Grist sous « facture \(2\) » \(le nom existait déjà\)\. Feuille « Facture » \(1 sur 2\)/, unreadable: 'Ce fichier n’est pas un classeur Excel (.xlsx) lisible.', euro: /^12,50\s€$/, total: /^20,50\s€$/ },
   en: { row: 'Import from Excel…', allSheets: 'All sheets (tabs)', placeholder: 'Search for a sheet…', noMatch: 'No sheet matches.', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
     reportTitle: 'What the import did not carry over as is', reportMessage: 'The workbook is imported. It had the following, which the grid could not carry over as is:\n• 1 formula replaced by its result',
-    imported: /^Sheet “Facture” \(1 of 2\) imported: 5 rows, 5 columns\./, unreadable: 'This file is not a readable Excel (.xlsx) workbook.', euro: /^12\.50\s€$/, total: /^20\.50\s€$/ },
+    imported: /^Saved to Grist as “facture”\. Sheet “Facture” \(1 of 2\) imported: 5 rows, 5 columns\./, importedAgain: /^Saved to Grist as “facture \(2\)” \(the name was already taken\)\. Sheet “Facture” \(1 of 2\)/, unreadable: 'This file is not a readable Excel (.xlsx) workbook.', euro: /^12\.50\s€$/, total: /^20\.50\s€$/ },
 };
 
 async function run(theme, lang) {
@@ -462,7 +469,11 @@ async function run(theme, lang) {
   check(`${label} - la hauteur de la première ligne est celle d'Excel (28 pt = 37 px), pas l'ancienne feuille A4 : aucune classe a4-preview`, grid.tableRowHeight >= 36 && grid.tableRowHeight <= 39 && !grid.a4, { height: grid.tableRowHeight, a4: grid.a4 });
   check(`${label} - le coin, la lettre A, le numéro 1 et la première case sont visibles et atteignables à la souris (rien ne les recouvre)`, grid.corner.ok && grid.col.ok && grid.row.ok && grid.firstCell.ok && grid.corner.inViewport && grid.col.inViewport && grid.row.inViewport, grid);
   const done = await statusOf(page);
-  check(`${label} - le coin d'état dit quelle feuille est lue et ce qu'elle a donné (lignes, colonnes), en entier, sans être coupé, dans le panneau`, T.imported.test(done.text) && !done.clipped && done.inPanel, done);
+  check(`${label} - le coin d'état commence par l'enregistrement sous « facture » puis dit quelle feuille est lue et ce qu'elle a donné (lignes, colonnes) ; il se lit en entier (dans le coin ou, trop long, dans sa bulle), dans le panneau`, T.imported.test(done.text) && done.whole && done.inPanel, done);
+  const rows1 = await stored(page);
+  const picked1 = await page.evaluate(() => ({ id: Templates.getCurrentId(), select: document.getElementById('template-select').value, name: document.getElementById('template-name').value }));
+  check(`${label} - la grille est ENREGISTRÉE dans Grist sous le nom du fichier « facture » (une ligne, relue dans la table, choisie dans la liste, son nom dans le champ), sans que personne l'ait nommée`,
+    rows1.length === 1 && rows1[0].name === 'facture' && rows1[0].length > 200 && picked1.id === rows1[0].id && picked1.select === String(rows1[0].id) && picked1.name === 'facture', { rows1, picked1 });
   await snap('imported');
 
   // 4) Quitter la grille (« Nouveau document ») puis écrire au vrai clavier : un fichier illisible ne demande rien et ne change rien.
@@ -523,6 +534,10 @@ async function run(theme, lang) {
     await closeReport(page, label, T);
     const text = await page.evaluate(() => EditorCore.getEditor().state.doc.textContent);
     check(`${label} - « ${T.discard} » : le brouillon est abandonné, la grille du classeur arrive`, (await gridActive(page)) && text.includes('Facture Alpha') && !text.includes('Brouillon'), { text: text.slice(0, 60) });
+    const again = await statusOf(page);
+    const rows2 = await stored(page);
+    check(`${label} - le même fichier importé de nouveau : le nom « facture » est pris, la grille s'enregistre sous « facture (2) » (jamais par-dessus la première), et le coin d'état le dit`,
+      T.importedAgain.test(again.text) && again.whole && rows2.map(r => r.name).join('|') === 'facture|facture (2)' && rows2[0].length === rows1[0].length, { again, rows2 });
   }
 
   await context.close();
