@@ -37,10 +37,12 @@
 //     `window` : la fenêtre à imprimer. `pageCount` : le nombre de feuilles ; `windows` : pour chacune, la part du document qu'elle montre `{ from, to, at }` (de `from` à `to`, dessinée à la
 //     hauteur `at` de la feuille), et, pour un document aux sens mêlés, `sheet` : la feuille de sa page `{ orientation, width, height, left, mm }`. `pageMm` : la taille de la première feuille.
 //     `dispose()` retire tout ce que l'impression a posé dans la page.
-//   PrintExport.stage(htmlContent, tableId, record, headerFooterData, { id, parent }) -> Promise<{ host, root, stage, windows, pagePx, sheetLeft, dispose }>
+//   PrintExport.stage(htmlContent, tableId, record, headerFooterData, { id, parent, cancelled }) -> Promise<{ host, root, stage, windows, pagePx, sheetLeft, dispose }>
 //     Le document rendu et mesuré comme pour l'impression, sans feuilles ni impression : `stage`, le #reader-container de l'arbre ombre de `host` (le conteneur, d'identifiant `id`,
 //     posé dans `parent`, sinon dans <body>), et ses fenêtres (`windows`, comme ci-dessus, chacune avec `page`, l'indice de la page de la Lecture qu'elle montre). Une seule copie du document, qu'on
 //     déplace d'une fenêtre à l'autre : le diaporama d'une présentation (extensions/diapositives/slide-show.js). Aucune limite de pages. `dispose()` retire le conteneur.
+//     `cancelled()` (facultative) : vraie quand personne n'attend plus le rendu (la fenêtre du diaporama est fermée, le diaporama quitté) ; le rendu s'arrête alors à son prochain point d'arrêt et rejette avec
+//     `error.cancelled === true`, le conteneur retiré, au lieu d'aller au bout.
 //   PrintExport.isTooLong(error), PrintExport.MAX_PAGES
 const PrintExport = (function () {
   const HOST_ID = 'pp-print-host';
@@ -327,15 +329,29 @@ const PrintExport = (function () {
     return host;
   }
 
+  // L'ABANDON d'un rendu (20/11, « j'ai refermé l'onglet et ça lag toujours, comme si un chantier tournait en fond ») : un rendu long (le diaporama d'une grosse présentation : plusieurs dizaines de secondes
+  // chez Firefox) continuait jusqu'au bout, page figée, alors que la fenêtre qui l'attendait était fermée. `cancelled()` (facultative, `options.cancelled` de `stage`) dit que personne n'attend plus le rendu ; le
+  // POINT D'ARRÊT que le rendu en tire rend la main une fois à une vraie tâche (le navigateur dit alors que la fenêtre est fermée, ce qu'une simple attente de promesse ne laisse pas passer), puis rejette avec
+  // `cancelled: true` si c'est le cas. Aux seuls endroits où l'on peut s'arrêter sans rien laisser derrière soi : avant la mise en page (la plus longue), entre deux passes, et avant la mesure des fenêtres.
+  function checkpointOf(cancelled) {
+    if (typeof cancelled !== 'function') return null;
+    return async () => {
+      await WorkPacer.yieldTask();
+      if (cancelled()) throw Object.assign(new Error('Rendu abandonné : plus personne ne l’attend'), { cancelled: true });
+    };
+  }
+
   // Le document rendu par la Lecture dans le conteneur `host`, déjà posé dans la page, et découpé en fenêtres.
-  async function layOut(host, htmlContent, tableId, record, headerFooterData, pagePx) {
+  async function layOut(host, htmlContent, tableId, record, headerFooterData, pagePx, checkpoint) {
     const shadow = host.shadowRoot;
     await settleStyles(shadow, 8000);
     await loadFonts();
+    if (checkpoint) await checkpoint();
     const scope = shadow.querySelector('.pp-print-scope');
     const stage = shadow.getElementById('reader-container');
-    const { paged } = await ReaderMode.renderInto(stage, htmlContent, tableId, record, headerFooterData);
+    const { paged } = await ReaderMode.renderInto(stage, htmlContent, tableId, record, headerFooterData, checkpoint);
     if (!paged || !paged.pages.length) throw new Error('Pagination impossible pour l’impression');
+    if (checkpoint) await checkpoint();
     return { scope, stage, paged, windows: planWindows(stage, paged, pagePx) };
   }
 
@@ -345,7 +361,7 @@ const PrintExport = (function () {
     const host = createPageHost(hostSizeFor(htmlContent, pagePx), options && options.id);
     ((options && options.parent) || document.body).appendChild(host);
     try {
-      const laid = await layOut(host, htmlContent, tableId, record, headerFooterData, pagePx);
+      const laid = await layOut(host, htmlContent, tableId, record, headerFooterData, pagePx, checkpointOf(options && options.cancelled));
       return { host, root: laid.scope, stage: laid.stage, windows: laid.windows, pagePx, sheetLeft: laid.paged.sheetLeft, dispose: () => host.remove() };
     } catch (e) {
       host.remove();
