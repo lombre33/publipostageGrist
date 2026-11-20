@@ -626,6 +626,41 @@ const ReaderMode = (function () {
     pages[pages.length - 1].bottom = seamTop + footAreaPx;
     pages.push({ top: seamTop + footAreaPx + divider.getBoundingClientRect().height / zoom, bodyTop: seamTop + seamHeight });
   }
+  // MESURE TEMPORAIRE, avec le suivi du lag (js/perf-trace.js : à retirer avec lui) - 20/11 : un diaporama de 79 diapositives met 27 s à se mettre en page sous Firefox (1 à 2 s sous Chromium), en cinq suites de
+  // coupures de 2 à 3 s chacune, entre lesquelles la page attend encore 1 s. `paginationTrace` n'existe que le temps d'une mise en page du rendu d'impression et du diaporama (renderInto) : chaque suite y laisse
+  // une ligne du rapport (combien de coupures, combien tenues, où elle s'est arrêtée, ce qu'ont coûté les lectures avant et après chaque écriture de feuille).
+  let paginationTrace = null;
+  const TRACED_BATCHES_MAX = 8;
+  const traceMark = (label) => { if (typeof PerfTrace !== 'undefined') PerfTrace.mark(label); };
+  // LES RÉSERVES D'UNE MISE EN PAGE DU RENDU D'IMPRESSION ET DU DIAPORAMA SE MESURENT EN LIGNE (20/11, rapport du 20/11 13:50 sous Firefox 153, 79 diapositives) : poser, réécrire ou retirer une feuille de style dans l'arbre
+  // ombre de l'impression fait refaire à Firefox le style et la mise en page de TOUT l'arbre (1,5 s à chaque lecture qui suit, 100 000 nœuds) ; une marge posée sur le style du bloc, un attribut, un bloc
+  // ajouté coûtent 2 ms. Chaque suite de coupures posait pourtant trois feuilles (la prévue, la relue, la rognée) et lisait après deux d'entre elles : 3 s par suite, cinq suites, 25 s. La marge se pose donc sur
+  // le style du bloc (`margin-bottom`, le même nombre de pixels : un style en ligne l'emporte sur toute règle, comme la règle de réserve, que sa forme fait gagner), pour la seule durée de la mise en page ;
+  // layoutSeams les retire toutes et écrit la feuille des règles d'un coup, une seule fois. Un bloc qui a déjà une marge en ligne reste à la feuille (la règle ne l'aurait pas emporté, la suite le saurait au
+  // contrôle d'après). Un contrôle de renderInto relit ensuite les réserves tenues (reservesHold) : si l'une manque, la mise en page se refait à la feuille, comme avant.
+  let paginationInline = false;
+  let inlineMargins = true;
+  // Pour les essais : rend la mise en page des coutures à la feuille (false) ou en ligne (true) ; rend l'état d'avant.
+  function useInlineMargins(on) { const before = inlineMargins; if (on !== undefined) inlineMargins = !!on; return before; }
+  function createInlineMargins() {
+    const originals = new Map();
+    const restore = (el) => {
+      const was = originals.get(el);
+      if (!was) return;
+      originals.delete(el);
+      el.style.marginBottom = was.margin;
+      if (!was.hadStyle && !el.getAttribute('style')) el.removeAttribute('style');
+    };
+    return {
+      accepts: el => !!el.style && (originals.has(el) || !el.style.marginBottom),
+      set(el, px) {
+        if (!originals.has(el)) originals.set(el, { hadStyle: el.hasAttribute('style'), margin: el.style.marginBottom });
+        el.style.marginBottom = px + 'px';
+      },
+      unset: restore,
+      restoreAll() { Array.from(originals.keys()).forEach(restore); },
+    };
+  }
   function placeSimpleSeamsAtOnce(pass, offsets, start) {
     // Les coutures d'une suite de coupures simples (ni entre deux lignes d'un tableau, ni dans une zone à deux colonnes) qui commence à la coupure `start`, posées d'un coup, chaque
     // coupure vérifiée, la première qui n'est pas au rendez-vous et toutes celles d'après laissées à placeSeam (carte du 21/10, « Accélérer ») : même calcul que l'éditeur
@@ -656,19 +691,51 @@ const ReaderMode = (function () {
     });
     const ruleOf = (i, margin) => EditorCore.reserveRule(sheetSel, cuts[i].el, cuts[i].nth, margin);
     let sheet = null;
-    const { steps: placed, missed } = EditorCore.placeReservesAtOnce(count, {
+    const trace = paginationTrace;
+    const inline = pass.inline && cuts.every(cut => pass.inline.accepts(cut.el)) ? pass.inline : null;
+    const reads = [0, 0, 0, 0];   // ms de lecture avant la première écriture, après la première, après la deuxième, après les suivantes
+    let writes = 0; let writeMs = 0;
+    const startedAt = trace ? performance.now() : 0;
+    const read = (i, top) => {
+      const from = trace ? performance.now() : 0;
+      const el = top ? cuts[i].next : cuts[i].el;
+      const value = el ? el.getBoundingClientRect()[top ? 'top' : 'bottom'] : null;
+      if (trace) reads[Math.min(writes, 3)] += performance.now() - from;
+      return value;
+    };
+    const { steps: placed, missed, held, exact, rounding } = EditorCore.placeReservesAtOnce(count, {
       zoom, rootTop: wrapperRect.top, bodyTopRel: pass.bodyTopRel, capacityOf: () => geometry.pageContentHeightPx, seamHeightOf: i => cuts[i].seamHeight,
     }, {
-      bottom: i => cuts[i].el.getBoundingClientRect().bottom,
-      nextTop: i => (cuts[i].next ? cuts[i].next.getBoundingClientRect().top : null),
+      bottom: i => read(i, false),
+      nextTop: i => read(i, true),
       write(margins) {
-        const text = margins.map((margin, i) => ruleOf(i, margin)).join('\n');
-        if (sheet) sheet.textContent = text; else sheet = steps.add(text);
+        const from = trace ? performance.now() : 0;
+        if (inline) {
+          // Les marges de la suite, sur le style de leurs blocs : une coupure qui n'est plus dans la liste (la suite rognée) retrouve le style qu'elle avait.
+          cuts.forEach((cut, i) => { if (i < margins.length) inline.set(cut.el, margins[i]); else inline.unset(cut.el); });
+        } else {
+          const text = margins.map((margin, i) => ruleOf(i, margin)).join('\n');
+          if (sheet) sheet.textContent = text; else sheet = steps.add(text);
+        }
+        writes++;
+        if (trace) writeMs += performance.now() - from;
       },
     });
+    if (trace) {
+      trace.batches++;
+      if (inline) trace.inlineBatches++;
+      if (trace.batches <= TRACED_BATCHES_MAX) {
+        traceMark('pagination : suite de ' + count + ' coupures dès la ' + (start + 1) + 'e, ' + placed.length + ' posées (tenues ' + held + ', exactes ' + exact + ', arrondi ' + rounding + (missed ? ', NON RECONNU' : '') + ') ; '
+          + writes + ' écriture(s) ' + (inline ? 'en ligne' : 'de feuille') + ' ' + Math.round(writeMs) + ' ms ; lectures avant/après 1/2/3+ : ' + reads.map(ms => Math.round(ms)).join('/') + ' ms ; suite entière ' + Math.round(performance.now() - startedAt) + ' ms');
+      }
+    }
     built.slice(placed.length).forEach(({ seam }) => seam.remove());
+    // Les hauteurs de toutes les coutures se lisent AVANT d'écrire la première : `toLayoutY` lit `clientTop` et `scrollTop` du conteneur, ce qui demande la mise en page, et chaque `seam.style.top`
+    // écrit la rendait de nouveau à refaire - une mise en page par coupure (77 pour une présentation de 79 diapositives : 0,6 ms chacune sous Chromium, mais Firefox refait le calcul de tout
+    // l'arbre à chaque fois). Les écritures ne touchent que des coutures en position absolue : les lectures rendent les mêmes nombres.
+    const seamTops = placed.map(step => toLayoutY(step.afterBottomScreen) + step.remaining);
     placed.forEach((step, i) => {
-      const seamTop = toLayoutY(step.afterBottomScreen) + step.remaining;
+      const seamTop = seamTops[i];
       if (cuts[i].next) pass.reserves.push({ next: cuts[i].next, bodyTopRel: step.bodyTopRel });
       marginRules.push(ruleOf(i, step.margin));
       built[i].seam.style.top = seamTop + 'px';
@@ -719,20 +786,30 @@ const ReaderMode = (function () {
     const pass = {
       zones: ctx.zones, geometry, totalPages: ctx.totalPages, pageBase: ctx.pageBase || 0, sheetSel: sheetSelector(wrapper), wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom,
       toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop, reserves: [],
+      inline: paginationInline ? createInlineMargins() : null,
     };
     // Les coupures simples d'une suite d'un coup, chaque coupure dans un tableau ou une zone une à une, puis la suite simple d'après d'un coup : un long texte coupe un tableau toutes les
     // trois ou quatre pages, et la première coupure de ce genre renvoyait toutes les suivantes au calcul une à une (une mise en page par coupure), comme dans l'éditeur.
     pass.atOnce = true;
-    for (let i = 0; i < offsets.length;) {
-      const placed = pass.atOnce ? placeSimpleSeamsAtOnce(pass, offsets, i) : 0;
-      if (placed > 0) { i += placed; continue; }
-      placeSeam(pass, offsets[i], i);
-      i++;
+    try {
+      for (let i = 0; i < offsets.length;) {
+        const placed = pass.atOnce ? placeSimpleSeamsAtOnce(pass, offsets, i) : 0;
+        if (placed > 0) { i += placed; continue; }
+        const from = paginationTrace ? performance.now() : 0;
+        placeSeam(pass, offsets[i], i);
+        if (paginationTrace) { paginationTrace.singles++; paginationTrace.singleMs += performance.now() - from; }
+        i++;
+      }
+    } catch (e) {
+      if (pass.inline) pass.inline.restoreAll();
+      throw e;
     }
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
     // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
     marginRules.push(sheetItself(wrapper) + ' { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
     pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule(pass.sheetSel + ' > *:nth-child(' + (index + 1) + ')', strips)));
+    // Les marges posées en ligne le temps du calcul s'en vont, et la feuille des mêmes règles les remplace : une seule écriture de feuille, une seule relecture.
+    if (pass.inline) pass.inline.restoreAll();
     styleEl.textContent = marginRules.join('\n');
     steps.clear();
     reservesOf.set(wrapper, pass.reserves);
@@ -765,6 +842,22 @@ const ReaderMode = (function () {
     wrapper.classList.add('v2-paper-backed');
     return layer;
   }
+  // Le numéro des pastilles de numéro de page posées dans le TEXTE (un en-tête ou un pied, eux, les résolvent page par page : addEdgeSpacers, layoutSeams) : celui de la page où elles tombent, lu sur
+  // la mise en page qui vient d'être faite (le haut de chaque page, `sheet.pages`), dans le format de la pastille (« 3 », « Page 3 », « 3/12 »), comme l'aperçu paginé de l'éditeur. Sans cela, la Lecture
+  // et l'impression écrivaient « # » (Word, lui, pose un vrai champ de page). Celle d'une présentation est déjà résolue (`data-slide-number`, js/slides-entry.js:resolveSlideNumbers). `pageBase` : le nombre
+  // de pages qui précèdent cette feuille de lecture, `totalPages` celui du document.
+  function resolveBodyPageNumbers(wrapper, sheet, pageBase, totalPages) {
+    const badges = wrapper.querySelectorAll('.page-number-badge:not([data-slide-number])');
+    if (!badges.length) return;
+    badges.forEach((badge) => {
+      const rect = badge.getBoundingClientRect();
+      const y = sheet.toLayoutY(rect.top + rect.height / 2);
+      let index = 0;
+      for (let k = 1; k < sheet.pages.length && sheet.pages[k].top <= y; k++) index = k;
+      const text = PageLayout.pageNumberText(badge.getAttribute('data-format') || 'n', pageBase + index + 1, totalPages);
+      if (badge.textContent !== text) badge.textContent = text;
+    });
+  }
   function renderPaginationPreview(container, wrapper, zones, plan) {
     // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires
     // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout
@@ -784,6 +877,7 @@ const ReaderMode = (function () {
 
     const edges = addEdgeSpacers(container, wrapper, zones, geometry, { first: pageBase + 1, last: pageBase + offsets.length + 1, total: totalPages });
     const sheet = layoutSeams({ container, wrapper, zones, geometry, offsets, totalPages, pageBase, wrapperChildren, edges });
+    resolveBodyPageNumbers(wrapper, sheet, pageBase, totalPages);
     const layer = addBackdrop(container, wrapper, edges, sheet);
     // Le bas de la dernière page : le bas de la feuille, bande du pied comprise (celui des autres pages vient de leur couture, cf. placeSeam).
     sheet.pages[sheet.pages.length - 1].bottom = sheet.toLayoutY((edges.edgeBottomEl || wrapper).getBoundingClientRect().bottom);
@@ -1444,10 +1538,12 @@ const ReaderMode = (function () {
   // `checkpoint` (facultatif, js/print-export.js:checkpointOf) : appelé aux endroits où le rendu peut s'abandonner sans rien laisser derrière lui (il rejette quand plus personne n'attend le rendu).
   async function renderInto(container, htmlContent, tableId, record, headerFooterData, checkpoint) {
     return GristAPI.withReadPass(async () => {
+      const phases = { from: performance.now() };
       if (typeof htmlContent === 'function') htmlContent = await htmlContent();
       const wrapper = readerWrapperFrom(htmlContent, PRINT_VIEW);
       const resolved = await resolveReaderBody(wrapper, tableId, record, () => false);
       if (checkpoint) await checkpoint();
+      phases.resolved = performance.now();
       container.innerHTML = '';
       container.appendChild(wrapper);
       // Dans l'arbre ombre de l'impression, un lien `#adresse` ne trouverait pas sa cible (le navigateur la cherche dans le document, pas dans l'arbre ombre) et sortirait en lien mort :
@@ -1465,15 +1561,41 @@ const ReaderMode = (function () {
       const widest = widestSheetPx(sections);
       if (widest) container.style.setProperty('--pp-page-width', widest + 'px');
       const wrappers = sections ? sections.map(section => section.wrapper) : [wrapper];
-      const layOut = () => layOutSheets(container, sections, wrapper, zones);
+      let layOutMs = 0; let layOuts = 0; let inlineOn = inlineMargins; let usedInline = false;
+      const layOut = () => {
+        const from = performance.now();
+        paginationTrace = { batches: 0, inlineBatches: 0, singles: 0, singleMs: 0 };
+        paginationInline = inlineOn;
+        try { return layOutSheets(container, sections, wrapper, zones); } finally {
+          paginationInline = false;
+          const elapsed = performance.now() - from;
+          layOutMs += elapsed; layOuts++;
+          const trace = paginationTrace;
+          paginationTrace = null;
+          usedInline = trace.inlineBatches > 0;
+          traceMark('pagination : ' + (trace.batches + trace.singles) + ' suites ou coupures seules, ' + trace.batches + ' suites d\u2019un coup (' + trace.inlineBatches + ' mesurées en ligne), ' + trace.singles + ' coupures une à une (' + Math.round(trace.singleMs) + ' ms) ; mise en page entière ' + Math.round(elapsed) + ' ms');
+        }
+      };
+      // Des marges mesurées en ligne : la feuille qui les remplace doit donner les mêmes places. Une réserve qui ne tient pas (une règle de la page plus forte que celle de la feuille, que le style en
+      // ligne battait) refait la mise en page à la feuille, comme avant.
+      const layOutChecked = () => {
+        const result = layOut();
+        if (!usedInline || wrappers.every(reservesHold)) return result;
+        traceMark('pagination : une réserve ne tient pas une fois la feuille posée, mise en page refaite à la feuille');
+        clearPagination(container, wrappers);
+        inlineOn = false;
+        return layOut();
+      };
       const fonts = container.ownerDocument.fonts;
       const settle = async () => { await settleImages(container, PRINT_SETTLE_MS); if (fonts) await fonts.ready; };
+      phases.placed = performance.now();
       await settle();
       if (checkpoint) await checkpoint();
+      phases.settled = performance.now();
       // Les tailles qui décident des coupures : la feuille et chaque image. Une image ou une police qui arrive après la première mesure les change ; la mise
       // en page se refait alors (comme watchGeometry à l'écran) jusqu'à ce qu'elles ne bougent plus.
       const sizes = () => wrappers.concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
-      let paged = layOut();
+      let paged = layOutChecked();
       // Les en-têtes et pieds des coutures sont écrits par la pagination : leurs images d'un autre site reprennent leur adresse, puis chargent.
       ExternalImages.unblockIn(container);
       for (let round = 0; round < PRINT_RELAYOUTS_MAX; round++) {
@@ -1482,9 +1604,12 @@ const ReaderMode = (function () {
         if (checkpoint) await checkpoint();
         if (sizes() === before) break;
         clearPagination(container, wrappers);
-        paged = layOut();
+        paged = layOutChecked();
         ExternalImages.unblockIn(container);
       }
+      const ms = (from, to) => Math.round(to - from);
+      traceMark('rendu d\u2019impression : résolution ' + ms(phases.from, phases.resolved) + ' ms, pose dans la page ' + ms(phases.resolved, phases.placed) + ' ms, images et polices ' + ms(phases.placed, phases.settled) + ' ms, mise en page ' + Math.round(layOutMs) + ' ms (' + layOuts + ' fois), le reste (tailles relues, images en attente) '
+        + Math.round(performance.now() - phases.settled - layOutMs) + ' ms');
       return { paged, hasError: resolved.hasError };
     });
   }
@@ -2072,5 +2197,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
+  return { render, lend, renderInto, useInlineMargins, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
 })();

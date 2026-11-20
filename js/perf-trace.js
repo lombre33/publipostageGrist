@@ -1,7 +1,7 @@
 // SUIVI DU LAG, TEMPORAIRE (10/11 : de quoi mesurer le gel d'un gros import chez la personne qui l'observe, puis en lire le rapport). Il tourne sans rien changer à l'écran et se lit à la demande :
 // Ctrl + Alt + Maj + L (ou `PerfTrace.download()` dans la console) enregistre un rapport texte (`rapport-fluidite-….txt`) et le copie dans le presse-papiers quand le navigateur le permet.
 // À retirer une fois le gel compris : ce fichier, sa balise dans index.html, ses textes `perfTrace.*`, son groupe d'essais `perfTrace` et ses appels `PerfTrace.mark` (js/main-import.js, js/main.js, et le `trace` du
-// départ du diaporama : extensions/diapositives/slide-show.js et slide-window.js).
+// départ du diaporama : extensions/diapositives/slide-show.js et slide-window.js ; mise en page du rendu d'impression et du diaporama : js/reader-mode.js, `traceMark`).
 //
 // Ce qu'il garde (les 600 derniers faits, en mémoire seulement : rien n'est envoyé ni écrit ailleurs) :
 //  - les ARRÊTS de la page : un battement toutes les 100 ms, un retard de 150 ms ou plus est un arrêt (marche dans tous les navigateurs, Firefox compris) ;

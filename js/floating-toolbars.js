@@ -1848,11 +1848,17 @@ const FloatingToolbars = (function () {
   // verrouillée, « Détacher » en retire le repère). Pour le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de copie.
   function createCopyToolbar(editor) {
     function wire() {
-      const html = `<span class="v2-copy-name"></span><button type="button" data-action="copy-detach" class="v2-copy-detach">${Icons.svg('unlink')}<span></span></button>`;
-      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-copy-toolbar', html, (action) => { if (action === 'copy-detach') SlideCopies.detach(editor); });
+      const html = `<span class="v2-copy-name"></span><button type="button" data-action="copy-refresh" class="v2-copy-refresh">${Icons.svg('refresh')}</button><button type="button" data-action="copy-detach" class="v2-copy-detach">${Icons.svg('unlink')}<span></span></button>`;
+      let shown = null;
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-copy-toolbar', html, (action) => {
+        if (action === 'copy-detach') SlideCopies.detach(editor);
+        // « Mettre à jour maintenant » : la relecture à l'instant de la diapositive que la sélection suit.
+        else if (action === 'copy-refresh') SlideCopies.updateNow(editor, shown);
+      });
       EditorCore.registerFloatingPanel(panel);
       const name = panel.el.querySelector('.v2-copy-name');
       const detach = panel.el.querySelector('.v2-copy-detach');
+      const refresh = panel.el.querySelector('.v2-copy-refresh');
       const check = ({ transaction } = {}) => {
         // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
         if (transaction && transaction.getMeta('blur')) return;
@@ -1864,6 +1870,11 @@ const FloatingToolbars = (function () {
         const label = I18n.t(status.gone ? 'slides.copy.barGone' : 'slides.copy.bar', { n: status.n, name: status.name });
         name.textContent = label;
         name.title = label;
+        shown = status;
+        // Sans sa diapositive d'origine, il n'y a rien à reprendre : le bouton se retire (« Détacher » reste).
+        refresh.hidden = !!status.gone;
+        refresh.title = I18n.t('slides.copy.refreshTip');
+        refresh.setAttribute('aria-label', I18n.t('slides.copy.refresh'));
         detach.querySelector('span').textContent = I18n.t('slides.copy.detach');
         detach.title = I18n.t(status.block ? 'slides.block.detachTip' : 'slides.copy.detachTip');
         // Une diapositive en bloc est une image : sa propre barre (js/floating-toolbars.js : image) est déjà au-dessus d'elle, celle du lien se pose dessous.

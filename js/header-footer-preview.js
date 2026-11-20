@@ -70,13 +70,14 @@ const HeaderFooterPreview = (function () {
   }
 
   // Le clic sur une zone d'en-tête ou de pied : elle s'ouvre ; pendant l'écriture en direct elle reste fermée et le clic dit pourquoi (js/live-entry.js).
-  function openZone(zone, variant) {
+  // `at` ({ page, total }) : la page dont la marge a été cliquée, que la pastille de numéro de page prend pour exemple pendant l'écriture (pageHint).
+  function openZone(zone, variant, at) {
     if (LiveEntry.isLive()) { LiveEntry.explainLocked('headerFooter'); return; }
-    enterHeaderFooterMode(zone, variant);
+    enterHeaderFooterMode(zone, variant, at);
   }
   // Charge le fragment voulu dans l'éditeur, après avoir gardé ce qu'on quitte : le brouillon de la zone ouverte, ou le document principal à la
   // première entrée.
-  function enterHeaderFooterMode(zone, variant) {
+  function enterHeaderFooterMode(zone, variant, at) {
     if (!editor || inEmailMode) return;
     // Écriture en direct : le texte de l'en-tête et du pied n'est pas partagé, et échanger le texte de l'éditeur romprait son lien avec le salon (js/live-entry.js). Le clic sur une zone l'explique
     // (openZone) ; ici, refus sans bruit - la Recherche, qui ouvre les zones à son tour, n'en est pas interrompue.
@@ -86,7 +87,11 @@ const HeaderFooterPreview = (function () {
     // l'autre reste permis.
     if (!hfMode && !PageLayout.fitsHeaderFooter() && !hasZoneContent(headerFooterDraft[zone][variant])) return;
     // Entrer dans une zone depuis le document ouvre une séance d'écriture : son état d'avant est pris ici, son repère se pose à la sortie (exitHeaderFooterMode).
-    if (!hfMode) hfSession = HistoryMarkers.begin('headerFooter');
+    if (!hfMode) {
+      hfSession = HistoryMarkers.begin('headerFooter');
+      // Le nombre de pages et la page cliquée se lisent ici : la pagination s'éteint avec l'échange du contenu.
+      pageHint = { page: at && at.page > 0 ? at.page : null, total: at && at.total > 0 ? at.total : (lastPageLayout ? lastBreaks.length + 1 : 0) };
+    }
     stashHistory(storyKey(hfMode));
     if (hfMode) headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     else mainDocSnapshot = editor.getHTML();
@@ -124,6 +129,7 @@ const HeaderFooterPreview = (function () {
     headerFooterDraft[hfMode.zone][hfMode.variant] = editor.getHTML();
     dropEmptyZones(headerFooterDraft);
     hfMode = null;
+    pageHint = null;
     loadStory(mainDocSnapshot);
     restoreHistory('main');
     mainDocSnapshot = null;
@@ -703,6 +709,7 @@ const HeaderFooterPreview = (function () {
   let lastBreaks = [];
   const paginatedListeners = new Set();
   function notifyPaginated() {
+    paintPageNumbers();
     paginatedListeners.forEach((fn) => { try { fn(); } catch (e) { console.warn('[HeaderFooterPreview] abonné à la pagination en échec', e); } });
   }
   // `fn()` après chaque pagination de l'éditeur ; rend de quoi se désabonner.
@@ -741,6 +748,66 @@ const HeaderFooterPreview = (function () {
     };
   }
   function pageIndexOf(el) { return pageIndexResolver()(el); }
+
+  // --- LE VRAI NUMÉRO DANS LA PASTILLE DE NUMÉRO DE PAGE (20/11, « qu'ils apparaissent même en mode édition, en gardant la couleur verte ») ---
+  // La vue de la pastille (js/editor-nodes.js:createPageNumberBadgeNode) s'inscrit ici avec son libellé d'espace réservé (« # », « Page # », « #/# »). Le numéro n'est qu'AFFICHÉ, jamais écrit dans le document :
+  // le texte de la vue change, `getHTML` garde `#`. Il se met à jour à chaque pagination (notifyPaginated), pas à la frappe : une lettre qui ne change la hauteur d'aucun bloc ne relance aucune pagination
+  // (textEditsKeepPagination), donc aucun travail ; le coût d'un passage est celui du nombre de pastilles (0,4 ms pour 11 dans 22 pages).
+  //  - Dans le texte d'un document : la page où la pastille tombe (pageIndexResolver), sur le nombre de pages de la pagination (celui que lisent déjà les bandes d'en-tête et de pied).
+  //  - Dans une présentation : le rang de sa diapositive (1 plus les sauts de page de premier niveau qui la précèdent), comme js/slides-entry.js:resolveSlideNumbers l'écrit en Lecture, au PDF et au diaporama.
+  //  - Pendant l'écriture d'un en-tête ou d'un pied (`hfMode`) : une seule zone sert toutes les pages, le numéro est un EXEMPLE : la page dont la marge a été cliquée (pageHint), la première pour la variante
+  //    « première page », et le vrai nombre de pages.
+  //  - Sans pages (Aperçu A4 éteint, éditeur masqué) : le libellé d'espace réservé, comme avant.
+  const liveBadges = new Set();
+  let badgePaintFrame = 0;
+  // { page, total } de la zone ouverte : la page de la marge cliquée (null quand la zone s'ouvre sans clic : la première pour un en-tête, la dernière pour un pied) et le nombre de pages au moment de l'ouverture,
+  // la pagination étant éteinte tant qu'une zone s'écrit. Null hors de l'écriture d'une zone.
+  let pageHint = null;
+  function watchPageNumber(entry) {
+    liveBadges.add(entry);
+    // La vue naît pendant la mise à jour de ProseMirror, avant d'être attachée à la page : son numéro se pose à la prochaine image, avant que l'écran ne la dessine.
+    if (!badgePaintFrame) badgePaintFrame = requestAnimationFrame(paintPageNumbers);
+    return () => { liveBadges.delete(entry); };
+  }
+  function sampleNumber() {
+    if (!hfMode || !pageHint || !(pageHint.total > 0)) return null;
+    const total = pageHint.total;
+    if (hfMode.variant === 'first') return { page: 1, total };
+    let page = pageHint.page != null ? pageHint.page : (hfMode.zone === 'footer' ? total : 1);
+    // Avec « première page différente », la page 1 porte la variante « première page » : la variante courante s'affiche sur la suivante.
+    if (headerFooterDraft.differentFirstPage && page === 1 && total > 1) page = 2;
+    return { page: Math.min(Math.max(page, 1), total), total };
+  }
+  // Le rang de diapositive de chaque bloc de premier niveau, et leur nombre.
+  function slideNumberResolver(tiptapEl) {
+    const rankOf = new Map();
+    let rank = 1;
+    Array.from(tiptapEl.children).forEach((child) => { if (child.classList.contains('page-break-marker')) rank += 1; else rankOf.set(child, rank); });
+    const total = rank;
+    return (el) => { const page = rankOf.get(topLevelAncestorIn(tiptapEl, el)); return page ? { page, total } : null; };
+  }
+  function numberResolver(tiptapEl) {
+    if (hfMode) { const sample = sampleNumber(); return () => sample; }
+    if (!tiptapEl) return () => null;
+    if (SlidesEntry.presentationShown()) return slideNumberResolver(tiptapEl);
+    if (!lastPageLayout) return () => null;
+    const pageOf = pageIndexResolver();
+    const total = lastBreaks.length + 1;
+    return (el) => { const index = pageOf(el); return index == null ? null : { page: index + 1, total }; };
+  }
+  function paintPageNumbers() {
+    if (badgePaintFrame) { cancelAnimationFrame(badgePaintFrame); badgePaintFrame = 0; }
+    if (!liveBadges.size) return;
+    const tiptapEl = editor && editor.view && editor.view.dom;
+    const resolve = numberResolver(tiptapEl && tiptapShowsLayout(tiptapEl) ? tiptapEl : null);
+    liveBadges.forEach((entry) => {
+      // Seules les pastilles de l'éditeur du document : une autre vue du même nœud n'a pas la pagination de celui-ci.
+      if (!entry.dom.isConnected || !tiptapEl || !tiptapEl.contains(entry.dom)) return;
+      const at = resolve(entry.dom);
+      const text = at ? PageLayout.pageNumberText(entry.format, at.page, at.total) : entry.label;
+      if (entry.dom.textContent !== text) entry.dom.textContent = text;
+    });
+  }
   // Le haut du corps de chaque page de la dernière pagination, en pixels de mise en page depuis le haut de `.tiptap` (là où le `top` d'une image en calque posée sur la page la dessine,
   // comme reconcileLayerImagesWithGrid le relit) ; null sans pagination. La bande des diapositives y lit où va une image en calque quand sa diapositive change de page.
   function pageBodyTops() { return lastPageLayout ? lastPageLayout.pages.map(page => page.bodyTop - lastPageLayout.tiptapTop) : null; }
@@ -1033,7 +1100,7 @@ const HeaderFooterPreview = (function () {
     el.querySelectorAll('img').forEach(img => {
       if (!img.complete) img.addEventListener('load', () => { if (el.isConnected) sizeHfZone(el, zone, hasContent, bandPx); }, { once: true });
     });
-    el.onclick = () => openZone(zone, variant);
+    el.onclick = () => openZone(zone, variant, { page: pageNum, total: totalPages });
   }
   // Les espaceurs ne prennent jamais le clic (`pointer-events: none`, css/editor-v2.css) : ils recouvrent la marge de `.tiptap`, où une image en
   // calque (le triangle d'un coin de feuille, par exemple) doit rester atteignable. La zone sous le curseur se retrouve donc ici, pour un clic tombé
@@ -1431,7 +1498,7 @@ const HeaderFooterPreview = (function () {
       Dom.setMarkup(footer, PageLayout.resolvePageNumberBadges(footerText, pageEnding, totalPages));
       footer.style.paddingTop = '0';
       footer.style.maxHeight = footAreaPx + 'px';
-      footer.onclick = () => openZone('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default');
+      footer.onclick = () => openZone('footer', (pageEnding === 1 && differentFirstPage) ? 'first' : 'default', { page: pageEnding, total: totalPages });
       foot.appendChild(footer);
     }
     const divider = document.createElement('div');
@@ -1447,7 +1514,7 @@ const HeaderFooterPreview = (function () {
       Dom.setMarkup(h, PageLayout.resolvePageNumberBadges(headerText, pageStarting, totalPages));
       h.style.paddingTop = (topMarginPx / 2) + 'px';
       h.style.maxHeight = headAreaPx + 'px';
-      h.onclick = () => openZone('header', 'default');
+      h.onclick = () => openZone('header', 'default', { page: pageStarting, total: totalPages });
       head.appendChild(h);
     }
     seam.appendChild(foot); seam.appendChild(divider); seam.appendChild(head);
@@ -1650,8 +1717,10 @@ const HeaderFooterPreview = (function () {
       },
     });
     built.slice(steps.length).forEach(({ seam }) => seam.remove());
+    // Toutes les hauteurs de couture se lisent avant la première écriture (js/reader-mode.js:placeSimpleSeamsAtOnce dit pourquoi : `toLayoutY` demande la mise en page, `seam.style.top` la défait).
+    const seamTops = steps.map(step => toLayoutY(step.afterBottomScreen) + step.remaining);
     steps.forEach((step, i) => {
-      const seamTop = toLayoutY(step.afterBottomScreen) + step.remaining;
+      const seamTop = seamTops[i];
       if (cuts[i].next) pass.reserves.push({ next: cuts[i].next, bodyTopRel: step.bodyTopRel });
       marginRules.push(ruleOf(i, step.margin));
       built[i].seam.style.top = seamTop + 'px';
@@ -1842,6 +1911,6 @@ const HeaderFooterPreview = (function () {
     enterHeaderFooterMode, exitHeaderFooterModeIfActive, isEditingHeaderFooter, listStories, openStory, onStoriesChange,
     getHeaderFooterData, setHeaderFooterData, snapshot, restore, stashHistory, restoreHistory,
     schedulePaginationRecompute, schedulePaginationAfterEdit, paginationHolds, renderPaginationOverlay, computePageGridPosition, migrateLegacyImagePositions, reconcileLayerImagesWithGrid, recaptureLayeredImageGrids,
-    rowPadOf, pageBreaks, pageIndexOf, pageIndexResolver, pageBodyTops, onPaginated, scrollToPage, pageScreenTop, breaksOf,
+    rowPadOf, pageBreaks, pageIndexOf, pageIndexResolver, watchPageNumber, paintPageNumbers, pageBodyTops, onPaginated, scrollToPage, pageScreenTop, breaksOf,
   };
 })();

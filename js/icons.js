@@ -306,6 +306,8 @@ const Icons = (function () {
       speakerErase: '<g transform="rotate(-45 12 11)"><rect x="3.5" y="6.5" width="17" height="9" rx="1.8"/><path d="M10.5 6.5v9"/></g><path d="M5 21h14"/>',
       // La poignée de rotation d'un cadre ou d'une forme (js/free-frame.js) : une flèche circulaire dans le sens des aiguilles d'une montre.
       rotate: '<path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
+      // « Mettre à jour maintenant » (la barre d'une diapositive liée, js/floating-toolbars.js) : deux flèches qui se suivent en rond.
+      refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.4L4 9"/><path d="M4 4.5V9h4.5"/><path d="M4 13a8 8 0 0 0 14.6 4.4L20 15"/><path d="M20 19.5V15h-4.5"/>',
       // « Objets » de la barre d'outils (js/objects-menu.js) : l'écran 16:9, un cadre en tirets et un rond posés dessus ; « Cadre de texte » (sa ligne, js/free-frame.js) : le cadre en
       // tirets et deux lignes de texte ; « Dupliquer » (la barre du cadre) : deux feuilles décalées.
       slideObjects: '<rect x="2.5" y="5" width="19" height="13" rx="1.5"/><rect x="5.5" y="8" width="8" height="4.5" rx="0.8" stroke-dasharray="2 1.6"/><circle cx="16.5" cy="13.5" r="2"/>',

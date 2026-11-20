@@ -315,6 +315,35 @@ const SlideCopies = (function () {
       following = false;
     }
   }
+  // « Mettre à jour maintenant » (20/11, « un bouton Mettre à jour maintenant sur la diapositive liée ») : sans attendre le passage suivant de l'enregistrement automatique (de 15 secondes à plus de
+  // trois minutes selon le poids de la table, et qui attend un moment sans frappe ni souris), la table des modèles est relue à l'instant et les copies en texte comme les blocs du document
+  // reprennent leur diapositive, par les mêmes pas que ce passage (`follow`, `followBlocks`). Le bouton de la barre en tient le rôle : la barre dit la diapositive que la sélection suit, `status`.
+  // Une diapositive déjà à jour le dit. Rend vrai quand la relecture a eu lieu.
+  let refreshing = false;
+  async function updateNow(editor, status) {
+    if (!editor || editor.isDestroyed || refreshing) return false;
+    if (SlideLinks.blockedReason()) { say('slides.copy.refreshOff', null, true); return false; }
+    refreshing = true;
+    const name = status && status.name ? status.name : '';
+    say('slides.copy.refreshing', { name });
+    try {
+      await Templates.loadAll();
+      if (editor.isDestroyed) return false;
+      if (paused(editor)) { say('slides.copy.refreshOff', null, true); return false; }
+      const texts = follow(editor);
+      const blocks = await followBlocks(editor);
+      const pulled = (texts ? texts.pulled.length : 0) + (blocks ? blocks.pulled.length : 0);
+      // Quand quelque chose a changé, `follow` et `followBlocks` l'ont dit ; sinon, la diapositive est celle de la dernière synchro.
+      if (!pulled) say('slides.copy.upToDate', { n: status && status.n ? status.n : 1, name });
+      return true;
+    } catch (error) {
+      console.warn('[SlideCopies] mise à jour immédiate impossible', error);
+      say('slides.copy.refreshFailed', { name }, true);
+      return false;
+    } finally {
+      refreshing = false;
+    }
+  }
   // ---- Les blocs redessinés pour une ligne (la Lecture et les exports) -----------------------------------------------------------------------------------
 
   // La Lecture et les exports (js/reader-mode.js : `resolveSlideBlocks`) redessinent, pour la ligne qu'ils écrivent, chaque diapositive en bloc qui garde sa diapositive (`slideSource`) : `resolveHtml(html)`
@@ -515,5 +544,5 @@ const SlideCopies = (function () {
     return SlideLinks.strip(Editor.getHTML(tr.doc));
   }
 
-  return { SOURCE_TYPE, createExtension, follow, followBlocks, fillBlocks, forOutput, insert, insertBlock, blockSourceOf, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
+  return { SOURCE_TYPE, createExtension, follow, followBlocks, updateNow, fillBlocks, forOutput, insert, insertBlock, blockSourceOf, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
 })();

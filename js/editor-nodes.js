@@ -320,8 +320,8 @@ const EditorNodes = (function () {
   const { createPageNumberBadgeNode, createSmartChipNode, smartChipAttrsOf, smartChipHtml, smartChipLabel } = (function () {
     // La bulle de numéro de page et la puce intelligente
 
-    // Bulle de numéro de page, même schéma que varBadge. Le libellé rendu dans l'éditeur n'est qu'un espace réservé (selon le format choisi), résolu en
-    // vrai numéro seulement à l'export et dans l'aperçu paginé.
+    // Bulle de numéro de page, même schéma que varBadge. Le libellé du schéma (renderHTML : HTML enregistré, presse-papiers) n'est qu'un espace réservé selon le format choisi ; la VUE de l'éditeur
+    // montre, elle, le vrai numéro quand l'éditeur le connaît (js/header-footer-preview.js:watchPageNumber), toujours en vert, et l'espace réservé sinon. Le numéro n'est jamais écrit dans le document.
     function createPageNumberBadgeNode(Node, mergeAttributes) {
       const LABELS = { n: '#', 'page-n': 'Page #', 'n-slash-total': '#/#' };
       const badgeAttributes = node => mergeAttributes({ class: 'page-number-badge', contenteditable: 'false', 'data-format': node.attrs.format });
@@ -343,9 +343,11 @@ const EditorNodes = (function () {
           return ({ node }) => {
             const dom = document.createElement('span');
             setAttrs(dom, badgeAttributes(node));
-            dom.textContent = LABELS[node.attrs.format] || LABELS.n;
+            const label = LABELS[node.attrs.format] || LABELS.n;
+            dom.textContent = label;
             showTextMarks(dom, node.marks);
-            return { dom };
+            // Le vrai numéro : posé à la prochaine pagination ; la vue s'en désinscrit en disparaissant.
+            return { dom, destroy: HeaderFooterPreview.watchPageNumber({ dom, format: node.attrs.format || 'n', label }) };
           };
         },
         addCommands() {

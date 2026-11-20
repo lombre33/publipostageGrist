@@ -6,7 +6,7 @@
 //  - le fichier (trois diapositives, un numéro de diapositive blanc de 28 pt sur un trapèze sombre, comme dans le fichier de la demande) s'importe par « + » > « Importer un PowerPoint… » ;
 //  - en MODE LECTURE (le vrai clic sur le bouton) chaque diapositive montre son numéro (1, 2, 3), blanc, gras, à 28 pt, sans la pastille verte : ni « # », ni fond, ni bordure ;
 //  - le DIAPORAMA (le vrai clic sur ▶, puis → au clavier) montre le même numéro sur chaque diapositive, sans pastille, et la touche Échap en sort ;
-//  - l'ÉDITEUR, lui, garde la pastille « # » (un espace réservé, comme dans un en-tête) : rien ne change à ce qu'on écrit.
+//  - l'ÉDITEUR montre lui aussi le numéro de chaque diapositive (1, 2, 3), en vert, depuis le 20/11 (js/header-footer-preview.js:watchPageNumber) ; le texte enregistré garde sa pastille : rien n'est écrit dans le document.
 // Lancé par run-headless.mjs (groupe Node « slideNumberMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-slide-number-mouse.mjs
 // SLIDE_NUMBER_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans lui, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -79,7 +79,7 @@ async function run(lang, scheme) {
   check(tag + 'trois diapositives importées, chacune avec la pastille de numéro de l\'éditeur (le champ du fichier), à 28 pt, blanc, gras', imported.slides === 3
     && (imported.html.match(/class="page-number-badge"/g) || []).length === 3 && (imported.html.match(/font-size: 28pt[^"]*"><strong>|<strong>[^]*?font-size: 28pt/g) || []).length >= 1, { slides: imported.slides, badges: (imported.html.match(/page-number-badge/g) || []).length });
   const editing = await badgesIn(page, 'document.querySelector("#editor-container .tiptap")');
-  check(tag + 'l\'éditeur garde la pastille « # » (un espace réservé, comme dans un en-tête) : trois, « # » chacune', !!editing && editing.length === 3 && editing.every(b => b.text === '#' && !b.resolved), editing);
+  check(tag + 'l\'éditeur montre le numéro de chaque diapositive, 1, 2 puis 3, dans la pastille verte (rien d\'écrit dans le texte : pas de data-slide-number)', !!editing && editing.length === 3 && editing.map(b => b.text).join(' ') === '1 2 3' && editing.every(b => !b.resolved), editing);
   await snap('editeur');
 
   // 2) Le MODE LECTURE, au vrai clic sur son bouton.
@@ -140,7 +140,7 @@ async function run(lang, scheme) {
   await page.keyboard.press('Escape');
   await sleep(700);
   const left = await page.evaluate(() => ({ shown: !!document.querySelector('.pp-slide-show'), html: Editor.getHTML() }));
-  check(tag + 'Échap quitte le diaporama et l\'éditeur garde sa pastille « # » : le texte n\'a pas changé, rien n\'est écrit', !left.shown && (left.html.match(/class="page-number-badge"/g) || []).length === 3 && !/data-slide-number/.test(left.html), { shown: left.shown, resolved: /data-slide-number/.test(left.html) });
+  check(tag + 'Échap quitte le diaporama et le texte de l\'éditeur n\'a pas changé, ses pastilles sont les mêmes : rien n\'est écrit', !left.shown && (left.html.match(/class="page-number-badge"/g) || []).length === 3 && !/data-slide-number/.test(left.html), { shown: left.shown, resolved: /data-slide-number/.test(left.html) });
 }
 
 await run('fr', 'light');
