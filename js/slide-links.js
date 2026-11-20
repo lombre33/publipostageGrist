@@ -630,8 +630,16 @@ const SlideLinks = (function () {
       const id = idOfSlide(now);
       if (!id || (idOfSlide(was) && idOfSlide(was) !== id)) return false;
       // La diapositive d'ici doit être la même que celle d'avant : son numéro, ou, sans numéro encore (celui que l'envoi vient de poser), son texte inchangé.
+      // 20/11 : l'autre page n'a posé QUE le repère (le texte de la diapositive est celui d'avant : « Garder liée » d'un document, qui écrit le numéro de la diapositive dans sa source) et la personne
+      // vient de taper dans cette diapositive : elle n'est plus celle d'avant, mais c'est la seule de la page qui diffère (toutes les autres sont telles que ce widget les connaissait, au même rang),
+      // donc c'est bien elle. Le repère s'y pose, sa frappe reste à enregistrer : un bandeau ici ferait perdre sa frappe (« Recharger la dernière version ») ou le repère (« Enregistrer » l'efface de la source).
       const slide = here[i];
-      if (idOfSlide(was) ? idOfSlide(slide) !== id : slideHash(slide) !== slideHash(was)) return false;
+      if (idOfSlide(was)) { if (idOfSlide(slide) !== id) return false; }
+      else if (slideHash(slide) !== slideHash(was)) {
+        const onlyTag = slideHash(was) === slideHash(now);
+        const alone = here.every((other, k) => k === i || slideHash(other) === slideHash(before.slides[k]));
+        if (!onlyTag || !alone) return false;
+      }
       changed.push(i);
     }
     const tr = editor.state.tr;
@@ -644,7 +652,9 @@ const SlideLinks = (function () {
       const tag = now.tag.node.type.create(tagAttrs);
       const editedHere = slideHash(slide) !== slideHash(before.slides[i]);
       const same = slideHash(slide) === slideHash(now);
-      if (editedHere && !same) {
+      // L'autre page n'a posé que le repère : rien à proposer, la diapositive d'ici garde son texte (tapé ou non) et reçoit le repère.
+      const tagOnly = slideHash(now) === slideHash(before.slides[i]);
+      if (editedHere && !same && !tagOnly) {
         // Changée ici aussi : elle garde sa version, la fenêtre propose l'autre.
         incoming.set(tagAttrs.slideId, now);
         asked.unshift({ index: i, incoming: true });
@@ -652,7 +662,7 @@ const SlideLinks = (function () {
         else tr.insert(slide.end, tag);
         return;
       }
-      if (same) {
+      if (same || tagOnly) {
         if (slide.tag) tr.replaceWith(slide.tag.pos, slide.tag.pos + slide.tag.node.nodeSize, tag);
         else tr.insert(slide.end, tag);
         return;
