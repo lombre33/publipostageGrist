@@ -58,6 +58,8 @@ const SlideWindow = (function () {
       deliver(payload) { self.payload = payload; if (self.ready) send(self, SHOW, { payload }); },
       // Rien à montrer (« Annuler », rendu raté) : la fenêtre se ferme.
       cancel() { self.release(); try { popup.close(); } catch (e) { /* déjà fermée */ } },
+      // La fenêtre est fermée ? Le navigateur le dit tout de suite (sans attendre le coup d'œil de 2 s) : un rendu qui l'attendait s'arrête alors (PrintExport.stage, `cancelled` ; slide-show.js).
+      isClosed() { try { return popup.closed === true; } catch (e) { return true; } },
       // La fenêtre est fermée, ou remplacée par la suivante : ce qu'elle gardait est libéré.
       release() { clearInterval(self.watch); self.payload = null; if (link === self) link = null; },
       // La vue intervenant suit la fenêtre : `onState(state)` à chaque changement de ce que le diaporama montre, `onGone()` une fois, quand la fenêtre se ferme (elle l'a dit, ou le navigateur la montre fermée), `onReady()`
@@ -241,13 +243,16 @@ const SlideWindow = (function () {
       shadow.appendChild(node);
       if (node.tagName === 'LINK') inside.push(node);
     });
+    // LE CONTENU ARRIVE APRÈS LES FEUILLES (20/11, « plus de 30 secondes pour que les slides se lancent ») : le HTML se lit et se nettoie pendant que les feuilles de style se chargent, mais il n'entre dans l'arbre qu'une fois
+    // toutes chargées et les polices prêtes. Posé avant, il portait plusieurs dizaines de milliers d'éléments que chaque feuille arrivée (une dizaine : celles de l'en-tête et celles de l'arbre ombre) obligeait à restyler, un
+    // restyle complet à chaque fois (Gecko refait le style de tout l'arbre à chaque feuille ajoutée) ; maintenant un seul style le prend, avec les bonnes polices (aucune mise en page refaite à leur arrivée).
     const content = clean(Dom.inertTemplate(payload.scope).content);
     const own = adoptImages(content, payload.images);
-    shadow.appendChild(content);
     const remove = () => { host.remove(); own.forEach((url) => { URL.revokeObjectURL(url); }); };
     parent.appendChild(host);
     await settleLinks(added.concat(inside), 8000);
     await loadFonts();
+    shadow.appendChild(content);
     const scope = shadow.querySelector('.pp-print-scope');
     const stage = shadow.getElementById('reader-container');
     if (!scope || !stage) { remove(); throw new Error('rendu illisible'); }

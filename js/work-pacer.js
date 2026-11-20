@@ -42,5 +42,6 @@ const WorkPacer = (function () {
     };
   }
 
-  return { create };
+  // `yieldTask()` : rend la main UNE fois, à une vraie tâche (rien de plus) - pour qui veut seulement laisser passer ce que le navigateur a en attente (une fenêtre fermée, un geste) avant de continuer.
+  return { create, yieldTask: breathe };
 })();

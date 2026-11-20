@@ -376,7 +376,9 @@ const SlideShow = (function () {
     let job = null;
     try {
       const slides = readSlides();
-      job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: document.body });
+      // La fenêtre fermée pendant la préparation (le départ d'une grosse présentation dure : on perd patience et on ferme l'onglet) : le rendu s'arrête au prochain point d'arrêt, au lieu d'aller au bout page figée.
+      job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: document.body, cancelled: link.isClosed });
+      if (link.isClosed()) { job.dispose(); job = null; link.release(); return; }
       const payload = SlideWindow.pack(job, Object.assign({}, slides, how), light ? light.images : null);
       job.dispose();
       job = null;
@@ -384,6 +386,7 @@ const SlideShow = (function () {
       trace('rendu envoyé à la fenêtre');
     } catch (e) {
       if (job) job.dispose();
+      if (e && e.cancelled) { link.release(); return; }   // la fenêtre est fermée : personne à qui le dire
       link.cancel();
       SlidesEntry.status(I18n.t('slides.show.failed', { message: (e && e.message) || String(e) }));
     } finally {
@@ -406,13 +409,15 @@ const SlideShow = (function () {
     player.root.focus({ preventScroll: true });
     if (refusal) player.note(I18n.t(refusal), 8000);
     try {
-      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root });
+      // Quitté (Échap, « Quitter ») pendant la préparation : le rendu s'arrête au prochain point d'arrêt.
+      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: player.root, cancelled: () => run !== current });
       if (run !== current) { job.dispose(); return; }
       player.load(job, slides, how);
       trace('première diapositive dans le panneau');
     } catch (e) {
       if (run !== current) return;
       stop();
+      if (e && e.cancelled) return;
       SlidesEntry.status(I18n.t('slides.show.failed', { message: (e && e.message) || String(e) }));
     }
   }
@@ -431,8 +436,10 @@ const SlideShow = (function () {
     // La fenêtre qui se dit prête (au départ, et si on la recharge) repart de zéro : le tracé qu'elle gardait n'est plus, celui de la console non plus.
     link.follow(state => speaker.setState(state), stop, () => speaker.reset());
     try {
-      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current });
+      // La console quittée, ou la fenêtre fermée, pendant la préparation : le rendu s'arrête au prochain point d'arrêt.
+      const job = await PrintExport.stage(FrameAnim.stampSlides(html), GristAPI.getCurrentTableId(), GristAPI.getCurrentRecord(), headerFooter, { id: SlidePlayer.HOST_ID, parent: speaker.boxes.current, cancelled: () => run !== current || link.isClosed() });
       if (run !== current) return;
+      if (link.isClosed()) { job.dispose(); stop(); return; }
       link.deliver(SlideWindow.pack(job, Object.assign({}, data, how), light ? light.images : null));
       const copy = await SlideWindow.duplicate(job, { id: UPCOMING_ID, parent: speaker.boxes.upcoming });
       if (run !== current) return;
@@ -440,6 +447,7 @@ const SlideShow = (function () {
     } catch (e) {
       if (run !== current) return;
       stop();
+      if (e && e.cancelled) return;
       SlidesEntry.status(I18n.t('slides.show.failed', { message: (e && e.message) || String(e) }));
     }
   }

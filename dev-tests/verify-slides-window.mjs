@@ -14,6 +14,7 @@
 //  LES EFFETS (demande du 03/11 : « même le mode plein écran dans un nouvel onglet pour lire le diapo rame ») : la page charge ce que ses effets lisent (js/color-math.js : sans lui chaque effet échouait et laissait
 //   une copie de toute la présentation), l'effet se joue pour de bon, la copie de la page quittée est la même d'un effet à l'autre (faite une fois, garée hors de l'écran entre deux) et montre la page quittée telle
 //   qu'elle était, la barre du bas reste devant la page qui arrive, et passer d'une diapositive à l'autre ne lit pas la taille de l'écran (calcul forcé de la mise en page de toute la copie).
+//  LE DÉPART ABANDONNÉ (20/11 : « j'ai refermé l'onglet et ça lag toujours ») : la fenêtre fermée (ou le diaporama quitté, ou la vue intervenant fermée) pendant que l'app prépare le rendu : le rendu s'abandonne au lieu d'aller au bout page figée, rien n'est envoyé ni laissé dans la page.
 //  ROUVRIR : ▶ pendant que la fenêtre est ouverte la remplace au lieu d'en empiler une deuxième (même nom) ; une fenêtre rechargée redemande son rendu ; une image d'un autre site pose sa question AVANT
 //   la fenêtre (Annuler n'ouvre rien, Continuer l'ouvre : le geste est celui du bouton de la question) ; un rendu qui échoue ferme la fenêtre et le dit.
 //  LE DÉLAI DU GESTE : un rendu de 6,5 s n'empêche pas la fenêtre de s'ouvrir tout de suite (elle s'ouvre avant le rendu) ; une attente de 6,5 s avant l'ouverture la fait refuser par le navigateur : le panneau, avec
@@ -717,7 +718,96 @@ async function standalone() {
   await context.close();
 }
 
+// --- LE DÉPART ABANDONNÉ (20/11 : « plus de 30 secondes pour que les slides se lancent », puis « j'ai refermé l'onglet et ça lag toujours, comme si un chantier tournait en fond ») : le rendu de la présentation
+// (PrintExport.stage) se préparait jusqu'au bout page figée alors que la fenêtre qui l'attendait était fermée (ou le diaporama quitté). Les feuilles de style du rendu arrivent ici avec 1,5 s de retard : la
+// préparation les attend, c'est pendant ce temps que la fenêtre est fermée ; le rendu doit alors s'abandonner (`error.cancelled`) sans mesurer les pages, sans rien envoyer, sans rien laisser dans la page.
+async function abandoned() {
+  const tag = '[abandon] ';
+  const fresh = async () => {
+    const A = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, langue: 'fr' }, seed: SEED, lang: 'fr', colorScheme: 'light', popups: true, bypassCSP: false });
+    A.slow = false;
+    await A.context.route('**/css/**', async (route) => { if (A.slow) await sleep(1500); route.continue().catch(() => {}); });
+    await open(A, 8, 3);
+    await cursorIn(toolsOf(A), 1);
+    // Chaque rendu demandé et ce qu'il devient (« rendu » : mené au bout ; « abandonné » : arrêté parce que plus personne ne l'attend), et combien de fois le rendu a été mis en paquet pour la fenêtre.
+    await A.app.evaluate(() => {
+      window.__stages = [];
+      const stage = PrintExport.stage;
+      PrintExport.stage = function () {
+        const rec = { state: 'en cours' };
+        window.__stages.push(rec);
+        const promise = stage.apply(this, arguments);
+        promise.then(() => { rec.state = 'rendu'; }, (e) => { rec.state = e && e.cancelled ? 'abandonné' : 'échec : ' + (e && e.message); });
+        return promise;
+      };
+      window.__packs = 0;
+      const pack = SlideWindow.pack;
+      SlideWindow.pack = function () { window.__packs++; return pack.apply(this, arguments); };
+    });
+    return A;
+  };
+  const after = A => A.app.evaluate(() => ({
+    stages: window.__stages.map(s => s.state), packs: window.__packs, link: SlideWindow.state(), running: SlideShow.isRunning(), console: !!SlideShow.speaker(),
+    hosts: document.querySelectorAll('#pp-slide-show-stage, .pp-slide-show, .pp-slide-speaker').length, status: (document.getElementById('status-msg') || {}).textContent || '',
+  }));
+
+  // 1. La fenêtre à part fermée pendant la préparation.
+  {
+    const A = await fresh();
+    const a = toolsOf(A);
+    A.slow = true;
+    const popup = await playAndCatch(A, a);
+    check(tag + 'le ▶ ouvre la fenêtre à part (cadre qui refuse le plein écran)', !!popup);
+    if (popup) await popup.close();
+    await sleep(3800);
+    const seen = await after(A);
+    check(tag + 'fenêtre fermée pendant la préparation : le rendu est ABANDONNÉ (non mené au bout, page figée), rien n’est mis en paquet ni envoyé', seen.stages.length === 1 && seen.stages[0] === 'abandonné' && seen.packs === 0, seen);
+    check(tag + 'rien ne reste dans la page (ni lien, ni rendu, ni diaporama) et aucun message d’échec n’est affiché', seen.link === null && seen.hosts === 0 && !seen.running && !/pas pu|could not/i.test(seen.status), seen);
+    A.slow = false;
+    // Le départ suivant marche : l'abandon n'a rien cassé.
+    const again = await playAndCatch(A, a);
+    if (again) { await waitCounter(again); }
+    const second = again ? await shownIn(again) : null;
+    check(tag + 'un nouveau ▶ ouvre la fenêtre et montre la diapositive (l’abandon n’a rien cassé)', !!again && !!second && /\d+ \/ 3/.test(second.counter), second && second.counter);
+    if (again) await closing(again.close());
+    await A.context.close();
+  }
+
+  // 2. Le diaporama du panneau quitté (Échap) pendant la préparation.
+  {
+    const A = await fresh();
+    const a = toolsOf(A);
+    await a.click('.pp-slide-show-more', 0, 250);
+    await a.click('.pp-show-menu [data-action="fullscreen"]', 0, 250);
+    A.slow = true;
+    await a.click('.pp-slide-show-open', 0, 400);
+    await A.page.keyboard.press('Escape');
+    // Le conteneur quitté est retiré de la page : ses feuilles de style n'y chargent plus, la préparation attend son délai de 8 s avant de voir qu'elle est abandonnée (elle ne travaille pas pendant ce temps).
+    await sleep(9500);
+    const seen = await after(A);
+    check(tag + 'panneau : Échap pendant la préparation abandonne le rendu (non mené au bout) et le panneau est rendu', seen.stages.length === 1 && seen.stages[0] === 'abandonné' && !seen.running && seen.hosts === 0 && !/pas pu|could not/i.test(seen.status), seen);
+    await A.context.close();
+  }
+
+  // 3. La vue intervenant : la fenêtre fermée pendant la préparation rend le panneau, sans rendu mené au bout.
+  {
+    const A = await fresh();
+    const a = toolsOf(A);
+    await a.click('.pp-slide-show-more', 0, 250);
+    await a.click('.pp-show-menu [data-action="speaker"]', 0, 250);
+    A.slow = true;
+    const popup = await playAndCatch(A, a);
+    check(tag + 'la vue intervenant ouvre sa fenêtre', !!popup);
+    if (popup) await popup.close();
+    await sleep(9500);
+    const seen = await after(A);
+    check(tag + 'vue intervenant : fenêtre fermée pendant la préparation : le rendu est abandonné, la console disparaît, le panneau est rendu', seen.stages.length === 1 && seen.stages[0] === 'abandonné' && seen.packs === 0 && !seen.console && !seen.running && seen.hosts === 0 && seen.link === null && !/pas pu|could not/i.test(seen.status), seen);
+    await A.context.close();
+  }
+}
+
 await run('fr', 'light');
 await run('en', 'dark');
+await abandoned();
 await standalone();
 await t.finish();
