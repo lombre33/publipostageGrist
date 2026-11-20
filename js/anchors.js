@@ -86,7 +86,8 @@ const Anchors = (function () {
     });
     return runs;
   }
-  const linkCount = (editor, id) => (id ? linkRuns(editor.state.doc, id).length : 0);
+  // Les liens et les renvois (js/cross-refs.js) qui mènent à `id`.
+  const linkCount = (editor, id) => (id ? linkRuns(editor.state.doc, id).length + CrossRefs.count(editor.state.doc, id) : 0);
 
   // La normalisation : à chaque changement du document, un signet qui n'a plus de place (bloc entré dans une liste ou un tableau, légende), un doublon, une
   // adresse que le HTML ne saurait écrire sont retirés ; un nom sans adresse (un HTML écrit à la main) en reçoit une. Une seule transaction, rangée dans
@@ -243,6 +244,7 @@ const Anchors = (function () {
     const id = keeps ? oldId : uniqueId(slug, candidate => taken.has(candidate));
     if (oldId && id !== oldId) {
       linkRuns(state.doc, oldId).forEach(run => tr.addMark(run.from, run.to, run.mark.type.create(Object.assign({}, run.mark.attrs, { href: hrefOf(id) }))));
+      CrossRefs.retarget(state.doc, tr, oldId, id);
     }
     tr.setNodeAttribute(pos, 'anchorId', id);
     tr.setNodeAttribute(pos, 'anchorName', wanted);

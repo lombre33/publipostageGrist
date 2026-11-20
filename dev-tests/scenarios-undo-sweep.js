@@ -132,6 +132,7 @@ window.EditorTestSuites.undoSweep = (function () {
     { name: 'paraEnd', markup: PARA, sel: 'end' },
     { name: 'list', markup: '<ul><li><p>a</p></li><li><p>b</p></li></ul>', sel: 'inB' },
     { name: 'heading', markup: '<h1>Titre</h1><p>texte</p>', sel: 'start' },
+    { name: 'headingPara', markup: '<h1>Titre</h1><p>texte</p>', sel: 'end' }, // le curseur au bout du paragraphe sous un titre : de quoi poser un renvoi vers ce titre
     { name: 'table', markup: TABLE, sel: 'cell' },
     { name: 'tableCells', markup: TABLE, sel: 'cells' },
     { name: 'tableVar', markup: '<table><tbody><tr><td><p>' + badge('Titre') + '</p></td><td><p>Beta</p></td></tr></tbody></table><p>Après</p>', sel: 'cellBeta', variables: true },

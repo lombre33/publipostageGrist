@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // QR code (js/qr-code.js, js/main-toolbar.js, css/qr-code.css, js/editor-nodes.js) : le panneau de 700x400 d'Antoine, à la VRAIE souris (page.mouse) et au VRAI clavier (frappe, Tab, Entrée,
 // Échap, Ctrl+Z), en clair, en sombre et en anglais. Ce que scenarios-qr-code.js ne peut pas voir depuis la page :
-//  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses dix lignes, « QR code… » en septième, dont les neuf premières tiennent dans le panneau (la dixième défile) et sont au premier plan, le volet ne déborde pas ;
+//  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses onze lignes, « QR code… » en huitième, dont les neuf premières tiennent dans le panneau (les deux dernières défilent) et sont au premier plan, le volet ne déborde pas ;
 //  - un clic sur « QR code… » ouvre la fenêtre ; elle tient dans 700x400 sans défiler - titre, champ, « Insérer une colonne… », aperçu et boutons visibles ; le focus est dans le champ ;
 //  - taper une adresse montre son QR code (relu par un décodeur) ; « Insérer » le pose dans le document, à 120 px et carré, et rend le clavier à l'éditeur ;
 //  - un clic sur le QR code le sélectionne : la ligne devient « Modifier le QR code… », la fenêtre s'ouvre remplie, Entrée valide, un Ctrl+Z revient à l'ancien ;
@@ -187,7 +187,7 @@ async function openMenu() {
   return c;
 }
 async function closeMenu() {
-  // Le volet à dix lignes (neuf visibles, la dixième défile) descend à ~394 px et couvre le bas du milieu du panneau : la souris le quitte par le coin bas droit.
+  // Le volet à onze lignes (neuf visibles, les deux dernières défilent) descend à ~394 px et couvre le bas du milieu du panneau : la souris le quitte par le coin bas droit.
   await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(250);
 }
@@ -211,7 +211,7 @@ await page.addScriptTag({ url: OFFLINE ? `${BASE}/dev-tests/.offline-cache/umd/j
 
 const MAIN = '#v2-btn-link';
 const ROW = '#v2-btn-qr';
-const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', ROW, '#v2-btn-chart', '#v2-btn-video'];
+const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-row-cross-ref', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', ROW, '#v2-btn-chart'];
 const FLYOUT = '#v2-blocks-flyout';
 const WIN = '#pp-qr-modal';
 const BOX = `${WIN} .modal-content`;
@@ -238,7 +238,7 @@ const textOf = selector => page.evaluate(sel => { const e = document.querySelect
 const isHidden = selector => page.evaluate(sel => { const e = document.querySelector(sel); return !e || e.hidden || getComputedStyle(e).display === 'none'; }, selector);
 const isDisabled = selector => page.evaluate(sel => { const e = document.querySelector(sel); return !!e && e.disabled; }, selector);
 const rowLabels = () => page.evaluate(() => Array.from(document.querySelectorAll('#v2-blocks-flyout .v2-menu-row')).map(r => r.textContent.trim()));
-const QR_ROW_INDEX = 6;
+const QR_ROW_INDEX = 7;
 // Les QR codes du document, tels qu'écrits : texte gardé, présence d'une image, largeur.
 const qrNodes = () => page.evaluate(() => Array.from(new DOMParser().parseFromString(Editor.getHTML(), 'text/html').querySelectorAll('img[data-qr-text]')).map(i => ({ text: i.getAttribute('data-qr-text'), hasSrc: i.hasAttribute('src'), src: i.getAttribute('src'), width: i.style.width })));
 // Le texte que lit un décodeur (jsQR, chargé dans la page) dans une image `data:`.
@@ -303,7 +303,7 @@ async function run(theme) {
   for (const sel of ROWS) rows.push(await hit(sel));
   check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses neuf premières lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
   const labels = await rowLabels();
-  check(`${T}, menu : « Lien… », « Signet… », « Citation », « Bloc de code », « Encadré… », « Bloc de signature », « QR code… », « Graphique de la page… », « Vidéo… » puis « Diapositive d’une présentation… »`, labels.length === 10 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Signet…' && labels[2] === 'Citation' && labels[3] === 'Bloc de code' && labels[4] === 'Encadré…' && labels[5] === 'Bloc de signature' && labels[QR_ROW_INDEX] === 'QR code…' && labels[7] === 'Graphique de la page…' && labels[8] === 'Vidéo…' && labels[9] === 'Diapositive d’une présentation…', labels);
+  check(`${T}, menu : « Lien… », « Signet… », « Renvoi… », « Citation », « Bloc de code », « Encadré… », « Bloc de signature », « QR code… », « Graphique de la page… », « Vidéo… » puis « Diapositive d’une présentation… »`, labels.length === 11 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Signet…' && labels[2] === 'Renvoi…' && labels[3] === 'Citation' && labels[4] === 'Bloc de code' && labels[5] === 'Encadré…' && labels[6] === 'Bloc de signature' && labels[QR_ROW_INDEX] === 'QR code…' && labels[8] === 'Graphique de la page…' && labels[9] === 'Vidéo…' && labels[10] === 'Diapositive d’une présentation…', labels);
   await snap(`${T}-1-menu`);
   await closeMenu();
   const closed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-blocks-flyout')).display === 'none');
@@ -505,7 +505,7 @@ async function runEnglish() {
   const flyout = await hit(FLYOUT);
   const rows = [];
   for (const sel of ROWS) rows.push(await hit(sel));
-  check('anglais, menu : le volet « Link and content blocks » montre « QR code… » en septième ligne et « Chart from the page… » en huitième, dans le panneau', labels.length === 10 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[QR_ROW_INDEX] === 'QR code…' && labels[7] === 'Chart from the page…' && flyout.inPanel && rows.every(seen), { labels, flyout, rows });
+  check('anglais, menu : le volet « Link and content blocks » montre « QR code… » en huitième ligne et « Chart from the page… » en neuvième, dans le panneau', labels.length === 11 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[QR_ROW_INDEX] === 'QR code…' && labels[8] === 'Chart from the page…' && flyout.inPanel && rows.every(seen), { labels, flyout, rows });
   await snap('en-1-menu');
   await clickRow(ROW);
   await page.waitForTimeout(150);

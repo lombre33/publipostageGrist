@@ -9,6 +9,19 @@
    et ses lettres : `.v2-floating-toolbar button` pose une largeur d'icône que ce bouton, qui porte un texte, remplace. */
 .v2-copy-toolbar { align-items: center; max-width: min(380px, calc(100vw - 16px)); }
 .v2-copy-name { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12.5px/26px var(--font-ui); color: var(--text, #3a4452); }
-.v2-floating-toolbar .v2-copy-detach { flex: none; width: auto; gap: 5px; padding: 0 8px; font: 12.5px/1 var(--font-ui); color: var(--text, #3a4452); }
+.v2-floating-toolbar .v2-copy-edit, .v2-floating-toolbar .v2-copy-detach { flex: none; width: auto; gap: 5px; padding: 0 8px; font: 12.5px/1 var(--font-ui); color: var(--text, #3a4452); }
 /* « Mettre à jour maintenant » : un bouton d'icône (la largeur d'icône de `.v2-floating-toolbar button`) ; absent quand la diapositive d'origine n'existe plus. */
-.v2-floating-toolbar .v2-copy-refresh[hidden] { display: none; }
+.v2-floating-toolbar .v2-copy-refresh[hidden], .v2-floating-toolbar .v2-copy-detach[hidden] { display: none; }
+/* Les boutons gardent leur taille (≥ 24 px) : c'est le nom de la présentation qui se coupe par « … » quand la barre est étroite. */
+.v2-floating-toolbar .v2-copy-refresh { flex: none; }
+/* « Modifier la diapo » : un bouton à texte comme « Détacher », devant le bouton d'icône de la mise à jour. */
+
+/* Le cadre « chargement » d'une diapositive qui arrive (js/slide-copies.js : startPending) : une décoration de l'éditeur, qui prend la place de la diapositive le temps qu'elle se lie et se dessine
+   (un gros PowerPoint : plusieurs secondes). Rien n'en reste dans le document, la Lecture ni les exports. */
+.tiptap .pp-slide-pending { display: flex; align-items: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: 72px; margin: 6px 0; padding: 12px 16px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-sunken); color: var(--text-muted); font: 13px/1.3 var(--font-ui); user-select: none; }
+.tiptap .pp-slide-pending-mark { flex: none; width: 14px; height: 14px; box-sizing: border-box; border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; }
+.tiptap .pp-slide-pending-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .tiptap .pp-slide-pending-mark { animation: pp-slide-pending-spin 0.9s linear infinite; }
+}
+@keyframes pp-slide-pending-spin { to { transform: rotate(360deg); } }

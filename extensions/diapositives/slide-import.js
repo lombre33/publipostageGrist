@@ -70,6 +70,7 @@ const SlideImport = (function () {
   let titleLabel = null;           // le titre du volet, libellé du choix de la source
   let mode = 'slides';             // 'slides' : le volet « Importer » de la bande, dans une présentation ; 'text' : le volet d'un document, qui insère une diapositive en texte
   const remembered = { slides: null, text: null };   // la source de chacun des deux usages du volet, que `sourceId` porte quand il est ouvert
+  let editing = null;              // « Modifier la diapo » : la diapositive du document que le prochain clic remplace (js/slide-copies.js : editTargetAt), ou null : un clic insère au curseur
   let linking = false;             // un import lié en cours (la source se relit et s'écrit) : les clics suivants attendent qu'il ait fini
   let list = null;                 // les miniatures de la source
   let opener = null;               // le bouton qui l'a ouvert : Échap lui rend le clavier
@@ -258,6 +259,7 @@ const SlideImport = (function () {
     clearRows();
     source = null;
     said = null;
+    editing = null;
     const wasText = inText();
     remembered[mode] = sourceId;
     mode = 'slides';
@@ -266,6 +268,65 @@ const SlideImport = (function () {
     if (!(returnFocus || hadFocus)) return;
     // Le clavier revient au bouton « Importer » ; en texte, au document.
     if (wasText) { const editor = EditorCore.getEditor(); if (editor && !editor.isDestroyed) editor.commands.focus(); } else if (opener && opener.isConnected) opener.focus();
+  }
+  // « Modifier la diapo » (20/11, « quand on clique sur la diapo importée, ça devrait rouvrir le menu » ; la barre flottante de la diapositive et son double clic) : le volet s'ouvre sur la diapositive
+  // du document que `target` désigne (js/slide-copies.js : editTargetAt) - sa présentation choisie, sa diapositive mise en évidence, les choix qu'elle avait (« En bloc » ou « En texte », « Garder
+  // liée », la mise en forme d'origine). Le clic suivant sur une miniature la REMPLACE, à sa place, d'un seul pas d'annulation, avec les choix du moment ; ensuite le volet insère de nouveau au
+  // curseur. Sans présentation connue (un bloc d'avant qui n'a pas gardé son origine, une présentation supprimée) il s'ouvre sans diapositive choisie, pour qu'on la désigne dans la liste.
+  function openFor(target) {
+    build();
+    const model = target.model != null ? Templates.byId(target.model) : null;
+    const known = model && model.typeModele === SlidesEntry.TYPE ? model : null;
+    editing = target;
+    if (known) { remembered.text = known.id; if (open && inText()) sourceId = known.id; }
+    openPanel(null, false, true);
+    linkText = !!target.linked;
+    asBlock = !!target.asBlock;
+    keepFormat = !!target.keepFormat;
+    said = null;
+    syncHint();
+    markCurrent();
+  }
+  // La clé d'une diapositive de la source, pour retrouver celle d'un bloc posé sans lien : l'empreinte de son texte.
+  const textKeyOf = index => SlideLinks.hashOf(cleanCopy(index).textContent || '');
+  // Le rang, dans la source à l'écran, de la diapositive que `editing` remplace (-1 : on ne le sait pas, ou ce n'est pas la présentation d'où elle vient).
+  function editedIndex() {
+    if (!editing || !source || editing.model == null || String(source.id) !== String(editing.model)) return -1;
+    if (editing.index >= 0) return editing.index < rows.length ? editing.index : -1;
+    if (editing.rank >= 0) {
+      const same = editing.h ? source.slides.findIndex((slide, index) => textKeyOf(index) === editing.h) : -1;
+      if (same >= 0) return same;
+      return editing.rank < rows.length ? editing.rank : -1;
+    }
+    return -1;
+  }
+  // Met en évidence la miniature de la diapositive qu'on modifie, et la montre.
+  function markCurrent() {
+    const at = editedIndex();
+    rows.forEach((row, index) => { row.item.classList.toggle('pp-slide-current', index === at); if (index === at) row.item.setAttribute('aria-current', 'true'); else row.item.removeAttribute('aria-current'); });
+    if (at >= 0) {
+      setActive(at, false);
+      rows[at].item.scrollIntoView({ block: 'nearest' });
+    }
+  }
+  // La modification est faite (ou la diapositive n'est plus là) : le volet insère de nouveau au curseur.
+  function endEditing() {
+    if (!editing) return;
+    editing = null;
+    rows.forEach((row) => { row.item.classList.remove('pp-slide-current'); row.item.removeAttribute('aria-current'); });
+    said = null;
+    syncHint();
+  }
+  // Ce que l'insertion en cours remplace, relu à l'instant où elle se fait (le texte a pu bouger depuis le clic) : { range, like, except } ; `range` null sans « Modifier la diapo » ; `gone` quand la
+  // diapositive à remplacer n'est plus dans le document (rien n'est posé, le coin d'état le dit).
+  function replacing(editor) {
+    if (!editing) return { range: null, like: null, except: null, gone: false };
+    const range = SlideCopies.rangeOf(editor, editing);
+    return { range, like: SlideCopies.blockAttrsOf(editor, editing), except: editing.match, gone: !range };
+  }
+  function sayGone() {
+    SlidesEntry.status(I18n.t('slides.edit.gone'), true);
+    endEditing();
   }
   function toggle(from, byKeyboard) {
     if (open) closePanel(byKeyboard); else openPanel(from, byKeyboard);
@@ -289,6 +350,7 @@ const SlideImport = (function () {
     readSource();
     syncRows();
     syncHint();
+    markCurrent();
   }
   // Rappelé par la bande : à chaque changement de son texte ou de son curseur, l'indication (`full` faux) ; quand l'écran change (`full`), tout ce que montre le volet, une fois
   // l'ouverture en cours finie : js/main.js montre la bande d'une présentation qui s'ouvre avant d'en faire le modèle courant (Templates.isCurrent), que la liste des sources écarte.
@@ -321,6 +383,7 @@ const SlideImport = (function () {
     readSource();
     syncRows();
     syncHint();
+    markCurrent();
   }
 
   // La source, lue de son HTML enregistré (le cache des modèles, js/templates.js), une fois tant qu'il ne change pas : assainie et inerte (HtmlSanitize.parseInert), puis coupée à ses sauts
@@ -507,8 +570,8 @@ const SlideImport = (function () {
     const linked = linkText && !blocked;
     const hintKey = asBlock ? (linked ? 'slides.block.hintLinked' : 'slides.block.hint')
       : linked ? (keepFormat ? 'slides.copy.hintLinkedKeep' : 'slides.copy.hintLinked') : (keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
-    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(hintKey);
-    const state = 'text|' + text + '|' + off + '|' + blocked + '|' + linkText + '|' + keepFormat + '|' + asBlock;
+    const text = !source ? (editing ? I18n.t('slides.edit.pick') : '') : off ? SlidesEntry.reason() : I18n.t(editing ? 'slides.edit.hint' : hintKey);
+    const state = 'text|' + text + '|' + off + '|' + blocked + '|' + linkText + '|' + keepFormat + '|' + asBlock + '|' + !!editing;
     if (state === said) return;
     said = state;
     hint.textContent = text;
@@ -581,7 +644,8 @@ const SlideImport = (function () {
   // La diapositive `index` de la source, après celle du curseur (SlideStrip.importAfterCurrent) ; le coin d'état le dit. Une diapositive vide arrive comme « Ajouter » en pose une.
   // Grisé (l'extension éteinte), il explique.
   function importSlide(index) {
-    if (!source || !source.slides[index] || linking) return;
+    if (!source || !source.slides[index]) return;
+    if (linking) { SlidesEntry.status(I18n.t('slides.pending.wait')); return; }
     if (isOff()) { SlidesEntry.explainOff(); return; }
     if (inText()) {
       const linked = linkText && !SlideLinks.blockedReason();
@@ -609,15 +673,35 @@ const SlideImport = (function () {
     setActive(index, byKeyboard);
     if (result.blank) { SlidesEntry.status(I18n.t('slides.text.empty', { n: index + 1, name })); return; }
     const { view } = editor;
-    view.dispatch(view.state.tr.setMeta('closeHistory$', true));
-    view.pasteHTML(copy.innerHTML);
-    SlideText.leaveBlockAtEnd(view);
+    // « Modifier la diapo » : le texte prend la place de la diapositive d'avant, en un seul pas d'annulation (comme une copie liée, sans son repère).
+    const replaced = replacing(editor);
+    if (replaced.gone) { sayGone(); return; }
+    if (replaced.range) SlideCopies.insert(editor, { html: copy.innerHTML, link: null, keepFormat, replace: replaced.range });
+    else {
+      view.dispatch(view.state.tr.setMeta('closeHistory$', true));
+      view.pasteHTML(copy.innerHTML);
+      SlideText.leaveBlockAtEnd(view);
+    }
+    if (replaced.range) endEditing();
     // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après la diapositive) ; au clavier, il reste sur la miniature, pour la suivante.
     if (!byKeyboard) editor.commands.focus();
     const said = I18n.t('slides.text.done', { n: index + 1, name });
     const dropped = SlideText.report(result.dropped);
     SlidesEntry.status(dropped ? said + ' ' + dropped : said);
   }
+  // Le cadre « chargement » de la diapositive `index` dans le document, à la place où elle se posera, jusqu'à ce qu'elle y soit (js/slide-copies.js : startPending) : une diapositive d'un gros
+  // PowerPoint met plusieurs secondes à se lier et à se dessiner, la page reste libre pendant ce temps. `at()` : où elle se pose maintenant, `release()` : le cadre part (idempotent).
+  // Rien de tel quand « Modifier la diapo » remplace une diapositive : l'ancienne reste à l'écran jusqu'à la nouvelle.
+  function holdPlace(editor, index, name) {
+    if (editing) return null;
+    const id = SlideCopies.startPending(editor, I18n.t('slides.pending.label', { n: index + 1, name }));
+    return id == null ? null : { id, at: () => SlideCopies.pendingAt(editor, id), release: () => SlideCopies.endPending(editor, id) };
+  }
+  // Laisse la page dessiner le cadre avant le premier pas lourd (une image au plus, 120 ms sinon : un onglet caché ne dessine rien).
+  const paintFirst = () => new Promise((resolve) => {
+    const late = setTimeout(resolve, 120);
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(() => { clearTimeout(late); resolve(); }, 0));
+  });
   // « En texte », « Garder liée » : la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis le texte arrive à l'endroit du curseur avec le sien, lié (js/slide-copies.js), en
   // un seul pas d'annulation. Pendant ce temps, le document à l'écran ne doit pas changer. Ce qui empêche le lien se dit sur la ligne d'état, et rien n'est inséré ; une source changée depuis que le
   // volet l'a lue se relit, pour que la personne choisisse de nouveau. Une diapositive déjà liée à ce document, ou vide, arrive comme sans la case (une vide n'écrit rien dans sa source).
@@ -631,21 +715,27 @@ const SlideImport = (function () {
     const here = Templates.getCurrentId();
     const byKeyboard = list.contains(document.activeElement);
     linking = true;
+    const hold = holdPlace(editor, index, name);
     SlidesEntry.status(I18n.t('slides.link.linking', { name }));
     try {
+      await paintFirst();
       const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu, source.body);
       if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
       if (isOff()) { SlidesEntry.explainOff(); return; }
-      if (SlideCopies.linkedFrom(editor, id).has(link.linkSlide)) {
+      if (SlideCopies.linkedFrom(editor, id, editing && editing.match).has(link.linkSlide)) {
         insertText(index);
         SlidesEntry.status(I18n.t('slides.link.already', { n: index + 1, name }));
         return;
       }
-      const result = SlideCopies.insert(editor, { html, link, keepFormat });
+      const replaced = replacing(editor);
+      if (replaced.gone) { sayGone(); return; }
+      const place = !replaced.range && hold ? hold.at() : null;
+      const result = SlideCopies.insert(editor, { html, link, keepFormat, replace: replaced.range || (place && place.range), leave: !!place && !place.untouched, pending: place ? hold.id : null });
+      if (replaced.range && !result.blank) endEditing();
       setActive(index, byKeyboard);
       if (result.blank) { SlidesEntry.status(I18n.t('slides.text.empty', { n: index + 1, name })); return; }
       // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après la copie) ; au clavier, il reste sur la miniature, pour la suivante.
-      if (!byKeyboard) editor.commands.focus();
+      if (!byKeyboard && !(place && !place.untouched)) editor.commands.focus();
       const said = I18n.t('slides.copy.done', { n: index + 1, name });
       const dropped = SlideText.report(result.dropped);
       SlidesEntry.status(dropped ? said + ' ' + dropped : said);
@@ -655,6 +745,7 @@ const SlideImport = (function () {
       if (error && (error.reason === 'slides.link.changed' || error.reason === 'slides.link.gone') && open) reload();
     } finally {
       linking = false;
+      if (hold) hold.release();
     }
   }
   // « En bloc » (demande du 12/11, carte « Un bloc comme une image ») : la diapositive `index` arrive dans le document en UNE image, dessinée comme la miniature (son décor, son logo, son numéro, ses
@@ -663,6 +754,7 @@ const SlideImport = (function () {
   // ou la source a changé entre-temps. La largeur est celle du texte du document, 16:9 par la source : la personne la règle ensuite aux poignées. Un seul pas d'annulation.
   // La photo de `html` (une diapositive, sans repère) à la page de la présentation `tpl`, dessinée hors de l'écran à l'échelle 1. `at` : { rank, total }, la place de la diapositive dans sa présentation
   // (13/11, « mon numéro de page apparaît en # vert ») : sa pastille de numéro y est écrite en texte de la diapositive, comme la Lecture et les exports, non laissée en espace réservé « # ».
+  const breathe = () => (typeof WorkPacer !== 'undefined' ? WorkPacer.yieldTask() : new Promise(resolve => setTimeout(resolve, 0)));
   async function snapshotHtml(html, tpl, at) {
     const stored = SlidesEntry.pageFor(SlidesEntry.TYPE, tpl ? tpl.marginsMm : null);
     const page = pageFromStored(stored, stored.orientation);
@@ -674,6 +766,7 @@ const SlideImport = (function () {
     document.body.appendChild(host);
     try {
       paint(host, html, g.width, g);
+      await breathe();
       const thumb = host.querySelector('.pp-slide-thumb');
       if (at) SlidesEntry.resolveSlideNumbers(thumb.querySelector('.pp-slide-page'), at);
       thumb.style.contentVisibility = 'visible';
@@ -681,6 +774,7 @@ const SlideImport = (function () {
       // La mise en page d'abord (les polices ne se chargent qu'à la première ligne qui s'en sert), puis les polices.
       thumb.getBoundingClientRect();
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      await breathe();
       return await SlideRaster.snapshot(thumb, Math.round(g.width), Math.round(g.height));
     } finally {
       host.remove();
@@ -690,7 +784,7 @@ const SlideImport = (function () {
   // Une diapositive sans texte, sans image, sans objet ni tableau n'a rien à montrer.
   const isBlank = (holder) => !holder.textContent.trim() && !holder.querySelector('img, table, .pp-free-frame');
   // Dessine la diapositive `html` et la pose au curseur (`link` : celui de SlideLinks.anchorSource, ou rien) ; rend vrai quand elle est posée. Le dessin qui échoue le dit et ne pose rien.
-  async function placeBlock(editor, index, html, link, here) {
+  async function placeBlock(editor, index, html, link, here, hold) {
     const name = nameOf(Templates.byId(source.id));
     const id = source.id;
     const byKeyboard = list.contains(document.activeElement);
@@ -703,10 +797,19 @@ const SlideImport = (function () {
     if (isOff()) { SlidesEntry.explainOff(); return false; }
     // Une diapositive qui parle d'une ligne (une variable, une puce...) garde sa diapositive : la Lecture et les exports la redessinent pour chaque ligne (js/slide-copies.js : `fillBlocks`).
     const slideSource = SlideCopies.blockSourceOf(html, Templates.byId(id), { rank: index + 1, total: source.slides.length });
-    SlideCopies.insertBlock(editor, { shot, width: blockWidthPx(), link, slideSource });
+    // « Modifier la diapo » : le bloc d'avant est remplacé à sa place, il laisse sa taille et son alignement au nouveau ; un bloc posé sans lien retient sa diapositive d'origine (`slideFrom`).
+    const replaced = replacing(editor);
+    if (replaced.gone) { sayGone(); return false; }
+    // Le cadre « chargement » dit où elle se pose ; la personne a pu écrire ou bouger le curseur pendant ce temps : il reste alors où elle l'a mis.
+    const place = !replaced.range && hold ? hold.at() : null;
+    SlideCopies.insertBlock(editor, {
+      shot, width: blockWidthPx(), link, slideSource, slideFrom: link ? null : { model: id, rank: index, h: textKeyOf(index) }, replace: replaced.range || (place && place.range), like: replaced.like,
+      leave: !!place && !place.untouched, pending: place ? hold.id : null,
+    });
+    if (replaced.range) endEditing();
     setActive(index, byKeyboard);
     // À la souris, le clavier revient dans le texte, là où le curseur s'est posé (après le bloc) ; au clavier, il reste sur la miniature, pour la suivante.
-    if (!byKeyboard) editor.commands.focus();
+    if (!byKeyboard && !(place && !place.untouched)) editor.commands.focus();
     SlidesEntry.status(I18n.t(link ? 'slides.block.doneLinked' : 'slides.block.done', { n: index + 1, name }));
     return true;
   }
@@ -718,7 +821,14 @@ const SlideImport = (function () {
     const copy = cleanCopy(index);
     if (isBlank(copy)) { setActive(index, list.contains(document.activeElement)); SlidesEntry.status(I18n.t('slides.text.empty', { n: index + 1, name })); return; }
     linking = true;
-    try { await placeBlock(editor, index, copy.innerHTML, null, Templates.getCurrentId()); } finally { linking = false; }
+    const hold = holdPlace(editor, index, name);
+    try {
+      await paintFirst();
+      await placeBlock(editor, index, copy.innerHTML, null, Templates.getCurrentId(), hold);
+    } finally {
+      linking = false;
+      if (hold) hold.release();
+    }
   }
   // « En bloc », « Garder liée » : comme en texte, la source relue reçoit le repère de la diapositive (SlideLinks.anchorSource), puis le bloc arrive avec son lien (js/slide-copies.js : `slideLink`,
   // `followBlocks`). Une diapositive déjà liée à ce document arrive sans lien, et le coin d'état le dit ; ce qui empêche le lien se dit sur la ligne d'état, et rien n'est inséré.
@@ -731,24 +841,27 @@ const SlideImport = (function () {
     if (isBlank(cleanCopy(index))) { insertBlock(index); return; }
     const here = Templates.getCurrentId();
     linking = true;
+    const hold = holdPlace(editor, index, name);
     SlidesEntry.status(I18n.t('slides.link.linking', { name }));
     try {
+      await paintFirst();
       const { html, link } = await SlideLinks.anchorSource(editor, id, index, source.contenu, source.body);
       if (!open || EditorCore.getEditor() !== editor || String(Templates.getCurrentId()) !== String(here) || !source || String(source.id) !== String(id)) return;
       if (isOff()) { SlidesEntry.explainOff(); return; }
-      if (SlideCopies.linkedFrom(editor, id).has(link.linkSlide)) {
-        if (await placeBlock(editor, index, html, null, here)) SlidesEntry.status(I18n.t('slides.link.already', { n: index + 1, name }));
+      if (SlideCopies.linkedFrom(editor, id, editing && editing.match).has(link.linkSlide)) {
+        if (await placeBlock(editor, index, html, null, here, hold)) SlidesEntry.status(I18n.t('slides.link.already', { n: index + 1, name }));
         return;
       }
       // L'empreinte d'une diapositive qui porte son numéro garde son rang et le nombre de diapositives (SlideCopies.numberStamp) : le bloc se redessine quand ils changent.
       const stamp = SlideCopies.numberStamp(html.indexOf('page-number-badge') !== -1, index + 1, source.slides.length);
-      await placeBlock(editor, index, html, Object.assign({}, link, { srcHash: link.srcHash + stamp }), here);
+      await placeBlock(editor, index, html, Object.assign({}, link, { srcHash: link.srcHash + stamp }), here, hold);
     } catch (error) {
       if (!error || !error.reason) console.warn('[SlideImport] bloc lié en échec', error);
       SlidesEntry.status(I18n.t((error && error.reason) || 'slides.link.failed', { name }), true);
       if (error && (error.reason === 'slides.link.changed' || error.reason === 'slides.link.gone') && open) reload();
     } finally {
       linking = false;
+      if (hold) hold.release();
     }
   }
   // Une page de document en diapositives (extensions/diapositives/page-slides.js) : leurs tailles sont celles d'une diapositive, sauf la case « Garder la mise en forme d'origine » ; une page trop longue en
@@ -964,7 +1077,7 @@ const SlideImport = (function () {
   }
 
   SlidesEntry.registerBlockRaster(snapshotHtml);
-  SlidesEntry.registerTextImport({ open: openText, close: closePanel, isOpen: () => open && inText(), syncScreen, keepsFormat: () => open && inText() && keepFormat });
+  SlidesEntry.registerTextImport({ open: openText, edit: openFor, close: closePanel, isOpen: () => open && inText(), syncScreen, keepsFormat: () => open && inText() && keepFormat });
 
   // `keepsFormat` : le volet ouvert sur un document garde les tailles du document (le Ctrl+V d'une sélection de document sur la bande, slide-strip.js, suit la case).
   return { open: openPanel, close: closePanel, toggle, isOpen: () => open, sync, paint, keepsFormat: () => open && inPages() && keepFormat };

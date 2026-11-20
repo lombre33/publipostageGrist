@@ -1807,6 +1807,9 @@ const EditorNodes = (function () {
         // `slideSource` : la diapositive elle-même, pour celles qui parlent d'une ligne (une variable, une puce, une condition) : `{ h, m, r, t }` - son HTML, les marges de sa présentation, son rang et le nombre de
         // diapositives (js/slide-copies.js : `sourceOf`). La Lecture et les exports la redessinent pour chaque ligne (js/reader-mode.js : `resolveSlideBlocks`) ; l'éditeur, lui, montre la photo.
         slideSource: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-source'), renderHTML: noBareRender },
+        // `slideFrom` : la diapositive d'où vient un bloc qui n'est PAS lié, `{ model, rank, h }` - la présentation, le rang de la diapositive (à partir de 0) et l'empreinte de son texte : « Modifier la diapo » rouvre
+        // le volet « Insérer depuis » sur elle (js/slide-copies.js : `editTargetAt`). Un bloc lié la tient de `slideLink`.
+        slideFrom: { default: null, parseHTML: el => jsonAttr(el, 'data-slide-from'), renderHTML: noBareRender },
       };
     }
     return { moveImageNode, imageAttributes };
@@ -2201,6 +2204,7 @@ const EditorNodes = (function () {
           if (nodeAttrs.slideWords) attrs['data-slide-words'] = JSON.stringify(nodeAttrs.slideWords);
           if (nodeAttrs.slideLink) attrs['data-slide-link'] = JSON.stringify(nodeAttrs.slideLink);
           if (nodeAttrs.slideSource) attrs['data-slide-source'] = JSON.stringify(nodeAttrs.slideSource);
+          if (nodeAttrs.slideFrom) attrs['data-slide-from'] = JSON.stringify(nodeAttrs.slideFrom);
           if (ChartEntry.isChartAttrs(nodeAttrs)) {
             if (nodeAttrs.chartSection) attrs['data-chart-section'] = String(nodeAttrs.chartSection);
             if (nodeAttrs.chartSpec) attrs['data-chart-spec'] = nodeAttrs.chartSpec;
@@ -2527,7 +2531,7 @@ const EditorNodes = (function () {
     // et dev-tests/verify-live-editor.mjs échoue tant qu'il manque.
     const INLINE_MARKS_ATTR = 'ppMarks';
     const INLINE_LEAF_NODES = [
-      'varBadge', 'calcBadge', 'pageNumberBadge', 'smartChip', 'footnoteRef', 'conditionalCheckbox', 'conditionalValue', 'editorImage', 'mention', 'tabStop', 'hardBreak',
+      'varBadge', 'calcBadge', 'pageNumberBadge', 'smartChip', 'footnoteRef', 'crossRef', 'conditionalCheckbox', 'conditionalValue', 'editorImage', 'mention', 'tabStop', 'hardBreak',
     ];
     function createInlineMarksCarrier(Extension) {
       return Extension.create({
