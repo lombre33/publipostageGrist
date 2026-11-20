@@ -609,7 +609,10 @@ const SlideLinks = (function () {
   // Ce que ce widget a lu ou écrit en dernier de la présentation ouverte (js/main.js : à son ouverture et après chaque enregistrement) : son texte et ses autres réglages.
   let known = null;
   const settingsOf = tpl => JSON.stringify([tpl.nom, tpl.nomFichierPDF, tpl.headerFooter, tpl.marginsMm, tpl.typeModele]);
+  // La ligne du DOCUMENT ouvert telle que ce widget la connaît (même rôle que `known`, pour `adoptPageMarkers`).
+  let knownDoc = null;
   function noteKnown(tpl) {
+    knownDoc = tpl && (tpl.typeModele || 'document') === 'document' ? { id: String(tpl.id), contenu: String(tpl.contenu || ''), settings: settingsOf(tpl) } : null;
     const next = tpl && tpl.typeModele === TYPE ? { id: String(tpl.id), contenu: String(tpl.contenu || ''), settings: settingsOf(tpl) } : null;
     // Une autre présentation à l'écran : les versions arrivées pour celle d'avant ne la concernent plus.
     if (!next || !known || known.id !== next.id) { incoming.clear(); taken.clear(); republish.clear(); given.clear(); }
@@ -622,6 +625,7 @@ const SlideLinks = (function () {
   // « Demander » propose l'autre (resolveIncoming). Vrai quand c'est fait : js/main.js prend la date de la ligne pour la sienne ; faux, et le bandeau s'ouvre comme toujours.
   const incoming = new Map();   // numéro d'une diapositive source -> la version arrivée que la personne n'a pas encore prise (« Demander »)
   function adopt(editor, remoteTpl) {
+    if (remoteTpl && remoteTpl.typeModele !== TYPE) return adoptPageMarkers(editor, remoteTpl);
     if (paused(editor) || !known || !remoteTpl || String(remoteTpl.id) !== known.id || remoteTpl.typeModele !== TYPE) return false;
     if (settingsOf(remoteTpl) !== known.settings) return false;
     const before = parseHtml(editor, known.contenu);
@@ -691,6 +695,38 @@ const SlideLinks = (function () {
       else say('slides.link.differsHere', { n: asked[0].index + 1 });
     }
     ui.changed();
+    return true;
+  }
+
+  // Un DOCUMENT dont une page est importée « Garder liée » dans une présentation (js/page-copies.js:anchorPage) voit sa ligne changer pendant qu'on l'édite : le repère de la page (un élément de plus,
+  // rien d'autre) y est écrit. Comme pour une présentation, ce repère se pose sans bandeau, hors de l'historique, sans rendre le document « à enregistrer » : la frappe de la personne reste à
+  // enregistrer, et l'enregistrement suivant garde le repère (sans lui, « Recharger la dernière version » perdrait la frappe, et « Enregistrer » effacerait le repère de la source : le lien de la
+  // présentation ne retrouverait plus sa page). Tout autre changement (du texte, un repère qui disparaît, un autre nombre de pages, d'autres réglages) laisse le bandeau. Vrai quand c'est fait.
+  function adoptPageMarkers(editor, remoteTpl) {
+    if (!libs || !editor || editor.isDestroyed || SlidesEntry.presentationShown() || Editor.isTrackChangesOn() || LiveEntry.isLive() || HeaderFooterPreview.getHfMode() || (editor.view && editor.view.composing)) return false;
+    if (!knownDoc || String(remoteTpl.id) !== knownDoc.id || (remoteTpl.typeModele || 'document') !== 'document') return false;
+    if (settingsOf(remoteTpl) !== knownDoc.settings) return false;
+    const before = parseHtml(editor, knownDoc.contenu);
+    const after = parseHtml(editor, remoteTpl.contenu);
+    const here = slidesOf(editor.state.doc);
+    if (before.slides.length !== after.slides.length || here.length !== before.slides.length) return false;
+    const attrsText = ({ node }) => JSON.stringify(node.attrs);
+    const adds = [];
+    for (let i = 0; i < after.slides.length; i++) {
+      if (slideHash(before.slides[i]) !== slideHash(after.slides[i])) return false;
+      const was = before.slides[i].tags.map(attrsText);
+      const now = after.slides[i].tags.map(attrsText);
+      if (was.some(text => !now.includes(text))) return false;
+      const mine = here[i].tags.map(attrsText);
+      const added = after.slides[i].tags.filter(tag => !was.includes(attrsText(tag)) && !mine.includes(attrsText(tag)));
+      if (added.length) adds.push({ at: here[i].end, nodes: added.map(tag => tag.node) });
+    }
+    if (adds.length) {
+      const tr = editor.state.tr;
+      adds.slice().reverse().forEach(({ at, nodes }) => tr.insert(at, nodes));
+      editor.view.dispatch(tr.setMeta(OWN_META, 'sync').setMeta('addToHistory', false));
+    }
+    noteKnown(remoteTpl);
     return true;
   }
 

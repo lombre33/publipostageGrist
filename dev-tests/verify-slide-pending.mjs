@@ -190,8 +190,8 @@ for (const [lang, scheme] of [['fr', 'light'], ['en', 'dark']]) {
   const nBefore = (await doc(page)).length;
   await click(page, 1);
   await waitFrame(page, true);
-  await click(page, 2);
-  const wait = await status(page);
+  // Le coin d'état est lu dans le même instant que le clic : la liaison en cours le réécrit aussitôt (« Dessin de la diapositive 2… »).
+  const wait = await page.evaluate(() => { document.querySelectorAll('.pp-slide-import .pp-slide-item')[2].click(); return document.getElementById('status-msg').textContent; });
   await waitFrame(page, false);
   await sleep(300);
   check(tag + 'un second clic pendant le chargement ne pose rien de plus et le coin d’état le dit', (await doc(page)).length <= nBefore + 2 && /instant|moment/i.test(wait), { wait, doc: await doc(page) });

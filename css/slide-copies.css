@@ -12,6 +12,8 @@
 .v2-floating-toolbar .v2-copy-edit, .v2-floating-toolbar .v2-copy-detach { flex: none; width: auto; gap: 5px; padding: 0 8px; font: 12.5px/1 var(--font-ui); color: var(--text, #3a4452); }
 /* « Mettre à jour maintenant » : un bouton d'icône (la largeur d'icône de `.v2-floating-toolbar button`) ; absent quand la diapositive d'origine n'existe plus. */
 .v2-floating-toolbar .v2-copy-refresh[hidden], .v2-floating-toolbar .v2-copy-detach[hidden] { display: none; }
+/* Les boutons gardent leur taille (≥ 24 px) : c'est le nom de la présentation qui se coupe par « … » quand la barre est étroite. */
+.v2-floating-toolbar .v2-copy-refresh { flex: none; }
 /* « Modifier la diapo » : un bouton à texte comme « Détacher », devant le bouton d'icône de la mise à jour. */
 
 /* Le cadre « chargement » d'une diapositive qui arrive (js/slide-copies.js : startPending) : une décoration de l'éditeur, qui prend la place de la diapositive le temps qu'elle se lie et se dessine
