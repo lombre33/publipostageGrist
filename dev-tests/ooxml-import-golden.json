@@ -26,6 +26,11 @@
    "sha": "806759bda3f2dfb3",
    "bytes": 375
   },
+  "docx-2047bfc1c1051d74b52256be": {
+   "kind": "docx",
+   "sha": "9d1632cfb918ce26",
+   "bytes": 546
+  },
   "docx-2ff50de5f7e4e158261134e5": {
    "kind": "docx",
    "sha": "a8c94116121fa004",
@@ -115,6 +120,11 @@
    "kind": "docx",
    "sha": "5fa59e9eb77b5787",
    "bytes": 802
+  },
+  "docx-6622b7531c23c76daeef8012": {
+   "kind": "docx",
+   "sha": "df6e7e798d03acd1",
+   "bytes": 475
   },
   "docx-6c92c1dda88eb34cdbc49e45": {
    "kind": "docx",
@@ -323,18 +333,18 @@
   },
   "pptx-05387e2ac179124a83021f57": {
    "kind": "pptx",
-   "sha": "8e90020e76467725",
-   "bytes": 1219
+   "sha": "59637b9881360aa3",
+   "bytes": 1231
   },
   "pptx-07e7508a823dccb9e89aa61b": {
    "kind": "pptx",
-   "sha": "20db14c7165c7fbc",
-   "bytes": 2611
+   "sha": "0e1a027cb97a8c02",
+   "bytes": 2623
   },
   "pptx-0a4a0f9ddaba6d8ee687c6d4": {
    "kind": "pptx",
-   "sha": "280d02994a05ce28",
-   "bytes": 1217
+   "sha": "11952af9f401bd63",
+   "bytes": 1229
   },
   "pptx-0b1f19833b8fc2c578a88ff7": {
    "kind": "pptx",
@@ -348,8 +358,8 @@
   },
   "pptx-0eb46809f0f76b5f753d1527": {
    "kind": "pptx",
-   "sha": "fe147db0f27f3030",
-   "bytes": 1391
+   "sha": "93ef436ed7ad32d4",
+   "bytes": 1403
   },
   "pptx-11c4f7844a682e66365f6811": {
    "kind": "pptx",
@@ -371,15 +381,20 @@
    "sha": "7c41aefc56de9489",
    "bytes": 1789
   },
+  "pptx-152f8ccd1dcb97f3129f0bf5": {
+   "kind": "pptx",
+   "sha": "2c4ab132c459c481",
+   "bytes": 73
+  },
   "pptx-1570e245762a040f19580412": {
    "kind": "pptx",
-   "sha": "6502bad3ad1710f0",
+   "sha": "00ab86335a97e3c1",
    "bytes": 1469
   },
   "pptx-165551e641406d3e07b4ff3f": {
    "kind": "pptx",
-   "sha": "03bd0471e9592e0d",
-   "bytes": 1643
+   "sha": "14a622bab80dcfdd",
+   "bytes": 1655
   },
   "pptx-1756260d6df5903c0e6041c0": {
    "kind": "pptx",
@@ -393,8 +408,8 @@
   },
   "pptx-18c2804af39c6291c2105f91": {
    "kind": "pptx",
-   "sha": "6aa867c6c81effcc",
-   "bytes": 1244
+   "sha": "f2d86578938b4eda",
+   "bytes": 1256
   },
   "pptx-1c33cef05d80b05b4710f77d": {
    "kind": "pptx",
@@ -413,18 +428,18 @@
   },
   "pptx-1dd61301664aeadcc0fd3315": {
    "kind": "pptx",
-   "sha": "5ae892fe3719974e",
-   "bytes": 1329
+   "sha": "f01d25eaeb339929",
+   "bytes": 1341
   },
   "pptx-1f42808a272ff8f2ae35eac1": {
    "kind": "pptx",
-   "sha": "87e0f9dcf4a172c3",
-   "bytes": 3969
+   "sha": "ee9490e64adb22ad",
+   "bytes": 4005
   },
   "pptx-1f95502d3d7b4c5d00edb02c": {
    "kind": "pptx",
-   "sha": "1895ece269e805b3",
-   "bytes": 1339
+   "sha": "6c1c1aad675bd7ab",
+   "bytes": 1351
   },
   "pptx-1ff184e336f1939c402eef55": {
    "kind": "pptx",
@@ -438,8 +453,8 @@
   },
   "pptx-20ecbb5cf991bb83c82883c9": {
    "kind": "pptx",
-   "sha": "81f7a476edd76e2f",
-   "bytes": 3161
+   "sha": "d3ba5a2958198ff7",
+   "bytes": 3173
   },
   "pptx-22308ec9429af6b91ff1f37d": {
    "kind": "pptx",
@@ -453,8 +468,8 @@
   },
   "pptx-26f172f6fa2596a08a982eec": {
    "kind": "pptx",
-   "sha": "b7f7bd5e7934fa22",
-   "bytes": 40623
+   "sha": "671e15ae229e435f",
+   "bytes": 40631
   },
   "pptx-27b45395f9843f58133c2077": {
    "kind": "pptx",
@@ -468,7 +483,7 @@
   },
   "pptx-28d0f55041dab2fa7de26f04": {
    "kind": "pptx",
-   "sha": "4a315713cb716643",
+   "sha": "4e63f4118a1378ba",
    "bytes": 11409
   },
   "pptx-29ec641cbb0a07b31216a73e": {
@@ -478,8 +493,8 @@
   },
   "pptx-2be1357d1190605cc8ee9baf": {
    "kind": "pptx",
-   "sha": "0c421eee74fbede7",
-   "bytes": 9293
+   "sha": "93722f75bfbfffe2",
+   "bytes": 9329
   },
   "pptx-2bf991ca26fc7c02d180be63": {
    "kind": "pptx",
@@ -513,33 +528,28 @@
   },
   "pptx-311ddf5fcd3b0da0c9db9a60": {
    "kind": "pptx",
-   "sha": "891fb805373c86e5",
-   "bytes": 2733
+   "sha": "cd4417f7c86cd24c",
+   "bytes": 2745
   },
   "pptx-32e7a55a795642e072ff3f55": {
    "kind": "pptx",
-   "sha": "bc1adb350a8bb18a",
-   "bytes": 2746
+   "sha": "19d7536055485ec0",
+   "bytes": 2782
   },
   "pptx-35ee5cbf948b88ee16b80d94": {
    "kind": "pptx",
    "sha": "bfcfc099fa5ae9d2",
    "bytes": 4132
   },
-  "pptx-376c36cfdd2944222a4287f3": {
-   "kind": "pptx",
-   "sha": "c78adcf10365726a",
-   "bytes": 5605
-  },
   "pptx-38ee435470b26dcee0da51d6": {
    "kind": "pptx",
-   "sha": "94d35b7ea31686fb",
-   "bytes": 4447
+   "sha": "3fd5debb6b67c738",
+   "bytes": 4495
   },
   "pptx-38f3f507d59c57d15689d32e": {
    "kind": "pptx",
-   "sha": "5433f6b0a7209c5b",
-   "bytes": 1123
+   "sha": "5beee4f35ab44ca3",
+   "bytes": 1135
   },
   "pptx-3abe2cd21ae1a9298f030442": {
    "kind": "pptx",
@@ -548,8 +558,13 @@
   },
   "pptx-3b7c16a71af118d04511243a": {
    "kind": "pptx",
-   "sha": "7421094decaea08f",
-   "bytes": 7084
+   "sha": "bcd885cf36a61680",
+   "bytes": 7096
+  },
+  "pptx-3fe57d3794403464c5b42cde": {
+   "kind": "pptx",
+   "sha": "c1ecbc13258be2aa",
+   "bytes": 4287
   },
   "pptx-412e977ee0849449b788da5a": {
    "kind": "pptx",
@@ -568,13 +583,23 @@
   },
   "pptx-44d04cd07d14058eb418a72e": {
    "kind": "pptx",
-   "sha": "9ff72c8e60dbe373",
-   "bytes": 1973
+   "sha": "63fcc4e5820c32d5",
+   "bytes": 1997
+  },
+  "pptx-45f1275efb1dea09925c4f05": {
+   "kind": "pptx",
+   "sha": "cd46ad220972ebd6",
+   "bytes": 1687
   },
   "pptx-4724aae847c23e979d0f9b3c": {
    "kind": "pptx",
    "sha": "9d04b03609040ec3",
    "bytes": 786
+  },
+  "pptx-494b8abb5c9f55f481915de8": {
+   "kind": "pptx",
+   "sha": "05129c0b6726e958",
+   "bytes": 11387
   },
   "pptx-4abb1d30a8edfe0e63f12627": {
    "kind": "pptx",
@@ -583,17 +608,17 @@
   },
   "pptx-4baae5ab6a8487fdedb3d366": {
    "kind": "pptx",
-   "sha": "7789eccda7c4284c",
-   "bytes": 1889
+   "sha": "75aa6882ad51359b",
+   "bytes": 1901
   },
   "pptx-4bcdf6cec8b1e3d6c5fa5df6": {
    "kind": "pptx",
-   "sha": "a9e06e59fa50e3d6",
-   "bytes": 1188
+   "sha": "b422ca2c37cf358a",
+   "bytes": 1200
   },
   "pptx-4c91c84a02c363fa94030589": {
    "kind": "pptx",
-   "sha": "60ff96997dfb87ed",
+   "sha": "bc317674770edde5",
    "bytes": 7607
   },
   "pptx-4d6ee5f26877bb3ce086e6f5": {
@@ -613,13 +638,13 @@
   },
   "pptx-4eab44464e74ecf49b07ea19": {
    "kind": "pptx",
-   "sha": "26cc4b9e07485598",
-   "bytes": 1333
+   "sha": "c957cb183c94cb1e",
+   "bytes": 1345
   },
   "pptx-5062854aa28a41732548e2b4": {
    "kind": "pptx",
-   "sha": "0da6af41cfc0715d",
-   "bytes": 8775
+   "sha": "d3ca0816504b7022",
+   "bytes": 8811
   },
   "pptx-53489f01169dda67b1314d2c": {
    "kind": "pptx",
@@ -633,8 +658,8 @@
   },
   "pptx-5412b8d78e67f9aa5034dba2": {
    "kind": "pptx",
-   "sha": "10d6014aee96c290",
-   "bytes": 1313
+   "sha": "f937f7f7dcd6c214",
+   "bytes": 1325
   },
   "pptx-55deee359128c944b3a58073": {
    "kind": "pptx",
@@ -648,8 +673,13 @@
   },
   "pptx-586c40a9732db4b16ace28b0": {
    "kind": "pptx",
-   "sha": "c596792dec693040",
-   "bytes": 1186
+   "sha": "9d5997f786c8bed5",
+   "bytes": 1198
+  },
+  "pptx-58b77c6fad1ada2858f766c4": {
+   "kind": "pptx",
+   "sha": "af8dfad7bd5d80b3",
+   "bytes": 1469
   },
   "pptx-59a0bb09f3d266545bae05df": {
    "kind": "pptx",
@@ -661,11 +691,6 @@
    "sha": "bf4283ad600b8fc3",
    "bytes": 1967
   },
-  "pptx-5ab4b95a164f08f258e04d46": {
-   "kind": "pptx",
-   "sha": "eb1031563d645e3d",
-   "bytes": 11387
-  },
   "pptx-5ced995e364b16e29b44e55d": {
    "kind": "pptx",
    "sha": "fb9d4c21109716e4",
@@ -673,7 +698,7 @@
   },
   "pptx-5d9b45d6087f91a41d966d0b": {
    "kind": "pptx",
-   "sha": "8b8065fe6c42487c",
+   "sha": "a4f9d658857fc2b8",
    "bytes": 15222
   },
   "pptx-5ee8288973ab7e9887ddf234": {
@@ -703,8 +728,8 @@
   },
   "pptx-6176a91180caa5456a50913f": {
    "kind": "pptx",
-   "sha": "06e3f5d042a1b7ee",
-   "bytes": 1313
+   "sha": "3685b5ffd64fdb00",
+   "bytes": 1325
   },
   "pptx-62fa46b036e4b1a1cf5127bc": {
    "kind": "pptx",
@@ -713,12 +738,12 @@
   },
   "pptx-63d9623b62cda7403a452c49": {
    "kind": "pptx",
-   "sha": "713b0f0d3029ccad",
-   "bytes": 2859
+   "sha": "9d6bb11c72d3ee10",
+   "bytes": 2871
   },
   "pptx-641391cfdc8784ad8c14f1db": {
    "kind": "pptx",
-   "sha": "abf41b425c6d6f8c",
+   "sha": "af1c624c32014056",
    "bytes": 27054
   },
   "pptx-64f069e4a0d800f913ad1710": {
@@ -728,13 +753,13 @@
   },
   "pptx-65396242c14ee52db2a8f14f": {
    "kind": "pptx",
-   "sha": "34c738d917e11576",
-   "bytes": 1313
+   "sha": "5a42a9f063f0122d",
+   "bytes": 1325
   },
   "pptx-65b5f5a9339d3afa1031362e": {
    "kind": "pptx",
-   "sha": "39f3cb85587b8040",
-   "bytes": 1727
+   "sha": "5913e8cdc0d88782",
+   "bytes": 1739
   },
   "pptx-6759e602da36ad3b59322671": {
    "kind": "pptx",
@@ -743,13 +768,13 @@
   },
   "pptx-696cfc5220c1d71b9b32394a": {
    "kind": "pptx",
-   "sha": "874c993995abcdb5",
-   "bytes": 1275
+   "sha": "9b8975077b3a3e35",
+   "bytes": 1287
   },
   "pptx-6971220f2bb88f488ad4bdda": {
    "kind": "pptx",
-   "sha": "e06fe916a028ef75",
-   "bytes": 1957
+   "sha": "f84b76b6ef1904dc",
+   "bytes": 1969
   },
   "pptx-698c88f7d046013e3362e859": {
    "kind": "pptx",
@@ -758,8 +783,8 @@
   },
   "pptx-6a35bb565de1e5d3ab9d36ac": {
    "kind": "pptx",
-   "sha": "1d8c51a1eaac4ea4",
-   "bytes": 1995
+   "sha": "ff8fe6f45285e19b",
+   "bytes": 2007
   },
   "pptx-6b32abd5746e00523c84b846": {
    "kind": "pptx",
@@ -768,18 +793,18 @@
   },
   "pptx-6c28386da7c526de02dee703": {
    "kind": "pptx",
-   "sha": "bc4085cc77bef598",
-   "bytes": 2333
+   "sha": "4227e1825bb0e05a",
+   "bytes": 2345
   },
   "pptx-6ee51ce69681a51b38aa160b": {
    "kind": "pptx",
-   "sha": "e98f34fa3f6d8991",
-   "bytes": 8493
+   "sha": "c1b2aea237800c3e",
+   "bytes": 8529
   },
   "pptx-6f13b37d80e0e8465061fadf": {
    "kind": "pptx",
-   "sha": "b74ff40b73499675",
-   "bytes": 2369
+   "sha": "f30c9feb9a872560",
+   "bytes": 2393
   },
   "pptx-6f5f2acc4cc6f61fef133b2c": {
    "kind": "pptx",
@@ -808,13 +833,13 @@
   },
   "pptx-742c2b66c67e48472b0ff222": {
    "kind": "pptx",
-   "sha": "7523a1b0240fd2b2",
-   "bytes": 1173
+   "sha": "b64acfcb1384acc3",
+   "bytes": 1185
   },
   "pptx-74cd7de0a4397e8c67fe9e8d": {
    "kind": "pptx",
-   "sha": "daca8136a9f53433",
-   "bytes": 559275
+   "sha": "ecda26c61fe54060",
+   "bytes": 559311
   },
   "pptx-74eac2562b8e161529e87817": {
    "kind": "pptx",
@@ -823,8 +848,8 @@
   },
   "pptx-770dd6db6a27116c34d89da9": {
    "kind": "pptx",
-   "sha": "2af7cbf53cb7860b",
-   "bytes": 2559
+   "sha": "6cd66f016ec50647",
+   "bytes": 2571
   },
   "pptx-77773c94c220525713c27788": {
    "kind": "pptx",
@@ -846,6 +871,11 @@
    "sha": "6cb842ad60df3d0e",
    "bytes": 1467
   },
+  "pptx-7876de684352ae50ecb37752": {
+   "kind": "pptx",
+   "sha": "23b3fb66ead53cbe",
+   "bytes": 1099
+  },
   "pptx-78af9ceaac24dc52bd4c0897": {
    "kind": "pptx",
    "sha": "94f68404ca0253db",
@@ -863,33 +893,38 @@
   },
   "pptx-7e373435e1761cbfe87fd170": {
    "kind": "pptx",
-   "sha": "1970f9cd3041c7dc",
-   "bytes": 1279
+   "sha": "025befd4f2b1e312",
+   "bytes": 1291
   },
   "pptx-7f021324e42c1e916b5d86b2": {
    "kind": "pptx",
-   "sha": "b21647bdc44748dc",
-   "bytes": 1525
+   "sha": "e294fef47a3bbea7",
+   "bytes": 1537
   },
   "pptx-81031a685b810ae2e842581c": {
    "kind": "pptx",
-   "sha": "5ae892fe3719974e",
-   "bytes": 1329
+   "sha": "f01d25eaeb339929",
+   "bytes": 1341
   },
   "pptx-823812ea0e933769cc4ef071": {
    "kind": "pptx",
-   "sha": "b03c3a412f9f5a29",
-   "bytes": 3743
+   "sha": "706065ba39786d6c",
+   "bytes": 3763
   },
   "pptx-8250145a021cf05e36f9e798": {
    "kind": "pptx",
-   "sha": "eb10ece8c5ffa0fc",
-   "bytes": 3705
+   "sha": "f9e2a468cebfa526",
+   "bytes": 3717
+  },
+  "pptx-847279950e81beb2531243a5": {
+   "kind": "pptx",
+   "sha": "3f0891b787d585f0",
+   "bytes": 2521
   },
   "pptx-848818b895a9ffa1cb084abf": {
    "kind": "pptx",
-   "sha": "e0338f6def90e95d",
-   "bytes": 1242
+   "sha": "c98d4254729263f6",
+   "bytes": 1254
   },
   "pptx-84dfd435a531fe38a34edc0b": {
    "kind": "pptx",
@@ -898,8 +933,13 @@
   },
   "pptx-85d974102d14b0de82986fcd": {
    "kind": "pptx",
-   "sha": "86e4bd3a52e4c531",
-   "bytes": 1201
+   "sha": "bad1b2d6a3221721",
+   "bytes": 1213
+  },
+  "pptx-864da3b84d2ce781d8c399f5": {
+   "kind": "pptx",
+   "sha": "d8e8cca865f55168",
+   "bytes": 2250
   },
   "pptx-86dc1cc203a908a09f991bbe": {
    "kind": "pptx",
@@ -913,8 +953,8 @@
   },
   "pptx-88ca2ed6c0bee786302d9533": {
    "kind": "pptx",
-   "sha": "cb8e3f9b8a69186d",
-   "bytes": 1147
+   "sha": "51b454572edd290a",
+   "bytes": 1159
   },
   "pptx-89417b31119997182614711f": {
    "kind": "pptx",
@@ -938,8 +978,8 @@
   },
   "pptx-8cad86348b7d4b2e241190d6": {
    "kind": "pptx",
-   "sha": "ef85b18a431549ab",
-   "bytes": 7637
+   "sha": "af4e4f1cc5de99a5",
+   "bytes": 7697
   },
   "pptx-8e109be00c5b6569fbc2f065": {
    "kind": "pptx",
@@ -948,13 +988,13 @@
   },
   "pptx-8e20578df63e24c36e78c315": {
    "kind": "pptx",
-   "sha": "c7efd134d95e8dce",
-   "bytes": 2639
+   "sha": "65acfbc8063c86c2",
+   "bytes": 2663
   },
   "pptx-8e492c6c5858574382d08929": {
    "kind": "pptx",
-   "sha": "a97204fdd7eb4245",
-   "bytes": 3241
+   "sha": "8da7705b8a0637f7",
+   "bytes": 3253
   },
   "pptx-8e5304bbb68e389d635bd614": {
    "kind": "pptx",
@@ -963,7 +1003,7 @@
   },
   "pptx-8f63e4b31b6b25cb0f31a0ba": {
    "kind": "pptx",
-   "sha": "e116dcfaefd1fc59",
+   "sha": "4f8f3129df35ff49",
    "bytes": 1357
   },
   "pptx-8fd3c33263934c884bf456cf": {
@@ -973,28 +1013,28 @@
   },
   "pptx-90d16512ec34c31621a849e7": {
    "kind": "pptx",
-   "sha": "c61aeeb05127063a",
-   "bytes": 1956
+   "sha": "72b995f94bee21c0",
+   "bytes": 1980
   },
   "pptx-91d2886f9e2db41f1193b3be": {
    "kind": "pptx",
-   "sha": "5433f6b0a7209c5b",
-   "bytes": 1123
+   "sha": "5beee4f35ab44ca3",
+   "bytes": 1135
   },
   "pptx-946c96231cd85086e6a0b983": {
    "kind": "pptx",
-   "sha": "30b0c89bf88961fc",
-   "bytes": 1131
+   "sha": "c6e2a82e54a102f3",
+   "bytes": 1143
   },
   "pptx-949f2f8005cf294d5637537b": {
    "kind": "pptx",
-   "sha": "acee4df905f45a6c",
-   "bytes": 1319
+   "sha": "96b5f2ade34dc17b",
+   "bytes": 1331
   },
   "pptx-94af237566a8faf25da00eb2": {
    "kind": "pptx",
-   "sha": "8358266449813ac7",
-   "bytes": 8980
+   "sha": "bb621f082e8fa4a7",
+   "bytes": 9016
   },
   "pptx-95fbe3565345f1c02bae1518": {
    "kind": "pptx",
@@ -1003,13 +1043,13 @@
   },
   "pptx-9704aeaf900177d6875f8563": {
    "kind": "pptx",
-   "sha": "b97ededb8a05ca5e",
-   "bytes": 1144
+   "sha": "7162f05c562dc388",
+   "bytes": 1156
   },
   "pptx-972d24ff69f0294ee9763891": {
    "kind": "pptx",
-   "sha": "a51d8a5c72374232",
-   "bytes": 1369
+   "sha": "fe0ac3abcd67861d",
+   "bytes": 1381
   },
   "pptx-987447bf7dc18eeab9ce7eea": {
    "kind": "pptx",
@@ -1048,8 +1088,8 @@
   },
   "pptx-a07c48b3ea8ce8b7c924fa55": {
    "kind": "pptx",
-   "sha": "b75e8c3ba60de554",
-   "bytes": 1944
+   "sha": "91af5cfe6bc36922",
+   "bytes": 1956
   },
   "pptx-a153cacc1a718fba1395ee24": {
    "kind": "pptx",
@@ -1058,8 +1098,8 @@
   },
   "pptx-a36d81db3cfe3113c0bf1250": {
    "kind": "pptx",
-   "sha": "cf730c12d257897b",
-   "bytes": 3106
+   "sha": "013fc75b0bb4f344",
+   "bytes": 3130
   },
   "pptx-a37848d0dbc80683f9ebee39": {
    "kind": "pptx",
@@ -1068,8 +1108,8 @@
   },
   "pptx-a70a77d7ee70a3da8256b534": {
    "kind": "pptx",
-   "sha": "45874991687548ef",
-   "bytes": 1545
+   "sha": "ccf156a190246a84",
+   "bytes": 1557
   },
   "pptx-a7c4873773daffa2d123693b": {
    "kind": "pptx",
@@ -1088,7 +1128,7 @@
   },
   "pptx-ac5301648ceb1e1c75c48611": {
    "kind": "pptx",
-   "sha": "b0d92c4d0adfb587",
+   "sha": "afd039dd91b056dd",
    "bytes": 4108
   },
   "pptx-ae60e6d608b3097f6ef0443b": {
@@ -1098,8 +1138,8 @@
   },
   "pptx-ae6d29cbc37be741a1c77caa": {
    "kind": "pptx",
-   "sha": "bc1adb350a8bb18a",
-   "bytes": 2746
+   "sha": "19d7536055485ec0",
+   "bytes": 2782
   },
   "pptx-ae74e8c8726bfc35ed3a3659": {
    "kind": "pptx",
@@ -1111,10 +1151,10 @@
    "sha": "f4e8cbefd3da3af2",
    "bytes": 1496
   },
-  "pptx-af35546daf855d456f72ce21": {
+  "pptx-afd6199131142b15134a1d86": {
    "kind": "pptx",
-   "sha": "23b3fb66ead53cbe",
-   "bytes": 1099
+   "sha": "4a63c37b856dbd7f",
+   "bytes": 4311
   },
   "pptx-b140d880fd45283758b9c90f": {
    "kind": "pptx",
@@ -1133,18 +1173,23 @@
   },
   "pptx-b370361681cfa4c58dd5ea8c": {
    "kind": "pptx",
-   "sha": "ce607d3cabbcec51",
-   "bytes": 7376
+   "sha": "1be67333a5ae3b0f",
+   "bytes": 7460
   },
   "pptx-b38f03e49b42dba7140c9da4": {
    "kind": "pptx",
-   "sha": "d256780eb24a5e7a",
+   "sha": "6f83ca0ab49c702a",
    "bytes": 5281
   },
   "pptx-b60e7ef3bea9e22046020f43": {
    "kind": "pptx",
-   "sha": "33991c6aab17e5c1",
-   "bytes": 1159
+   "sha": "4f3ca490017a637e",
+   "bytes": 1171
+  },
+  "pptx-b6a21892bcf24b22289eae1b": {
+   "kind": "pptx",
+   "sha": "122da88383bc1187",
+   "bytes": 1175
   },
   "pptx-b8fbeca745396b49e1ffde6b": {
    "kind": "pptx",
@@ -1168,13 +1213,13 @@
   },
   "pptx-c1566bc8b67f4f9c3ce0bcb2": {
    "kind": "pptx",
-   "sha": "9ba7f0ca8d0b83fd",
-   "bytes": 1239
+   "sha": "4f18a2905dc13e60",
+   "bytes": 1251
   },
   "pptx-c3461e0a9aba8bf047fc505e": {
    "kind": "pptx",
-   "sha": "4232e2650a694268",
-   "bytes": 1183
+   "sha": "b9a9c732b20e1cc8",
+   "bytes": 1195
   },
   "pptx-c632f76d0acaee50179dafbd": {
    "kind": "pptx",
@@ -1183,8 +1228,8 @@
   },
   "pptx-c78ce372cbb91503477c0515": {
    "kind": "pptx",
-   "sha": "dac9bbc750a00873",
-   "bytes": 1899
+   "sha": "b881096ead39fca0",
+   "bytes": 1911
   },
   "pptx-c9605b6ed90c920a624b748e": {
    "kind": "pptx",
@@ -1193,8 +1238,8 @@
   },
   "pptx-c9b95c4504864d672346517e": {
    "kind": "pptx",
-   "sha": "42b7bfcce52ce650",
-   "bytes": 1419
+   "sha": "c5925c82dd4d2bf1",
+   "bytes": 1431
   },
   "pptx-cade9227a053551fa44b38e5": {
    "kind": "pptx",
@@ -1203,8 +1248,8 @@
   },
   "pptx-cd0f8db7d9614eac644088eb": {
    "kind": "pptx",
-   "sha": "2fe90940f0df02db",
-   "bytes": 1313
+   "sha": "e1195f35ae8e4342",
+   "bytes": 1325
   },
   "pptx-cd2cb35dd35302a700f86c6e": {
    "kind": "pptx",
@@ -1213,13 +1258,13 @@
   },
   "pptx-ce4206082e5b9a65231f747f": {
    "kind": "pptx",
-   "sha": "9d565942b1ef6a3a",
-   "bytes": 2545
+   "sha": "ec14092c11fae41c",
+   "bytes": 2569
   },
   "pptx-cf935e7a31417a374127cd6f": {
    "kind": "pptx",
-   "sha": "aa76122d5aacd6a7",
-   "bytes": 63299
+   "sha": "1c32537d3e8e8939",
+   "bytes": 63539
   },
   "pptx-d10e68f7a511b98d81f75e17": {
    "kind": "pptx",
@@ -1233,7 +1278,7 @@
   },
   "pptx-d2f74b6ff4bce27f46e6edc4": {
    "kind": "pptx",
-   "sha": "45d1f75f2a22b9ac",
+   "sha": "3a4b284be98c47f9",
    "bytes": 1221
   },
   "pptx-d51b5d1e96839a708c999790": {
@@ -1248,23 +1293,18 @@
   },
   "pptx-d7035cde7dcfa0c9214b8847": {
    "kind": "pptx",
-   "sha": "1f3bfa99d7469971",
-   "bytes": 3887
+   "sha": "d347596ef87e1e4e",
+   "bytes": 3899
   },
   "pptx-d81b55a2db04f4211548693e": {
    "kind": "pptx",
-   "sha": "272cf2f58c7b2439",
-   "bytes": 1119
+   "sha": "06ffcfd649586573",
+   "bytes": 1131
   },
   "pptx-d856a5c0b11c21389bd1205f": {
    "kind": "pptx",
    "sha": "7ed091e3eeb8d32e",
    "bytes": 915
-  },
-  "pptx-d8c861028d51aae875b5db07": {
-   "kind": "pptx",
-   "sha": "2c4ab132c459c481",
-   "bytes": 73
   },
   "pptx-dd327a64afb74e44da01667c": {
    "kind": "pptx",
@@ -1288,8 +1328,8 @@
   },
   "pptx-e15feb48d9197e1fdfee81c3": {
    "kind": "pptx",
-   "sha": "c28ec3d6a802a92a",
-   "bytes": 2509
+   "sha": "3f0891b787d585f0",
+   "bytes": 2521
   },
   "pptx-e1ac604a2a0ad25df69fe0b4": {
    "kind": "pptx",
@@ -1305,6 +1345,11 @@
    "kind": "pptx",
    "sha": "9fee306cba6c2a89",
    "bytes": 3473
+  },
+  "pptx-e328be89258a087cc22f9bdf": {
+   "kind": "pptx",
+   "sha": "584de1cc87b3def6",
+   "bytes": 5605
   },
   "pptx-e3535d568027e38ee19ada70": {
    "kind": "pptx",
@@ -1326,11 +1371,6 @@
    "sha": "37932b8d0a8269dc",
    "bytes": 1469
   },
-  "pptx-ec2f76a0b78a6380809a9d81": {
-   "kind": "pptx",
-   "sha": "c28ec3d6a802a92a",
-   "bytes": 2509
-  },
   "pptx-ed0f9d96cc3a1aec364615d4": {
    "kind": "pptx",
    "sha": "63f5e2fea310c459",
@@ -1338,8 +1378,8 @@
   },
   "pptx-ed81fbe85f20282119014163": {
    "kind": "pptx",
-   "sha": "74ab0933ae239dec",
-   "bytes": 1225
+   "sha": "8818bb43817081f1",
+   "bytes": 1237
   },
   "pptx-ef351ed0c69fdbf637019dc5": {
    "kind": "pptx",
@@ -1348,8 +1388,8 @@
   },
   "pptx-efe987dad8c7490b935dea66": {
    "kind": "pptx",
-   "sha": "68debe4ec6627e54",
-   "bytes": 1922
+   "sha": "d2e7f86431dfe941",
+   "bytes": 1934
   },
   "pptx-f07305d39028abde9e1af262": {
    "kind": "pptx",
@@ -1358,8 +1398,8 @@
   },
   "pptx-f0d8672675a22326ba75e6ed": {
    "kind": "pptx",
-   "sha": "ac619a395a11d6ef",
-   "bytes": 2369
+   "sha": "7459e446b7d537b6",
+   "bytes": 2393
   },
   "pptx-f2535e7824196b80fd4ba539": {
    "kind": "pptx",
@@ -1383,33 +1423,33 @@
   },
   "pptx-f78bae8d0dc27a38423e8564": {
    "kind": "pptx",
-   "sha": "869fe0bb956153ec",
-   "bytes": 1433
+   "sha": "576cd706725570f3",
+   "bytes": 1437
   },
   "pptx-f9675141873094b4203db155": {
    "kind": "pptx",
-   "sha": "c7449bdbd103b949",
-   "bytes": 5024
+   "sha": "ad7e412776711d75",
+   "bytes": 5036
   },
   "pptx-fce550c5932ab482e53b6ff9": {
    "kind": "pptx",
-   "sha": "e3b0015ac80b6a56",
-   "bytes": 1163
+   "sha": "7185d2cebffb162a",
+   "bytes": 1175
   },
   "pptx-fda4ad663283d9acb2ab4f2f": {
    "kind": "pptx",
-   "sha": "c596792dec693040",
-   "bytes": 1186
+   "sha": "9d5997f786c8bed5",
+   "bytes": 1198
   },
   "pptx-fdaf57a5f0a009d084104c22": {
    "kind": "pptx",
-   "sha": "71225c19f2a15a10",
-   "bytes": 1651
+   "sha": "a7b4455d5e11bdf6",
+   "bytes": 1655
   },
   "pptx-fff071f85d0f12b8033094f0": {
    "kind": "pptx",
-   "sha": "5c08c20ae404bd20",
-   "bytes": 1247
+   "sha": "4827a52650ad13b5",
+   "bytes": 1259
   }
  }
 }
