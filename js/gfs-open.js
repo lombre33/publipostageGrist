@@ -4,7 +4,8 @@
 //  - Au démarrage, l'`ouverture` du contexte (GfsLink.opening) passe avant l'ordre habituel de js/main.js (la ligne, le modèle de la vue, le ★). Sans modèle qui s'ouvre - rien demandé, introuvable, ou d'un type que la
 //    garde « type inconnu » ne laisse pas ouvrir - l'ordre habituel reste, sans message d'erreur. « Nouveau » (pas de fichier, un `type`) ouvre à la place de cet ordre un modèle vierge de ce type : document, grille, email,
 //    présentation (si GFS dit l'extension « diapositives » active) ; le macro-modèle n'a rien à charger, il ouvre son écran de composition, vide, par-dessus le modèle habituel, comme son bouton. Un `type` absent, que la garde
-//    refuse, ou un document en lecture seule : l'ordre habituel. `dossier` n'est pas lu : le rangement de l'app est dans `Publipostage_TemplatePreferences`, le modèle arrive à la racine.
+//    refuse, ou un document en lecture seule : l'ordre habituel. `dossier` (« Mes fichiers » de GFS : le dossier où la personne a cliqué « Nouveau », 20/11) est lu : le document y est rangé à son PREMIER enregistrement (le rangement de l'app est dans `Publipostage_TemplatePreferences`, la ligne de la personne s'écrit avec celle du document, js/templates.js `onCreated`) ;
+//    rien n'est écrit à l'ouverture, un document qu'on abandonne ne laisse rien, et le dossier ne vaut que pour ce document (js/main.js `loadTemplateIntoEditor` l'oublie). Un fichier importé, déjà enregistré, y est rangé à la fin de l'import. Un `dossier` vide ou fait d'espaces : la racine.
 //    Une ouverture de raison `importer` porte `importation: { valeur: 'excel' | 'markdown' | 'html' | 'powerpoint' | 'word' | 'opendocument', fichier: File }` (GFS a ouvert le sélecteur de fichier lui-même, le cadre isolé de l'app n'a pas le geste de la
 //    personne, et ne donne le fichier qu'une fois) : ce n'est jamais un « Nouveau » du type, ni un modèle à ouvrir. La valeur désigne l'import du menu « + » (js/main.js `importFileFromGfs` : un classeur Excel, un
 //    Markdown, une page HTML ou son archive ZIP, un PowerPoint, un Word, un OpenDocument), qui lit le fichier reçu à la place de celui du sélecteur, avec les mêmes refus, les mêmes phrases du coin d'état et la même question « Enregistrer / Abandonner / Annuler » après une lecture
@@ -35,7 +36,7 @@
 //    l'inscription attend `init`, un autre pendant que le démarrage s'achève trouve un modèle sans rien à enregistrer.
 // Seule (adresse sans `gfs=`), GfsLink ne rend aucune ouverture et n'appelle jamais : l'ordre d'arrivée est celui d'avant. Ce fichier n'écrit ni n'écoute aucun message : tout passe par js/gfs-link.js.
 //   GfsOpen.init({ openTemplate(id) -> Promise<bool>, openBlank(type) -> Promise<bool>, importFile(valeur, fichier) -> Promise<bool>, readPdf(lecture) -> Promise<bool>, openModel(id) -> Promise<bool>, say(text),
-//                  saveBeforeLeaving() -> Promise, leave(raison) -> Promise<bool> })  s'inscrit aux appels `ouvrir` et `fermer` ;
+//                  saveBeforeLeaving() -> Promise, leave(raison) -> Promise<bool>, file(id, dossier) -> Promise })  s'inscrit aux appels `ouvrir` et `fermer` ;
 //                                                                                                       `openTemplate` rend vrai si le modèle est ouvert à la fin, `openBlank` si le modèle vierge de ce type l'est,
 //                                                                                                       `importFile` si le modèle importé de ce fichier l'est, `readPdf` si le PDF (`lecture`) est lu à l'écran,
 //                                                                                                       `openModel` si le modèle de départ de ce catalogue (`modele.id`) est à l'écran, non enregistré,
@@ -43,6 +44,8 @@
 //                                                                                                       s'ouvre (sans rien poser comme question), `leave` répond à `fermer` : vrai si l'app peut laisser la place
 //   GfsOpen.startupTemplateId() -> Promise<id | null>               à attendre avant de choisir le modèle de départ
 //   GfsOpen.startupBlankType() -> Promise<type | null>              le type du modèle vierge que « Nouveau » demande au démarrage, ou null : à attendre de même
+//   GfsOpen.takeFolder() -> dossier ('' : aucun)                    le dossier que GFS a donné à la création en attente, une seule fois : js/main.js l'appelle à la naissance de la ligne du modèle (Templates.onCreated)
+//   GfsOpen.forgetFolder()                                          l'oublie : un autre document s'ouvre, le dossier ne vaut que pour celui que GFS a demandé
 //   GfsOpen.startupDone() / startupFailed()                         la fin du démarrage : dit pourquoi le modèle s'est ouvert, lance l'import que l'ouverture demandait ; libère (ou refuse) les appels `ouvrir` qui attendaient
 const GfsOpen = (function () {
   // La raison de l'ouverture (contrats 5.2, point 3) -> la clé de sa phrase (js/i18n.js). Une raison que l'app ne connaît pas n'affiche rien ; « nouveau » non plus : le coin d'état garde l'avertissement « modèle
@@ -50,6 +53,12 @@ const GfsOpen = (function () {
   const REASON_TEXT = new Map([['explorateur', 'status.openedFromExplorer']]);
 
   let hooks = null;
+  // Le dossier que GFS a donné à la création en attente (« Nouveau », « Nouveau > Depuis un modèle »), normalisé : '' sans dossier. Pris par js/main.js à la naissance de la ligne du modèle (takeFolder), oublié dès qu'un
+  // autre document s'ouvre (forgetFolder).
+  let pendingFolder = '';
+  const folderOf = opening => (opening && typeof TemplatePreferences !== 'undefined' ? TemplatePreferences.normalizeFolderPath(opening.dossier) : '') || '';
+  function takeFolder() { const folder = pendingFolder; pendingFolder = ''; return folder; }
+  function forgetFolder() { pendingFolder = ''; }
   let startupReason = '';    // la raison de l'ouverture du démarrage, dite quand le coin d'état a fini de dire « Widget prêt. »
   let queue = Promise.resolve();
   let startupTask = Promise.resolve();   // l'import ou la lecture de PDF que l'ouverture du démarrage demande, lancé par startupDone : les appels `ouvrir` qui attendaient passent après lui
@@ -117,6 +126,8 @@ const GfsOpen = (function () {
       startupTask = Promise.resolve().then(() => readFrom(opening)).catch((e) => { console.warn('[GfsOpen] lecture de PDF demandée au démarrage en échec', e); return false; });
     } else if (isModel(opening)) {
       startupTask = Promise.resolve().then(() => modelFrom(opening)).catch((e) => { console.warn('[GfsOpen] modèle de départ demandé au démarrage en échec', e); return false; });
+    } else if (requestedBlank(opening) !== null) {
+      pendingFolder = folderOf(opening);   // le vierge est déjà à l'écran (startupBlankType) : son dossier attend son premier enregistrement
     }
     settleStarted(true);
   }
@@ -128,7 +139,16 @@ const GfsOpen = (function () {
   async function importFrom(opening) {
     const wanted = opening.importation;
     if (!wanted) return false;
-    return (await hooks.importFile(wanted.valeur, wanted.fichier)) === true;
+    pendingFolder = '';   // un « Nouveau » d'avant, jamais enregistré, ne range pas le document importé
+    const done = (await hooks.importFile(wanted.valeur, wanted.fichier)) === true;
+    // Le document importé s'enregistre de lui-même (js/main-import.js) : il est dans Grist, il est le document courant ; son dossier ne s'écrit qu'à ce moment-là (une question d'enregistrement du document
+    // d'avant, posée pendant l'import, ne doit pas ranger CELUI-là).
+    const folder = folderOf(opening);
+    const id = Templates.getCurrentId();
+    if (done && folder && id != null && hooks.file) {
+      try { await hooks.file(id, folder); } catch (e) { console.warn('[GfsOpen] rangement du document importé impossible', e); }
+    }
+    return done;
   }
 
   // Le PDF que cette ouverture demande de lire : vrai quand il est lu à l'écran à la fin ; faux sans `lecture` bien formée, quand le PDF est illisible, vide ou refusé, ou quand la personne annule (js/main.js `readPdfFromGfs`).
@@ -143,7 +163,9 @@ const GfsOpen = (function () {
   async function modelFrom(opening) {
     const id = requestedModel(opening);
     if (id === null) return false;
-    return (await hooks.openModel(id)) === true;
+    const opened = (await hooks.openModel(id)) === true;
+    if (opened) pendingFolder = folderOf(opening);   // non enregistré : le dossier attend son premier enregistrement
+    return opened;
   }
 
   // Ce qui attend d'être enregistré l'est avant de quitter le modèle à l'écran pour celui-ci (consigne 047) : js/main.js `saveBeforeGfsLeaves`, qui ne pose aucune question.
@@ -165,7 +187,9 @@ const GfsOpen = (function () {
     const blank = requestedBlank(opening);
     if (blank !== null) {
       await settle();
-      return (await hooks.openBlank(blank)) === true;
+      const opened = (await hooks.openBlank(blank)) === true;
+      if (opened) pendingFolder = folderOf(opening);
+      return opened;
     }
     const id = designated(opening);
     if (id === null) return false;
@@ -194,5 +218,5 @@ const GfsOpen = (function () {
     GfsLink.onClose(handleClose);
   }
 
-  return { init, startupTemplateId, startupBlankType, startupDone, startupFailed };
+  return { init, startupTemplateId, startupBlankType, startupDone, startupFailed, takeFolder, forgetFolder };
 })();

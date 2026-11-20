@@ -31,6 +31,7 @@ const I18nTextsStatus = {
   'status.readOnly': { fr: 'Lecture seule.', en: 'Read-only.' },
   // Hébergé par Grist Factory Suite (js/gfs-open.js, consigne GFS 010) : pourquoi ce modèle s'est ouvert, selon la raison que GFS donne ; « explorateur » est la seule raison connue.
   'status.openedFromExplorer': { fr: 'Ouvert depuis l’explorateur.', en: 'Opened from the explorer.' },
+  'status.gfsFolderNotSaved': { fr: 'Le document est enregistré, mais pas rangé dans le dossier choisi : il est à la racine. Déplace-le depuis la liste.', en: 'The document is saved, but not filed in the chosen folder: it is at the root. Move it from the list.' },
   // La lecture d'un PDF dans le mode Lecture (js/pdf-reading.js, extensions/lecture-pdf/, consigne GFS 040) : le coin d'état, la fenêtre du mot de passe, les noms des pages et les raisons des grisés.
   'pdf.untitled': { fr: 'sans nom', en: 'untitled' },
   'pdf.page': { fr: 'Page {n} sur {total}', en: 'Page {n} of {total}' },
