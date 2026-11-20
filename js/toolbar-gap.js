@@ -215,6 +215,10 @@ const ToolbarGap = (function () {
   const top = document.getElementById('toolbar-top');
   if (logo && top) GfsBar.keepClear(logo, (move) => { if (move.dx < 0) top.style.setProperty(LOGO_SHIFT, -move.dx + 'px'); else top.style.removeProperty(LOGO_SHIFT); });
 
+  // Les bandeaux en flux sous la barre d'outils (une ligne fine, texte à gauche et bouton à droite) : la barre de GFS à gauche en recouvre le texte, à droite le bouton. Chacun s'en écarte par un retrait (GfsBar.keepClearBand),
+  // seulement quand la zone le recouvre à sa hauteur. La barre de recherche (js/find-replace-panel.js) fait de même à son ouverture.
+  ['autosave-conflict-banner', 'macro-return-bar', 'linked-return-bar', 'pdf-fonts-bar'].forEach((id) => { const band = document.getElementById(id); if (band) GfsBar.keepClearBand(band); });
+
   place();   // l'état d'à présent d'abord, puis les changements
   GfsBar.onChange(place);
   watch();

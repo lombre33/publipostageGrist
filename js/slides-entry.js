@@ -155,32 +155,39 @@ const SlidesEntry = (function () {
   const OUTPUT_CACHE_MIN_CHARS = 20000;
   const outputCache = [];
   function outputKey(typeModele, options) {
-    const { keepProps = false, anchors = false, theme = null, page = null, stored } = options || {};
+    const { keepProps = false, anchors = false, theme = null, page = null, stored, stampAnimations = false } = options || {};
     // La page du modèle ouvert se lit toujours en route : le cadre du fond de chaque diapositive est de sa taille (FreeFrame.backgroundHtml), et le décor quand aucune autre page n'est dite (SlideTheme.decorHtmlFor).
     const own = typeof PageLayout !== 'undefined' ? PageLayout.getPageSizePt() : null;
-    return JSON.stringify([typeModele, keepProps, anchors, theme, page, stored === undefined ? null : stored, stored === undefined, own]);
+    return JSON.stringify([typeModele, keepProps, anchors, theme, page, stored === undefined ? null : stored, stored === undefined, own, stampAnimations]);
   }
-  function computeOutputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null, page = null, stored } = {}) {
+  // `stampAnimations` (le diaporama, js/frame-anim.js:stampSlides) : chaque élément animé reçoit en plus le rang de sa diapositive, sur l'arbre déjà lu, sans relire le texte de sortie (0,6 s sur 12 Mo dans Firefox).
+  function computeOutputHtml(typeModele, html, { keepProps = false, anchors = false, theme = null, page = null, stored, stampAnimations = false } = {}) {
     // Un document ne montre jamais le repère de ses copies en texte (js/slide-copies.js), et une copie dont la diapositive a changé la reprend.
     if (html && !isPresentation(typeModele)) return SlideCopies.forOutput(html);
     if (!isPresentation(typeModele) || !html) return html;
+    const finish = text => (stampAnimations && typeof FrameAnim !== 'undefined' ? FrameAnim.stampSlides(text) : text);
     // Le repère d'une diapositive liée n'en sort jamais, et une diapositive que seule sa source a changée prend celle de la source (js/slide-links.js:forOutput).
-    html = SlideLinks.forOutput(html);
     // Ni celui de la transition d'une diapositive (js/slide-props.js) : le diaporama la lit dans le texte de l'éditeur. Son fond, lui, y devient le cadre qui le peint, et celui du thème (SlideTheme.paperOf) le
     // cadre de chaque diapositive qui n'a pas le sien. L'export PowerPoint (`keepProps`) n'en écrit pas : le fond du thème est celui de son masque (js/pptx-export.js).
     // Le HTML est lu UNE fois, et les étapes qui suivent (objets masqués, thème, sauts de diapositive) se font sur le même arbre : chacune, avec un texte pour entrée et pour sortie, le relisait et le
     // sérialisait (cinq lectures, quatre écritures, de 0,12 à 0,16 s dans « Présentation commerciale »). Le texte qui sort est le même, au caractère près (dev-tests/verify-output-html.mjs).
-    if (!keepProps) {
-      const tree = SlideProps.forOutputTree(html, { anchors, background: SlideTheme.paperOf(theme), decor: SlideTheme.decorHtmlFor(theme, page || (stored !== undefined ? pageSizeOf(typeModele, stored) : null)) });
-      if (tree) {
-        // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`).
-        FreeFrame.withoutHiddenIn(tree);
-        // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
-        if (theme) SlideTheme.forOutputIn(tree, theme);
-        markSlideBreaks(tree);
-        resolveSlideNumbers(tree);
-        return tree.innerHTML;
-      }
+    // Les repères des diapositives liées partent de ce même arbre quand rien n'est à comparer à une source (SlideLinks.outputKind) : une lecture de moins (0,6 s sur 12 Mo dans Firefox).
+    const kind = SlideLinks.outputKind(html);
+    const forTree = keepProps ? null : { anchors, background: SlideTheme.paperOf(theme), decor: SlideTheme.decorHtmlFor(theme, page || (stored !== undefined ? pageSizeOf(typeModele, stored) : null)) };
+    let tree = forTree && kind !== 'sync' ? SlideProps.forOutputTree(html, Object.assign({ first: kind === 'strip' ? SlideLinks.stripIn : null }, forTree)) : null;
+    if (!tree) {
+      html = SlideLinks.forOutput(html);
+      if (forTree && kind === 'sync') tree = SlideProps.forOutputTree(html, forTree);
+    }
+    if (tree) {
+      // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`).
+      FreeFrame.withoutHiddenIn(tree);
+      // Le thème de la présentation : sa police et sa couleur sur le texte et les titres, la même chose qu'à l'écran (css/slide-theme.css).
+      if (theme) SlideTheme.forOutputIn(tree, theme);
+      markSlideBreaks(tree);
+      resolveSlideNumbers(tree);
+      if (stampAnimations && typeof FrameAnim !== 'undefined') FrameAnim.stampIn(tree);
+      return tree.innerHTML;
     }
     // Ni les objets masqués (js/free-frame.js : `data-ff-hidden`) ; l'export PowerPoint les écrit masqués.
     if (!keepProps) html = FreeFrame.withoutHidden(html);
@@ -190,7 +197,7 @@ const SlidesEntry = (function () {
     // L'export PowerPoint (`keepProps`) écrit le numéro en vrai champ de numéro de diapositive (js/pptx-export.js) : la pastille lui reste.
     const marked = markSlideBreaks(host.content);
     const numbered = !keepProps && resolveSlideNumbers(host.content);
-    return marked || numbered ? host.innerHTML : html;
+    return finish(marked || numbered ? host.innerHTML : html);
   }
   // Marque les sauts de page de premier niveau de `root` (un arbre lu : un fragment ou un `body`) comme sauts de diapositive, et ouvre la dernière diapositive sur une ligne ; vrai quand il y en a.
   function markSlideBreaks(root) {
@@ -354,7 +361,7 @@ const SlidesEntry = (function () {
   const showSlide = index => !!(strip && typeof strip.showSlide === 'function' && strip.showSlide(index));
 
   // Une diapositive en texte de document
-  // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
+  // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), edit(target), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
   // d'une présentation, ouvert depuis un document.
   function registerTextImport(next) { textImport = next; }
   // La photo d'une diapositive (extensions/diapositives/slide-raster.js, posée par le volet une fois chargé : registerBlockRaster) : `blockSnapshot(html, tpl)` dessine le HTML d'une diapositive de la
@@ -377,6 +384,15 @@ const SlidesEntry = (function () {
     if (shown.type !== 'document' || !shown.editing) return false;
     if (!(await ensureFor(TYPE, TEXT_FEATURE_KEY)) || !textImport) return false;
     textImport.open(byKeyboard);
+    return true;
+  }
+  // « Modifier la diapo » (js/slide-copies.js : `edit`, la barre flottante d'une diapositive posée dans un document et son double clic) : le volet s'ouvre sur cette diapositive, et le clic suivant sur une
+  // miniature la remplace. `target` : ce que SlideCopies.editTargetAt rend. Vrai quand le volet est ouvert ; rien hors de l'Édition d'un document ni sans l'extension.
+  async function editInserted(target) {
+    const shown = context();
+    if (shown.type !== 'document' || !shown.editing) return false;
+    if (!(await ensureFor(TYPE, TEXT_FEATURE_KEY)) || !textImport || !textImport.edit) return false;
+    textImport.edit(target);
     return true;
   }
   // Le HTML collé dans un document (js/editor.js : transformPastedHTML) : une diapositive copiée de la bande y devient du texte du document, à la taille du document (ou celle de la diapositive,
@@ -420,6 +436,6 @@ const SlidesEntry = (function () {
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, isPresentation, reason, startNew, ensureFor, unavailableReason, pageFor, pageSizeOf, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, resolveSlideNumbers, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
-    registerTextImport, registerBlockRaster, blockSnapshot, openTextImport, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
+    registerTextImport, registerBlockRaster, blockSnapshot, openTextImport, editInserted, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
   };
 })();

@@ -152,6 +152,10 @@
    thème sombre, d'où une couleur écrite en dur, comme celle de la citation. Le curseur reste celui du texte : un clic place le curseur,
    Ctrl/⌘+clic ouvre le lien (js/link-dialog.js). */
 .tiptap a { color: #0563c1; text-decoration: underline; cursor: text; }
+/* Renvoi (js/cross-refs.js) : un lien dont le texte suit le titre visé. Choisi, il porte le même contour que les autres éléments en ligne ; rouge et ondulé quand son titre n'existe plus (la page
+   reste blanche en thème sombre : un rouge écrit en dur, 5,9:1 sur blanc). Dans la Lecture et les exports il n'est qu'un lien (`#reader-container .reader-content a[href]`). */
+.tiptap a.pp-xref.ProseMirror-selectednode { outline: 2px solid #0563c1; outline-offset: 1px; border-radius: 2px; }
+.tiptap a.pp-xref.pp-xref-broken { color: #c53030; text-decoration: underline wavy #c53030; }
 /* Bloc de code : texte brut sur fond gris clair, police à chasse fixe (Cousine au PDF, métrique de Courier New), lignes qui passent à la ligne
    comme à l'export. 9,5 pt, un peu sous le texte courant (10,5 pt). Le schéma TipTap n'y permet aucune marque : ni gras, ni couleur, ni lien. */
 .tiptap pre { margin: 4px 0; padding: 8px 10px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; color: #1b2430; font-family: 'Cousine', 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.42; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }

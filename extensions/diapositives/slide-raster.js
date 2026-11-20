@@ -79,8 +79,10 @@ const SlideRaster = (function () {
     return found ? found[1].replace(/\\(.)/g, '$1') : '';
   }
 
-  // La copie de `source` (une miniature affichée) dont chaque élément porte son style calculé, calques compris.
-  function inline(source, parentStyle) {
+  // La copie de `source` (une miniature affichée) dont chaque élément porte son style calculé, calques compris. `pace` : la pause (celle d'un WorkPacer) à attendre entre deux éléments : une
+  // diapositive d'un gros PowerPoint en compte des centaines, et chacun lit des centaines de propriétés ; sans elle la page restait prise d'un bloc (20/11).
+  async function inline(source, parentStyle, pace) {
+    await pace();
     const copy = source.cloneNode(false);
     if (source.nodeType !== Node.ELEMENT_NODE) return copy;
     const style = getComputedStyle(source);
@@ -99,15 +101,15 @@ const SlideRaster = (function () {
     };
     const before = layer('::before');
     if (before) copy.appendChild(before);
-    Array.from(source.childNodes).forEach((child) => {
+    for (const child of Array.from(source.childNodes)) {
       if (child.nodeType === Node.ELEMENT_NODE) {
-        if (/^(script|style|template)$/i.test(child.localName)) return;
-        copy.appendChild(inline(child, style));
+        if (/^(script|style|template)$/i.test(child.localName)) continue;
+        copy.appendChild(await inline(child, style, pace));
       } else if (child.nodeType === Node.TEXT_NODE) {
         // Un SVG est du XML : un caractère de commande n'y est pas permis.
         copy.appendChild(document.createTextNode(child.nodeValue.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')));
       }
-    });
+    }
     const after = layer('::after');
     if (after) copy.appendChild(after);
     return copy;
@@ -115,12 +117,13 @@ const SlideRaster = (function () {
 
   // Les mots de la page et leur place, en millièmes de sa largeur et de sa hauteur. Un mot est une suite de caractères sans espace d'un même texte ; sa boîte est celle que le navigateur lui a
   // donnée (un mot coupé en fin de ligne a deux boîtes : on garde la réunion). Les mots hors de la page (rognés par leur cadre) n'y sont pas.
-  function wordsOf(page, width, height) {
+  async function wordsOf(page, width, height, pace) {
     const box = page.getBoundingClientRect();
     const out = [];
     const walker = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
     const range = document.createRange();
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      await pace();
       const text = node.nodeValue;
       if (!text.trim()) continue;
       const parent = node.parentElement;
@@ -160,15 +163,16 @@ const SlideRaster = (function () {
   }
 
   // Les polices que la diapositive emploie (la première de chaque pile et les suivantes : la police de repli compte aussi), en minuscules.
-  function familiesOf(root) {
+  async function familiesOf(root, pace) {
     const used = new Set();
     const seen = new Set();
-    [root].concat(Array.from(root.querySelectorAll('*'))).forEach((node) => {
+    for (const node of [root].concat(Array.from(root.querySelectorAll('*')))) {
+      await pace();
       const stack = getComputedStyle(node).fontFamily;
-      if (seen.has(stack)) return;
+      if (seen.has(stack)) continue;
       seen.add(stack);
       stack.split(',').forEach(name => used.add(name.trim().replace(/^["']|["']$/g, '').toLowerCase()));
-    });
+    }
     return used;
   }
   // Les `@font-face` de la feuille de Roboto, lue une fois ([] si elle ne vient pas) : { family, text }.
@@ -194,20 +198,30 @@ const SlideRaster = (function () {
     img.src = url;
   });
 
-  // La miniature `thumb` (à l'échelle 1, large de `width` px et haute de `height` px) en image.
+  // Une pause à attendre entre deux pas : rien tant que la tranche en cours est courte, puis la main rendue à la page (js/work-pacer.js) ; sans WorkPacer, aucune.
+  const pacer = () => (typeof WorkPacer !== 'undefined' ? WorkPacer.create({ sliceMs: 20, paintMs: 250 }) : async () => {});
+
+  // La miniature `thumb` (à l'échelle 1, large de `width` px et haute de `height` px) en image. La page garde la main entre les pas (la frappe, la souris, le cadre « chargement » du document) ;
+  // ce que le navigateur fait d'un bloc (lire le SVG, le peindre dans le canevas) ne se découpe pas.
   async function snapshot(thumb, width, height) {
-    const faces = (await loadFaces()).filter(face => familiesOf(thumb).has(face.family)).map(face => face.text).join('\n');
+    const pace = pacer();
+    const families = await familiesOf(thumb, pace);
+    const faces = (await loadFaces()).filter(face => families.has(face.family)).map(face => face.text).join('\n');
     const holder = document.createElementNS(XHTML, 'div');
     holder.setAttribute('xmlns', XHTML);
     holder.setAttribute('style', 'all: unset; display: block; overflow: hidden; width: ' + width + 'px; height: ' + height + 'px;');
-    holder.appendChild(inline(thumb, null));
+    holder.appendChild(await inline(thumb, null, pace));
+    await pace();
     const body = new XMLSerializer().serializeToString(holder);
+    await pace();
     const outW = Math.round(width * SCALE);
     const outH = Math.round(height * SCALE);
     const style = faces ? '<style xmlns="' + XHTML + '"><![CDATA[' + faces.replace(/\]\]>/g, ']]]]><![CDATA[>') + ']]></style>' : '';
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + outW + '" height="' + outH + '" viewBox="0 0 ' + width + ' ' + height + '">'
       + '<foreignObject x="0" y="0" width="' + width + '" height="' + height + '">' + style + body + '</foreignObject></svg>';
+    await pace();
     const img = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+    await pace();
     const canvas = document.createElement('canvas');
     canvas.width = outW;
     canvas.height = outH;
@@ -224,7 +238,8 @@ const SlideRaster = (function () {
       if (jpeg && jpeg.size < blob.size * JPEG_GAIN) blob = jpeg;
     }
     const src = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
-    return { src, width: outW, height: outH, text: textOf(thumb), words: wordsOf(thumb, width, height) };
+    await pace();
+    return { src, width: outW, height: outH, text: textOf(thumb), words: await wordsOf(thumb, width, height, pace) };
   }
 
   return { snapshot };

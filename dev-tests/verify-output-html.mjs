@@ -37,7 +37,8 @@ await page.waitForFunction(() => typeof SlidesEntry !== 'undefined' && typeof Sl
 
 // L'enchaînement d'avant, étape par étape sur des textes (les fonctions à texte n'ont pas changé de sens), et les variantes de la présentation.
 await page.evaluate(() => {
-  window.__sequential = (html, { keepProps = false, anchors = false, theme = null, page = null } = {}) => {
+  window.__sequential = (html, { keepProps = false, anchors = false, theme = null, page = null, stampAnimations = false } = {}) => {
+    const done = text => (stampAnimations ? FrameAnim.stampSlides(text) : text);
     html = SlideLinks.forOutput(html);
     if (!keepProps) html = SlideProps.forOutput(html, { anchors, background: SlideTheme.paperOf(theme), decor: SlideTheme.decorHtmlFor(theme, page) });
     if (!keepProps) html = FreeFrame.withoutHidden(html);
@@ -45,11 +46,11 @@ await page.evaluate(() => {
     const host = Dom.inertTemplate(html);
     const blocks = Array.from(host.content.children);
     const breaks = blocks.filter(block => block.classList.contains('page-break-marker'));
-    if (!breaks.length) return html;
+    if (!breaks.length) return done(html);
     breaks.forEach(block => block.setAttribute(SlidesEntry.SLIDE_BREAK_ATTR, ''));
     const written = blocks.filter(block => !block.hasAttribute('data-ff-bg') && !block.hasAttribute('data-ff-decor'));
     if (written[written.length - 1].classList.contains('page-break-marker')) host.content.appendChild(document.createElement('p'));
-    return host.innerHTML;
+    return done(host.innerHTML);
   };
   window.__variants = (deck) => {
     const parse = text => new DOMParser().parseFromString(text, 'text/html').body;
@@ -59,6 +60,14 @@ await page.evaluate(() => {
     body = parse(deck); body.querySelectorAll('.pp-slide-props').forEach((el) => { el.remove(); }); out.sansRepères = body.innerHTML;
     body = parse(deck); body.querySelectorAll('.pp-slide-props').forEach((el, i) => { if (i % 2) el.removeAttribute('data-bg'); else { el.setAttribute('data-anchor', 'partie-' + i); el.setAttribute('data-anchor-name', 'Partie ' + i); } }); out.signets = body.innerHTML;
     body = parse(deck); body.querySelectorAll('.page-break-marker').forEach((el) => { el.remove(); }); out.sansSauts = body.innerHTML;
+    // Les repères des diapositives liées (js/slide-links.js, `pp-slide-link`) en tête de chaque diapositive, sans lien à comparer à une source (ils s'en vont de l'arbre lu), avec un lien (que l'éditeur compare à sa source), et des éléments animés (`data-ff-anim`, que le diaporama relie à leur diapositive).
+    const linkMark = (i, extra) => '<div class="pp-slide-link" data-slide-id="s' + i + '"' + (extra || '') + ' style="display:block;height:0;margin:0;padding:0;border:0;overflow:hidden"></div>';
+    const withLinkMarks = (text, extra) => { const doc = parse(text); doc.insertAdjacentHTML('afterbegin', linkMark(0, extra)); Array.from(doc.querySelectorAll('.page-break-marker')).forEach((el, i) => { el.insertAdjacentHTML('afterend', linkMark(i + 1, extra)); }); return doc.innerHTML; };
+    const withAnimations = (text) => { const doc = parse(text); Array.from(doc.querySelectorAll('p')).forEach((el, i) => { if (i % 3 === 0) el.setAttribute('data-ff-anim', 'appear'); }); Array.from(doc.querySelectorAll('.pp-free-frame')).forEach((el, i) => { if (i % 4 === 0) el.setAttribute('data-ff-anim', 'appear'); }); return doc.innerHTML; };
+    out.reperesDeLiens = withLinkMarks(deck);
+    out.reperesDeLiensVersUneSource = withLinkMarks(deck, ' data-link-model="inconnu" data-link-slide="s0" data-link-key="k"');
+    out.animations = withAnimations(deck);
+    out.liensEtAnimations = withAnimations(withLinkMarks(deck));
     out.sautEnPlus = deck + '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
     out.espaceEnTete = '\n  ' + deck;
     out.balisesRetirees = deck.replace('</p>', '</p><script>alert(1)</script><x-y>texte</x-y><!-- note --><p onclick="x()" style="color:red">a<a href="javascript:alert(1)">lien</a><a href="https://exemple.fr/">ok</a><img src="javascript:x"></p><iframe src="https://exemple.fr/"></iframe><style>p{color:red}</style>');
@@ -89,6 +98,15 @@ async function compare(label, html, combos) {
       for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); a = Math.imul(a ^ c, 16777619) >>> 0; b = Math.imul(b ^ c, 0x01000193) + i >>> 0; }
       return a.toString(16) + b.toString(16) + ':' + text.length;
     };
+    const sameBut = (text) => {
+      const body = new DOMParser().parseFromString(text, 'text/html').body;
+      body.querySelectorAll('*').forEach((el) => {
+        const attrs = Array.from(el.attributes).map(attr => [attr.name, attr.value]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+        attrs.forEach(([name]) => el.removeAttribute(name));
+        attrs.forEach(([name, value]) => el.setAttribute(name, value));
+      });
+      return body.innerHTML;
+    };
     let count = 0;
     combos.forEach(([themeName, pageName, keepProps, anchors]) => {
       const options = { keepProps, anchors, theme: themes[themeName], page: pages[pageName] };
@@ -96,6 +114,17 @@ async function compare(label, html, combos) {
       try { expected = window.__sequential(html, options); } catch (e) { expected = 'ERREUR ' + e.message; }
       try { got = SlidesEntry.outputHtml('presentation', html, options); } catch (e) { got = 'ERREUR ' + e.message; }
       count += 1;
+      // `stampAnimations` (le diaporama) : le rang de la diapositive posé sur l'arbre déjà lu, le même texte que `FrameAnim.stampSlides` sur la sortie.
+      let expectedStamped, gotStamped;
+      try { expectedStamped = window.__sequential(html, Object.assign({ stampAnimations: true }, options)); } catch (e) { expectedStamped = 'ERREUR ' + e.message; }
+      try { gotStamped = SlidesEntry.outputHtml('presentation', html, Object.assign({ stampAnimations: true }, options)); } catch (e) { gotStamped = 'ERREUR ' + e.message; }
+      // Chromium n'écrit l'attribut `style` d'un élément (posé par le thème) qu'au moment où l'arbre est sérialisé : après le rang de la diapositive posé entre-temps. Le même élément, les mêmes attributs, dans un autre ordre :
+      // c'est le seul écart toléré ici (`ordre`), le texte sans rang (au-dessus) reste comparé au caractère près.
+      if (gotStamped !== expectedStamped && sameBut(gotStamped) !== sameBut(expectedStamped)) {
+        let at = 0;
+        while (at < expectedStamped.length && expectedStamped[at] === gotStamped[at]) at += 1;
+        different.push({ stamped: true, themeName, pageName, keepProps, anchors, lengths: [expectedStamped.length, gotStamped.length], at, expected: expectedStamped.slice(Math.max(0, at - 60), at + 80), got: gotStamped.slice(Math.max(0, at - 60), at + 80) });
+      }
       prints[[themeName, pageName, keepProps ? 'garde' : 'sort', anchors ? 'signets' : 'sans'].join('/')] = fingerprint(got);
       if (got !== expected) {
         let at = 0;
@@ -136,6 +165,10 @@ const TINY = {
   sautSeul: '<p>a</p><div class="page-break-marker" contenteditable="false"></div>',
   sautEtSuite: '<p>a</p><div class="page-break-marker" contenteditable="false"></div><p>b</p>',
   masqueSeul: '<div class="pp-free-frame" data-ff-hidden="true"><p>x</p></div><p>a</p>',
+  repereDeLienSeul: '<div class="pp-slide-link" data-slide-id="a"></div><p>a</p>',
+  classeDeLienEnTexte: '<p>pp-slide-link dans un texte</p><x-y>en trop</x-y>',
+  animationsEtSauts: '<p data-ff-anim="appear">a</p><div class="page-break-marker"></div><p data-ff-anim="appear">b</p><div class="page-break-marker"></div><p>c</p>',
+  repereDeLienEtFond: '<div class="pp-slide-link" data-slide-id="a"></div><div class="pp-slide-props" data-bg="#ffeecc"></div><p data-ff-anim="appear">a</p><div class="page-break-marker"></div>',
   repereSeul: '<div class="pp-slide-props" data-bg="#ffeecc" data-anchor="a" data-anchor-name="A"></div><p>a</p>',
   repereEtSaut: '<div class="pp-slide-props" data-trans="zoom"></div><p>a</p><div class="page-break-marker"></div><div class="pp-slide-props" data-bg="#102030"></div><p>b</p><div class="page-break-marker"></div>',
 };
@@ -153,6 +186,21 @@ const reads = await page.evaluate(({ deck, themes }) => {
   return big;
 }, { deck: DECK, themes: THEMES });
 check(`le HTML entier de la présentation n'est lu qu'une fois par outputHtml (${reads.length} lecture(s) : ${reads.join(', ')})`, reads.length === 1, reads);
+// Avec des repères de diapositives liées et des éléments animés, ce que le diaporama demande (`stampAnimations`) : une lecture encore (avant, trois : les repères, le fond et le décor, le rang des animations).
+const readsWithLinks = await page.evaluate(({ variants, themes }) => {
+  const html = variants.liensEtAnimations + '<p>variante ' + Math.random() + '</p>';
+  const big = [];
+  const parseInert = HtmlSanitize.parseInert;
+  HtmlSanitize.parseInert = function (text) { if (String(text).length > 20000) big.push('parseInert'); return parseInert.apply(this, arguments); };
+  const inertTemplate = Dom.inertTemplate;
+  Dom.inertTemplate = function (text) { if (String(text).length > 20000) big.push('inertTemplate'); return inertTemplate.apply(this, arguments); };
+  let out = '';
+  try { out = SlidesEntry.outputHtml('presentation', html, { anchors: true, theme: themes.decor, page: null, stampAnimations: true }); } finally { HtmlSanitize.parseInert = parseInert; Dom.inertTemplate = inertTemplate; }
+  const body = new DOMParser().parseFromString(out, 'text/html').body;
+  return { big, links: body.querySelectorAll('.pp-slide-link').length, animated: body.querySelectorAll('[data-ff-anim]').length, stamped: body.querySelectorAll('[data-ff-anim][data-ff-slide]').length };
+}, { variants, themes: THEMES });
+check(`avec repères de liens et éléments animés (diaporama), le HTML entier n'est lu qu'une fois (${readsWithLinks.big.length} lecture(s))`, readsWithLinks.big.length === 1, readsWithLinks);
+check('et la sortie a fait son travail : plus de repère de lien, chaque élément animé a le rang de sa diapositive', readsWithLinks.links === 0 && readsWithLinks.animated > 0 && readsWithLinks.stamped === readsWithLinks.animated, readsWithLinks);
 
 if (process.env.OUTPUT_HTML_DUMP) writeFileSync(process.env.OUTPUT_HTML_DUMP, JSON.stringify(dump, null, 1));
 await t.finish();

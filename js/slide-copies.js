@@ -158,34 +158,38 @@ const SlideCopies = (function () {
   // Pose, au curseur du document, le texte de la diapositive `html` (sans repère) avec son repère : `link` est celui que rend SlideLinks.anchorSource ; `keepFormat` garde les tailles de la
   // diapositive. Un seul pas d'annulation, à part de la frappe d'avant, et le curseur se pose dans le bloc qui suit. Rend { blank } quand rien de lisible n'en reste (rien n'est posé), sinon
   // { dropped, blocks } (ce qui n'est pas entré, le nombre de blocs posés).
-  function insert(editor, { html, link, keepFormat }) {
+  // `replace` : { from, to }, ce que la copie remplace (« Modifier la diapo »), au lieu de se poser au curseur.
+  // `leave` : comme pour insertBlock ; `pending` : le cadre « chargement » (startPending) que cette pose retire, dans la même transaction.
+  function insert(editor, { html, link, keepFormat, replace, leave, pending }) {
     const { makeBase, hashOfNodes, NODE } = kit();
     const result = convertHtml(editor, html, !!keepFormat);
     if (result.blank) return { blank: true, dropped: result.dropped };
     const { state } = editor;
-    const { from, to } = placeFor(state, copiesOf(state.doc));
-    const attrs = Object.assign(emptyAttrs(), {
+    const { from, to } = replace || placeFor(state, copiesOf(state.doc));
+    // Sans `link` (« Modifier la diapo » : une diapositive remplacée par du texte qui ne la suit pas), le texte arrive seul, sans repère.
+    const marker = link ? editor.schema.nodes[NODE].create(Object.assign(emptyAttrs(), {
       linkModel: link.linkModel, linkKey: link.linkKey, linkSlide: link.linkSlide, linkMode: 'pull', linkSpan: result.nodes.length, linkKeep: keepFormat ? true : null,
       linkBase: makeBase(hashOfNodes(result.nodes), link.srcHash),
-    });
-    const marker = editor.schema.nodes[NODE].create(attrs);
-    const content = [...result.nodes, marker];
+    })) : null;
+    const content = marker ? [...result.nodes, marker] : [...result.nodes];
     // Un bloc de texte juste après le repère, pour que le curseur y tienne (la copie finit le document, ou un tableau, une zone ou un saut de page la suit).
     const next = state.doc.nodeAt(to);
     if (!next || !next.isTextblock) content.push(editor.schema.nodes.paragraph.create());
     const tr = state.tr.setMeta('closeHistory$', true).replaceWith(from, to, content);
-    const caret = from + content.slice(0, result.nodes.length + 1).reduce((sum, node) => sum + node.nodeSize, 0);
-    tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(caret), 1)).scrollIntoView();
+    if (pending != null && pendingKey) tr.setMeta(pendingKey, { remove: pending });
+    const caret = from + content.slice(0, result.nodes.length + (marker ? 1 : 0)).reduce((sum, node) => sum + node.nodeSize, 0);
+    if (!leave) tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(caret), 1)).scrollIntoView();
     editor.view.dispatch(tr);
     return { dropped: result.dropped, blocks: result.nodes.length };
   }
 
   // Les diapositives de la présentation `id` dont ce document porte déjà une copie liée (un lien par diapositive source et par document), en texte ou en bloc.
-  function linkedFrom(editor, id) {
+  // `except` : une fonction `(nœud) => vrai` pour ce qu'on ne compte pas (la diapositive que « Modifier la diapo » remplace).
+  function linkedFrom(editor, id, except) {
     const found = new Set();
     if (!editor || editor.isDestroyed) return found;
-    copiesOf(editor.state.doc).forEach((copy) => { if (String(copy.attrs.linkModel) === String(id)) found.add(copy.attrs.linkSlide); });
-    blocksOf(editor.state.doc).forEach(({ link }) => { if (String(link.model) === String(id)) found.add(link.slide); });
+    copiesOf(editor.state.doc).forEach((copy) => { if (!(except && except(copy.node)) && String(copy.attrs.linkModel) === String(id)) found.add(copy.attrs.linkSlide); });
+    blocksOf(editor.state.doc).forEach(({ node, link }) => { if (!(except && except(node)) && String(link.model) === String(id)) found.add(link.slide); });
     return found;
   }
 
@@ -217,25 +221,33 @@ const SlideCopies = (function () {
   }
   // Les attributs de l'image d'une photo de diapositive `shot` ({ src, text, words }), large de `width` (en px) ; `link` : { linkModel, linkKey, linkSlide, srcHash } de SlideLinks.anchorSource ;
   // `source` : celle de `blockSourceOf`.
-  function blockAttrs(shot, width, link, source) {
+  // `from` : la diapositive d'où vient un bloc posé SANS lien, { model, rank, h } (`slideFrom`), que « Modifier la diapo » retrouve.
+  function blockAttrs(shot, width, link, source, from) {
     return {
       src: shot.src, alt: blockAltOf(shot.text), width: width + 'px', slideText: shot.text || null, slideWords: shot.words && shot.words.length ? shot.words : null,
       slideLink: link ? { model: link.linkModel, key: link.linkKey, slide: link.linkSlide, base: link.srcHash } : null,
       slideSource: source || null,
+      slideFrom: link ? null : (from || null),
     };
   }
   // Pose la photo `shot` au curseur du document, large de `width` px (la largeur du texte) : un paragraphe qui ne porte que l'image, un seul pas d'annulation à part de la frappe d'avant ; le curseur se
   // pose dans le bloc qui suit (il y en a toujours un : une ligne vide est ajoutée au besoin). Rend { blocks: 1 }.
-  function insertBlock(editor, { shot, width, link, slideSource }) {
+  // `replace` : { from, to }, ce que le bloc remplace (« Modifier la diapo » : la diapositive d'avant, dans le même pas d'annulation) au lieu de se poser au curseur ; `like` : les attributs du bloc remplacé,
+  // dont le nouveau garde la taille et l'alignement.
+  // `leave` : la personne a déplacé le curseur pendant que la diapositive se dessinait (le cadre « chargement ») : il reste où elle l'a mis, sans défilement ; `pending` : le cadre « chargement » (startPending) que cette pose retire, dans la même transaction.
+  function insertBlock(editor, { shot, width, link, slideSource, slideFrom, replace, like, leave, pending }) {
     const { state } = editor;
-    const { from, to } = placeFor(state, copiesOf(state.doc));
+    const { from, to } = replace || placeFor(state, copiesOf(state.doc));
     const { editorImage, paragraph } = editor.schema.nodes;
-    const block = paragraph.create(null, [editorImage.create(blockAttrs(shot, width, link, slideSource))]);
+    const attrs = blockAttrs(shot, width, link, slideSource, slideFrom);
+    if (like) ['width', 'align', 'wrap'].forEach((name) => { if (like[name] != null) attrs[name] = like[name]; });
+    const block = paragraph.create(null, [editorImage.create(attrs)]);
     const content = [block];
     const next = state.doc.nodeAt(to);
     if (!next || !next.isTextblock) content.push(paragraph.create());
     const tr = state.tr.setMeta('closeHistory$', true).replaceWith(from, to, content);
-    tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(from + block.nodeSize), 1)).scrollIntoView();
+    if (pending != null && pendingKey) tr.setMeta(pendingKey, { remove: pending });
+    if (!leave) tr.setSelection(EditorCore.getTextSelectionClass().near(tr.doc.resolve(from + block.nodeSize), 1)).scrollIntoView();
     editor.view.dispatch(tr);
     return { blocks: 1 };
   }
@@ -470,13 +482,80 @@ const SlideCopies = (function () {
     return Extension.create({
       name: 'slideCopies',
       addProseMirrorPlugins() {
+        pendingKey = new PluginKey('slideCopies');
         return [new Plugin({
-          key: new PluginKey('slideCopies'),
+          key: pendingKey,
+          // Les diapositives en train d'arriver (`startPending`) : leur place suit le texte que la personne tape pendant ce temps.
+          state: {
+            init: () => [],
+            apply(tr, items) {
+              let next = items;
+              if (tr.docChanged && items.length) next = items.map(item => Object.assign({}, item, { from: tr.mapping.map(item.from, -1), to: tr.mapping.map(item.to, 1), caret: tr.mapping.map(item.caret, -1) }));
+              const meta = tr.getMeta(pendingKey);
+              if (meta && meta.add) next = next.concat([meta.add]);
+              if (meta && meta.remove) next = next.filter(item => item.id !== meta.remove);
+              return next;
+            },
+          },
           filterTransaction(tr, state) { return !refuses(tr, state); },
-          props: { decorations: state => marks(state, Decoration, DecorationSet) },
+          props: {
+            decorations(state) {
+              const base = marks(state, Decoration, DecorationSet);
+              const items = pendingKey.getState(state) || [];
+              if (!items.length || GridEditor.isActive() || HeaderFooterPreview.getHfMode()) return base;
+              const frames = items.map(item => Decoration.widget(item.from, () => pendingFrame(item.label), { side: -1, key: 'pp-slide-pending-' + item.id, ignoreSelection: true, stopEvent: () => true }));
+              return base ? base.add(state.doc, frames) : DecorationSet.create(state.doc, frames);
+            },
+          },
         })];
       },
     });
+  }
+
+  // ---- Le cadre « chargement » ---------------------------------------------------------------------------------------------------------------------------
+
+  // Une diapositive d'un gros PowerPoint met plusieurs secondes à arriver (sa source se lit, se numérote, puis se dessine) : dès le clic, un cadre « chargement » prend sa place dans le document,
+  // et la page reste libre pendant que le reste se fait. Le cadre est une décoration de l'éditeur seulement (rien n'en reste dans le document, l'historique, la Lecture ni les exports) ; sa
+  // place suit la frappe (`apply`, plus haut). `startPending` rend son numéro (null quand l'éditeur n'est pas prêt), `pendingAt` dit où la diapositive se pose et si la personne n'a pas bougé
+  // le curseur depuis (alors il la suit, comme d'habitude ; sinon il reste où elle l'a mis), `endPending` retire le cadre.
+  let pendingKey = null;
+  let pendingSeq = 0;
+  function pendingFrame(label) {
+    const frame = document.createElement('div');
+    frame.className = 'pp-slide-pending';
+    frame.contentEditable = 'false';
+    frame.setAttribute('role', 'status');
+    frame.setAttribute('aria-busy', 'true');
+    const mark = document.createElement('span');
+    mark.className = 'pp-slide-pending-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.className = 'pp-slide-pending-label';
+    text.textContent = label;
+    frame.append(mark, text);
+    return frame;
+  }
+  function startPending(editor, label) {
+    if (!pendingKey || !editor || editor.isDestroyed) return null;
+    const { state } = editor;
+    const at = placeFor(state, copiesOf(state.doc));
+    const id = ++pendingSeq;
+    editor.view.dispatch(state.tr.setMeta(pendingKey, { add: { id, from: at.from, to: at.to, blank: at.from !== at.to, caret: state.selection.head, label } }).setMeta('addToHistory', false));
+    return id;
+  }
+  function pendingAt(editor, id) {
+    const item = pendingKey && editor && !editor.isDestroyed ? (pendingKey.getState(editor.state) || []).find(entry => entry.id === id) : null;
+    if (!item) return null;
+    const { doc, selection } = editor.state;
+    // Un paragraphe vide que la diapositive remplaçait l'est-il resté ? (sinon la personne y a écrit : la diapositive vient avant, rien n'est écrasé)
+    const node = item.blank ? doc.nodeAt(item.from) : null;
+    const blank = !!node && node.type.name === 'paragraph' && node.content.size === 0 && item.from + node.nodeSize === item.to;
+    return { range: blank ? { from: item.from, to: item.to } : { from: item.from, to: item.from }, untouched: selection.empty && selection.head === item.caret };
+  }
+  function endPending(editor, id) {
+    if (!pendingKey || !editor || editor.isDestroyed || id == null) return;
+    if (!(pendingKey.getState(editor.state) || []).some(entry => entry.id === id)) return;
+    editor.view.dispatch(editor.state.tr.setMeta(pendingKey, { remove: id }).setMeta('addToHistory', false));
   }
 
   // ---- La barre flottante et « Détacher » -------------------------------------------------------------------------------------------------------
@@ -494,6 +573,76 @@ const SlideCopies = (function () {
     const editor = EditorCore.getEditor();
     const plan = editor && !editor.isDestroyed && kit().libs ? planOf(editor, copy.attrs) : { action: 'missing', model: sourceOf(copy.attrs) };
     return { copy, from: copy.from, name: plan.model ? plan.model.nom : '', n: plan.action === 'missing' ? 0 : plan.at + 1, gone: plan.action === 'missing' };
+  }
+
+  // ---- « Modifier la diapo » : rouvrir le volet sur une diapositive déjà posée ------------------------------------------------------------------------
+
+  // Un bloc posé SANS lien (l'image d'une diapositive qui garde son texte, mais pas sa source) : la barre le propose aussi, avec la diapositive d'où il vient quand il la connaît (`slideFrom`).
+  const isFreeBlock = node => !!node && node.type.name === 'editorImage' && !isBlockLink(node.attrs.slideLink) && !!(node.attrs.slideFrom || node.attrs.slideText || node.attrs.slideWords || node.attrs.slideSource);
+  function freeBlockAt(state) {
+    if (GridEditor.isActive() || HeaderFooterPreview.getHfMode()) return null;
+    const node = state.selection.node;
+    if (!isFreeBlock(node)) return null;
+    const from = node.attrs.slideFrom;
+    const model = from && Templates.byId(from.model);
+    return { block: { node, pos: state.selection.from }, from: state.selection.from, name: model ? nameOfModel(model) : '', free: true };
+  }
+  const nameOfModel = model => model.nom || '';
+
+  // La diapositive que la sélection désigne dans le document, pour rouvrir le volet dessus : { kind: 'block' | 'copy', linked, asBlock, keepFormat, model, index, rank, h, name, key, match } ; null quand
+  // elle ne désigne aucune diapositive posée. `model` : la présentation d'où elle vient (null : un bloc d'avant, qui n'a pas gardé son origine : le volet s'ouvre sans diapositive choisie), `index` : son
+  // rang dans la présentation (-1 quand on ne le sait pas), `match(nœud)` : est-ce encore elle (elle change de nœud quand sa source la met à jour). Une copie en texte sans lien est du texte ordinaire :
+  // rien à rouvrir.
+  function editTargetAt(state) {
+    const status = statusAt(state) || freeBlockAt(state);
+    if (!status) return null;
+    if (status.block) {
+      const { node } = status.block;
+      const link = node.attrs.slideLink;
+      const linked = isBlockLink(link);
+      const from = node.attrs.slideFrom;
+      const target = { kind: 'block', linked, asBlock: true, keepFormat: false, name: status.name };
+      if (linked) Object.assign(target, { model: link.model, index: status.gone ? -1 : status.n - 1, key: link.slide, match: other => !!other && other.type.name === 'editorImage' && !!other.attrs.slideLink && other.attrs.slideLink.slide === link.slide });
+      else Object.assign(target, { model: from ? from.model : null, index: -1, rank: from ? from.rank : -1, h: from ? from.h : '', key: node.attrs.src, match: other => !!other && other.type.name === 'editorImage' && other.attrs.src === node.attrs.src });
+      return target;
+    }
+    const { copy } = status;
+    const { linkModel, linkSlide } = copy.attrs;
+    return {
+      kind: 'copy', linked: true, asBlock: false, keepFormat: !!copy.attrs.linkKeep, model: linkModel, index: status.gone ? -1 : status.n - 1, rank: -1, h: '', name: status.name, key: linkSlide,
+      match: other => !!other && isTagNode(other) && other.attrs.linkModel === linkModel && other.attrs.linkSlide === linkSlide,
+    };
+  }
+  const isTagNode = node => kit().isTag(node);
+  // Où la diapositive du `target` est maintenant dans le texte : { from, to } (ce qu'un remplacement efface), ou null quand elle n'y est plus. Un bloc seul dans son paragraphe l'emporte avec lui.
+  function rangeOf(editor, target) {
+    if (!editor || editor.isDestroyed) return null;
+    const doc = editor.state.doc;
+    if (target.kind === 'copy') {
+      const copy = copiesOf(doc).find(c => c.whole && target.match(c.node));
+      return copy ? { from: copy.from, to: copy.pos + copy.node.nodeSize } : null;
+    }
+    let at = null;
+    doc.descendants((node, pos) => { if (at !== null) return false; if (target.match(node)) { at = pos; return false; } return !node.isAtom; });
+    if (at === null) return null;
+    const $at = doc.resolve(at);
+    const parent = $at.parent;
+    if (parent.type.name === 'paragraph' && parent.childCount === 1 && $at.depth >= 1) return { from: $at.before(), to: $at.after() };
+    return { from: at, to: at + doc.nodeAt(at).nodeSize };
+  }
+  // Les attributs du bloc d'image du `target` tels que le texte les a maintenant (sa taille et son alignement, que le nouveau bloc garde), ou null.
+  function blockAttrsOf(editor, target) {
+    if (!editor || editor.isDestroyed || target.kind !== 'block') return null;
+    let found = null;
+    editor.state.doc.descendants((node) => { if (found) return false; if (target.match(node)) { found = node.attrs; return false; } return !node.isAtom; });
+    return found;
+  }
+  // Rouvre le volet « Insérer depuis » sur la diapositive que la sélection désigne (la barre flottante et le double clic) ; faux quand la sélection n'en désigne aucune ou que l'extension est éteinte.
+  function edit(editor) {
+    if (!editor || editor.isDestroyed || !editor.isEditable) return false;
+    const target = editTargetAt(editor.state);
+    if (!target) return false;
+    return SlidesEntry.editInserted(target);
   }
 
   // « Détacher » : la copie garde ce qu'elle montre et n'est plus liée (le repère part) ; elle s'écrit de nouveau. Un seul Annuler. Faux, sans rien changer, sous le suivi des modifications ou
@@ -544,5 +693,5 @@ const SlideCopies = (function () {
     return SlideLinks.strip(Editor.getHTML(tr.doc));
   }
 
-  return { SOURCE_TYPE, createExtension, follow, followBlocks, updateNow, fillBlocks, forOutput, insert, insertBlock, blockSourceOf, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
+  return { SOURCE_TYPE, createExtension, follow, followBlocks, updateNow, editTargetAt, freeBlockAt, rangeOf, blockAttrsOf, edit, fillBlocks, forOutput, insert, insertBlock, startPending, pendingAt, endPending, blockSourceOf, numberStamp, detach, statusAt, linkedFrom, copiesOf, blocksOf };
 })();

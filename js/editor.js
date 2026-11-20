@@ -480,6 +480,8 @@ const Editor = (function () {
       // Pastille « @ » (js/mention.js) : la fiche d'une ligne précise d'une table, pas une valeur de la ligne affichée.
       Mention.createNode(Node, mergeAttributes),
       EditorNodes.createFootnoteRefNode(Node, mergeAttributes),
+      // Renvoi (js/cross-refs.js) : le nom d'un titre ou d'un signet écrit tout seul, qui suit le titre et mène à lui.
+      CrossRefs.createNode(Node),
       // Les marques de ces nœuds en ligne, gardées dans un attribut pour l'écriture en direct (js/editor-nodes.js:createInlineMarksCarrier) : inerte tant qu'elle ne s'en sert pas.
       EditorNodes.createInlineMarksCarrier(Extension),
       EditorNodes.createCommentMark(Mark, mergeAttributes),
@@ -559,6 +561,8 @@ const Editor = (function () {
       HeadingStyles.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Signets (js/anchors.js) : l'adresse et le nom d'un paragraphe ou d'un titre, plus le drapeau de l'éditeur et la correction des doublons.
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      // Renvois (js/cross-refs.js) : leur texte remis à jour dans la transaction qui change le titre visé, `broken` quand il n'existe plus.
+      CrossRefs.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createEditorImageNode(Node),
       EditorNodes.createPageBreakNode(Node),
       // « Fin de la section » (js/loop-sections.js) : la marque qui arrête la section répétée par un titre en boucle, et le repère de chaque section (une décoration par bloc), rien d'écrit dans le texte.

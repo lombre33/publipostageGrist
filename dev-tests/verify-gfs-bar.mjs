@@ -90,7 +90,8 @@ const TOOLBAR_ROWS = '#toolbar-top .bar-row, #toolbar-top #v2-email-fields-row, 
 const layoutOf = (app, { outsideRows = false } = {}) => app.evaluate(([skip, rows]) => {
   const out = {};
   const round = n => Math.round(n * 10) / 10;
-  document.querySelectorAll('[id]').forEach((el) => { if (skip && el.closest(rows)) return; const r = el.getBoundingClientRect(); out['#' + el.id] = [round(r.left), round(r.top), round(r.width), round(r.height)]; });
+  // La languette du plan du document (#v2-outline-tab, au bord gauche du texte) s'écarte de la zone par GfsBar.keepClear (js/document-outline.js) : comme les rangées de la barre d'outils, elle n'est pas « immobile ».
+  document.querySelectorAll('[id]').forEach((el) => { if (skip && (el.closest(rows) || el.id === 'v2-outline-tab')) return; const r = el.getBoundingClientRect(); out['#' + el.id] = [round(r.left), round(r.top), round(r.width), round(r.height)]; });
   out.cadre = [window.innerWidth, window.innerHeight, document.documentElement.scrollWidth, document.documentElement.scrollHeight];
   return out;
 }, [outsideRows, TOOLBAR_ROWS]);

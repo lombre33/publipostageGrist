@@ -556,5 +556,5 @@ const LinkDialog = (function () {
     document.addEventListener('scroll', hideTip, true);
   }
 
-  return { normalizeUrl, canLinkHere, open, openForObject, claimInto, createExtension, wireEditor, shortcutLabel };
+  return { normalizeUrl, canLinkHere, open, openForObject, claimInto, createExtension, wireEditor, shortcutLabel, modKey };
 })();
