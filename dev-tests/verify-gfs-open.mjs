@@ -9,7 +9,7 @@
 //   n'empêche pas le démarrage.
 //  « NOUVEAU » (consigne 014 : `fichier` nul et un `type`) AU DÉMARRAGE : un modèle vierge de ce type s'ouvre à la place de l'ordre habituel - document, email avec son bandeau, grille avec son tableau, présentation en 16:9
 //   quand l'extension « diapositives » est active - sans que le ★ ni aucun modèle s'ouvre, sans rien écrire, le coin d'état garde l'avertissement « modèle non enregistré » (français et anglais), la ligne courante ne
-//   rouvre pas son modèle ; le macro-modèle garde l'ordre habituel et ouvre par-dessus son écran de composition, vide, dans le panneau ; `dossier` n'y change rien ; un type absent, refusé par la garde, une présentation
+//   rouvre pas son modèle ; le macro-modèle garde l'ordre habituel et ouvre par-dessus son écran de composition, vide, dans le panneau ; `dossier` ne change rien à l'ouverture (il attend le premier enregistrement : dev-tests/verify-gfs-folder.mjs) ; un type absent, refusé par la garde, une présentation
 //   sans l'extension, un document en lecture seule : l'ordre habituel, sans message.
 //  « NOUVEAU > IMPORTER » (consigne 035 : `raison` `importer` et `importation: { valeur, fichier: File }`, js/gfs-link.js `normalizeOpening`, js/gfs-open.js, js/main.js `importFileFromGfs`) : l'importation est gardée pour cette
 //   raison seule (un `File` et une valeur en texte), jamais pour une autre ; GFS a déjà ouvert le sélecteur, donc aucun sélecteur ne s'ouvre ; chacune des six valeurs (Excel, Markdown, HTML, PowerPoint, Word, OpenDocument) lit SON fichier par le chemin
@@ -315,7 +315,7 @@ console.log('\n== Au démarrage : « Nouveau » ouvre un modèle vierge du type 
 
   o = await startNew({ ouverture: NEW('email', { dossier: 'Contrats/2026' }) });
   got = await shown(o.page); s = await surfaces(o.page);
-  check('un `dossier` rempli n’y change rien : le même email vierge, à la racine, sans rien écrire', got.current == null && s.emailBanner && await nothingWritten(o.page), { got, s });
+  check('un `dossier` rempli ne change rien à l’ouverture : le même email vierge, sans rien écrire (le dossier attend le premier enregistrement, verify-gfs-folder)', got.current == null && s.emailBanner && await nothingWritten(o.page), { got, s });
   await o.context.close();
 
   o = await startNew({ ouverture: NEW('document') }, { options: { modeleDeLaVue: '3', modeleSelonLigne: ROW_RULES }, record: { id: 1, Nom: 'L1', Statut: 'Urgent' } });
@@ -544,7 +544,7 @@ console.log('\n== L’appel `ouvrir` sans fichier : « Nouveau » (l’app est d
   reply = await ask(page, NEW('document', { dossier: 'Contrats/2026' }));
   got = await shown(page);
   seen = await probe(page);
-  check('un `dossier` rempli n’y change rien : un document vierge, hors du mode grille', reply.data && reply.data.ouvert === true && got.current == null && got.text === '' && !seen.grid, { reply, got, seen });
+  check('un `dossier` rempli ne change rien à l’ouverture : un document vierge, hors du mode grille', reply.data && reply.data.ouvert === true && got.current == null && got.text === '' && !seen.grid, { reply, got, seen });
 
   reply = await ask(page, NEW('macro'));
   let m = await macroModal(page);

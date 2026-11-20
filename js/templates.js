@@ -604,6 +604,12 @@ const Templates = (function () {
 
   function setCurrentId(id) { currentTemplateId = id; currentIdSeq++; }
 
+  // Ce qui suit la naissance d'un modèle : `fn(id)` est attendue (jamais plus d'un abonné, le dernier) juste après l'écriture de sa ligne, avant que save() rende la main. js/main.js y range le modèle dans le
+  // dossier que GFS a donné à sa création (js/gfs-open.js) : la ligne de rangement part avec le premier enregistrement, la liste la montre dès qu'il est fini. Un abonné qui échoue ne fait pas échouer
+  // l'enregistrement : la ligne du modèle est écrite, ce serait mentir.
+  let createdHook = null;
+  function onCreated(fn) { createdHook = typeof fn === 'function' ? fn : null; }
+
   function getDefaultId() {
     // Un modèle email ou macro n'est jamais le ★ du document (cf. js/main.js, syncDefaultTemplateButton) : une ligne restée marquée
     // IsDefault sur l'un d'eux (défaut posé avant cette règle, colonne éditée dans Grist) ne doit pas masquer un modèle document lui aussi marqué,
@@ -849,6 +855,9 @@ const Templates = (function () {
       const dateModif = dates.get(newId);
       writes.remember(newId, dateModif);
       settleOthers(dates);
+      if (createdHook) {
+        try { await createdHook(newId); } catch (e) { console.warn('[Templates] suite de la création impossible', e); }
+      }
       return { id: newId, dateModif };
     }
   }
@@ -1051,7 +1060,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
+    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, verifyStored, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,

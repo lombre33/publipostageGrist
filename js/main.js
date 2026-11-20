@@ -316,6 +316,20 @@
     DocumentOutline.sync();
   }
 
+  // Range le document `id` dans le dossier `folder` que GFS a donné (« Nouveau » cliqué dans ce dossier de « Mes fichiers ») : sa ligne de rangement de la personne, comme un « Déplacer vers » mais sans historique (rien à annuler : le document naît
+  // là). Sans dossier : rien, il reste à la racine. Une écriture refusée ne perd pas le document : il est enregistré, à la racine, et l'état le dit.
+  async function fileInGfsFolder(id, folder) {
+    const path = TemplatePreferences.normalizeFolderPath(folder);
+    if (!path || id == null) return;
+    try {
+      await TemplatePreferences.setFolder(id, path);
+      TemplateTreeSelect.refresh();
+    } catch (e) {
+      console.warn('[main] dossier de GFS non écrit pour le document', id, e);
+      setStatus(I18n.t('status.gfsFolderNotSaved'), true);
+    }
+  }
+
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
   // réécrit ici. options.progressive : le choix d'un modèle dans la liste (onTemplateSelectChange) - un gros modèle de présentation enregistré s'ouvre alors par morceaux sous un voile (fillOpenedPresentation) ;
   // les autres chemins (restauration d'une version, retours, conflit d'enregistrement) chargent le texte d'un bloc, comme avant.
@@ -323,6 +337,8 @@
     // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
     // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
     if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
+    // Le dossier que GFS avait donné à une création en attente ne vaut que pour CE document : un autre qui s'ouvre l'oublie (js/gfs-open.js ; GfsOpen le repose après son propre « Nouveau »).
+    GfsOpen.forgetFolder();
     // Un modèle qui se remplissait par morceaux (fillOpenedPresentation) cède l'éditeur : il ne pose plus rien, le voile est retiré.
     ImportPlacing.stopFill();
     // Un PDF à l'écran (js/pdf-reading.js) se ferme dès qu'un modèle s'ouvre, quel que soit le chemin : le mode d'avant la lecture revient (onPdfReadingChange).
@@ -1251,7 +1267,10 @@
     // demandé, par le chemin du bouton « Nouveau » de ce type ; « Nouveau > Importer » importe le fichier qu'il donne, par le chemin de la ligne d'import du menu « + » ; « Nouveau > Depuis un modèle » ouvre, non enregistré, le modèle de la
     // galerie qu'il nomme (TemplateGalleryModal.openFromGfs), avec la demande d'accord de la galerie avant ses tables. Avant de quitter le modèle ouvert, ce qui attend est enregistré
     // sans question quand l'enregistrement automatique est allumé (saveBeforeGfsLeaves), et l'appel `fermer` y répond (leaveForGfs). Seul, rien n'arrive.
-    GfsOpen.init({ openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, openModel: TemplateGalleryModal.openFromGfs, say: text => setStatus(text), saveBeforeLeaving: saveBeforeGfsLeaves, leave: leaveForGfs });
+    // « Nouveau » depuis un dossier de « Mes fichiers » de GFS : la ligne du document naît à son premier enregistrement (js/templates.js `onCreated`), sa ligne de rangement s'écrit alors, dans le dossier que GFS a donné (GfsOpen.takeFolder).
+    // Un fichier importé est déjà enregistré quand GFS l'a demandé : GfsOpen le range à la fin de l'import (`file`).
+    Templates.onCreated(async (newId) => { await fileInGfsFolder(newId, GfsOpen.takeFolder()); });
+    GfsOpen.init({ file: fileInGfsFolder, openTemplate: openTemplateForRow, openBlank: openBlankOfType, importFile: importFileFromGfs, readPdf: PdfReading.open, openModel: TemplateGalleryModal.openFromGfs, say: text => setStatus(text), saveBeforeLeaving: saveBeforeGfsLeaves, leave: leaveForGfs });
     PdfReading.init({ leave: leaveForPdf, show: () => switchMode('read'), say: (text, isError) => setStatus(text, isError), layoutChanged: () => refreshPageFitZoom() });
     PdfReading.onChange(onPdfReadingChange);
     PdfReading.onLocksChanged(applyPdfLocks);
