@@ -1202,7 +1202,16 @@
     SchemaRenames.checkAfterOpen({ isUntouched: untouched, notify: msg => { renamedMessage = msg; setStatus(msg); } })
       .catch(e => console.warn('[main] suivi des renommages impossible', e))
       .then(() => SettingsColumns.checkAfterOpen({ isUntouched: untouched, notify: (msg, isError) => setStatus(renamedMessage ? msg + ' ' + renamedMessage : msg, isError) }))
-      .catch(e => console.warn('[main] vérification des réglages impossible', e));
+      .catch(e => console.warn('[main] vérification des réglages impossible', e))
+      // Une table du widget portée sous son ancien nom ET sous son nom anglais (js/table-doubles.js) : la question passe en dernier, c'est la seule qui ouvre une fenêtre. Réunies, les données que les écrans ont lues
+      // avant sont relues (les documents, le rangement et sa liste).
+      .then(() => TableDoubles.checkAfterOpen({
+        isUntouched: untouched,
+        isReadOnly,
+        notify: (msg, isError) => setStatus(msg, isError),
+        onMerged: async () => { await refreshTemplateList(); await TemplatePreferences.refresh(); TemplateTreeSelect.refresh(); },
+      }))
+      .catch(e => console.warn('[main] vérification des tables en double impossible', e));
   }
 
   async function init() {
