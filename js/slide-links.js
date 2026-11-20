@@ -940,41 +940,76 @@ const SlideLinks = (function () {
   }
 
   // L'import lié (la case « Garder liée » du volet Importer) : la diapositive de rang `index` de la présentation `id`, telle que la personne l'a vue (`seen` : le texte de la source
-  // qu'avait le cache), reçoit son numéro de diapositive source quand elle n'en a pas encore, écrit tout de suite dans la source (son texte seul, Templates.saveContent ; relu juste avant :
-  // un repère posé sur un cache en retard écraserait ce que la source a changé depuis). Rend { html, link } : la diapositive à importer et le lien de son repère (sans base : tagImported la
+  // qu'avait le cache), a son numéro de diapositive source dans la ligne de la source. Rend { html, link } : la diapositive à importer et le lien de son repère (sans base : tagImported la
   // prend sur ce que le collage a posé) ; lève une Error dont `reason` est la clé de la raison (la source supprimée, ou changée depuis que la personne l'a vue).
+  // Une grosse présentation (un PowerPoint de 30 Mo : 30 Mo lus et 30 Mo écrits à chaque liaison, la page tenue à chaque pas) se paie donc UNE fois, pas à chaque diapositive (20/11, « l'import dans le
+  // document depuis un ppt très lourd en cliquant garder lié est très long, laggy ») :
+  //  - la diapositive porte déjà son numéro (un repère à elle seule dans le texte que le cache garde, et jeton connu) : rien n'est relu ni écrit, la liaison est immédiate ;
+  //  - sinon, la source est relue (un repère posé sur un cache en retard écraserait ce que la source a changé depuis), et TOUTES ses diapositives sans numéro reçoivent le leur dans la même écriture
+  //    (Templates.saveContent, son texte seul) : les liaisons suivantes de cette présentation passent par le premier cas. Un numéro porté par deux diapositives (une diapositive dupliquée dans
+  //    Slides+ en copie le repère) est refait pour celle qu'on lie : sans quoi le lien suivrait la première des deux.
+  // Entre deux pas lourds (lire, assainir, écrire) la page respire : la frappe et la souris ne restent pas prises pendant toute la liaison.
+  const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
   async function anchorSource(editor, id, index, seen, seenBody) {
     const fail = (reason) => { const error = new Error(reason); error.reason = reason; throw error; };
     if (!libs || !editor) fail('slides.link.failed');
     const blocked = blockedReason();
     if (blocked) fail(blocked);
+    const idOf = slide => (slide.tag && slide.tag.node.attrs.slideId) || '';
+    // La diapositive de la présentation lue `parsed` qui est celle de la personne (même texte : à son rang, sinon la première qui lui ressemble).
+    const findIn = (parsed, wantedHash) => (parsed.slides[index] && slideHash(parsed.slides[index]) === wantedHash ? index : parsed.slides.findIndex(slide => slideHash(slide) === wantedHash));
+    // Son numéro quand elle en a un à elle seule dans la présentation, sinon ''.
+    const ownId = (parsed, at) => { const wanted = idOf(parsed.slides[at]); return wanted && parsed.slides.filter(slide => idOf(slide) === wanted).length === 1 ? wanted : ''; };
+    const done = (parsed, at, model, key, slideId) => {
+      const nodes = portable(editor, parsed.slides[at].nodes.map(entry => entry.node));
+      const html = strip(Editor.getHTML(editor.schema.topNodeType.create(null, nodes)));
+      return { html, link: { linkModel: model.id, linkKey: key, linkSlide: slideId, linkMode: 'both', srcHash: slideHash(parsed.slides[at]), name: model.nom } };
+    };
     // `seenBody` : ce texte déjà assaini par le volet (rien ne le relit) ; un gros PowerPoint (30 Mo) se lit en une demi-seconde et plus, jamais deux fois ici.
     const before = seenBody ? parseBody(editor, seenBody) : parseHtml(editor, seen);
     const wanted = before.slides[index];
     if (!wanted) fail('slides.link.changed');
     const wantedHash = slideHash(wanted);
+    // Le texte que le cache garde porte-t-il déjà son numéro ? (le volet vient de le lire, ou une liaison d'avant l'a posé)
+    const known = Templates.byId(id);
+    if (known && known.typeModele === TYPE && known.jeton) {
+      const cached = String(known.contenu || '') === String(seen || '') ? before : parseHtml(editor, known.contenu);
+      const at = findIn(cached, wantedHash);
+      const slideId = at < 0 ? '' : ownId(cached, at);
+      if (slideId) return done(cached, at, known, known.jeton, slideId);
+      await breathe();
+    }
     await Templates.loadAll();
+    await breathe();
     const model = Templates.byId(id);
     if (!model || model.typeModele !== TYPE) fail('slides.link.gone');
     const key = model.jeton || await Templates.ensureToken(model.id, { fresh: true });
     if (!key) fail('slides.link.failed');
     // La source relue est celle que la personne a vue (le cas courant) : la lecture d'avant sert, rien n'est relu.
     const parsed = String(model.contenu || '') === String(seen || '') ? before : parseHtml(editor, model.contenu);
-    let at = parsed.slides[index] && slideHash(parsed.slides[index]) === wantedHash ? index : parsed.slides.findIndex(slide => slideHash(slide) === wantedHash);
+    const at = findIn(parsed, wantedHash);
     if (at < 0) fail('slides.link.changed');
-    let slide = parsed.slides[at];
-    let slideId = slide.tag && slide.tag.node.attrs.slideId;
+    let slideId = ownId(parsed, at);
     if (!slideId) {
+      // Un numéro pour chaque diapositive qui n'en a pas, celle de la personne en premier ; de la dernière à la première, pour que les places du texte lu restent justes.
       slideId = newSlideId();
       const tr = libs.EditorState.create({ doc: parsed.doc }).tr;
-      const attrs = slide.tag ? Object.assign({}, slide.tag.node.attrs, { slideId }) : Object.assign(Object.fromEntries(ATTRS.map(name => [name, null])), { slideId });
-      const tag = editor.schema.nodes[NODE].create(attrs);
-      if (slide.tag) tr.replaceWith(slide.tag.pos, slide.tag.pos + slide.tag.node.nodeSize, tag); else tr.insert(slide.end, tag);
-      await Templates.saveContent(model.id, Editor.getHTML(tr.doc));
+      const stamps = [];
+      parsed.slides.forEach((slide, rank) => {
+        const mine = rank === at;
+        if (!mine && idOf(slide)) return;
+        const mark = mine ? slideId : newSlideId();
+        const attrs = slide.tag ? Object.assign({}, slide.tag.node.attrs, { slideId: mark }) : Object.assign(Object.fromEntries(ATTRS.map(name => [name, null])), { slideId: mark });
+        stamps.push({ slide, tag: editor.schema.nodes[NODE].create(attrs) });
+      });
+      stamps.sort((a, b) => (b.slide.tag ? b.slide.tag.pos : b.slide.end) - (a.slide.tag ? a.slide.tag.pos : a.slide.end));
+      stamps.forEach(({ slide, tag }) => { if (slide.tag) tr.replaceWith(slide.tag.pos, slide.tag.pos + slide.tag.node.nodeSize, tag); else tr.insert(slide.end, tag); });
+      await breathe();
+      const written = Editor.getHTML(tr.doc);
+      await breathe();
+      await Templates.saveContent(model.id, written);
     }
-    const nodes = portable(editor, slide.nodes.map(entry => entry.node));
-    const html = strip(Editor.getHTML(editor.schema.topNodeType.create(null, nodes)));
-    return { html, link: { linkModel: model.id, linkKey: key, linkSlide: slideId, linkMode: 'both', srcHash: slideHash(slide), name: model.nom } };
+    return done(parsed, at, model, key, slideId);
   }
   // Juste après le collage de l'import lié, dans le même pas d'annulation : la diapositive `index` du texte de l'éditeur reçoit son repère, avec la base prise sur ce que le collage a posé.
   function tagImported(editor, index, link) {
