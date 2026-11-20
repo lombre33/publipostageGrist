@@ -16,7 +16,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
-import { clickHoverRow } from './load-lib.mjs';
+import { clickHoverRow, makeUnsaved } from './load-lib.mjs';
 
 const SHOTS = process.env.ODP_IMPORT_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -33,7 +33,7 @@ const CM = 72 / 2.54;
 const TEXTS = {
   fr: {
     unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: n => `Présentation OpenDocument importée : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}. Nommez le document puis enregistrez-le.`, importedPattern: /Présentation OpenDocument importée/,
+    savedAs: name => `Enregistré dans Grist sous « ${name} ». `, imported: n => `Présentation OpenDocument importée : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}.`, importedPattern: /Présentation OpenDocument importée/,
     reading: /^Lecture (du fichier|de la présentation) OpenDocument/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'La présentation est importée. Le fichier avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     report: ['2 animations d’objets non reprises', '1 tracé libre, courbe ou polygone non repris', '1 forme remplacée par un rectangle'],
@@ -45,7 +45,7 @@ const TEXTS = {
   },
   en: {
     unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: n => `OpenDocument presentation imported: ${n} ${n === 1 ? 'slide' : 'slides'}. Name the document, then save it.`, importedPattern: /OpenDocument presentation imported/,
+    savedAs: name => `Saved to Grist as “${name}”. `, imported: n => `OpenDocument presentation imported: ${n} ${n === 1 ? 'slide' : 'slides'}.`, importedPattern: /OpenDocument presentation imported/,
     reading: /^Reading the OpenDocument (file|presentation)/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The presentation is imported. The file had the following, which the editor could not carry over as is:',
     report: ['2 object animations not imported', '1 free drawing, curve or polygon not imported', '1 shape replaced by a rectangle'],
@@ -99,11 +99,24 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
 const odpFile = (name, buffer, mimeType = MIME) => ({ name, mimeType, buffer });
 
 // ---- Ce que la page montre ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
+const SEED_IDS = [1, 2, 3, 4, 5, 6];   // les lignes déjà là avant tout import (seedModels)
+// Attend que le coin d'état annonce l'enregistrement sous le nom du fichier `base` (le texte d'un import précédent ne compte pas : il ne porte pas ce nom).
+const settleSaved = async (page, base) => {
+  await page.waitForFunction(b => { const t = document.getElementById('status-msg').textContent; return t.includes('« ' + b) || t.includes('“' + b); }, base, { timeout: 30000 }).catch(() => {});
+  await sleep(600);
+};
 const dialogState = page => page.evaluate(() => {
   const ov = document.getElementById('pp-dialog-modal');
   const shown = !!ov && getComputedStyle(ov).display !== 'none';
@@ -188,7 +201,7 @@ async function run(lang, scheme) {
   const label = (lang === 'fr' ? 'français' : 'anglais') + ' ' + (scheme === 'dark' ? 'sombre' : 'clair');
   const tag = `[${lang} ${scheme}] `;
   console.log(`\n=== Import d'une présentation OpenDocument à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme: scheme });
+  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme: scheme, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   const snap = async name => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${lang}-${scheme}-${name}.png`) }); };
   await page.addScriptTag({ url: '/dev-tests/scenarios-odp-import.js' });
   const engineRequests = () => requests.filter(url => /js\/odp-import\.js/.test(url)).length;
@@ -209,14 +222,16 @@ async function run(lang, scheme) {
   // 2) Une présentation que l'éditeur reprend en entier : une NOUVELLE présentation sans nom, une miniature par diapositive, rien à dire.
   const emptyBefore = await snapshot(page);
   await pickFile(page, odpFile('bilan.odp', await buildFile(page, 'deck')));
-  await settle(page, T.importedPattern);
+  await settleSaved(page, 'bilan');
   await waitStrip(page, 3);
   const done = await snapshot(page);
   const status = await statusOf(page);
+  const rows1 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
   check(tag + 'le moteur des présentations est demandé au réseau une seule fois', engineRequests() === 1, engineRequests());
-  check(tag + `le coin d'état dit « ${T.imported(3)} », en entier, dans le panneau`, status.text === T.imported(3) && !status.error && !status.clipped && status.inPanel, status);
+  check(tag + `le coin d'état commence par l'enregistrement sous « bilan » puis dit « ${T.imported(3)} », se lit en entier, dans le panneau`, status.text === T.savedAs('bilan') + T.imported(3) && !status.error && status.whole && status.inPanel, status);
+  check(tag + 'la présentation est ENREGISTRÉE dans Grist sous le nom du fichier « bilan » (une ligne de plus, relue, choisie dans la liste)', rows1.length === 1 && rows1[0].name === 'bilan' && rows1[0].length > 200 && done.select === String(rows1[0].id), { rows1, select: done.select });
   check(tag + 'aucune fenêtre ne s\'est ouverte (rien à dire : tout est repris)', !(await dialogState(page)).shown);
-  check(tag + 'une présentation neuve, sans nom : trois miniatures, la bande des diapositives, aucun point rouge', done.slides === 3 && done.select === '' && done.stripShown && done.dots === 0 && done.html !== emptyBefore.html, { slides: done.slides, select: done.select, dots: done.dots });
+  check(tag + 'une présentation neuve, enregistrée : trois miniatures, la bande des diapositives, aucun point rouge', done.slides === 3 && done.select !== '' && done.stripShown && done.dots === 0 && done.html !== emptyBefore.html, { slides: done.slides, select: done.select, dots: done.dots });
   check(tag + 'la page est celle du fichier : 28 x 15,75 cm', Math.abs(done.page.width - 28 * CM) < 1 && Math.abs(done.page.height - 15.75 * CM) < 1, done.page);
   check(tag + 'le document porte les trois diapositives : six cadres (deux par diapositive), un tableau, une image', done.frames === 6 && done.tables === 1 && done.images === 1 && /Bilan de l’année/.test(done.text) && /Les chiffres/.test(done.text), { frames: done.frames, tables: done.tables, images: done.images });
   const title = await seenOnScreen(page, new Function('return ' + frameWith('Bilan de l’année'))());
@@ -252,6 +267,7 @@ async function run(lang, scheme) {
 
   // 3) Un document à enregistrer : la question vient APRÈS le choix du fichier ; « Annuler » garde le document ; « Ne pas enregistrer » importe, puis la fenêtre dit ce qui n'est pas repris.
   const report = odpFile('resultats.odp', await buildFile(page, 'report'));
+  await makeUnsaved(page); // le nom retapé : la présentation enregistrée par son import est de nouveau « à enregistrer »
   const second_ = await pickFile(page, report);
   check(tag + '(document à enregistrer) le sélecteur s\'ouvre sans poser de question avant le choix du fichier', !!second_.chooser && !second_.askedBefore.shown, second_.askedBefore);
   await settle(page, /^$/);
@@ -280,18 +296,21 @@ async function run(lang, scheme) {
   check(tag + `« ${T.close} » est atteignable à la souris dans le panneau`, !!closed && closed.reachable && closed.inPanel, closed);
   await parkMouse(page);
   const one = await snapshot(page);
-  check(tag + 'la présentation du fichier a remplacé la première : une diapositive, son titre, la forme inconnue en rectangle', one.slides === 1 && /Résultats/.test(one.text) && one.frames === 2 && !(await dialogState(page)).shown, { slides: one.slides, frames: one.frames });
+  const rows2 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+  check(tag + 'la présentation du fichier a remplacé la première (une diapositive, son titre, la forme inconnue en rectangle) et s\'est enregistrée sous « resultats » ; « bilan » est intacte', one.slides === 1 && /Résultats/.test(one.text) && one.frames === 2 && !(await dialogState(page)).shown && rows2.map(r => r.name).join('|') === 'bilan|resultats', { slides: one.slides, frames: one.frames, rows2 });
   check(tag + 'le focus est rendu à l\'éditeur après la fenêtre', await page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.tiptap')));
 
   // 4) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec un document à enregistrer), le document ne bouge pas.
+  await makeUnsaved(page);
   const baseline = await snapshot(page);
+  const rowsBefore = (await stored(page)).length;
   const refused = async (file, pattern) => {
     await pickFile(page, file);
     await settle(page, pattern);
     const after = await statusOf(page);
     const dialog = await dialogState(page);
     const now = await snapshot(page);
-    return { after, dialog, unchanged: now.html === baseline.html };
+    return { after, dialog, unchanged: now.html === baseline.html && (await stored(page)).length === rowsBefore };
   };
   const refusal = (what, got, expected) => check(tag + `${what} : « ${expected} » en rouge, sans fenêtre, le document ne bouge pas`, got.after.text === expected && got.after.error && !got.dialog.shown && got.unchanged && !got.after.clipped && got.after.inPanel, got);
   refusal('un dessin OpenDocument', await refused({ name: 'dessin.odg', mimeType: 'application/vnd.oasis.opendocument.graphics', buffer: await buildFile(page, 'drawing') }, T.drawingPattern), T.drawing);

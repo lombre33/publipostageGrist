@@ -5,10 +5,10 @@
 // fichier : c'est ici qu'on s'assure que
 //   - « + » ouvre son menu au survol et la ligne « Importer un HTML… » (« Import from HTML… ») y suit « Importer un Markdown… » et précède « Importer un Word… », entière dans le panneau, que rien ne recouvre, lisible ;
 //   - un vrai clic sur la ligne ouvre le vrai sélecteur, réduit aux fichiers HTML, pour un seul fichier ; annuler dans le sélecteur ne change rien ;
-//   - le fichier choisi (une page enregistrée : feuille de style, menu, colonne, pied, image à côté, image en données, lien relatif, élément caché, programme) devient un document sans nom, visible et atteignable à la
-//     souris (titre en couleur, chapeau en gras, listes, tableau à fond de case, image) ; le menu et le pied du site sont gardés comme du texte ; l'élément caché n'y est pas ; la fenêtre du compte rendu dit, en entier,
-//     une ligne par genre, et son bouton se ferme à la souris ; le coin d'état dit que le HTML est importé ;
-//   - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe ;
+//   - le fichier choisi (une page enregistrée : feuille de style, menu, colonne, pied, image à côté, image en données, lien relatif, élément caché, programme) devient un document ENREGISTRÉ dans Grist sous le nom
+//     de son fichier (une ligne de plus dans la table, relue ; « nom (2) » si le nom est pris), visible et atteignable à la souris (titre en couleur, chapeau en gras, listes, tableau à fond de case, image) ; le menu et le pied du site sont gardés comme du texte ; l'élément caché n'y est pas ; la fenêtre du compte rendu dit, en entier,
+//     une ligne par genre, et son bouton se ferme à la souris ; le coin d'état commence par « Enregistré dans Grist sous « nom » » puis dit que le HTML est importé ;
+//   - un document modifié et pas enregistré (enregistrement automatique coupé dans ce test) : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture ; « Annuler » garde le document, « Ne pas enregistrer » importe ;
 //   - un fichier binaire, vide, de plus de 10 Mo ou de plus de 2 millions de caractères : un message clair en rouge, rien ne change, aucune fenêtre ;
 //   - le geste complet : un document exporté en HTML (menu « Type d'export » > « HTML (fichier à déposer) », bouton Exporter) puis importé redonne ses encadré, cases, colonnes, note, légende, en-tête et pied ;
 //   - le DÉPÔT d'un .html sur un document ouvert : la fenêtre « Nouveau document / Remplacer celui-ci / Ajouter après / Insérer ici », « Ajouter après » met la page à la fin, le compte rendu suit.
@@ -16,7 +16,7 @@
 // HTML_IMPORT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { open, sleep, click, hoverRow, clickHoverRow, downloadOf, chooseExportType, chooseExportLines, fire } from './load-lib.mjs';
+import { makeUnsaved, open, sleep, click, hoverRow, clickHoverRow, downloadOf, chooseExportType, chooseExportLines, fire } from './load-lib.mjs';
 
 const PORT = Number(process.env.HTML_IMPORT_MOUSE_PORT || 9041);
 const SHOTS = process.env.HTML_IMPORT_SHOTS || '';
@@ -31,7 +31,7 @@ const HEIGHT = 400;
 const TEXTS = {
   fr: {
     row: 'Importer un HTML…', md: 'Importer un Markdown…', word: 'Importer un Word…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
-    reading: /^Lecture du fichier HTML/, imported: 'HTML importé. Nommez le document puis enregistrez-le.', reportTitle: 'Ce que l’import n’a pas repris tel quel',
+    reading: /^Lecture du fichier HTML/, savedAs: name => `Enregistré dans Grist sous « ${name} ». `, savedTwice: name => `Enregistré dans Grist sous « ${name} » (le nom existait déjà). `, imported: 'HTML importé.', reportTitle: 'Ce que l’import n’a pas repris tel quel',
     reportIntro: 'La page est importée. Elle avait ceci, que l’éditeur n’a pas pu reprendre tel quel :',
     reportLines: ['• 1 image rangée à côté du fichier (adresse relative), remplacée par un mot', '• 1 lien vers une autre page du site (adresse relative), repris comme texte', '• 1 programme (script) retiré',
       '• 3 blocs de navigation (menus, colonnes latérales, en-têtes ou pieds du site) repris comme du texte', '• 1 élément caché par la page retiré'],
@@ -42,7 +42,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from HTML…', md: 'Import from Markdown…', word: 'Import from Word…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
-    reading: /^Reading the HTML file/, imported: 'HTML imported. Name the document, then save it.', reportTitle: 'What the import did not carry over as is',
+    reading: /^Reading the HTML file/, savedAs: name => `Saved to Grist as “${name}”. `, savedTwice: name => `Saved to Grist as “${name}” (the name was already taken). `, imported: 'HTML imported.', reportTitle: 'What the import did not carry over as is',
     reportIntro: 'The page is imported. It had the following, which the editor could not carry over as is:',
     reportLines: ['• 1 image stored next to the file (relative address), replaced by a word', '• 1 link to another page of the site (relative address) kept as text', '• 1 script removed',
       '• 3 navigation blocks (menu, sidebar, site header or footer) kept as text', '• 1 element hidden by the page removed'],
@@ -89,11 +89,23 @@ const rowsState = (page, selectors) => page.evaluate(sels => {
     };
   });
 }, selectors);
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
+// Attend que le coin d'état annonce l'enregistrement sous le nom `base` (le texte d'un import précédent ne compte pas : il ne porte pas ce nom).
+const settleSaved = async (page, base) => {
+  await page.waitForFunction(b => { const t = document.getElementById('status-msg').textContent; return t.includes('« ' + b) || t.includes('“' + b); }, base, { timeout: 20000 }).catch(() => {});
+  await sleep(500);
+};
 // La fenêtre ouverte (celle de confirmation, du compte rendu ou du dépôt) : titre, texte entier, boutons, ce qui la déborde.
 const dialogState = page => page.evaluate(() => {
   const modal = Array.from(document.querySelectorAll('.pp-modal')).find(m => m.getClientRects().length > 0);
@@ -219,7 +231,7 @@ async function run(theme, lang) {
   const label = lang === 'en' ? 'anglais' : theme === 'dark' ? 'sombre' : 'clair';
   const T = TEXTS[lang];
   console.log(`\n=== Import d'un fichier HTML à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const w = await open({ spec: SPEC, theme, lang, port: PORT });
+  const w = await open({ spec: SPEC, theme, lang, port: PORT, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   const { page } = w;
   const snap = async name => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${lang === 'en' ? 'en' : theme}-${name}.png`) }); };
   try {
@@ -259,9 +271,12 @@ async function run(theme, lang) {
     const closed = await clickDialogButton(page, report.buttons[report.buttons.length - 1]);
     check(`${label} - le bouton de la fenêtre est atteignable à la souris, dans le panneau, et la ferme`, !!closed && closed.reachable && closed.inPanel && !(await dialogState(page)).shown, closed);
     const done = await statusOf(page);
-    check(`${label} - le coin d'état dit « ${T.imported} », en entier, sans être coupé, dans le panneau`, done.text === T.imported && !done.error && !done.clipped && done.inPanel, done);
+    check(`${label} - le coin d'état commence par l'enregistrement sous « note-de-service » puis dit « ${T.imported} », se lit en entier, dans le panneau`, done.text === T.savedAs('note-de-service') + T.imported && !done.error && done.whole && done.inPanel, done);
     const imported = await snapshot(page);
-    check(`${label} - le document est un nouveau modèle sans nom, avec le titre de la page`, imported.title === 'Note de service' && !imported.modelId && imported.select === '' && imported.name === '', { title: imported.title, id: imported.modelId, select: imported.select, name: imported.name });
+    const rows1 = await stored(page);
+    check(`${label} - le document est ENREGISTRÉ dans Grist sous le nom du fichier « note-de-service » (une ligne, relue dans la table), choisi dans la liste, avec le titre de la page`,
+      imported.title === 'Note de service' && rows1.length === 1 && rows1[0].name === 'note-de-service' && rows1[0].length > 200 && imported.modelId === rows1[0].id && imported.select === String(rows1[0].id) && imported.name === 'note-de-service',
+      { title: imported.title, id: imported.modelId, select: imported.select, name: imported.name, rows1 });
     const shown = [];
     for (const selector of ['.tiptap h1', '.tiptap ul', '.tiptap table', '.tiptap img.editor-image']) shown.push(await reachableInDocument(page, selector));
     check(`${label} - titre, liste, tableau et image sont visibles et atteignables à la souris`, shown.every(s => s.shown && s.reachable), shown.filter(s => !(s.shown && s.reachable)));
@@ -285,6 +300,7 @@ async function run(theme, lang) {
     await snap('document');
 
     // 4) Le document est « à enregistrer » : la question vient APRÈS le choix du fichier et sa lecture ; Annuler garde le document, Ne pas enregistrer importe.
+    await makeUnsaved(page); // le nom retapé : le document enregistré par son import est de nouveau « à enregistrer »
     const second = await pickFile(page, htmlFile('second.html', savedPage('Second document')));
     check(`${label} - (document à enregistrer) le sélecteur s'ouvre sans poser de question avant le choix du fichier`, !!second.chooser && !second.askedBefore.shown, second.askedBefore);
     await settle(page, /^$/);
@@ -302,16 +318,20 @@ async function run(theme, lang) {
     const secondReport = await dialogState(page);
     if (secondReport.shown) await clickDialogButton(page, secondReport.buttons[secondReport.buttons.length - 1]);
     const replaced = await snapshot(page);
-    check(`${label} - « ${T.discard} » : le second fichier remplace le document, son compte rendu est lu`, replaced.title === 'Second document' && secondReport.shown && secondReport.title === T.reportTitle, { title: replaced.title, report: secondReport.title });
+    const rows2 = await stored(page);
+    check(`${label} - « ${T.discard} » : le second fichier remplace le document ET s'enregistre sous son nom « second » (deux lignes), son compte rendu est lu après l'enregistrement ; le premier garde son nom d'origine`,
+      replaced.title === 'Second document' && secondReport.shown && secondReport.title === T.reportTitle && rows2.length === 2 && rows2[1].name === 'second' && rows2[0].name === 'note-de-service' && (await statusOf(page)).text === T.savedAs('second') + T.imported,
+      { title: replaced.title, report: secondReport.title, rows2, status: (await statusOf(page)).text });
 
     // 5) Les fichiers refusés : un message clair en rouge, aucune fenêtre, le document ne bouge pas.
+    await makeUnsaved(page);
     const refused = async (name, buffer, expected) => {
       await pickFile(page, { name, mimeType: 'text/html', buffer });
       await settle(page, expected);
       const after = await statusOf(page);
       const dialog = await dialogState(page);
       const now = await snapshot(page);
-      return { after, dialog, unchanged: now.html === replaced.html && now.zones === replaced.zones };
+      return { after, dialog, unchanged: now.html === replaced.html && now.zones === replaced.zones && (await stored(page)).length === 2 };
     };
     const binary = await refused('programme.html', Buffer.from([0x50, 0x4B, 0x03, 0x04, 0, 0, 0, 0, 1, 2, 3]), /HTML lisible|readable HTML/);
     check(`${label} - un fichier binaire : « ${T.unreadable} » en rouge, sans fenêtre, le document ne bouge pas`, binary.after.text === T.unreadable && binary.after.error && !binary.dialog.shown && binary.unchanged && !binary.after.clipped, binary);
@@ -344,7 +364,7 @@ async function run(theme, lang) {
     await pickFile(page, htmlFile(exported.suggested, exportedText));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
-    await settle(page, /^$/);
+    await settleSaved(page, exported.suggested.replace(/\.[^.]*$/, ''));
     const roundTripReport = await dialogState(page);
     check(`${label} - le fichier exporté par le widget n'a rien à dire : aucune fenêtre de compte rendu`, !roundTripReport.shown || roundTripReport.title === T.unsaved ? !roundTripReport.shown : false, roundTripReport.title);
     const back = await page.evaluate(() => {
@@ -390,7 +410,9 @@ async function run(theme, lang) {
     await settle(page, /^$/);
     const leave = await clickDialogButton(page, T.discard);
     check(`${label} - une archive ZIP au vrai sélecteur : la question d'enregistrement vient après la lecture, « ${T.discard} » est atteignable`, !!leave && leave.reachable, leave);
-    await settle(page, /HTML import|importé|imported/);
+    await settleSaved(page, 'page');
+    const archiveRows = await stored(page);
+    check(`${label} - l'archive ZIP s'enregistre sous le nom de l'archive « page » (et non « index »)`, archiveRows.some(r => r.name === 'page'), archiveRows.map(r => r.name));
     const fromArchive = await neighbourState(page, 'Archive');
     const archiveDialog = await dialogState(page);
     check(`${label} - l'archive : le titre est bleu (feuille liée lue), l'image voisine est en données, aucun mot « image non reprise », aucun compte rendu`,
@@ -416,6 +438,18 @@ async function run(theme, lang) {
     await settle(page, /^$/);
     const fromZipDrop = await neighbourState(page, 'Deposee');
     check(`${label} - l'archive déposée : sa page est ajoutée, titre bleu, image en données`, fromZipDrop.color === 'rgb(0, 0, 145)' && fromZipDrop.images.length === 3 && /Texte de la page/.test(fromZipDrop.text), fromZipDrop);
+
+    // 9) Un dossier déposé en « Nouveau document » : le document s'enregistre sous le nom du DOSSIER (le fichier de la page s'appelle « index »).
+    await dropFolder(page, 'Chantier');
+    await sleep(1200);
+    await clickDialogButton(page, T.drop.nw);
+    await sleep(1500);
+    if ((await dialogState(page)).shown && (await dialogState(page)).title === T.unsaved) await clickDialogButton(page, T.discard);
+    await settleSaved(page, 'Chantier');
+    const folderNamed = await statusOf(page);
+    const rows9 = await stored(page);
+    check(`${label} - un dossier déposé en « ${T.drop.nw} » : le document s'enregistre sous le nom du dossier « Chantier » (et non « index »), le coin d'état le dit`,
+      folderNamed.text.startsWith(T.savedAs('Chantier')) && rows9.some(r => r.name === 'Chantier') && !rows9.some(r => /^index/.test(r.name)), { status: folderNamed.text, names: rows9.map(r => r.name) });
 
     check(`${label} - aucune erreur de page, aucune boîte du navigateur`, realErrors(w).length === 0 && w.dialogs.length === 0, { errors: realErrors(w), dialogs: w.dialogs });
   } finally {

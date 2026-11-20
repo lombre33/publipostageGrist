@@ -826,6 +826,7 @@ const Templates = (function () {
       // quitté puis rouvert aussitôt y est lu - avant la relecture de la date ci-dessous, qui dure des secondes quand Grist est lent.
       settleWritten(id, columns, now);
       settleOthersContent();
+      if (typeof contenuHtml === 'string') writtenTextSize.set(String(id), contenuHtml.length);
       const dates = await readBackDateModifs([id, ...others.map(({ id: modelId }) => modelId)], now, writtenChars);
       const dateModif = dates.get(id);
       writes.remember(id, dateModif);
@@ -843,6 +844,7 @@ const Templates = (function () {
       // est à l'écran, et l'enregistrement automatique y écrirait ensuite, sous l'identifiant du modèle neuf, ce que l'écran montre.
       if (currentIdSeq === seqAtStart) currentTemplateId = newId;
       settleOthersContent();
+      if (typeof contenuHtml === 'string') writtenTextSize.set(String(newId), contenuHtml.length);
       const dates = await readBackDateModifs([newId, ...others.map(({ id: modelId }) => modelId)], now, writtenChars);
       const dateModif = dates.get(newId);
       writes.remember(newId, dateModif);
@@ -863,6 +865,7 @@ const Templates = (function () {
       ['UpdateRecord', TABLE_NAME, id, { Content: contenuHtml, ModifiedAt: now }]
     ]);
     settleContent(id, contenuHtml, now);
+    if (typeof contenuHtml === 'string') writtenTextSize.set(String(id), contenuHtml.length);
     const dateModif = await readBackDateModif(id, now, typeof contenuHtml === 'string' ? contenuHtml.length : 0);
     writes.remember(id, dateModif);
     noteDateModif(id, dateModif);
@@ -942,6 +945,20 @@ const Templates = (function () {
     };
   }
   const writes = createWriteTracker();
+
+  // Le nombre de signes du texte que le dernier enregistrement de chaque ligne a écrit : verifyStored le compare à ce que Grist rend à la relecture de la table (loadAll). Seul le nombre est gardé, jamais le texte.
+  const writtenTextSize = new Map();
+  // Ce que Grist garde de la ligne `id` d'après la dernière lecture de la table : 'ok' (la ligne est là, avec le nom et le texte que le dernier enregistrement de CE widget a écrits), 'missing' (la ligne n'est pas dans
+  // la table lue) ou 'differs' (elle y est, mais son texte n'a pas la taille de celui qui est parti). À appeler après l'enregistrement ET la relecture de la liste (js/main-save.js la fait avant de rendre la main) : le cache
+  // est alors ce que Grist a rendu, pas ce que le widget a écrit (js/templates.js:keepWrittenSince ne garde la valeur écrite que pour une ligne écrite PENDANT la lecture).
+  function verifyStored(id, name) {
+    const row = byId(id);
+    if (!row) return 'missing';
+    if (typeof name === 'string' && name.trim() !== '' && String(row.nom).trim() !== name.trim()) return 'differs';
+    const size = writtenTextSize.get(String(id));
+    if (size !== undefined && typeof row.contenu === 'string' && row.contenu.length !== size) return 'differs';
+    return 'ok';
+  }
 
   function save(...args) { return writes.track(() => saveRow(...args)); }
   function saveContentTracked(...args) { return writes.track(() => saveContent(...args)); }
@@ -1037,7 +1054,7 @@ const Templates = (function () {
     loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
+    sameDateModif, verifyStored, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();

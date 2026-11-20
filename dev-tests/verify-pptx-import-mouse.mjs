@@ -23,7 +23,7 @@ import { mkdir, mkdtemp, open as openFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
-import { hoverRow, clickHoverRow } from './load-lib.mjs';
+import { hoverRow, clickHoverRow, makeUnsaved } from './load-lib.mjs';
 
 const SHOTS = process.env.PPTX_IMPORT_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -40,7 +40,7 @@ const MAX_MIB = 150;
 const TEXTS = {
   fr: {
     row: 'Importer un PowerPoint…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: n => `PowerPoint importé : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}. Nommez le document puis enregistrez-le.`, importedPattern: /PowerPoint importé/,
+    savedAs: name => `Enregistré dans Grist sous « ${name} ». `, imported: n => `PowerPoint importé : ${n} ${n === 1 ? 'diapositive' : 'diapositives'}.`, importedPattern: /PowerPoint importé/,
     reading: /^Lecture du fichier PowerPoint/,
     unreadable: 'Ce fichier n’est pas une présentation PowerPoint (.pptx) lisible.', unreadablePattern: /n’est pas une présentation/,
     legacy: 'Format .ppt d’avant 2007 ou fichier protégé : enregistrez-le en .pptx sans mot de passe.', legacyPattern: /d’avant 2007/,
@@ -57,7 +57,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from PowerPoint…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: n => `PowerPoint imported: ${n} ${n === 1 ? 'slide' : 'slides'}. Name the document, then save it.`, importedPattern: /PowerPoint imported/,
+    savedAs: name => `Saved to Grist as “${name}”. `, imported: n => `PowerPoint imported: ${n} ${n === 1 ? 'slide' : 'slides'}.`, importedPattern: /PowerPoint imported/,
     reading: /^Reading the PowerPoint file/,
     unreadable: 'This file is not a readable PowerPoint (.pptx) presentation.', unreadablePattern: /not a readable PowerPoint/,
     legacy: 'Pre-2007 .ppt format or password-protected file: save it as .pptx without a password.', legacyPattern: /Pre-2007/,
@@ -175,11 +175,24 @@ const hoveredState = async (page, row) => {
     return { hovered: el.matches(':hover'), painted: !/rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor), contrast: Math.round((Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05) * 100) / 100 };
   }, row);
 };
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
+const SEED_IDS = [1, 2, 3, 4, 5, 6];   // les lignes déjà là avant tout import (seedModels)
+// Attend que le coin d'état annonce l'enregistrement sous le nom du fichier `base` (le texte d'un import précédent ne compte pas : il ne porte pas ce nom).
+const settleSaved = async (page, base) => {
+  await page.waitForFunction(b => { const t = document.getElementById('status-msg').textContent; return t.includes('« ' + b) || t.includes('“' + b); }, base, { timeout: 60000 }).catch(() => {});
+  await sleep(600);
+};
 // La fenêtre ouverte (Dialogs : question « Modifications non enregistrées », fenêtre du rapport, explication d'une extension absente) : titre, message, boutons, place, défilement du message.
 const dialogState = page => page.evaluate(() => {
   const report = document.getElementById('pp-import-report-modal');
@@ -312,7 +325,7 @@ async function run(lang, scheme) {
   const label = (lang === 'fr' ? 'français' : 'anglais') + ' ' + (scheme === 'dark' ? 'sombre' : 'clair');
   const tag = `[${lang} ${scheme}] `;
   console.log(`\n=== Import d'un PowerPoint à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme: scheme });
+  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE }, seed: SEED, lang, colorScheme: scheme, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   const snap = async name => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${lang}-${scheme}-${name}.png`) }); };
   const tmp = await mkdtemp(join(tmpdir(), 'pp-pptx-import-'));
   try {
@@ -350,15 +363,16 @@ async function run(lang, scheme) {
     // 3) Une présentation que l'éditeur reprend en entier : rien n'était à enregistrer, donc aucune question ; rien à dire, donc aucune fenêtre.
     const first = await pickFile(page, pptxFile('bilan.pptx', await buildDeck(page, 'plain')));
     check(tag + 'le sélecteur s\'ouvre de nouveau', !!first.chooser);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'bilan');
     await waitStrip(page, 3);
     const done = await statusOf(page);
-    check(tag + `le coin d'état dit « ${T.imported(3)} », en entier, sans être coupé, dans le panneau`, done.text === T.imported(3) && !done.error && !done.clipped && done.inPanel, done);
+    check(tag + `le coin d'état commence par l'enregistrement sous « bilan » puis dit « ${T.imported(3)} », se lit en entier, dans le panneau`, done.text === T.savedAs('bilan') + T.imported(3) && !done.error && done.whole && done.inPanel, done);
     check(tag + 'rien n\'était à enregistrer et rien n\'est à dire : aucune fenêtre ne s\'est ouverte, avant ni après', !first.askedBefore.shown && !(await dialogState(page)).shown);
     check(tag + 'le moteur d\'import est demandé au réseau une seule fois, à ce premier import', engineRequests() === 1, engineRequests());
     const plain = await snapshot(page);
-    check(tag + 'le document est une NOUVELLE présentation, sans nom : la bande des diapositives est là avec trois miniatures, la page du fichier (960 x 540 pt), aucun modèle choisi',
-      plain.stripShown && plain.slides === 3 && Math.abs(plain.page.width - 960) < 1 && Math.abs(plain.page.height - 540) < 1 && !plain.modelId && plain.select === '', { stripShown: plain.stripShown, slides: plain.slides, page: plain.page, id: plain.modelId, select: plain.select });
+    const rows1 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+    check(tag + 'le document est une NOUVELLE présentation ENREGISTRÉE dans Grist sous le nom du fichier « bilan » (une ligne de plus, relue, choisie dans la liste) : la bande des diapositives est là avec trois miniatures, la page du fichier (960 x 540 pt)',
+      rows1.length === 1 && rows1[0].name === 'bilan' && rows1[0].length > 200 && plain.modelId === rows1[0].id && plain.select === String(rows1[0].id) && plain.stripShown && plain.slides === 3 && Math.abs(plain.page.width - 960) < 1 && Math.abs(plain.page.height - 540) < 1, { stripShown: plain.stripShown, slides: plain.slides, page: plain.page, id: plain.modelId, select: plain.select });
     check(tag + 'le texte, la carte, le tableau, l\'image et le trait du fichier sont dans le document : titre, deux points, carte, tableau de 3 x 3, une image, sept cadres au total (trois, un, deux, et le tableau, posé dans son cadre)',
       /Bilan de l’année/.test(plain.text) && /Premier point/.test(plain.text) && /Deuxième point/.test(plain.text) && /Carte/.test(plain.text) && /Les chiffres/.test(plain.text) && /Février/.test(plain.text)
       && plain.tables === 1 && plain.images === 1 && plain.frames === 7, { tables: plain.tables, images: plain.images, frames: plain.frames, text: plain.text.slice(0, 120) });
@@ -420,6 +434,7 @@ async function run(lang, scheme) {
     // 4) Le document est maintenant « à enregistrer » : la question vient APRÈS le choix du fichier et sa lecture ; Annuler garde le document ; « Ne pas enregistrer » importe ;
     //    ce fichier a de quoi remplir la fenêtre du rapport, qui vient après la question.
     const report = pptxFile('resultats.pptx', await buildDeck(page, 'report'));
+    await makeUnsaved(page); // le nom retapé : la présentation enregistrée par son import est de nouveau « à enregistrer »
     const second = await pickFile(page, report);
     check(tag + '(document à enregistrer) le sélecteur s\'ouvre sans poser de question avant le choix du fichier', !!second.chooser && !second.askedBefore.shown, second.askedBefore);
     await settle(page, /^$/);
@@ -435,10 +450,12 @@ async function run(lang, scheme) {
     await settle(page, /^$/);
     const discarded = await clickDialogButton(page, T.discard);
     check(tag + `« ${T.discard} » est atteignable à la souris dans le panneau`, !!discarded && discarded.reachable && discarded.inPanel, discarded);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'resultats');
     await sleep(400);
     const told = await reportState(page);
-    check(tag + `« ${T.discard} » : la présentation du fichier remplace le premier document (deux miniatures) et le coin d'état le dit`, (await snapshot(page)).slides === 2 && (await statusOf(page)).text === T.imported(2), { slides: (await snapshot(page)).slides, status: (await statusOf(page)).text });
+    const rows2 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+    check(tag + `« ${T.discard} » : la présentation du fichier remplace le premier document (deux miniatures), s'enregistre sous « resultats » (deux lignes, « bilan » intacte) et le coin d'état le dit`,
+      (await snapshot(page)).slides === 2 && (await statusOf(page)).text === T.savedAs('resultats') + T.imported(2) && rows2.map(r => r.name).join('|') === 'bilan|resultats', { slides: (await snapshot(page)).slides, status: (await statusOf(page)).text, rows2 });
     check(tag + `la fenêtre du rapport s'ouvre APRÈS la question, titrée « ${T.reportTitle} », avec sa phrase d'introduction`, told.shown && told.title === T.reportTitle && told.intro === T.reportIntro, { title: told.title, intro: told.intro });
     check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (animations, graphique, dégradé), au singulier ou au pluriel, chaque ligne repliée', JSON.stringify(told.headlines) === JSON.stringify(T.report) && told.open.every(open => !open), { headlines: told.headlines, open: told.open });
     check(tag + `elle a deux boutons, « ${T.copy} » et « ${T.close} », entière dans le panneau, avec le focus sur « ${T.close} »`, JSON.stringify(told.buttons) === JSON.stringify([T.copy, T.close]) && told.boxInPanel && told.titleInPanel && told.buttonsInPanel && told.focusOn === T.close, told);
@@ -500,9 +517,11 @@ async function run(lang, scheme) {
     };
 
     // 5) Un fichier qui a de tout : la fenêtre du rapport le plus long (seize genres) tient dans le panneau, titre et boutons fixes, la liste défile.
+    await makeUnsaved(page);
     await pickFile(page, pptxFile('tout.pptx', await buildDeck(page, 'many')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
+    await settleSaved(page, 'tout');
     await sleep(900);
     const long = await reportState(page);
     check(tag + 'le rapport le plus long : seize genres, un par ligne, du premier (animations) au dernier (objet illisible), titre et introduction comme les autres',
@@ -531,9 +550,11 @@ async function run(lang, scheme) {
       const imported = await PptxImport.fromBuffer(bin.buffer);
       return { keys: PptxImport.REPORT_KEYS.length, wanted: imported.report.map(item => I18n.t('pptx.import.report.' + item.key, { n: item.n, max: PptxImport.MAX_SLIDES })) };
     }, lostFile.toString('base64'));
+    await makeUnsaved(page);
     await pickFile(page, pptxFile('perdu.pptx', lostFile));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
+    await settleSaved(page, 'perdu');
     await sleep(900);
     const lost = await reportState(page);
     check(tag + `le rapport le plus long de tous : ${wanted.length} genres, un par ligne, dans l'ordre et dans la langue de l'interface, du premier (animations) au dernier (objet illisible), aucune clé laissée telle quelle`,
@@ -551,24 +572,26 @@ async function run(lang, scheme) {
     check(tag + 'la fenêtre du rapport de tous les genres se ferme au vrai clic', !(await reportState(page)).shown);
 
     // 5 bis) La page du fichier : une présentation en 4:3 s'ouvre en 4:3 (720 x 540 pt) et non à la page d'une nouvelle présentation (960 x 540) ; rien à dire, donc aucune fenêtre de rapport.
+    await makeUnsaved(page);
     await pickFile(page, pptxFile('quatre-tiers.pptx', await buildDeck(page, 'fourThree')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'quatre-tiers');
     await waitStrip(page, 1);
     await sleep(400);
     const fourThree = await snapshot(page);
     const fourThreeStatus = await statusOf(page);
     check(tag + 'un fichier en 4:3 ouvre une présentation en 4:3 (720 x 540 pt) et non à la page d\'une nouvelle présentation (960 x 540) : une miniature, son texte, aucune fenêtre de rapport',
-      Math.abs(fourThree.page.width - 720) < 1 && Math.abs(fourThree.page.height - 540) < 1 && fourThree.slides === 1 && /Quatre tiers/.test(fourThree.text) && !(await dialogState(page)).shown && fourThreeStatus.text === T.imported(1),
+      Math.abs(fourThree.page.width - 720) < 1 && Math.abs(fourThree.page.height - 540) < 1 && fourThree.slides === 1 && /Quatre tiers/.test(fourThree.text) && !(await dialogState(page)).shown && fourThreeStatus.text === T.savedAs('quatre-tiers') + T.imported(1),
       { page: fourThree.page, slides: fourThree.slides, status: fourThreeStatus.text });
     await snap('four-three');
 
     // 5 ter) Un fichier au thème sombre : la page de l'éditeur prend son fond (noir), la diapositive qui montre le fond du thème n'écrit pas le sien (la seconde garde son blanc), la ligne du menu Page nomme le thème.
+    await makeUnsaved(page);
     await pickFile(page, pptxFile('nuit.pptx', await buildDeck(page, 'dark')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'nuit');
     await waitStrip(page, 2);
     await sleep(500);
     const dark = await page.evaluate(() => {
@@ -585,14 +608,16 @@ async function run(lang, scheme) {
     await snap('dark-file');
 
     // 6) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec un document à enregistrer), le document ne bouge pas.
+    await makeUnsaved(page);
     const baseline = await snapshot(page);
+    const rowsBefore = (await stored(page)).length;
     const refused = async (file, pattern) => {
       await pickFile(page, file);
       await settle(page, pattern);
       const after = await statusOf(page);
       const dialog = await dialogState(page);
       const now = await snapshot(page);
-      return { after, dialog, unchanged: now.html === baseline.html && now.slides === baseline.slides };
+      return { after, dialog, unchanged: now.html === baseline.html && now.slides === baseline.slides && (await stored(page)).length === rowsBefore };
     };
     const refusal = (what, got, expected) => check(tag + `${what} : « ${expected} » en rouge, sans fenêtre, le document ne bouge pas`, got.after.text === expected && got.after.error && !got.dialog.shown && got.unchanged && !got.after.clipped && got.after.inPanel, got);
     refusal('un fichier qui n\'est pas un zip', await refused(pptxFile('courrier.pptx', Buffer.from('Ceci est un courrier, pas une présentation.', 'utf8')), T.unreadablePattern), T.unreadable);

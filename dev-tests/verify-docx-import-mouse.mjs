@@ -18,7 +18,7 @@ import { mkdir, mkdtemp, open as openFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
-import { hoverRow, clickHoverRow } from './load-lib.mjs';
+import { hoverRow, clickHoverRow, makeUnsaved } from './load-lib.mjs';
 
 const SHOTS = process.env.DOCX_IMPORT_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -26,6 +26,7 @@ const t = await start({ name: 'verify-docx-import-mouse', port: Number(process.e
 const { check } = t;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SEED = seedModels();
+const SEED_IDS = [1, 2, 3, 4, 5, 6];   // les lignes déjà là avant tout import (seedModels)
 const PLUS = '#btn-new';
 const ROW = '#v2-btn-import-docx';
 const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -34,7 +35,7 @@ const MAX_MIB = 150;
 const TEXTS = {
   fr: {
     row: 'Importer un Word…', adoptTitle: 'Discussions du Word non enregistrées', adoptReason: /Grist refuse d’écrire/, unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    imported: 'Word importé. Nommez le document puis enregistrez-le.', importedPattern: /Word importé/,
+    savedAs: name => `Enregistré dans Grist sous « ${name} ». `, imported: 'Word importé.', importedPattern: /Word importé/,
     reading: /^Lecture du fichier Word/,
     unreadable: 'Ce fichier n’est pas un document Word (.docx) lisible.', unreadablePattern: /n’est pas un document Word/,
     legacy: 'Format .doc d’avant 2007 ou fichier protégé : enregistrez-le en .docx sans mot de passe.', legacyPattern: /d’avant 2007/,
@@ -48,7 +49,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from Word…', adoptTitle: 'Word discussions not saved', adoptReason: /Grist refuses to write/, unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    imported: 'Word imported. Name the document, then save it.', importedPattern: /Word imported/,
+    savedAs: name => `Saved to Grist as “${name}”. `, imported: 'Word imported.', importedPattern: /Word imported/,
     reading: /^Reading the Word file/,
     unreadable: 'This file is not a readable Word (.docx) document.', unreadablePattern: /not a readable Word/,
     legacy: 'Pre-2007 .doc format or password-protected file: save it as .docx without a password.', legacyPattern: /Pre-2007/,
@@ -175,11 +176,18 @@ const hoveredState = async (page, row) => {
     return { hovered: el.matches(':hover'), painted: !/rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor), contrast: Math.round((Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05) * 100) / 100 };
   }, row);
 };
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
 const dialogState = page => page.evaluate(() => {
   const ov = document.getElementById('pp-dialog-modal');
   const shown = !!ov && getComputedStyle(ov).display !== 'none';
@@ -247,6 +255,11 @@ async function pickFile(page, file) {
   if (chooser && file) await chooser.setFiles(file);
   return { chooser, askedBefore };
 }
+// Attend que le coin d'état annonce l'enregistrement sous le nom du fichier `base` (le texte d'un import précédent ne compte pas : il ne porte pas ce nom).
+const settleSaved = async (page, base) => {
+  await page.waitForFunction(b => { const t = document.getElementById('status-msg').textContent; return t.includes('« ' + b) || t.includes('“' + b); }, base, { timeout: 30000 }).catch(() => {});
+  await sleep(600);
+};
 const settle = async (page, pattern) => {
   await page.waitForFunction(source => {
     const text = document.getElementById('status-msg').textContent;
@@ -262,7 +275,7 @@ async function run(lang, scheme) {
   const label = (lang === 'fr' ? 'français' : 'anglais') + ' ' + (scheme === 'dark' ? 'sombre' : 'clair');
   const tag = `[${lang} ${scheme}] `;
   console.log(`\n=== Import d'un Word à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ['graphique'] }, seed: SEED, lang, colorScheme: scheme });
+  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ['graphique'] }, seed: SEED, lang, colorScheme: scheme, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   const snap = async name => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${lang}-${scheme}-${name}.png`) }); };
   const tmp = await mkdtemp(join(tmpdir(), 'pp-docx-import-'));
   try {
@@ -298,14 +311,16 @@ async function run(lang, scheme) {
     // 3) Un Word que l'éditeur reprend en entier : rien n'était à enregistrer, donc aucune question ; rien à dire, donc aucune fenêtre.
     const first = await pickFile(page, wordFile('bilan.docx', await buildFile(page, 'plain')));
     check(tag + 'le sélecteur s\'ouvre de nouveau', !!first.chooser);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'bilan');
     await sleep(500);
     const done = await statusOf(page);
-    check(tag + `le coin d'état dit « ${T.imported} », en entier, sans être coupé, dans le panneau`, done.text === T.imported && !done.error && !done.clipped && done.inPanel, done);
+    check(tag + `le coin d'état commence par l'enregistrement sous « bilan » puis dit « ${T.imported} », se lit en entier, dans le panneau`, done.text === T.savedAs('bilan') + T.imported && !done.error && done.whole && done.inPanel, done);
     check(tag + 'rien n\'était à enregistrer et rien n\'est à dire : aucune fenêtre ne s\'est ouverte, avant ni après', !first.askedBefore.shown && !(await dialogState(page)).shown);
     check(tag + 'le moteur d\'import est demandé au réseau une seule fois, à ce premier import', engineRequests() === 1, engineRequests());
     const plain = await snapshot(page);
-    check(tag + 'le document est NOUVEAU, sans nom : aucun modèle choisi, la page A4 du fichier (595 x 842 pt)', !plain.modelId && plain.select === '' && Math.abs(plain.page.width - 595) < 2 && Math.abs(plain.page.height - 842) < 2, { id: plain.modelId, select: plain.select, page: plain.page });
+    const rows1 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+    check(tag + 'le document est ENREGISTRÉ dans Grist sous le nom du fichier « bilan » (une ligne de plus dans la table, relue), choisi dans la liste, la page A4 du fichier (595 x 842 pt)',
+      rows1.length === 1 && rows1[0].name === 'bilan' && rows1[0].length > 200 && plain.modelId === rows1[0].id && plain.select === String(rows1[0].id) && Math.abs(plain.page.width - 595) < 2 && Math.abs(plain.page.height - 842) < 2, { id: plain.modelId, select: plain.select, page: plain.page, rows1 });
     check(tag + 'le titre, le texte, les deux points de la liste, le tableau (une case sur deux colonnes), l\'image et la note de bas de page sont dans le document',
       plain.headings === 1 && /Bilan de l’année/.test(plain.text) && /Le chiffre d’affaires progresse de 12 %\./.test(plain.text) && plain.items === 2 && /Deuxième point/.test(plain.text)
       && plain.tables === 1 && plain.merged === 1 && /Janvier/.test(plain.text) && plain.images === 1 && plain.notes === 1, { headings: plain.headings, items: plain.items, tables: plain.tables, merged: plain.merged, images: plain.images, notes: plain.notes, text: plain.text.slice(0, 120) });
@@ -326,6 +341,7 @@ async function run(lang, scheme) {
     // 4) Le document est maintenant « à enregistrer » : la question vient APRÈS le choix du fichier et sa lecture ; Annuler garde le document ; « Ne pas enregistrer » importe ;
     //    ce fichier a de quoi remplir la fenêtre du rapport, qui vient après la question.
     const report = wordFile('resultats.docx', await buildFile(page, 'report'));
+    await makeUnsaved(page); // le nom retapé : le document enregistré par son import est de nouveau « à enregistrer »
     const second = await pickFile(page, report);
     check(tag + '(document à enregistrer) le sélecteur s\'ouvre sans poser de question avant le choix du fichier', !!second.chooser && !second.askedBefore.shown, second.askedBefore);
     await settle(page, /^$/);
@@ -341,11 +357,13 @@ async function run(lang, scheme) {
     await settle(page, /^$/);
     const discarded = await clickDialogButton(page, T.discard);
     check(tag + `« ${T.discard} » est atteignable à la souris dans le panneau`, !!discarded && discarded.reachable && discarded.inPanel, discarded);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'resultats');
     await sleep(400);
     const told = await dialogState(page);
     const replaced = await snapshot(page);
-    check(tag + `« ${T.discard} » : le Word du fichier remplace le premier document (« Résultats », plus de tableau) et le coin d'état le dit`, /Résultats/.test(replaced.text) && replaced.tables === 0 && (await statusOf(page)).text === T.imported, { tables: replaced.tables, text: replaced.text.slice(0, 80) });
+    const rows2 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+    check(tag + `« ${T.discard} » : le Word du fichier remplace le premier document (« Résultats », plus de tableau), s'enregistre sous « resultats » (deux lignes, « bilan » intact) et le coin d'état le dit`,
+      /Résultats/.test(replaced.text) && replaced.tables === 0 && (await statusOf(page)).text === T.savedAs('resultats') + T.imported && rows2.map(r => r.name).join('|') === 'bilan|resultats', { tables: replaced.tables, text: replaced.text.slice(0, 80), rows2 });
     const lines = told.message.split('\n');
     check(tag + `la fenêtre du rapport s'ouvre APRÈS la question, titrée « ${T.reportTitle} », avec sa phrase d'introduction`, told.shown && told.title === T.reportTitle && lines[0] === T.reportIntro, { title: told.title, intro: lines[0] });
     check(tag + 'elle dit chaque genre non repris, un par ligne, dans l\'ordre (police, retrait, forme, graphique, commentaire, modifications suivies), au singulier ou au pluriel',
@@ -363,10 +381,11 @@ async function run(lang, scheme) {
     check(tag + 'les modifications suivies du fichier restent à valider : l\'ajout est dans une insertion, la suppression dans une suppression, rien n\'est accepté en silence', tracked.adds.join('').includes('inséré') && tracked.dels.join('').includes('Retiré'), tracked);
 
     // 4 bis) Un Word relu par deux personnes : les modifications suivies et le commentaire sont dans le document, le fil s'ouvre au VRAI clic sur sa marque avec ses deux messages ; rien à dire : aucune fenêtre.
+    await makeUnsaved(page);
     await pickFile(page, wordFile('relu.docx', await buildFile(page, 'reviewed')));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
-    await settle(page, T.importedPattern);
+    await settleSaved(page, 'relu');
     await sleep(500);
     const reviewed = await page.evaluate(() => {
       const box = el => { const r = el.getBoundingClientRect(); return { shown: r.width > 0 && r.height > 0, x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
@@ -406,9 +425,11 @@ async function run(lang, scheme) {
       const imported = await DocxImport.fromBuffer(bin.buffer);
       return { keys: DocxImport.REPORT_KEYS.length, wanted: imported.report.map(item => '• ' + I18n.t('docx.import.report.' + item.key, { n: item.n })) };
     }, manyFile.toString('base64'));
+    await makeUnsaved(page);
     await pickFile(page, wordFile('tout.docx', manyFile));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
+    await settleSaved(page, 'tout');
     await sleep(900);
     const long = await dialogState(page);
     const longLines = long.message.split('\n');
@@ -440,14 +461,16 @@ async function run(lang, scheme) {
     check(tag + 'la fenêtre du rapport le plus long se ferme au vrai clic', !(await dialogState(page)).shown);
 
     // 6) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec un document à enregistrer), le document ne bouge pas.
+    await makeUnsaved(page);
     const baseline = await snapshot(page);
+    const rowsBefore = (await stored(page)).length;
     const refused = async (file, pattern) => {
       await pickFile(page, file);
       await settle(page, pattern);
       const after = await statusOf(page);
       const dialog = await dialogState(page);
       const now = await snapshot(page);
-      return { after, dialog, unchanged: now.html === baseline.html };
+      return { after, dialog, unchanged: now.html === baseline.html && (await stored(page)).length === rowsBefore };
     };
     const refusal = (what, got, expected) => check(tag + `${what} : « ${expected} » en rouge, sans fenêtre, le document ne bouge pas`, got.after.text === expected && got.after.error && !got.dialog.shown && got.unchanged && !got.after.clipped && got.after.inPanel, got);
     refusal('un fichier qui n\'est pas un zip', await refused(wordFile('courrier.docx', Buffer.from('Ceci est un courrier, pas un document Word.', 'utf8')), T.unreadablePattern), T.unreadable);
@@ -458,13 +481,8 @@ async function run(lang, scheme) {
     refusal(`un fichier de plus de ${MAX_MIB} Mo (jamais lu : sa taille suffit)`, await refused(huge, T.tooBigPattern), T.tooBig);
     await snap('refused');
     check(tag + 'aucun de ces refus n\'a demandé le moindre rechargement du moteur ni laissé un champ de fichier dans la page', engineRequests() === 1 && (await page.evaluate(() => document.querySelectorAll('input[type="file"]').length)) === 0, { engine: engineRequests() });
-    // 7) Grist refuse d'écrire dans la table des commentaires au premier enregistrement d'un Word importé : une fenêtre le dit (entière dans le panneau), le fil s'ouvre encore au vrai clic sur sa marque,
+    // 7) Grist refuse d'écrire dans la table des commentaires au premier enregistrement d'un Word importé (il a lieu à l'import) : une fenêtre le dit (entière dans le panneau), le fil s'ouvre encore au vrai clic sur sa marque,
     // et l'enregistrement suivant, l'écriture permise, écrit les messages.
-    await pickFile(page, wordFile('relu-refus.docx', await buildFile(page, 'reviewed')));
-    await settle(page, /^$/);
-    await clickDialogButton(page, T.discard);
-    await settle(page, T.importedPattern);
-    await sleep(500);
     const realSave = async () => {
       const box = await page.evaluate(() => { const b = document.getElementById('btn-save'); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       await page.mouse.move(box.x - 6, box.y, { steps: 2 });
@@ -477,9 +495,13 @@ async function run(lang, scheme) {
       const rows = window.__gristStub.state.rows.Publipostage_Commentaires;
       if (rows) Object.keys(rows).forEach(column => { rows[column] = []; });
       window.__gristStub.denyTable('Publipostage_Commentaires', true);
-      document.getElementById('template-name').value = 'Word relu';
     });
-    await realSave();
+    await makeUnsaved(page);
+    await pickFile(page, wordFile('relu-refus.docx', await buildFile(page, 'reviewed')));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await settleSaved(page, 'relu-refus');   // l'enregistrement se fait à l'import : c'est lui que Grist refuse
+    await sleep(500);
     const adopt = await dialogState(page);
     check(tag + `Grist refuse les fils : une fenêtre « ${T.adoptTitle} » le dit, avec la raison, entière dans le panneau, et « ${T.close} » en bas`, adopt.shown && adopt.title === T.adoptTitle && T.adoptReason.test(adopt.message) && adopt.boxInPanel && adopt.titleInPanel && adopt.buttonsInPanel && adopt.buttons.includes(T.close), { title: adopt.title, buttons: adopt.buttons, box: adopt.box });
     check(tag + 'le modèle est enregistré malgré tout, aucun message n\'est écrit dans la table des fils', (await page.evaluate(() => Templates.getCurrentId())) != null && (await threadRows()) === 0);

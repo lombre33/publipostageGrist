@@ -2,7 +2,7 @@
 // Déposer un fichier sur la page pour l'importer (js/drop-import.js, js/main-import.js:importDroppedFile ; audit « confort d'usage » du 12/11, idée 9), à 700x400, en clair, en sombre puis en anglais. Le dépôt vient d'un
 // vrai événement de glisser-déposer (DataTransfer avec un vrai fichier, dispatchEvent dragenter / dragover / drop : Playwright n'a pas de glisser depuis le bureau) ; les clics sur la fenêtre sont de la vraie souris :
 //   1) un fichier survole la page : le voile « Déposez le fichier pour l'importer » s'allume et ne reçoit pas de clic ; il s'éteint en quittant ; une image seule ne l'allume pas ;
-//   2) aucun document ouvert (texte vide) : un Markdown déposé s'ouvre comme nouveau document, sans question ;
+//   2) aucun document ouvert (texte vide) : un Markdown déposé s'ouvre comme nouveau document, sans question, enregistré dans Grist sous le nom du fichier (comme le tableur déposé) ;
 //   3) un document déjà ouvert : la fenêtre « Nouveau document / Remplacer celui-ci / Ajouter après / Insérer ici » s'ouvre (focus sur « Nouveau document ») ;
 //      « Ajouter après » met le texte du fichier à la fin, « Insérer ici » au curseur, « Remplacer celui-ci » à la place du texte (le nom du modèle reste) ; Ctrl+Z défait chacun ; « Annuler » ne change rien ;
 //   4) un fichier d'un genre inconnu dit son refus dans le coin d'état, sans rien changer ; le navigateur n'ouvre pas le fichier ;
@@ -38,6 +38,8 @@ async function dragFile(page, { name, type, content, phase }) {
 }
 const hintOn = page => page.evaluate(() => { const h = document.getElementById('pp-drop-hint'); return !!h && h.classList.contains('is-on') && getComputedStyle(h).display !== 'none'; });
 const doc = page => page.evaluate(() => ({ text: EditorCore.getEditor().getText({ blockSeparator: '|' }), name: document.getElementById('template-name').value, status: document.getElementById('status-msg').textContent, modal: Array.from(document.querySelectorAll('.pp-modal')).some(m => m.getClientRects().length > 0) }));
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
 const dialog = page => page.evaluate(() => {
   const m = Array.from(document.querySelectorAll('.pp-modal')).find(x => x.getClientRects().length > 0);
   if (!m) return null;
@@ -94,6 +96,9 @@ async function run(lang, scheme, w) {
   await sleep(1200);
   let d = await doc(page);
   check(`${L} : sans texte ouvert, un Markdown déposé devient le document (sans la question Remplacer / Ajouter)`, emptyDrop.dropPrevented && !d.modal && d.text.includes('Texte importé du Markdown') && (askedLeave || !first), { emptyDrop, first, d });
+  const savedLine = name => fr ? `Enregistré dans Grist sous « ${name} ». ` : `Saved to Grist as “${name}”. `;
+  const rows1 = await stored(page);
+  check(`${L} : le Markdown déposé est ENREGISTRÉ dans Grist sous le nom du fichier « note » (une ligne, relue dans la table), et le coin d'état commence par l'enregistrement`, rows1.some(r => r.name === 'note' && r.length > 20) && d.status.startsWith(savedLine('note')), { rows1, status: d.status });
 
   // Un document ouvert : la fenêtre.
   await seed(page);
@@ -188,6 +193,8 @@ async function run(lang, scheme, w) {
   await sleep(1500);
   const grid = await page.evaluate(() => ({ active: GridEditor.isActive(), text: EditorCore.getEditor().state.doc.textContent }));
   check(`${L} : le tableur déposé devient une grille (nom, âge, Ana, 31)`, grid.active && /Nom/.test(grid.text) && /Ana/.test(grid.text) && /31/.test(grid.text), grid);
+  const rows2 = await stored(page);
+  check(`${L} : la grille déposée est ENREGISTRÉE dans Grist sous le nom du fichier « chiffres » (une ligne de plus, relue)`, rows2.some(r => r.name === 'chiffres' && r.length > 20) && rows2.length === rows1.length + 1, { rows1: rows1.map(r => r.name), rows2: rows2.map(r => r.name) });
 
 }
 
@@ -196,7 +203,7 @@ const errors = [];
 try {
   for (const [scheme, lang] of [['light', 'fr'], ['dark', 'fr'], ['light', 'en']]) {
     console.log(`\n[${scheme} / ${lang}]`);
-    w = await open({ spec: SPEC, port: PORT, settleMs: 2000, theme: scheme, lang });
+    w = await open({ spec: SPEC, port: PORT, settleMs: 2000, theme: scheme, lang, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » (sinon son « Enregistré à… » recouvre le message d'un refus)
     await run(lang, scheme, w);
     errors.push(...w.errors);
     await w.close();

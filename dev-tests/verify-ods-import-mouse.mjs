@@ -14,7 +14,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { start, seedModels, contrastOf, WIDTH, HEIGHT } from './gfs-page.mjs';
-import { hoverRow, clickHoverRow } from './load-lib.mjs';
+import { hoverRow, clickHoverRow, makeUnsaved } from './load-lib.mjs';
 
 const SHOTS = process.env.ODS_IMPORT_SHOTS || '';
 if (SHOTS) await mkdir(SHOTS, { recursive: true });
@@ -29,7 +29,7 @@ const SHEET_MIME = 'application/vnd.oasis.opendocument.spreadsheet';
 const TEXTS = {
   fr: {
     row: 'Importer un OpenDocument…', placeholder: 'Rechercher une feuille…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler', close: 'Fermer',
-    importedSheet: /^Feuille « Détail » \(2 sur 2\) importée : 3 lignes, 2 colonnes\./, imported: 'OpenDocument importé : 2 lignes, 2 colonnes. Nommez le document puis enregistrez-le.', importedPattern: /importé/,
+    savedAs: name => `Enregistré dans Grist sous « ${name} ». `, importedSheet: /^Enregistré dans Grist sous « ventes ». Feuille « Détail » \(2 sur 2\) importée : 3 lignes, 2 colonnes\./, imported: 'OpenDocument importé : 2 lignes, 2 colonnes.', importedPattern: /importé/,
     reportTitle: 'Ce que l’import n’a pas repris tel quel', reportIntro: 'Le classeur est importé. Il avait ceci, que la grille n’a pas pu reprendre tel quel :', report: ['1 formule remplacée par son résultat', '1 ligne masquée non reprise'],
     drawing: 'Ce fichier OpenDocument est un dessin : seuls les textes, tableurs et présentations sont lus.', drawingPattern: /est un dessin/,
     empty: 'Ce tableur ne contient aucune case à importer.', emptyPattern: /ne contient aucune case/,
@@ -38,7 +38,7 @@ const TEXTS = {
   },
   en: {
     row: 'Import from OpenDocument…', placeholder: 'Search for a sheet…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel', close: 'Close',
-    importedSheet: /^Sheet “Détail” \(2 of 2\) imported: 3 rows, 2 columns\./, imported: 'OpenDocument imported: 2 rows, 2 columns. Name the document, then save it.', importedPattern: /imported/,
+    savedAs: name => `Saved to Grist as “${name}”. `, importedSheet: /^Saved to Grist as “ventes”\. Sheet “Détail” \(2 of 2\) imported: 3 rows, 2 columns\./, imported: 'OpenDocument imported: 2 rows, 2 columns.', importedPattern: /imported/,
     reportTitle: 'What the import did not carry over as is', reportIntro: 'The workbook is imported. It had the following, which the grid could not carry over as is:', report: ['1 formula replaced by its result', '1 hidden row not imported'],
     drawing: 'This OpenDocument file is a drawing: only texts, spreadsheets and presentations are read.', drawingPattern: /is a drawing/,
     empty: 'This spreadsheet has no cells to import.', emptyPattern: /has no cells/,
@@ -80,11 +80,24 @@ const buildFile = async (page, kind) => Buffer.from(await page.evaluate(async (w
 const odsFile = (name, buffer, mimeType = SHEET_MIME) => ({ name, mimeType, buffer });
 
 // ---- Ce que la page montre ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
+const SEED_IDS = [1, 2, 3, 4, 5, 6];   // les lignes déjà là avant tout import (seedModels)
+// Attend que le coin d'état annonce l'enregistrement sous le nom du fichier `base` (le texte d'un import précédent ne compte pas : il ne porte pas ce nom).
+const settleSaved = async (page, base) => {
+  await page.waitForFunction(b => { const t = document.getElementById('status-msg').textContent; return t.includes('« ' + b) || t.includes('“' + b); }, base, { timeout: 30000 }).catch(() => {});
+  await sleep(600);
+};
 const dialogState = page => page.evaluate(() => {
   const ov = document.getElementById('pp-dialog-modal');
   const shown = !!ov && getComputedStyle(ov).display !== 'none';
@@ -168,7 +181,7 @@ async function run(lang, scheme) {
   const label = (lang === 'fr' ? 'français' : 'anglais') + ' ' + (scheme === 'dark' ? 'sombre' : 'clair');
   const tag = `[${lang} ${scheme}] `;
   console.log(`\n=== Import d'un tableur OpenDocument à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ['graphique'] }, seed: SEED, lang, colorScheme: scheme });
+  const { page, requests, natives } = await t.openPage({ hosted: true, stub: { extensions: ['graphique'] }, seed: SEED, lang, colorScheme: scheme, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   const snap = async name => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${lang}-${scheme}-${name}.png`) }); };
   await page.addScriptTag({ url: '/dev-tests/scenarios-ods-import.js' });
   const engineRequests = () => requests.filter(url => /js\/ods-import\.js/.test(url)).length;
@@ -209,8 +222,9 @@ async function run(lang, scheme) {
   const told = await dialogState(page);
   const grid = await gridState(page);
   check(tag + 'le moteur du tableur est demandé au réseau une seule fois', engineRequests() === 1, engineRequests());
-  check(tag + 'une NOUVELLE grille sans nom s\'affiche, avec le texte du tableur tel qu\'il l\'affichait (« 1 250,00 € »), sans la ligne masquée ni les autres feuilles',
-    grid.active && grid.select === '' && /Mois/.test(grid.text) && /Janvier/.test(grid.text) && /1 250,00 €/.test(grid.text.replace(/\s/g, ' ')) && !/Caché/.test(grid.text) && !/Stylo/.test(grid.text) && !/brouillon/.test(grid.text), { active: grid.active, text: grid.text });
+  const rows1 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+  check(tag + 'une NOUVELLE grille s\'affiche, ENREGISTRÉE dans Grist sous le nom du fichier « ventes » (une ligne de plus, relue, choisie dans la liste), avec le texte du tableur tel qu\'il l\'affichait (« 1 250,00 € »), sans la ligne masquée ni les autres feuilles',
+    rows1.length === 1 && rows1[0].name === 'ventes' && rows1[0].length > 100 && grid.select === String(rows1[0].id) && grid.active && /Mois/.test(grid.text) && /Janvier/.test(grid.text) && /1 250,00 €/.test(grid.text.replace(/\s/g, ' ')) && !/Caché/.test(grid.text) && !/Stylo/.test(grid.text) && !/brouillon/.test(grid.text), { active: grid.active, text: grid.text, rows1, select: grid.select });
   check(tag + 'les titres sont en gras, comme dans le tableur', /<strong>Mois<\/strong>/.test(grid.html), grid.html.slice(0, 300));
   check(tag + `le coin d'état dit quelle feuille a été importée (${T.importedSheet})`, T.importedSheet.test((await statusOf(page)).text), (await statusOf(page)).text);
   const lines = told.message.split('\n');
@@ -225,6 +239,7 @@ async function run(lang, scheme) {
 
   // 4) Un tableur d'une feuille : pas de liste ; la grille est « à enregistrer » : la question vient APRÈS le choix du fichier.
   const small = odsFile('petit.ods', await buildFile(page, 'small'));
+  await makeUnsaved(page); // le nom retapé : la grille enregistrée par son import est de nouveau « à enregistrer »
   const second = await pickFile(page, small);
   check(tag + '(grille à enregistrer) le sélecteur s\'ouvre sans poser de question avant le choix du fichier', !!second.chooser && !second.askedBefore.shown, second.askedBefore);
   await settle(page, /^$/);
@@ -238,21 +253,24 @@ async function run(lang, scheme) {
   await pickFile(page, small);
   await settle(page, /^$/);
   await clickDialogButton(page, T.discard);
-  await settle(page, T.importedPattern);
+  await settleSaved(page, 'petit');
   const small2 = await gridState(page);
-  check(tag + `« ${T.discard} » : la grille du fichier remplace la première et le coin d'état dit « ${T.imported} », sans fenêtre de rapport (rien à dire)`,
-    small2.active && /Ana/.test(small2.text) && !/Mois/.test(small2.text) && (await statusOf(page)).text === T.imported && !(await dialogState(page)).shown, { text: small2.text, status: (await statusOf(page)).text });
+  const rows2 = (await stored(page)).filter(r => !SEED_IDS.includes(r.id));
+  check(tag + `« ${T.discard} » : la grille du fichier remplace la première, s'enregistre sous « petit » (deux lignes, « ventes » intacte) et le coin d'état dit « ${T.imported} » après l'enregistrement, sans fenêtre de rapport (rien à dire)`,
+    small2.active && /Ana/.test(small2.text) && !/Mois/.test(small2.text) && (await statusOf(page)).text === T.savedAs('petit') + T.imported && !(await dialogState(page)).shown && rows2.map(r => r.name).join('|') === 'ventes|petit', { text: small2.text, status: (await statusOf(page)).text, rows2 });
   await parkMouse(page);
 
   // 5) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec une grille à enregistrer), la grille ne bouge pas.
+  await makeUnsaved(page);
   const baseline = await gridState(page);
+  const rowsBefore = (await stored(page)).length;
   const refused = async (file, pattern) => {
     await pickFile(page, file);
     await settle(page, pattern);
     const after = await statusOf(page);
     const dialog = await dialogState(page);
     const now = await gridState(page);
-    return { after, dialog, unchanged: now.html === baseline.html };
+    return { after, dialog, unchanged: now.html === baseline.html && (await stored(page)).length === rowsBefore };
   };
   const refusal = (what, got, expected) => check(tag + `${what} : « ${expected} » en rouge, sans fenêtre, la grille ne bouge pas`, got.after.text === expected && got.after.error && !got.dialog.shown && got.unchanged && !got.after.clipped && got.after.inPanel, got);
   refusal('un dessin OpenDocument', await refused({ name: 'dessin.odg', mimeType: 'application/vnd.oasis.opendocument.graphics', buffer: await buildFile(page, 'drawing') }, T.drawingPattern), T.drawing);

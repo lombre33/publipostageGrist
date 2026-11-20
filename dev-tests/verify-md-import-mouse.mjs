@@ -5,10 +5,11 @@
 // ni un vrai sélecteur de fichier : c'est ici qu'on s'assure que
 //   - « + » ouvre son menu au survol et la ligne « Importer un Markdown… » (« Import from Markdown… ») y suit « Importer un Excel… », entière dans le panneau, que rien ne recouvre, lisible (F5) ;
 //   - un vrai clic sur la ligne ouvre le vrai sélecteur, réduit aux fichiers Markdown, pour un seul fichier ; annuler dans le sélecteur ne change rien (ni message, ni fenêtre, rien ne reste dans la page) ;
-//   - le fichier choisi devient un document sans nom, visible dans l'éditeur : titre, encadré, liste à cases, tableau, note de bas de page, image, atteignables à la souris ; son en-tête et son pied de
-//     page (ceux que l'export écrit entre commentaires) sont ceux du document ; le coin d'état dit ce qui s'est passé (et combien d'images n'ont pas été reprises), en entier, sans être coupé ;
-//   - un document modifié et pas enregistré : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture (un fichier refusé ne demande rien) ; « Annuler » garde le document,
-//     « Abandonner » importe ;
+//   - le fichier choisi devient un document visible dans l'éditeur ET enregistré dans Grist sous le nom de son fichier (une ligne de plus dans la table, relue) : titre, encadré, liste à cases, tableau, note de
+//     bas de page, image, atteignables à la souris ; son en-tête et son pied de page (ceux que l'export écrit entre commentaires) sont ceux du document ; le coin d'état commence par « Enregistré dans Grist sous
+//     « nom » » puis dit ce qui s'est passé (et combien d'images n'ont pas été reprises) ; trop long pour le coin, il se lit en entier dans la bulle de survol ; un nom déjà pris devient « nom (2) » ;
+//   - un document modifié et pas enregistré (l'enregistrement automatique est coupé dans ce test) : « Modifications non enregistrées » vient APRÈS le choix du fichier et sa lecture (un fichier refusé ne demande
+//     rien) ; « Annuler » garde le document, « Abandonner » importe ;
 //   - un fichier binaire, vide ou de plus de 10 Mo : un message clair en rouge, rien ne change, aucune fenêtre ;
 //   - le geste complet, d'un bout à l'autre : le document exporté en Markdown (menu « Type d'export », bouton Exporter) puis importé redonne le même texte, le même HTML (à l'identifiant des notes près) et les
 //     mêmes en-tête et pied ;
@@ -19,7 +20,7 @@
 // MD_IMPORT_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { open, sleep, click, hoverRow, clickHoverRow, status, downloadOf, chooseExportType, chooseExportLines, fire } from './load-lib.mjs';
+import { open, sleep, click, hoverRow, clickHoverRow, status, downloadOf, chooseExportType, chooseExportLines, fire, makeUnsaved } from './load-lib.mjs';
 
 const PORT = Number(process.env.MD_IMPORT_MOUSE_PORT || 9040);
 const SHOTS = process.env.MD_IMPORT_SHOTS || '';
@@ -34,22 +35,22 @@ const HEIGHT = 400;
 const TEXTS = {
   fr: {
     row: 'Importer un Markdown…', excel: 'Importer un Excel…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
-    reading: /^Lecture du fichier Markdown/, imported: 'Markdown importé. Nommez le document puis enregistrez-le.',
-    importedImages: 'Markdown importé ; 1 image locale non reprise. Nommez le document puis enregistrez-le.',
+    reading: /^Lecture du fichier Markdown/, savedAs: name => `Enregistré dans Grist sous « ${name} ». `, savedTwice: name => `Enregistré dans Grist sous « ${name} » (le nom existait déjà). `, imported: 'Markdown importé.',
+    importedImages: 'Markdown importé ; 1 image locale non reprise.',
     unreadable: 'Ce fichier n’est pas un texte Markdown lisible.', empty: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
     tooBig: /^Ce fichier est trop gros pour être importé : 10,1 Mo \(au plus 10 Mo\)\.$/, placeholder: '[image non reprise : Logo]',
     mdTemplate: 'Markdown (modèle)', templateExported: 'Modèle exporté en Markdown, variables comprises.',
-    importedVariable: 'Markdown importé ; 1 variable inconnue laissée en texte. Nommez le document puis enregistrez-le.',
+    importedVariable: 'Markdown importé ; 1 variable inconnue laissée en texte.',
     importedImageVariables: 'Markdown importé ; 1 image locale non reprise, 2 variables inconnues.',
   },
   en: {
     row: 'Import from Markdown…', excel: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
-    reading: /^Reading the Markdown file/, imported: 'Markdown imported. Name the document, then save it.',
-    importedImages: 'Markdown imported; 1 local image not imported. Name the document, then save it.',
+    reading: /^Reading the Markdown file/, savedAs: name => `Saved to Grist as “${name}”. `, savedTwice: name => `Saved to Grist as “${name}” (the name was already taken). `, imported: 'Markdown imported.',
+    importedImages: 'Markdown imported; 1 local image not imported.',
     unreadable: 'This file is not readable Markdown text.', empty: 'This Markdown file is empty: there is nothing to import.',
     tooBig: /^This file is too big to import: 10\.1 MB \(at most 10 MB\)\.$/, placeholder: '[image not imported: Logo]',
     mdTemplate: 'Markdown (template)', templateExported: 'Template exported to Markdown, variables included.',
-    importedVariable: 'Markdown imported; 1 unknown variable left as text. Name the document, then save it.',
+    importedVariable: 'Markdown imported; 1 unknown variable left as text.',
     importedImageVariables: 'Markdown imported; 1 local image not imported, 2 unknown variables.',
   },
 };
@@ -104,11 +105,18 @@ const hoveredState = async (page, row) => {
     return { hovered: el.matches(':hover'), painted: !/rgba\(0, 0, 0, 0\)|transparent/.test(cs.backgroundColor), contrast: Math.round((Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05) * 100) / 100 };
   }, row);
 };
-const statusOf = page => page.evaluate(() => {
-  const el = document.getElementById('status-msg');
-  const r = el.getBoundingClientRect();
-  return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
-});
+// `whole` : le texte se lit en entier, dans le coin ou, quand il est trop long pour lui (il finit alors par « … »), dans sa bulle de survol (`title`, posée à l'entrée de la souris).
+const statusOf = async page => {
+  const s = await page.evaluate(() => {
+    const el = document.getElementById('status-msg');
+    const r = el.getBoundingClientRect();
+    return { text: el.textContent, error: el.classList.contains('error-msg'), clipped: el.scrollWidth > el.clientWidth + 1, inPanel: r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+  });
+  if (s.clipped) { s.tooltip = await page.evaluate(() => { const el = document.getElementById('status-msg'); el.dispatchEvent(new MouseEvent('mouseenter')); return el.title; }); }
+  return { ...s, whole: !s.clipped || s.tooltip === s.text };
+};
+// Les lignes de la table des documents dans Grist (le faux Grist du test) : ce que l'import y a écrit, relu.
+const stored = page => page.evaluate(() => { const t = window.__gristStub.state.rows.Publipostage_Modeles; return t.id.map((id, i) => ({ id, name: t.Nom[i], length: String(t.Contenu[i] || '').length })); });
 const dialogState = page => page.evaluate(() => {
   const ov = document.getElementById('pp-dialog-modal');
   const shown = !!ov && getComputedStyle(ov).display !== 'none';
@@ -179,11 +187,23 @@ const settle = async (page, pattern) => {
   await sleep(500);
 };
 
+// Attend que le coin d'état annonce l'enregistrement sous le nom du fichier `base` (le texte d'un import précédent ne compte pas : il ne porte pas ce nom).
+const settleSaved = async (page, base) => {
+  await page.waitForFunction(b => { const t = document.getElementById('status-msg').textContent; return t.includes('« ' + b) || t.includes('“' + b); }, base, { timeout: 20000 }).catch(() => {});
+  await sleep(500);
+};
+// Ce que le coin d'état doit dire d'un fichier importé : « Enregistré dans Grist sous « nom » » (ou « (le nom existait déjà) » si le nom était pris : le document se nomme alors « nom (2) »), puis `what`.
+const savedLine = async (page, T, fileName, what) => {
+  const shown = await page.evaluate(() => document.getElementById('template-name').value.trim());
+  const base = fileName.replace(/\.[^.]*$/, '');
+  return { shown, base, text: (shown === base ? T.savedAs(shown) : T.savedTwice(shown)) + what, nameOk: shown === base || shown === base + ' (2)' };
+};
+
 async function run(theme, lang) {
   const label = lang === 'en' ? 'anglais' : theme === 'dark' ? 'sombre' : 'clair';
   const T = TEXTS[lang];
   console.log(`\n=== Import d'un fichier Markdown à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const w = await open({ spec: SPEC, theme, lang, port: PORT });
+  const w = await open({ spec: SPEC, theme, lang, port: PORT, storage: { pp_autosave_enabled: 'false' } }); // enregistrement automatique coupé : une modification reste « à enregistrer » jusqu'au geste de la personne
   const { page } = w;
   const snap = async name => { if (SHOTS) await page.screenshot({ path: join(SHOTS, `${lang === 'en' ? 'en' : theme}-${name}.png`) }); };
   try {
@@ -219,12 +239,17 @@ async function run(theme, lang) {
     check(`${label} - le sélecteur s'ouvre de nouveau`, !!first.chooser);
     await settle(page, /Markdown import/);
     const done = await statusOf(page);
-    check(`${label} - le coin d'état dit que le Markdown est importé et qu'une image n'a pas été reprise (celle qui n'est pas en ligne), en entier, sans être coupé, dans le panneau`,
-      done.text === T.importedImages && !done.error && !done.clipped && done.inPanel, done);
-    check(`${label} - rien n'était à enregistrer : aucune fenêtre n'a été posée`, !first.askedBefore.shown && !(await dialogState(page)).shown);
+    check(`${label} - le coin d'état commence par l'enregistrement sous le nom du fichier, dit que le Markdown est importé et qu'une image n'a pas été reprise (celle qui n'est pas en ligne), se lit en entier, dans le panneau`,
+      done.text === T.savedAs('compte-rendu') + T.importedImages && !done.error && done.whole && done.inPanel, done);
+    const rows1 = await stored(page);
+    check(`${label} - le document est ENREGISTRÉ dans Grist sous le nom du fichier « compte-rendu » (une ligne, relue dans la table), sans que personne l'ait nommé ni enregistré`,
+      rows1.length === 1 && rows1[0].name === 'compte-rendu' && rows1[0].length > 200, rows1);
+    check(`${label} - rien n'était à enregistrer : aucune fenêtre n'a été posée, et une fois enregistré le document n'attend plus rien (aucune question pour quitter)`, !first.askedBefore.shown && !(await dialogState(page)).shown
+      && await page.evaluate(() => !Templates.verifyStored || Templates.verifyStored(Templates.getCurrentId(), document.getElementById('template-name').value.trim()) === 'ok'));
     const imported = await snapshot(page);
-    check(`${label} - le document est un nouveau modèle sans nom, avec le titre du fichier (l'en-tête YAML n'est pas du texte)`,
-      imported.title === 'Compte rendu de la réunion' && !imported.modelId && imported.select === '' && !/tags:|title: Compte/.test(imported.text), { title: imported.title, id: imported.modelId, select: imported.select });
+    const nameShown = await page.evaluate(() => document.getElementById('template-name').value);
+    check(`${label} - l'éditeur affiche le document enregistré : choisi dans la liste, nommé comme son fichier, avec le titre du fichier (l'en-tête YAML n'est pas du texte)`,
+      imported.title === 'Compte rendu de la réunion' && imported.modelId === rows1[0].id && imported.select === String(rows1[0].id) && nameShown === 'compte-rendu' && !/tags:|title: Compte/.test(imported.text), { title: imported.title, id: imported.modelId, select: imported.select, nameShown });
     const shown = [];
     for (const selector of ['.tiptap h1', '.tiptap div.callout', '.tiptap ul[data-type="taskList"]', '.tiptap table', '.tiptap sup.footnote-ref-marker', '.tiptap img.editor-image']) shown.push(await reachableInDocument(page, selector));
     check(`${label} - titre, encadré, liste à cases, tableau, note de bas de page et image sont visibles et atteignables à la souris`, shown.every(s => s.shown && s.reachable), shown.filter(s => !(s.shown && s.reachable)));
@@ -246,7 +271,9 @@ async function run(theme, lang) {
     await sleep(300);
     await snap('document');
 
-    // 4) Le document est maintenant « à enregistrer » : la question vient APRÈS le choix du fichier et sa lecture ; Annuler garde le document, Abandonner importe.
+    // 4) Le document est maintenant « à enregistrer » (le nom retapé, enregistrement automatique coupé) : la question vient APRÈS le choix du fichier et sa lecture ; Annuler garde le document, Abandonner importe.
+    await makeUnsaved(page);
+    const edited = await snapshot(page);
     const second = await pickFile(page, mdFile('second.md', meeting('Second document')));
     check(`${label} - (document à enregistrer) le sélecteur s'ouvre sans poser de question avant le choix du fichier`, !!second.chooser && !second.askedBefore.shown, second.askedBefore);
     await settle(page, /^$/);
@@ -257,23 +284,27 @@ async function run(theme, lang) {
     const cancelled = await clickDialogButton(page, T.cancel);
     check(`${label} - « ${T.cancel} » est atteignable à la souris dans le panneau`, !!cancelled && cancelled.reachable && cancelled.inPanel, cancelled);
     const kept = await snapshot(page);
-    check(`${label} - « ${T.cancel} » : la fenêtre se ferme et le premier document reste tel quel`, !(await dialogState(page)).shown && kept.title === 'Compte rendu de la réunion' && kept.html === imported.html, { shown: (await dialogState(page)).shown, title: kept.title });
+    check(`${label} - « ${T.cancel} » : la fenêtre se ferme et le premier document reste tel quel`, !(await dialogState(page)).shown && kept.title === 'Compte rendu de la réunion' && kept.html === imported.html && edited.html === imported.html, { shown: (await dialogState(page)).shown, title: kept.title });
     await pickFile(page, mdFile('second.md', meeting('Second document')));
     await settle(page, /^$/);
     const discarded = await clickDialogButton(page, T.discard);
     check(`${label} - « ${T.discard} » est atteignable à la souris dans le panneau`, !!discarded && discarded.reachable && discarded.inPanel, discarded);
-    await settle(page, /Markdown import/);
+    await settleSaved(page, 'second');
     const replaced = await snapshot(page);
-    check(`${label} - « ${T.discard} » : le second fichier remplace le document, son message d'état est dit`, replaced.title === 'Second document' && (await statusOf(page)).text === T.importedImages, { title: replaced.title, status: (await statusOf(page)).text });
+    const rows2 = await stored(page);
+    check(`${label} - « ${T.discard} » : le second fichier remplace le document ET s'enregistre sous son nom « second » (deux lignes dans la table), son message d'état est dit ; le premier, abandonné, garde son nom d'origine`,
+      replaced.title === 'Second document' && (await statusOf(page)).text === T.savedAs('second') + T.importedImages && rows2.length === 2 && rows2[1].name === 'second' && rows2[0].name === 'compte-rendu',
+      { title: replaced.title, status: (await statusOf(page)).text, rows2 });
 
-    // 5) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec un document à enregistrer), le document ne bouge pas.
+    // 5) Les fichiers refusés : un message clair en rouge, aucune fenêtre (même avec un document à enregistrer), le document ne bouge pas, rien de plus n'est enregistré.
+    await makeUnsaved(page);
     const refused = async (name, buffer, expected) => {
       await pickFile(page, { name, mimeType: 'text/plain', buffer });
       await settle(page, expected);
       const after = await statusOf(page);
       const dialog = await dialogState(page);
       const now = await snapshot(page);
-      return { after, dialog, unchanged: now.html === replaced.html && now.zones === replaced.zones };
+      return { after, dialog, unchanged: now.html === replaced.html && now.zones === replaced.zones && (await stored(page)).length === 2 };
     };
     const binary = await refused('programme.md', Buffer.from([0x50, 0x4B, 0x03, 0x04, 0, 0, 0, 0, 1, 2, 3]), /Markdown lisible|readable Markdown/);
     check(`${label} - un fichier binaire : « ${T.unreadable} » en rouge, sans fenêtre, le document ne bouge pas`, binary.after.text === T.unreadable && binary.after.error && !binary.dialog.shown && binary.unchanged && !binary.after.clipped && binary.after.inPanel, binary);
@@ -282,6 +313,17 @@ async function run(theme, lang) {
     const big = await refused('gros.md', Buffer.alloc(10 * 1024 * 1024 + 1, 0x61), /trop gros|too big/);
     check(`${label} - un fichier de plus de 10 Mo : sa taille et la limite sont dites, en rouge, sans fenêtre, le document ne bouge pas`, T.tooBig.test(big.after.text) && big.after.error && !big.dialog.shown && big.unchanged && !big.after.clipped, big);
     await snap('refused');
+
+    // 5b) Un nom déjà pris : le même fichier importé de nouveau devient « second (2) », le coin d'état le dit, le premier « second » n'est pas touché (jamais écrasé).
+    await makeUnsaved(page);
+    await pickFile(page, mdFile('second.md', meeting('Second document')));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await settleSaved(page, 'second');
+    const twice = await statusOf(page);
+    const rows3 = await stored(page);
+    check(`${label} - un nom déjà pris : le même fichier importé de nouveau s'enregistre sous « second (2) », le coin d'état dit que le nom existait déjà, le premier document n'est pas touché`,
+      twice.text === T.savedTwice('second (2)') + T.importedImages && twice.whole && rows3.map(r => r.name).join('|') === 'compte-rendu|second|second (2)' && rows3[1].length === rows2[1].length, { twice, rows3 });
 
     // 6) Le geste complet, d'un bout à l'autre : exporter en Markdown (menu « Type d'export », bouton Exporter) puis importer ce fichier redonne le même document.
     await fire(page, 'PbClients', 1);
@@ -297,7 +339,7 @@ async function run(theme, lang) {
     await pickFile(page, mdFile(exported.suggested, exportedText));
     await settle(page, /^$/);
     await clickDialogButton(page, T.discard);
-    await settle(page, /Markdown import/);
+    await settleSaved(page, exported.suggested.replace(/\.[^.]*$/, ''));
     const back = await snapshot(page);
     check(`${label} - le fichier exporté, importé de nouveau, redonne le même texte, le même HTML (aux identifiants de notes près) et les mêmes en-tête et pied`,
       back.text === replaced.text && back.html === replaced.html && back.zones === replaced.zones, { sameText: back.text === replaced.text, sameHtml: back.html === replaced.html, sameZones: back.zones === replaced.zones });
@@ -319,24 +361,26 @@ async function run(theme, lang) {
       { suggested: modelExport.suggested, text: modelText });
     const templateDone = await statusOf(page);
     check(`${label} - le coin d'état dit « ${T.templateExported} », en entier, sans être coupé, dans le panneau`, templateDone.text === T.templateExported && !templateDone.error && !templateDone.clipped && templateDone.inPanel, templateDone);
-    const importModel = async (name, text, expected) => {
+    const importModel = async (name, text, what) => {
+      await makeUnsaved(page); // le document précédent, enregistré par son import, est modifié de nouveau : la question revient
       await pickFile(page, mdFile(name, text));
       await settle(page, /^$/);
       await clickDialogButton(page, T.discard);
-      await settle(page, /Markdown import/);
-      return { snap: await snapshot(page), state: await statusOf(page), expected };
+      await settleSaved(page, name.replace(/\.[^.]*$/, ''));
+      const line = await savedLine(page, T, name, what);
+      return { snap: await snapshot(page), state: await statusOf(page), line };
     };
-    const same = await importModel(modelExport.suggested, modelText);
-    check(`${label} - le fichier du modèle, importé de nouveau, redonne les mêmes bulles et le même HTML ; le coin d'état n'a rien à ajouter (« ${T.imported} »)`,
-      same.snap.html === modelBefore.html && same.snap.zones === modelBefore.zones && same.state.text === T.imported && !same.state.clipped, { sameHtml: same.snap.html === modelBefore.html, status: same.state.text });
+    const same = await importModel(modelExport.suggested, modelText, T.imported);
+    check(`${label} - le fichier du modèle, importé de nouveau, redonne les mêmes bulles et le même HTML ; le coin d'état n'a rien à ajouter à « ${T.imported} » (que l'enregistrement sous le nom du fichier, suivi de « (2) » quand le nom est déjà pris)`,
+      same.snap.html === modelBefore.html && same.snap.zones === modelBefore.zones && same.state.text === same.line.text && same.line.nameOk && same.state.whole, { sameHtml: same.snap.html === modelBefore.html, status: same.state.text, line: same.line });
     const keys = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap span.var-badge')).map(b => b.dataset.key + (b.dataset.before ? '/' + b.dataset.before : '')).join('|'));
     check(`${label} - les trois bulles sont dans l'éditeur (la troisième avec son « Dr »)`, keys === 'PbClients.Nom|PbClients.Nom|PbClients.Nom/Dr ', keys);
-    const oneUnknown = await importModel('inconnue.md', modelText + '\n{{AutreTable.Nom}}\n');
+    const oneUnknown = await importModel('inconnue.md', modelText + '\n{{AutreTable.Nom}}\n', T.importedVariable);
     check(`${label} - une clé qui n'est pas une variable du document reste du texte et le coin d'état le dit : « ${T.importedVariable} », en entier, sans être coupé, dans le panneau`,
-      oneUnknown.state.text === T.importedVariable && !oneUnknown.state.error && !oneUnknown.state.clipped && oneUnknown.state.inPanel && /\{\{AutreTable\.Nom\}\}/.test(oneUnknown.snap.text), { status: oneUnknown.state, text: oneUnknown.snap.text.slice(-60) });
-    const mixed = await importModel('mixte.md', modelText + '\n{{AutreTable.Nom}} {{AutreTable.Ville}}\n\n![Logo](images/logo.png)\n');
+      oneUnknown.state.text === oneUnknown.line.text && !oneUnknown.state.error && oneUnknown.state.whole && oneUnknown.state.inPanel && /\{\{AutreTable\.Nom\}\}/.test(oneUnknown.snap.text), { status: oneUnknown.state, text: oneUnknown.snap.text.slice(-60) });
+    const mixed = await importModel('mixte.md', modelText + '\n{{AutreTable.Nom}} {{AutreTable.Ville}}\n\n![Logo](images/logo.png)\n', T.importedImageVariables);
     check(`${label} - avec une image locale en plus, une seule phrase : « ${T.importedImageVariables} », en entier, sans être coupée, dans le panneau`,
-      mixed.state.text === T.importedImageVariables && !mixed.state.error && !mixed.state.clipped && mixed.state.inPanel, mixed.state);
+      mixed.state.text === mixed.line.text && !mixed.state.error && mixed.state.whole && mixed.state.inPanel, mixed.state);
     await snap('model');
 
     // 7) Depuis une grille, puis depuis un email (« + » puis « Nouvelle grille » / « Nouvel email » au vrai clic) : l'import quitte ce modèle, rien de la grille ni de l'email ne reste et le document s'affiche
@@ -353,18 +397,41 @@ async function run(theme, lang) {
       ['une grille', '#v2-btn-new-grid', m => m.grid, m => !m.grid],
       ['un email', '#v2-btn-new-email', m => m.emailButton && m.emailFields, m => !m.emailButton && !m.emailFields],
     ]) {
+      await makeUnsaved(page);
       await clickHoverRow(page, PLUS, row);
       await settle(page, /^$/);
       if ((await dialogState(page)).shown) await clickDialogButton(page, T.discard);
       await sleep(600);
       const opened = await modelState();
       await pickFile(page, mdFile('venu-de-ailleurs.md', doc('# Venu d’ailleurs', '', 'Un texte.')));
-      await settle(page, /^$/);
+      await sleep(1500);
       if ((await dialogState(page)).shown) await clickDialogButton(page, T.discard);
-      await settle(page, /Markdown import/);
+      await settleSaved(page, 'venu-de-ailleurs');
       const imported = await modelState();
       check(`${label} - depuis ${kind} : l'import quitte ce modèle, le document s'affiche sur sa page`, isOpen(opened) && isGone(imported) && imported.title === 'Venu d’ailleurs' && imported.page && imported.sheet, { opened, imported });
     }
+    // 7) Grist refuse d'écrire dans la table des documents : le document s'affiche quand même (rien n'est perdu), mais le coin d'état ne dit PAS « Enregistré dans Grist », il dit l'échec en rouge,
+    // aucune ligne n'est écrite, et le document reste « à enregistrer » : la question « Modifications non enregistrées » se pose encore quand on le quitte.
+    await makeUnsaved(page);
+    const rowsBeforeRefusal = (await stored(page)).length;
+    await page.evaluate(() => window.__gristStub.denyTable('Publipostage_Modeles', true));
+    await pickFile(page, mdFile('refuse.md', meeting('Document refusé')));
+    await settle(page, /^$/);
+    await clickDialogButton(page, T.discard);
+    await page.waitForFunction(() => document.getElementById('status-msg').classList.contains('error-msg'), null, { timeout: 20000 }).catch(() => {});
+    await sleep(500);
+    const refusedWrite = await statusOf(page);
+    const refusedShown = await snapshot(page);
+    const rowsRefused = await stored(page);
+    await page.evaluate(() => window.__gristStub.denyTable('Publipostage_Modeles', false));
+    await pickFile(page, mdFile('suite.md', meeting('Document suivant')));
+    await settle(page, /^$/);
+    const asksStill = await dialogState(page);
+    await clickDialogButton(page, T.cancel);
+    check(`${label} - Grist refuse d'écrire : le document s'affiche, le coin d'état le dit en rouge sans prétendre qu'il est enregistré, et aucune ligne n'est écrite`,
+      refusedShown.title === 'Document refusé' && refusedWrite.error && !/Enregistré dans Grist|Saved to Grist/.test(refusedWrite.text) && refusedWrite.text.trim() !== '' && rowsRefused.length === rowsBeforeRefusal, { refusedWrite, title: refusedShown.title, rows: rowsRefused.length, rowsBeforeRefusal });
+    check(`${label} - le document refusé reste à enregistrer : en importer un autre pose encore la question « ${T.unsaved} », et « ${T.cancel} » le garde`, asksStill.shown && asksStill.title === T.unsaved && (await snapshot(page)).title === 'Document refusé', { asksStill });
+
     check(`${label} - aucune erreur de page, aucune boîte du navigateur`, realErrors(w).length === 0 && w.dialogs.length === 0, { errors: realErrors(w), dialogs: w.dialogs });
   } finally {
     await w.close();
