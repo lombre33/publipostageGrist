@@ -92,6 +92,8 @@ const pageErrors = [];
 const imageRequests = [];
 let shotCount = 0;
 
+// Le niveau d'accès d'un widget qui peut lire sa table mais pas le document : Grist lui envoie des lignes, et lui refuse les modèles (js/reader-guide.js:editorLacksAccess).
+const READ_TABLE = 'read table';
 async function openWidget(colorScheme, lang, access) {
   // bypassCSP : la politique de sécurité du contenu d'index.html bloquerait les scripts que le harnais injecte (cf. verify-*.mjs voisins) ; elle n'est pas ce que ce script vérifie.
   const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme, bypassCSP: true });
@@ -259,7 +261,9 @@ async function runPass(theme, lang) {
   const label = `${theme === 'dark' ? 'sombre' : 'clair'}, ${lang === 'en' ? 'anglais' : 'français'}`;
   const T = TEXTS[lang];
   console.log(`\n=== Guide de la Lecture sans ligne à la vraie souris, ${WIDTH}x${HEIGHT}, ${label} ===`);
-  const { context, page } = await openWidget(theme, lang);
+  // Le widget n'a que l'accès à la table (« lecture de table ») : des lignes arrivent, mais Grist lui refuse les modèles - le seul cas où la Lecture sans ligne montre encore le guide au lieu du document (avec l'accès
+  // complet elle montre le document et la pastille « Aucune ligne sélectionnée » : dev-tests/verify-reading-no-row-mouse.mjs).
+  const { context, page } = await openWidget(theme, lang, READ_TABLE);
   const unlinked = { asTarget: null, asSource: false };
   await fireLinking(page, unlinked);
 
@@ -383,10 +387,11 @@ async function runPass(theme, lang) {
 
   // La ligne arrive (un clic dans le tableau relié) : le document remplace le guide ; à 420 px de large le guide, lui, ne déborde pas (capture sous le texte).
   await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
-  await page.waitForFunction(() => { const c = document.querySelector('#reader-container .reader-content'); return !!c && (c.textContent || '').indexOf('Dupont') !== -1; }, null, { timeout: 8000 }).catch(() => {});
-  const arrived = await page.evaluate(() => ({ guide: !!document.querySelector('#reader-container .reader-guide'), message: !!document.querySelector('#reader-container .reader-empty'), text: (document.querySelector('#reader-container .reader-content') || {}).textContent }));
+  await page.waitForFunction(() => { const c = document.querySelector('#reader-container .reader-content'); return !!c; }, null, { timeout: 8000 }).catch(() => {});
+  const arrived = await page.evaluate(() => ({ guide: !!document.querySelector('#reader-container .reader-guide'), message: !!document.querySelector('#reader-container .reader-empty'), text: (document.querySelector('#reader-container .reader-content') || {}).textContent, hasDocument: !!document.querySelector('#reader-container .reader-content') }));
   await shot(page, `${theme}-${lang}-document`);
-  check(`${label} - une ligne arrive : le document « Facture de Dupont » remplace le guide`, !arrived.guide && !arrived.message && /Dupont/.test(arrived.text || ''), arrived);
+  // Sans l'accès complet les modèles ne se lisent pas : le document est celui de la page vide, sans texte à y chercher (le texte d'une ligne dans le document : scenarios-reader-guide.js, readerGuide).
+  check(`${label} - une ligne arrive : le document remplace le guide`, !arrived.guide && !arrived.message && arrived.hasDocument, arrived);
 
   await context.close();
 }
@@ -394,7 +399,7 @@ async function runPass(theme, lang) {
 // Un panneau plus étroit que 700 px : la capture passe sous le texte, rien ne déborde.
 async function runNarrow() {
   console.log(`\n=== Guide de la Lecture sans ligne, panneau étroit (420x${HEIGHT}), clair, français ===`);
-  const { context, page } = await openWidget('light', 'fr');
+  const { context, page } = await openWidget('light', 'fr', READ_TABLE);
   await fireLinking(page, { asTarget: null, asSource: false });
   await page.setViewportSize({ width: 420, height: HEIGHT });
   await realClick(page, '#btn-mode-read');

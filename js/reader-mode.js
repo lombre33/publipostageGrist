@@ -1235,6 +1235,9 @@ const ReaderMode = (function () {
   // Vrai quand la Lecture affichée porte une boucle sur toutes les lignes (LoopRules.createContext : `readsAll`) : ses lignes ne suivent pas la ligne choisie,
   // js/main.js la redessine quand les lignes de la vue de Grist changent (BatchScope.onViewChange).
   let displayedReadsAll = false;
+  // Vrai quand la Lecture affichée (ou en train de s'afficher) est celle d'un document SANS ligne (render(..., record=null)) : js/reading-line.js en tire sa pastille « Aucune ligne
+  // sélectionnée ». Faux dès qu'une ligne la remplace, quand la carte de l'accès prend la place du document, et pendant un prêt à un PDF.
+  let noRowShown = false;
   // La Lecture prêtée à autre chose que le modèle (un PDF, js/pdf-reading.js) : tant que c'est le cas, `render` ne dessine rien - ni le rendu commencé avant le prêt (il écrirait par-dessus : le document vierge sous un PDF ouvert
   // depuis la Lecture), ni celui qu'on demande pendant (la ligne de la table change, un commentaire se pose) - et la mise en page suivie du modèle s'arrête. `lend(false)` rend la Lecture : le modèle qui s'ouvre s'y dessine.
   let lent = false;
@@ -1244,6 +1247,7 @@ const ReaderMode = (function () {
     renderGeneration++;
     stopGeometryWatch();
     displayedReadsAll = false;
+    noRowShown = false;
   }
   async function render(htmlContent, tableId, record, headerFooterData) {
     if (lent) return;
@@ -1254,14 +1258,18 @@ const ReaderMode = (function () {
     hookReveal();
     // Le contenu affiché est sur le point d'être remplacé : sa mise en page n'a plus à être suivie.
     stopGeometryWatch();
-    // État vide : js/main.js:renderReader() appelle render() avec record=null quand aucune ligne n'est choisie. Pas une erreur, juste une étape que
-    // la personne n'a pas encore faite : js/reader-guide.js la lui explique (le guide en quatre étapes, ou le court message quand le widget est déjà
-    // relié à un tableau).
-    if (!record) {
+    // Sans ligne (js/main-reader.js:renderReader appelle render() avec record=null quand aucune ligne n'est choisie) : la Lecture montre le document tout de même - un document ou des
+    // diapositives n'ont pas besoin d'une ligne, et une table sans ligne (un GFS neuf) n'est pas une erreur. Les champs de fusion se lisent alors comme pour une ligne qui
+    // n'existe pas (Variables.resolveRawValue : vides), et la pastille de js/reading-line.js dit, discrètement, qu'aucune ligne n'est sélectionnée (`showsNoRow`).
+    // Seule exception : un widget SANS l'accès complet (js/reader-guide.js:editorLacksAccess). Grist ne lui envoie aucune ligne et lui refuse la lecture des modèles : il n'y a pas de
+    // document à montrer, la carte de l'accès (ou le guide) reste à sa place.
+    if (!record && ReaderGuide.editorLacksAccess()) {
       displayedReadsAll = false;
+      noRowShown = false;
       ReaderGuide.render(container);
       return;
     }
+    noRowShown = !record;
     return GristAPI.withReadPass(() => renderRecord(renderId, container, htmlContent, tableId, record, headerFooterData));
   }
   // ---- La diapositive où l'on est (demande du 11/11 : passer de l'Édition à la Lecture d'une présentation, et en revenir, sans retomber sur la première) ----
@@ -2062,5 +2070,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, slideShown, showSlide };
+  return { render, lend, renderInto, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
 })();

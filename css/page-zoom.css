@@ -60,6 +60,9 @@
 .pp-reading-line-label { padding: 0 4px; font-variant-numeric: tabular-nums; }
 .pp-reading-line-btn { box-sizing: border-box; width: 18px; height: 18px; margin: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: inherit; cursor: pointer; }
 .pp-reading-line-btn svg { width: 12px; height: 12px; }
+.pp-reading-line-btn[hidden] { display: none; }
+/* Sans ligne (js/reading-line.js:showNoRow) : le libellé seul, sans flèches ; le « ? » du guide (widget non relié) est un bouton comme les flèches. */
+.pp-reading-line.is-norow { padding: 0 4px; }
 .pp-reading-line-btn:hover:not(:disabled) { background: var(--surface-sunken); border-color: var(--border); color: var(--text); }
 .pp-reading-line-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pp-reading-line-btn:disabled { opacity: .35; cursor: default; }

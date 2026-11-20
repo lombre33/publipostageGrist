@@ -1,6 +1,9 @@
 // Guide de la Lecture sans ligne : en mode Lecture, quand le widget n'a pas de « Sélectionner par » configuré, il guide la personne sur ce qu'il faut
 // faire, avec du texte et des captures d'écran, plutôt que d'afficher « Aucune ligne sélectionnée ».
-// - Quand : js/reader-mode.js:render() n'a aucune ligne à montrer. Widget relié à une autre vue (GristAPI.getLinkState() = 'linked') : rien à régler,
+// - Depuis le 20/11 (« passer en mode Lecture indépendamment des lignes ») la Lecture SANS ligne montre le document, avec la pastille « Aucune ligne sélectionnée » de
+//   js/reading-line.js : cette carte n'occupe plus la Lecture que pour un widget SANS l'accès complet (editorLacksAccess : Grist ne lui envoie aucune ligne et lui refuse la lecture des
+//   modèles, il n'y a pas de document à montrer). Le guide à quatre étapes reste à un clic de la pastille d'un widget non relié, dans une fenêtre (openHelp).
+// - Quand : js/reader-mode.js:render() n'a aucune ligne à montrer ET le widget n'a pas l'accès complet. Widget relié à une autre vue (GristAPI.getLinkState() = 'linked') : rien à régler,
 //   il reste un clic à faire, donc le court message (« Aucune ligne sélectionnée » et son indication), sauf sans accès (GristAPI.getAccessLevel() =
 //   'none') : Grist n'envoie alors aucune ligne, même avec une ligne cliquée, et ce message serait faux ; la carte se réduit à l'étape de l'accès
 //   complet. Sinon (« Sélectionner par » vide, 'unlinked', ou version de Grist qui ne le dit pas, 'unknown'), le guide : quatre étapes (donner
@@ -99,12 +102,15 @@ const ReaderGuide = (function () {
     return li;
   }
 
-  function buildGuide(state) {
+  // `inWindow` : le guide ouvert depuis la pastille de la Lecture (openHelp) - la fenêtre porte déjà son titre, la carte n'a pas à le redire.
+  function buildGuide(state, inWindow) {
     const root = el('section', 'reader-guide');
-    root.setAttribute('aria-labelledby', 'reader-guide-title');
-    const title = heading(2, 'reader-guide-title', I18n.t('readerGuide.title'));
-    title.id = 'reader-guide-title';
-    root.appendChild(title);
+    if (!inWindow) {
+      root.setAttribute('aria-labelledby', 'reader-guide-title');
+      const title = heading(2, 'reader-guide-title', I18n.t('readerGuide.title'));
+      title.id = 'reader-guide-title';
+      root.appendChild(title);
+    }
     root.appendChild(el('p', 'reader-guide-intro', I18n.t('readerGuide.intro')));
     const steps = el('ol', 'reader-guide-steps');
     steps.setAttribute('role', 'list');
@@ -164,6 +170,25 @@ const ReaderGuide = (function () {
     else container.appendChild(GristAPI.getAccessLevel() === 'none' ? buildAccessOnly() : buildMessage());
   }
 
+  // Le guide à quatre étapes dans une fenêtre, ouvert par le « ? » de la pastille « Aucune ligne sélectionnée » (js/reading-line.js) : la Lecture sans ligne montre désormais le document, et ce
+  // guide - qu'elle montrait à sa place quand le widget n'est pas relié - reste à un clic. Les mêmes quatre étapes et captures, dans la langue de l'interface du moment.
+  let helpWindow = null;
+  function openHelp() {
+    wire();
+    if (!helpWindow) {
+      helpWindow = ModalBase.create({ id: 'pp-reader-guide-modal', titleId: 'pp-reader-guide-modal-title', size: 'lg', boxClass: 'pp-reader-guide-box', actionsClass: 'var-modal-actions' });
+      const close = Dom.button('var-modal-primary');
+      close.id = 'pp-reader-guide-modal-close';
+      close.addEventListener('click', () => helpWindow.hide());
+      helpWindow.actions.appendChild(close);
+    }
+    helpWindow.title.textContent = I18n.t('readerGuide.title');
+    helpWindow.actions.querySelector('button').textContent = I18n.t('common.close');
+    helpWindow.body.innerHTML = '';
+    helpWindow.body.appendChild(buildGuide(GristAPI.getLinkState(), true));
+    helpWindow.show();
+  }
+
   // L'éditeur sans accès complet : la carte de l'accès, seule, dans `container` (#access-guide-container).
   function renderAccess(container) {
     wire();
@@ -171,5 +196,5 @@ const ReaderGuide = (function () {
     container.appendChild(buildAccessOnly(true));
   }
 
-  return { render, renderAccess, editorLacksAccess };
+  return { render, renderAccess, editorLacksAccess, openHelp };
 })();

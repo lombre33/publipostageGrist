@@ -1169,7 +1169,7 @@
       focusEditor: () => { const editor = EditorCore.getEditor(); if (editor && editor.isEditable) editor.commands.focus(null, { scrollIntoView: false }); },
     });
     DropImport.wire({ importFile: importDroppedFile, importSet: importDroppedSet, setStatus }); // déposer un fichier Word, PowerPoint, Excel, HTML ou Markdown (ou un dossier, ou une page HTML avec ses images) pour l'importer (js/drop-import.js)
-    ReadingLine.wire({ currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }), readsAllRows: () => ReaderMode.readsAllRows(), setStatus }); // « ‹ Martin · ligne 2 sur 3 › » en Lecture (js/reading-line.js)
+    ReadingLine.wire({ currentRecord: () => ({ record: latestRecord, tableId: latestRecordTableId }), readsAllRows: () => ReaderMode.readsAllRows(), showsNoRow: () => ReaderMode.showsNoRow(), isLinked: () => GristAPI.getLinkState() === 'linked', openHelp: () => ReaderGuide.openHelp(), setStatus }); // « ‹ Martin · ligne 2 sur 3 › » en Lecture, « Aucune ligne sélectionnée » quand la Lecture n'a pas de ligne (js/reading-line.js)
     ReadingValue.wire({ rerender: () => renderReader(), setStatus }); // « ‹ Santé · valeur 1 sur 2 › » : la valeur lue d'une liste réglée « Un document par valeur » (js/reading-value.js)
     VariableReview.wire(); // le coin d'état « N variables à revoir » (js/variable-review.js)
     MarkFields.wire(); // la case « Repérer les champs » du menu Mode lecture (js/mark-fields.js)
