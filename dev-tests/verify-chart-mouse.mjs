@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Graphique de la page (extensions/graphique/ : chart-block.js, chart-source.js, chart-plot.js, chart-block.css ; js/chart-entry.js, js/search-select.js) : le panneau de 700x400, à la VRAIE souris (page.mouse) et au VRAI
 // clavier (frappe, flèches, Tab, Entrée, Échap), en clair, en sombre et en anglais. Ce que scenarios-chart-block.js ne peut pas voir depuis la page :
-//  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses dix lignes, « Graphique de la page… » en huitième, « Vidéo… » puis « Diapositive d’une présentation… » (qui défile), dont les neuf premières tiennent dans le panneau et sont au premier plan ;
+//  - le survol de l'icône chaîne ouvre le menu « Lien et blocs de contenu » : ses onze lignes, « Graphique de la page… » en neuvième, « Vidéo… » puis « Diapositive d’une présentation… » (qui défile), dont les neuf premières tiennent dans le panneau et sont au premier plan ;
 //  - un clic sur la ligne ouvre la fenêtre : elle tient dans 700x400 sans défiler (titre, liste, indication, lignes à tracer, aperçu, boutons) ; « Insérer » est grisé tant qu'aucun graphique n'est choisi ;
 //  - un clic sur la liste l'ouvre AU-DESSUS de la fenêtre et dans le panneau : les graphiques rangés par page, ceux que le widget ne sait pas redessiner grisés avec leur raison, qu'un clic ne choisit pas ;
 //  - la recherche se tape et se valide au clavier ; l'aperçu montre le vrai graphique de la ligne en cours (une image, à la bonne proportion) ; les deux choix de lignes se cochent à la souris ;
@@ -208,8 +208,8 @@ const sheetZoom = () => page.evaluate(() => { const sheet = document.querySelect
 
 const MAIN = '#v2-btn-link';
 const ROW = '#v2-btn-chart';
-const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr', ROW, '#v2-btn-video'];
-const ROW_INDEX = 7;
+const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-row-cross-ref', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr', ROW];
+const ROW_INDEX = 8;
 const FLYOUT = '#v2-blocks-flyout';
 const WIN = '#pp-chart-modal';
 const BOX = `${WIN} .modal-content`;
@@ -292,7 +292,7 @@ async function run(theme) {
   for (const sel of ROWS) rows.push(await hit(sel));
   check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses neuf premières lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
   const labels = await rowLabels();
-  check(`${T}, menu : « QR code… » puis « Graphique de la page… » en huitième, « Vidéo… » puis « Diapositive d’une présentation… » en dernière (rien n'a disparu)`, labels.length === 10 && labels[6] === 'QR code…' && labels[ROW_INDEX] === 'Graphique de la page…' && labels[2] === 'Citation' && labels[5] === 'Bloc de signature', labels);
+  check(`${T}, menu : « QR code… » puis « Graphique de la page… » en neuvième, « Vidéo… » puis « Diapositive d’une présentation… » en dernière (rien n'a disparu)`, labels.length === 11 && labels[7] === 'QR code…' && labels[ROW_INDEX] === 'Graphique de la page…' && labels[3] === 'Citation' && labels[6] === 'Bloc de signature', labels);
   await snap(`${T}-1-menu`);
   await closeMenu();
   const closed = await page.evaluate(() => getComputedStyle(document.getElementById('v2-blocks-flyout')).display === 'none');
@@ -521,7 +521,7 @@ async function runEnglish() {
   const flyout = await hit(FLYOUT);
   const rows = [];
   for (const sel of ROWS) rows.push(await hit(sel));
-  check('anglais, menu : le volet « Link and content blocks » montre « Chart from the page… » en huitième ligne, dans le panneau', labels.length === 10 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[6] === 'QR code…' && labels[ROW_INDEX] === 'Chart from the page…' && flyout.inPanel && rows.every(seen), { labels, flyout, rows });
+  check('anglais, menu : le volet « Link and content blocks » montre « Chart from the page… » en neuvième ligne, dans le panneau', labels.length === 11 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[7] === 'QR code…' && labels[ROW_INDEX] === 'Chart from the page…' && flyout.inPanel && rows.every(seen), { labels, flyout, rows });
   await snap('en-1-menu');
   await clickRow(ROW);
   await page.waitForFunction(() => { const s = document.getElementById('pp-chart-pick'); return !!s && s.options[0] && !/^(Lecture des graphiques|Reading the charts)/.test(s.options[0].textContent); }, null, { timeout: 8000 });

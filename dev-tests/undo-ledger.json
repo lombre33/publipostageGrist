@@ -145,6 +145,7 @@
     "#v2-btn-link": {"class": "window", "start": "para", "drive": [["type", "#pp-link-url", "https://exemple.fr/a"], ["click", ".var-modal-primary"]]},
     "#v2-row-link": {"class": "window", "start": "para", "drive": [["type", "#pp-link-url", "https://exemple.fr/b"], ["click", ".var-modal-primary"]]},
     "#v2-row-bookmark": {"class": "window", "start": "paraEnd", "drive": [["type", "#pp-bookmark-name", "Ancre"], ["click", ".var-modal-primary"]]},
+    "#v2-row-cross-ref": {"class": "window", "start": "headingPara", "drive": [["click", "#pp-xref-modal .ss-trigger"], ["click", "#pp-xref-modal .ss-option"], ["click", ".var-modal-primary"]]},
     "#v2-btn-callout": {"class": "window", "start": "para", "drive": [["click", ".var-modal-primary"]]},
     "#v2-btn-qr": {"class": "window", "start": "para", "drive": [["type", "#pp-qr-text", "https://exemple.fr"], ["click", ".var-modal-primary"]]},
     "#v2-btn-video": {"class": "window", "start": "para", "drive": [["prompt", "https://youtu.be/dQw4w9WgXcQ"], ["wait", 400]]},

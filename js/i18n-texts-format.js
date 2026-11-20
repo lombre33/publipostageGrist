@@ -296,6 +296,11 @@ const I18nTextsFormat = {
   'insert.bookmark.rowEdit': { fr: 'Modifier le signet…', en: 'Edit bookmark…' },
   'insert.bookmark.aria': { fr: 'Poser un signet sur ce paragraphe ou ce titre', en: 'Place a bookmark on this paragraph or heading' },
   'insert.bookmark.ariaEdit': { fr: 'Modifier le signet de ce paragraphe ou de ce titre', en: 'Edit the bookmark of this paragraph or heading' },
+  // Ligne « Renvoi… » du même menu (js/cross-refs.js:syncRow la relit « Modifier le renvoi… » quand un renvoi est sélectionné)
+  'insert.crossRef.row': { fr: 'Renvoi…', en: 'Cross-reference…' },
+  'insert.crossRef.rowEdit': { fr: 'Modifier le renvoi…', en: 'Edit cross-reference…' },
+  'insert.crossRef.aria': { fr: 'Insérer un renvoi qui suit un titre ou un signet', en: 'Insert a cross-reference that follows a heading or bookmark' },
+  'insert.crossRef.ariaEdit': { fr: 'Modifier le renvoi sélectionné', en: 'Edit the selected cross-reference' },
   'insert.codeBlock.tip': { fr: 'Bloc de code', en: 'Code block' },
   'insert.codeBlock.aria': { fr: 'Insérer un bloc de code', en: 'Insert a code block' },
   'insert.callout.row': { fr: 'Encadré…', en: 'Callout…' },

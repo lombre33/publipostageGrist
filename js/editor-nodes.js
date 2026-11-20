@@ -2525,7 +2525,7 @@ const EditorNodes = (function () {
     // et dev-tests/verify-live-editor.mjs échoue tant qu'il manque.
     const INLINE_MARKS_ATTR = 'ppMarks';
     const INLINE_LEAF_NODES = [
-      'varBadge', 'calcBadge', 'pageNumberBadge', 'smartChip', 'footnoteRef', 'conditionalCheckbox', 'conditionalValue', 'editorImage', 'mention', 'tabStop', 'hardBreak',
+      'varBadge', 'calcBadge', 'pageNumberBadge', 'smartChip', 'footnoteRef', 'crossRef', 'conditionalCheckbox', 'conditionalValue', 'editorImage', 'mention', 'tabStop', 'hardBreak',
     ];
     function createInlineMarksCarrier(Extension) {
       return Extension.create({

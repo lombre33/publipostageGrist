@@ -1387,6 +1387,8 @@ const ReaderMode = (function () {
     // Variables déjà résolues (texte des titres définitif) : le sommaire se construit maintenant, avant que `renderRecord` remplace le contenu
     // affiché.
     resolveTocMarkers(wrapper);
+    // Les renvois (js/cross-refs.js) : chacun écrit le nom ou le numéro du titre qu'il vise, tel que ce document résolu le montre (un titre à variable y porte la valeur de la ligne) ; sans ce titre, le renvoi n'est que du texte.
+    CrossRefs.resolveIn(wrapper);
     // Le rond ou le numéro de chaque point de liste prend la couleur et la taille du début de son texte, la valeur d'une bulle comprise : les variables que lit `li::marker` (js/list-markers.js).
     ListMarkers.apply(wrapper);
     // Le style de chaque niveau de titre, gardé dans le modèle (js/heading-styles.js) : posé en ligne sur les <h1> à <h6>, que l'impression et le diaporama relisent comme la Lecture.

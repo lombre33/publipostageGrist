@@ -32,3 +32,13 @@
 .pp-link-trans-row .pp-dialog-input { flex: 1 1 0; min-width: 0; width: auto; }
 .pp-link-trans-row .pp-dialog-input:first-child:not(:only-child) { flex: 2 1 0; }
 .pp-link-trans-row .pp-dialog-input:disabled { color: var(--text-muted); cursor: not-allowed; }
+/* Fenêtre « Renvoi » (js/cross-ref-dialog.js) : ce que le renvoi écrit, trois cases d'option l'une sous l'autre, chacune avec son exemple écrit avec le titre choisi. Une case que le titre ne permet pas
+   (le numéro d'un titre qui n'en a pas) reste affichée, grisée de la couleur des textes discrets, sa raison en info-bulle. */
+.pp-xref-modes { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
+.pp-xref-modes legend { padding: 0; }
+.pp-xref-mode { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 4px 0; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.pp-xref-mode input { margin: 0; align-self: center; accent-color: var(--accent-solid); cursor: inherit; }
+.pp-xref-mode input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-xref-mode-name { font-weight: 600; }
+.pp-xref-mode-example { min-width: 0; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-xref-mode-off { color: var(--text-muted); cursor: not-allowed; }

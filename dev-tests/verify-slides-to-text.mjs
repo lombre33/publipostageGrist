@@ -56,7 +56,7 @@ const SEED = seedModels({ record: { id: 1, Nom: 'Alice', Statut: 'Urgent' } }) +
   stub.state.nextRowId.Publipostage_Modeles = 11;
 `;
 const READING = ['paragraph:Bonjour,', 'heading:Notre offre', 'paragraph:Un texte gras', 'bulletList:Rapide', 'paragraph:Dans la forme', 'paragraph:Cadre gauche', 'paragraph:Cadre droit', 'paragraph:Cadre bas', 'paragraph:Cordialement'];
-const ROWS = ['v2-row-link', 'v2-row-bookmark', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-video', 'v2-btn-slide-text'];
+const ROWS = ['v2-row-link', 'v2-row-bookmark', 'v2-row-cross-ref', 'v2-btn-citation', 'v2-btn-code-block', 'v2-btn-callout', 'v2-btn-signature', 'v2-btn-qr', 'v2-btn-chart', 'v2-btn-video', 'v2-btn-slide-text'];
 const NAME = 'Présentation commerciale';
 const TEXTS = {
   fr: {

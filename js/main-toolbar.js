@@ -223,7 +223,7 @@ const MainToolbar = (function () {
     // disait que « lien »), chaque ligne la sienne - « Lien… » garde le maillon.
     set('v2-btn-link', 'blocks');
     const setRowIcon = (id, icon) => { const slot = document.querySelector('#' + id + ' .v2-menu-row-icon'); if (slot) Dom.setMarkup(slot, Icons.svg(icon)); };
-    setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
+    setRowIcon('v2-row-link', 'link'); setRowIcon('v2-row-bookmark', 'bookmark'); setRowIcon('v2-row-cross-ref', 'crossRef'); setRowIcon('v2-btn-citation', 'blockquote'); setRowIcon('v2-btn-code-block', 'codeBlock');
     setRowIcon('v2-btn-callout', 'callout'); setRowIcon('v2-btn-signature', 'signature'); setRowIcon('v2-btn-qr', 'qr'); setRowIcon('v2-btn-chart', 'chart'); setRowIcon('v2-btn-chart-make', 'chartMake'); setRowIcon('v2-btn-video', 'video');
     setRowIcon('v2-btn-linked-table', 'linkedTable'); setRowIcon('v2-btn-slide-text', 'slideImport');
     // « Aa » (js/character-format.js) : le menu des réglages de caractère, après Barré ; Exposant et Indice (js/script-marks.js) en tête de ce menu.
@@ -385,6 +385,8 @@ const MainToolbar = (function () {
     BulletFormat.syncRow(byId('v2-btn-bullet-char'), editor);
     // « Signet… » (menu du lien) : grisée avec sa raison hors d'un paragraphe ou d'un titre du texte (et dans un modèle d'e-mail), relue « Modifier le signet… » quand le bloc en porte un.
     Anchors.syncRow(byId('v2-row-bookmark'), editor, inEmailMode ? 'bookmark.email' : null);
+    // « Renvoi… » (menu du lien) : grisée avec sa raison hors d'un texte de bloc (en-tête, pied de page, bloc de code, sélection sur plusieurs blocs) et dans un modèle d'e-mail, relue « Modifier le renvoi… » quand un renvoi est sélectionné.
+    CrossRefs.syncRow(byId('v2-row-cross-ref'), editor, inEmailMode ? 'crossRef.email' : null);
     // « Tableau d'un modèle Grille… » (menu du bouton Tableau) : grisée avec sa raison quand le suivi est allumé, dans un en-tête ou un pied de page, ou que le curseur est
     // dans un tableau.
     LinkedTable.syncRow(byId('v2-btn-linked-table'), editor);
@@ -806,6 +808,7 @@ const MainToolbar = (function () {
     bind('v2-btn-link', () => LinkDialog.open());
     bind('v2-row-link', () => LinkDialog.open());
     bind('v2-row-bookmark', () => BookmarkDialog.open());
+    bind('v2-row-cross-ref', () => CrossRefDialog.open());
     // Nœud blockquote de StarterKit, déjà géré en PDF, DOCX et Lecture. Sur une sélection de cases, toutes les cases entrent dans une citation ou en
     // sortent : l'état voulu est l'inverse de celui que le bouton montre (la case de tête), comme pour les listes.
     bind('v2-btn-citation', () => { if (!EditorCore.quoteSelectedCells(!EditorCore.isQuoteActive())) editor.chain().focus().toggleBlockquote().run(); });

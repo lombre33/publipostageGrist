@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Lien, citation et bloc de code sous une seule icône (js/link-dialog.js, js/main-toolbar.js, css/link-dialog.css, css/editor-v2.css) : le panneau de 700x400 d'Antoine, à la
 // VRAIE souris (page.mouse) et au VRAI clavier (frappe, Ctrl+K, Entrée, Échap, Tab), en clair et en sombre. Ce que scenarios-links-blocks.js ne peut pas voir depuis la page :
-//  - le survol de l'icône ouvre le menu, ses dix lignes (compactées à cette hauteur) dont les neuf premières tiennent dans le panneau (la dixième défile) et sont au premier plan (aucun autre volet ne les recouvre) ;
+//  - le survol de l'icône ouvre le menu, ses onze lignes (compactées à cette hauteur) dont les neuf premières tiennent dans le panneau (les deux dernières défilent) et sont au premier plan (aucun autre volet ne les recouvre) ;
 //  - un clic sur la ligne « Lien… » ouvre la fenêtre ; elle tient dans 700x400, titre et boutons visibles, y compris avec le message d'erreur et le champ « texte à afficher » ;
 //  - Ctrl+K au clavier ouvre la fenêtre (même sans passer par la barre), Entrée valide, Échap annule et rend le clavier à l'éditeur, Tab ne sort pas de la fenêtre ;
 //  - un clic simple sur un lien n'ouvre rien, Ctrl+clic l'ouvre dans un nouvel onglet ; le survol montre l'info-bulle, dans le panneau ;
@@ -124,7 +124,7 @@ const nativeDialogs = [];
 page.on('dialog', async d => { nativeDialogs.push(d.type() + ' : ' + d.message()); await d.dismiss(); });
 
 const MAIN = '#v2-btn-link';
-const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr', '#v2-btn-chart', '#v2-btn-video'];
+const ROWS = ['#v2-row-link', '#v2-row-bookmark', '#v2-row-cross-ref', '#v2-btn-citation', '#v2-btn-code-block', '#v2-btn-callout', '#v2-btn-signature', '#v2-btn-qr', '#v2-btn-chart'];
 const WIN = '#pp-link-modal';
 
 async function snap(name) { if (SHOTS) await page.screenshot({ path: join(SHOTS, name + '.png') }); }
@@ -173,7 +173,7 @@ async function openMenu() {
   return c;
 }
 async function closeMenu() {
-  // Le volet à dix lignes (la dixième défile) descend à ~394 px et couvre le bas du milieu du panneau : la souris le quitte par le coin bas droit.
+  // Le volet à onze lignes (les deux dernières défilent) descend à ~394 px et couvre le bas du milieu du panneau : la souris le quitte par le coin bas droit.
   await page.mouse.move(WIDTH - 30, HEIGHT - 20, { steps: 3 });
   await page.waitForTimeout(250);
 }
@@ -207,8 +207,8 @@ async function run(theme) {
   for (const sel of ROWS) rows.push(await hit(sel));
   check(`${T}, menu : au survol, le volet s'ouvre dans le panneau avec ses neuf premières lignes au premier plan`, flyout.found && flyout.inPanel && rows.every(seen), { flyout, rows });
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-blocks-flyout .v2-menu-row')).map(r => r.textContent.trim()));
-  check(`${T}, menu : « Lien… » (avec son raccourci), « Signet… », « Citation », « Bloc de code », « Encadré… », « Bloc de signature », « QR code… », « Graphique de la page… », « Vidéo… » et « Diapositive d’une présentation… »`, labels.length === 10 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Signet…' && labels[2] === 'Citation' && labels[3] === 'Bloc de code' && labels[4] === 'Encadré…' && labels[5] === 'Bloc de signature' && labels[6] === 'QR code…' && labels[7] === 'Graphique de la page…' && labels[8] === 'Vidéo…' && labels[9] === 'Diapositive d’une présentation…', labels);
-  // La dixième ligne (« Diapositive d'une présentation… ») est sous le pli : la molette, sur le volet, la fait venir sous la souris et dans le panneau ; le volet ne fait pas défiler la page.
+  check(`${T}, menu : « Lien… » (avec son raccourci), « Signet… », « Renvoi… », « Citation », « Bloc de code », « Encadré… », « Bloc de signature », « QR code… », « Graphique de la page… », « Vidéo… » et « Diapositive d’une présentation… »`, labels.length === 11 && /^Lien…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Signet…' && labels[2] === 'Renvoi…' && labels[3] === 'Citation' && labels[4] === 'Bloc de code' && labels[5] === 'Encadré…' && labels[6] === 'Bloc de signature' && labels[7] === 'QR code…' && labels[8] === 'Graphique de la page…' && labels[9] === 'Vidéo…' && labels[10] === 'Diapositive d’une présentation…', labels);
+  // La dernière ligne (« Diapositive d'une présentation… ») est sous le pli : la molette, sur le volet, la fait venir sous la souris et dans le panneau ; le volet ne fait pas défiler la page.
   const hiddenBefore = await hit('#v2-btn-slide-text');
   const pageScrollBefore = await page.evaluate(() => document.scrollingElement.scrollTop);
   const inside = await centerOf('#v2-btn-qr');
@@ -217,7 +217,7 @@ async function run(theme) {
   await page.waitForTimeout(250);
   const lastRow = await hit('#v2-btn-slide-text');
   const scrolled = await page.evaluate(() => ({ top: document.getElementById('v2-blocks-flyout').scrollTop, page: document.scrollingElement.scrollTop }));
-  check(`${T}, menu : la molette fait défiler le volet, la dixième ligne vient dans le panneau, sous la souris, la page reste en place`, !seen(hiddenBefore) && seen(lastRow) && scrolled.top > 0 && scrolled.page === pageScrollBefore, { hiddenBefore, lastRow, scrolled });
+  check(`${T}, menu : la molette fait défiler le volet, la dernière ligne vient dans le panneau, sous la souris, la page reste en place`, !seen(hiddenBefore) && seen(lastRow) && scrolled.top > 0 && scrolled.page === pageScrollBefore, { hiddenBefore, lastRow, scrolled });
   await page.mouse.wheel(0, -300);
   await page.waitForTimeout(150);
   await snap(`${T}-1-menu`);
@@ -397,7 +397,7 @@ async function runEnglish() {
   await openMenu();
   const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#v2-blocks-flyout .v2-menu-row')).map(r => r.textContent.trim()));
   const flyoutTitle = await page.evaluate(() => document.querySelector('#v2-blocks-flyout .v2-hover-flyout-label').textContent);
-  check('anglais, menu : « Link… Ctrl+K », « Bookmark… », « Quote », « Code block », « Callout… », « Signature block », « QR code… », « Chart from the page… », « Video… », « Slide from a presentation… », titre « Link and content blocks »', labels.length === 10 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Bookmark…' && labels[2] === 'Quote' && labels[3] === 'Code block' && labels[4] === 'Callout…' && labels[5] === 'Signature block' && labels[6] === 'QR code…' && labels[7] === 'Chart from the page…' && labels[8] === 'Video…' && labels[9] === 'Slide from a presentation…' && flyoutTitle === 'Link and content blocks', { labels, flyoutTitle });
+  check('anglais, menu : « Link… Ctrl+K », « Bookmark… », « Cross-reference… », « Quote », « Code block », « Callout… », « Signature block », « QR code… », « Chart from the page… », « Video… », « Slide from a presentation… », titre « Link and content blocks »', labels.length === 11 && /^Link…\s*Ctrl\+K$/.test(labels[0]) && labels[1] === 'Bookmark…' && labels[2] === 'Cross-reference…' && labels[3] === 'Quote' && labels[4] === 'Code block' && labels[5] === 'Callout…' && labels[6] === 'Signature block' && labels[7] === 'QR code…' && labels[8] === 'Chart from the page…' && labels[9] === 'Video…' && labels[10] === 'Slide from a presentation…' && flyoutTitle === 'Link and content blocks', { labels, flyoutTitle });
   await snap('en-1-menu');
   await clickRow('#v2-row-link');
   await page.keyboard.type('nope nope');
