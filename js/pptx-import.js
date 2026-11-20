@@ -496,9 +496,36 @@ const PptxImport = (function () {
   }
   // Ce que les propriétés d'un objet (`cNvPr`) portent que l'éditeur ne garde pas : un lien (sur une image comme sur une forme) que ni l'image (enveloppée d'un lien) ni le texte de la forme (lié en entier) n'ont pris
   // (`linked`). Le texte alternatif (`descr`) est repris (`alt` du cadre, de l'image).
-  function noteObject(node, losses, linked) {
+  function noteObject(node, losses, linked, env) {
     const props = kid(kid(node, ['nvSpPr', 'nvCxnSpPr', 'nvPicPr']), 'cNvPr');
-    if (kid(props, 'hlinkClick') && !linked) losses.add('objectLinks');
+    const link = kid(props, 'hlinkClick');
+    if (!link || linked) return;
+    losses.add('objectLinks');
+    if (env) noteTo(env.ctx.report, 'objectLinks', placeOf(env.ctx), 1, lostLinkLabel(link, env));
+  }
+  // Où mène un lien d'objet que l'éditeur ne reprend pas : le rapport le dit (« vers un fichier : Budget.xlsx »), pour que la personne sache quoi corriger dans son fichier ou ce qui reste à apprendre à l'éditeur.
+  // L'ordre : le genre d'action de PowerPoint (diaporama personnalisé, macro, programme, autre présentation, fichier), puis la relation (fichier ou adresse d'un autre genre, diapositive absente ou au-delà de la 500e) ;
+  // un lien que l'éditeur sait lire mais que son objet ne peut pas porter (un trait, une forme trop fine) est dit tel quel.
+  function lostLinkLabel(link, env) {
+    const action = String(attr(link, 'action') || '');
+    const rel = env.slideRels.byId.get(relAttr(link, 'id'));
+    const fileName = rel && rel.href ? (String(rel.href).split(/[\\/]/).filter(Boolean).pop() || '').slice(0, 60) : '';
+    const kindOf = key => I18n.t('importReport.linkLost.' + key + (fileName && /^(program|deck|file)$/.test(key) ? 'Named' : ''), { name: fileName });
+    if (/^ppaction:\/\/customshow/i.test(action)) return kindOf('customShow');
+    if (/^ppaction:\/\/macro/i.test(action)) return kindOf('macro');
+    if (/^ppaction:\/\/program/i.test(action)) return kindOf('program');
+    if (/^ppaction:\/\/hlinkpres/i.test(action)) return kindOf('deck');
+    if (/^ppaction:\/\/hlinkfile/i.test(action)) return kindOf('file');
+    if (rel && rel.external) return /^(https?:|mailto:|tel:)/i.test(String(rel.href || '').trim()) ? kindOf('onLine') : kindOf('file');
+    const ctx = env.ctx;
+    const jump = /hlinkshowjump\?jump=(\w+)/.exec(action);
+    if (jump) return kindOf('onLine');
+    if (rel && rel.type === 'slide') {
+      const n = ctx.slideNumbers.get(rel.target) || 0;
+      if (!n) return kindOf('slideAbsent');
+      return n > ctx.slideCount ? kindOf('slideBeyond') : kindOf('onLine');
+    }
+    return kindOf('other');
   }
   // Le texte alternatif d'un objet tel que le fichier l'écrit. Un générateur de présentation (python-pptx, une exportation) y met le NOM du fichier de l'image (« logo.png ») : ce n'est pas une description, et le
   // garder ferait lire « logo point png » par un lecteur d'écran et passer l'image pour décrite (js/alt-reminder.js). Un texte qui n'est qu'un nom de fichier (il finit par l'extension d'une image) vaut donc « sans texte alternatif ».
@@ -1559,7 +1586,7 @@ const PptxImport = (function () {
     if (kids(blip).some(effect => !/^(alphaModFix|extLst)$/.test(effect.localName) && !(effect.localName === 'lum' && !numAttr(effect, 'bright', 0) && !numAttr(effect, 'contrast', 0))) && !(finished && finished.done.adjust)) losses.add('imageAdjust');
     const effects = effectsOf(spPr, kid(pic, 'style'), env);
     if ((lineOf(spPr, kid(pic, 'style'), env) || effects.shadow || effects.glow) && !(finished && finished.done.frame && pictureEffects(spPr, kid(pic, 'style'), env).other === false)) losses.add('imageFrames');
-    noteObject(pic, losses, !!link || showAction);
+    noteObject(pic, losses, !!link || showAction, env);
     tally(ctx.report, losses);
   }
 
@@ -1668,7 +1695,7 @@ const PptxImport = (function () {
     const losses = new Set();
     if (look.dashLost) losses.add('dashes');
     noteEffects(effectsOf(spPr, kid(node, 'style'), env), losses, true);
-    noteObject(node, losses, false);
+    noteObject(node, losses, false, env);
     tally(env.ctx.report, losses);
   }
 
@@ -1740,7 +1767,7 @@ const PptxImport = (function () {
     // Un rectangle sans texte plus mince qu'un cadre ne peut l'être devient un trait (plus bas) : un trait n'a pas de lien.
     const thin = !hasText && (hasFill || look) && (kind === 'rect' || kind === 'roundRect') && (box.h < THIN_H_PT || box.w < THIN_W_PT);
     // Le lien de la forme est repris par le cadre, ou par une série de caractères : quand chacune a le sien (et que le cadre n'est pas repris), il est perdu, et compté.
-    noteObject(sp, losses, (!!frameLink && !thin) || (hasText && !!objectLink && !!shape.objectLinkUsed));
+    noteObject(sp, losses, (!!frameLink && !thin) || (hasText && !!objectLink && !!shape.objectLinkUsed), env);
     if (hasText && VERTICAL_TEXT.test(bodyAttr(bodies, 'vert') || '') && !TURNED_TEXT.test(bodyAttr(bodies, 'vert'))) losses.add('vertical');
     // Une forme que l'éditeur ne dessine pas devient un rectangle, compté ; une forme libre sans fond ni texte (un tracé trop détaillé ou illisible) n'est pas reprise du tout - un rectangle vide ne
     // montrerait rien -, et le rapport le dit pour ce qu'il est : un tracé libre non repris, pas un rectangle.
@@ -2131,9 +2158,63 @@ const PptxImport = (function () {
     const ole = kid(data, 'oleObj') || descendants(data, 'oleObj')[0];
     if (/\/table$/.test(uri)) await tableObject(node, env, groups, out);
     else if (/chart/i.test(uri)) { report.charts += 1; noteTo(report, 'charts', await chartKindOf(data, env)); }
-    else if (/diagram/i.test(uri)) report.diagrams += 1;
+    else if (/diagram/i.test(uri)) await diagramObject(node, data, env, groups, out);
     else if (/\/ole$/.test(uri) || ole) { report.embedded += 1; noteTo(report, 'embedded', attr(ole, 'progId')); }
     else { report.unreadable += 1; noteTo(report, 'unreadable', I18n.t('importReport.unreadable.graphic', { name: uri.split('/').pop() || '?' })); }
+  }
+  // Un schéma SmartArt (carte « Liens + SmartArt modifiables » d'Antoine, 20/11). PowerPoint garde dans le fichier le DESSIN qu'il a calculé pour chaque schéma (`ppt/diagrams/drawingN.xml`, relation
+  // `diagramDrawing`, que le modèle de données `dgm:dataModelExt` désigne) : des formes `dsp:sp` (forme, fond, trait, texte, rectangle du texte `txXfrm`) dans le repère du cadre, en EMU depuis son coin. L'import les
+  // reprend comme des formes ordinaires - les mêmes que celles d'un objet de la diapositive - à la place du cadre : le schéma se voit comme dans PowerPoint et chaque texte se corrige, mais il ne se redessine plus tout
+  // seul (la disposition `dgm:` n'est pas reprise). Un schéma sans dessin enregistré (un fichier fait par un programme), illisible ou de plus de MAX_DIAGRAM_SHAPES formes reste compté, avec sa raison. Une
+  // animation du schéma (une seule cible, le cadre) s'applique à toutes ses formes (walkTree).
+  const MAX_DIAGRAM_SHAPES = 150;
+  async function diagramDrawingOf(data, env) {
+    const ctx = env.ctx;
+    const ids = descendants(data, 'relIds')[0];
+    const dataRel = ids ? env.slideRels.byId.get(relAttr(ids, 'dm')) : null;
+    let drawingRel = null;
+    if (dataRel && dataRel.target) {
+      const model = await ctx.pkg.xml(dataRel.target);
+      const ext = model ? descendants(model.documentElement, 'dataModelExt')[0] : null;
+      drawingRel = ext ? env.slideRels.byId.get(attr(ext, 'relId')) : null;
+    }
+    if (!drawingRel) { const all = env.slideRels.ofType('diagramDrawing'); drawingRel = all.length === 1 ? all[0] : null; }
+    if (!drawingRel || !drawingRel.target) return null;
+    const doc = await ctx.pkg.xml(drawingRel.target);
+    return doc ? { doc, rels: await ctx.pkg.rels(drawingRel.target) } : null;
+  }
+  // Le texte d'une forme du dessin tient dans son rectangle `txXfrm` (le rectangle inscrit d'un rond, par exemple), pas dans la forme entière : l'écart entre les deux s'ajoute aux marges intérieures du texte, que
+  // PowerPoint a comptées depuis ce rectangle.
+  function diagramTextInsets(shape) {
+    const box = el => {
+      const off = kid(el, 'off');
+      const ext = kid(el, 'ext');
+      return off && ext ? { x: numAttr(off, 'x', 0), y: numAttr(off, 'y', 0), w: numAttr(ext, 'cx', 0), h: numAttr(ext, 'cy', 0) } : null;
+    };
+    const outer = box(kid(kid(shape, 'spPr'), 'xfrm'));
+    const textXf = kid(shape, 'txXfrm');
+    const inner = box(textXf);
+    const body = kid(kid(shape, 'txBody'), 'bodyPr');
+    if (!outer || !inner || !body || numAttr(textXf, 'rot', 0)) return;
+    const set = (name, base, extra) => body.setAttribute(name, String(Math.max(0, Math.round(numAttr(body, name, base) + Math.max(0, extra)))));
+    set('lIns', 91440, inner.x - outer.x);
+    set('tIns', 45720, inner.y - outer.y);
+    set('rIns', 91440, outer.x + outer.w - inner.x - inner.w);
+    set('bIns', 45720, outer.y + outer.h - inner.y - inner.h);
+  }
+  async function diagramObject(node, data, env, groups, out) {
+    const ctx = env.ctx;
+    const report = ctx.report;
+    const xf = xfrmOf(node);
+    const drawing = xf ? await diagramDrawingOf(data, env) : null;
+    const tree = drawing ? kid(drawing.doc.documentElement, 'spTree') : null;
+    const shapes = tree ? kids(tree).filter(el => /^(sp|cxnSp|pic|grpSp)$/.test(el.localName)) : [];
+    const refuse = (why, extra) => { report.diagrams += 1; noteTo(report, 'diagrams', placeOf(ctx), 1, I18n.t('importReport.diagramWhy.' + why, extra)); };
+    if (!tree || !shapes.length) { refuse(drawing ? 'empty' : 'noDrawing'); return; }
+    if (shapes.length > MAX_DIAGRAM_SHAPES) { refuse('tooMany', { n: shapes.length, max: MAX_DIAGRAM_SHAPES }); return; }
+    shapes.forEach((shape) => { if (shape.localName === 'sp') diagramTextInsets(shape); });
+    const frame = Object.assign({}, xf, { chOff: { x: 0, y: 0 }, chExt: { w: xf.w, h: xf.h } });
+    await walkTree(tree, Object.assign({}, env, { slideRels: drawing.rels }), [frame].concat(groups), 1, out);
   }
   // Le genre d'un graphique de PowerPoint (`barChart`, `pieChart`, `lineChart`…, plusieurs liés par « + » pour un graphique combiné), lu dans sa partie : le détail du rapport le nomme, sans rien changer à ce qui est repris.
   async function chartKindOf(data, env) {

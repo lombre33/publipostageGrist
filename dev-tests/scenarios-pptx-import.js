@@ -3208,6 +3208,72 @@
       return result(bad);
     });
 
+  add('pptx_import_report_detail_says_where_each_lost_object_link_points',
+    'Retour d\'Antoine du 20/11 (diapo 24 « Zoom de diapositive 8 », diapo 76 « Flèche : droite 11 ») : un lien posé sur un objet et non repris dit où il mène dans le détail du compte rendu : diaporama personnalisé, macro, programme, autre présentation, fichier (avec son nom), diapositive absente du fichier ou au-delà de la 500e, ou lien lisible posé sur un trait ; le compte ne bouge pas',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const goTo = id => '<a:hlinkClick r:id="' + id + '" action="ppaction://hlinksldjump"/>';
+      const button = (id, name, y, link) => sp({ id, name, x: 20, y, w: 160, h: 36, fill: solid('DDEEFF'), cnvInner: link, text: para(run(name)) });
+      const rels = [{ id: 'rId9', type: 'hyperlink', target: 'file:///C:/Dossier/Budget%202026.xlsx', external: true }, { id: 'rId10', type: 'hyperlink', target: 'file:///C:/Outils/calcul.exe', external: true },
+        { id: 'rId11', type: 'slide', target: 'slide99.xml' }, { id: 'rId12', type: 'hyperlink', target: 'file:///C:/Autre.pptx', external: true }, { id: 'rId13', type: 'hyperlink', target: 'https://example.org/', external: true }];
+      const r = await run1({ slides: [{ rels, shapes: button(2, 'Fichier', 20, '<a:hlinkClick r:id="rId9" action="ppaction://hlinkfile"/>') + button(3, 'Perso', 60, '<a:hlinkClick r:id="" action="ppaction://customshow?id=0&amp;return=true"/>')
+        + button(4, 'Programme', 100, '<a:hlinkClick r:id="rId10" action="ppaction://program"/>') + button(5, 'Macro', 140, '<a:hlinkClick r:id="" action="ppaction://macro?name=Faire"/>')
+        + button(6, 'Absente', 180, goTo('rId11')) + button(7, 'Autre', 220, '<a:hlinkClick r:id="rId12" action="ppaction://hlinkpres?slideindex=1&amp;slidetitle="/>')
+        + sp({ id: 8, name: 'Flèche : droite 11', prst: 'line', x: 400, y: 20, w: 200, h: 0, line: ln(2, solid('FF0000')), cnvInner: '<a:hlinkClick r:id="rId13"/>' }) }] });
+      const item = detailOf(r, 'objectLinks');
+      const textOf = name => ((item.labels || []).find(l => l.name === name + ' (diapositive 1)') || {}).text;
+      expect('sept liens, comptés comme avant : un par objet', item.n === 7 || reportOf(r).objectLinks === 7, r.report);
+      expect('un fichier : « lien vers un fichier : Budget 2026.xlsx »', textOf('Fichier') === 'lien vers un fichier : Budget%202026.xlsx' || textOf('Fichier') === 'lien vers un fichier : Budget 2026.xlsx', item.labels);
+      expect('un diaporama personnalisé', textOf('Perso') === 'lien vers un diaporama personnalisé', textOf('Perso'));
+      expect('un programme, avec son nom', textOf('Programme') === 'lien vers un programme : calcul.exe', textOf('Programme'));
+      expect('une macro', textOf('Macro') === 'lien qui lance une macro', textOf('Macro'));
+      expect('une diapositive absente du fichier', textOf('Absente') === 'lien vers une diapositive absente du fichier', textOf('Absente'));
+      expect('une autre présentation, avec son nom', textOf('Autre') === 'lien vers un autre fichier PowerPoint : Autre.pptx', textOf('Autre'));
+      expect('un lien lisible posé sur un trait : dit tel quel', /lisible/.test(textOf('Flèche : droite 11') || ''), textOf('Flèche : droite 11'));
+      const english = await inLang('en', () => run1({ slides: [{ rels, shapes: button(3, 'Perso', 60, '<a:hlinkClick r:id="" action="ppaction://customshow?id=0&amp;return=true"/>') }] }));
+      expect('en anglais : « link to a custom show »', ((detailOf(english, 'objectLinks').labels || [])[0] || {}).text === 'link to a custom show', detailOf(english, 'objectLinks').labels);
+      return result(bad);
+    });
+
+  add('pptx_import_smartart_is_taken_from_its_saved_drawing_as_ordinary_editable_shapes',
+    'Carte « Liens + SmartArt modifiables » d\'Antoine (20/11) : un schéma SmartArt est repris d\'après le dessin que PowerPoint a gardé dans le fichier (`diagrams/drawingN.xml`, désigné par le modèle de données) : une forme ordinaire par forme du dessin, posée dans le repère du cadre, avec son texte modifiable ; le rectangle du texte (`txXfrm`) s\'ajoute aux marges du texte ; le schéma n\'est plus compté comme non repris ; sans dessin enregistré, ou au-delà de 150 formes, il reste compté avec sa raison',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const DSP = 'xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+      const dspShape = (x, y, w, h, prst, fill, text, inset) => `<dsp:sp modelId="{0}"><dsp:nvSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvSpPr/></dsp:nvSpPr><dsp:spPr>${xfrm(x, y, w, h)}<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${fill}</dsp:spPr>`
+        + `<dsp:style><a:lnRef idx="2"><a:scrgbClr r="0" g="0" b="0"/></a:lnRef><a:fillRef idx="1"><a:scrgbClr r="0" g="0" b="0"/></a:fillRef><a:effectRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></dsp:style>`
+        + `<dsp:txBody><a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"><a:noAutofit/></a:bodyPr><a:lstStyle/>${text ? para(run(text, 'sz="1800"'), 'algn="ctr"') : '<a:p><a:endParaRPr lang="fr-FR"/></a:p>'}</dsp:txBody>`
+        + (inset ? `<dsp:txXfrm>${xfrm(x + inset, y + inset, w - 2 * inset, h - 2 * inset, '', 'a:off').replace(/^<a:off[^>]*>/, '').replace(/<\/a:off>$/, '')}</dsp:txXfrm>` : '') + '</dsp:sp>';
+      const drawing = shapes => `${HEAD}<dsp:drawing ${DSP}><dsp:spTree><dsp:nvGrpSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvGrpSpPr/></dsp:nvGrpSpPr><dsp:grpSpPr/>${shapes}</dsp:spTree></dsp:drawing>`;
+      const dataModel = `${HEAD}<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><dgm:ptLst/><dgm:extLst><a:ext uri="http://schemas.microsoft.com/office/drawing/2008/diagram"><dsp:dataModelExt xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" relId="rId6" minVer="http://schemas.openxmlformats.org/drawingml/2006/diagram"/></a:ext></dgm:extLst></dgm:dataModel>`;
+      const frame = (id, name, x, y, w, h) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${name}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(x, y, w, h, '', 'p:xfrm')}`
+        + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"><dgm:relIds xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" r:dm="rId5" r:lo="rId7" r:qs="rId8" r:cs="rId9"/></a:graphicData></a:graphic></p:graphicFrame>';
+      const rels = [{ id: 'rId5', type: 'diagramData', target: '../diagrams/data1.xml' }, { id: 'rId6', type: 'diagramDrawing', target: '../diagrams/drawing1.xml' }];
+      const shapes = dspShape(0, 0, 200, 200, 'ellipse', solid('ED7D31'), 'Revue', 30) + dspShape(200, 100, 200, 200, 'ellipse', solid('F4B183'), 'Bilan', 0) + dspShape(150, 250, 100, 50, 'downArrow', solid('F8CBAD'), '', 0);
+      const r = await run1({ slides: [{ rels, shapes: frame(20, 'Diagramme 19', 100, 50, 400, 300) }], parts: { 'ppt/diagrams/data1.xml': dataModel, 'ppt/diagrams/drawing1.xml': drawing(shapes) } });
+      const frames = slidesOf(r.html)[0].frames;
+      const named = text => frames.find(f => f.text === text);
+      expect('trois formes ordinaires (deux ronds à texte et la flèche), le schéma n\'est plus compté non repris', frames.length === 3 && !reportOf(r).diagrams, { n: frames.length, report: r.report });
+      const one = named('Revue');
+      const two = named('Bilan');
+      expect('« Revue » est posée à l\'angle du cadre (100 ; 50) : 200 x 200 pt (le trait du style la déborde de 1 pt)', !!one && near(one.x, 100, 1.5) && near(one.y, 50, 1.5) && near(one.w, 200, 3) && near(one.h, 200, 3), one && [one.x, one.y, one.w, one.h]);
+      expect('« Bilan » à (200 ; 100) depuis l\'angle du cadre, soit (300 ; 150)', !!two && near(two.x, 300, 1.5) && near(two.y, 150, 1.5), two && [two.x, two.y]);
+      expect('le texte reste un texte (taille 18 pt), centré, modifiable', !!one && /font-size: 18pt/.test(one.inner) && /text-align: center/.test(one.inner), one && one.inner);
+      expect('la forme garde sa couleur et sa forme : rond orange', !!one && /ED7D31/i.test(one.fill || '') && /ellipse|ovale|circle/i.test(one.shape || ''), one && [one.fill, one.shape]);
+      // Sans dessin enregistré : compté, avec sa raison.
+      const bare = await run1({ slides: [{ rels: [], shapes: frame(20, 'Diagramme 19', 100, 50, 400, 300) }] });
+      const item = detailOf(bare, 'diagrams');
+      expect('un schéma sans dessin enregistré reste compté non repris et dit pourquoi', reportOf(bare).diagrams === 1 && ((item.labels || [])[0] || {}).text === 'le fichier ne garde pas le dessin du schéma', bare.report);
+      // Trop de formes.
+      let many = '';
+      for (let i = 0; i < 151; i++) many += dspShape((i % 15) * 20, Math.floor(i / 15) * 20, 18, 18, 'rect', solid('4472C4'), '', 0);
+      const big = await run1({ slides: [{ rels, shapes: frame(20, 'Diagramme 19', 0, 0, 400, 300) }], parts: { 'ppt/diagrams/data1.xml': dataModel, 'ppt/diagrams/drawing1.xml': drawing(many) } });
+      expect('151 formes : non repris, la raison dit le nombre', reportOf(big).diagrams === 1 && /151/.test(((detailOf(big, 'diagrams').labels || [])[0] || {}).text || ''), big.report);
+      return result(bad);
+    });
+
   add('pptx_import_report_detail_of_a_heavy_decor_gives_the_concrete_debug_file_slides_groups_colors_points_and_a_map_of_the_page',
     'DÉBOGAGE TEMPORAIRE : le décor d\'un masque dit son fichier, les diapositives qui le montrent, la boîte de son groupe (en % de la page), les couleurs de ses formes, ses points de tracé et une carte de la page en 10 lignes de 48 cases (à retirer avec le débogage)',
     async () => {
