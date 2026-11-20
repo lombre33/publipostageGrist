@@ -24,8 +24,14 @@
 //                            la place manque pour le déplacer ; sinon `dy`, l'écart qui l'en éloigne. `held` : vrai pour un composant tenu par son bas (`top: auto`, il s'ouvre vers le haut : plafonné, c'est son haut qui bouge). Tout vaut 0,
 //                            et `cap` null, quand rien n'est recouvert ou sans barre : l'appelant peut l'appliquer sans test.
 //   GfsBar.keepClear(el, report)  `el` : un élément posé à demeure près d'un bord ou d'un coin (le logo, la sortie de la Lecture épurée), en position absolue ou fixe. Le glisse hors de la zone par sa propriété CSS
-//                            `translate` (sa place d'origine reste celle de la feuille de style) de ce que `settle` demande à un petit élément, sans sortir du cadre ; se recale à chaque changement de la barre et de la taille de
-//                            `el` (la sortie de la Lecture épurée n'a de taille qu'une fois montrée) ; rend `{ dx, dy }` à `report` quand ce déplacement change (de quoi réserver la place d'un voisin). Rend de quoi arrêter.
+//                            `translate` (sa place d'origine reste celle de la feuille de style) de ce que `settle` demande à un petit élément, sans sortir du cadre ; se recale à chaque changement de la barre, de la taille de
+//                            `el` (la sortie de la Lecture épurée n'a de taille qu'une fois montrée) et de ce qui le déplace dans la page sans changer sa taille (la barre d'outils qui change de lignes, un bandeau ou la barre de recherche qui s'ouvre au-dessus de lui : les languettes du plan et du panneau du haut pendent dessous) ; rend `{ dx, dy }` à `report` quand ce déplacement change (de quoi réserver la place d'un voisin). Rend de quoi arrêter.
+//   GfsBar.keepClearBand(el) `el` : une barre fine sur toute la largeur du cadre, en flux entre la barre d'outils et le texte (la recherche, les bandeaux « Revenir au… », « Polices du PDF », « modifié ailleurs »).
+//                            Une barre de GFS à gauche en recouvre le début, à droite le bout (une croix, un bouton) : `el` s'en écarte par un retrait (`padding-left` ou `padding-right` posé en ligne) de la profondeur de
+//                            la zone de ce côté, seulement quand la zone le recouvre à sa hauteur (`bite`, mesuré SANS le retrait : un retrait qui ferait passer un champ à la ligne ne doit pas la lui faire lâcher) ; une barre
+//                            en haut ne la touche que si la barre fine est tout en haut du cadre (panneau du haut replié) : `padding-top` de ce que la zone en prend, le contenu passe dessous. Rien de posé sans barre, ni
+//                            quand elle ne la recouvre pas, ni en bas (une barre fine à cette hauteur n'a plus de texte sous elle). Se recale à chaque changement de la barre, de la taille de `el` et de ce qui le déplace dans la page
+//                            (la barre d'outils, le texte). Rend de quoi arrêter.
 //   GfsBar.onChange(fn)      `fn({ edge, depth, zone } | null)` à chaque changement de la barre, celui du contexte au démarrage compris ; lire `edge()` ou `zone()` d'abord, puis s'abonner. Rend de quoi se désabonner.
 //   GfsBar.hide(masked)      demande à GFS de masquer sa barre (vrai : le diaporama prend tout le cadre) ou de la rendre (faux) ; GFS la remontre de lui-même quand l'explorateur s'ouvre, que l'app se ferme et
 //                            à chaque contexte, donc toute sortie du diaporama doit la rendre (`hide(false)`), en gardant sa propre sortie (Échap). Faux, sans rien envoyer, seule ou si `masked` n'est pas un booléen.
@@ -131,6 +137,24 @@ const GfsBar = (function () {
     return room >= MIN_CAP ? { dx: 0, dy: away.dy, cap: room } : { dx: 0, dy: clamp(away.dy, 0, height - FRAME_MARGIN - rect.bottom), cap: null };
   }
 
+  // Ce qui déplace un élément posé près d'un bord sans que sa propre taille change : la barre d'outils qui change de lignes, un bandeau, la barre de recherche ou le volet du dessus qui s'ouvre, qui descendent
+  // tout ce qui pend sous eux (les languettes du plan et du panneau du haut) ou font passer une barre fine à la hauteur de la zone. Le texte (#editor-container, #reader-container) prend ce que la barre
+  // d'outils et les bandeaux lui laissent : sa hauteur change à chacun de ces mouvements, c'est donc elle qu'on observe, avec la barre d'outils et l'élément suivi.
+  const followers = new Set();
+  let layoutWatch = null;
+  function followLayout(fn, target) {
+    followers.add(fn);
+    if (!layoutWatch && typeof ResizeObserver === 'function') {
+      layoutWatch = new ResizeObserver(() => followers.forEach(follower => follower()));
+      ['toolbar-top', 'editor-container', 'reader-container'].forEach((id) => { const node = document.getElementById(id); if (node) layoutWatch.observe(node); });
+    }
+    if (layoutWatch && target) layoutWatch.observe(target);
+    return () => {
+      followers.delete(fn);
+      if (layoutWatch && target) layoutWatch.unobserve(target);
+    };
+  }
+
   function keepClear(el, report) {
     let last = '0,0';
     function refresh() {
@@ -151,12 +175,37 @@ const GfsBar = (function () {
     }
     refresh();
     const stop = onChange(refresh);
-    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(refresh) : null;
-    if (watch) watch.observe(el);
+    const unfollow = followLayout(refresh, el);
     return () => {
       stop();
-      if (watch) watch.disconnect();
+      unfollow();
       el.style.translate = '';
+    };
+  }
+
+  function clearBand(el) {
+    el.style.paddingLeft = '';
+    el.style.paddingRight = '';
+    el.style.paddingTop = '';
+    if (state === null) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const gap = bite(rect);
+    if (gap.left > 0) el.style.paddingLeft = Math.ceil(gap.left) + 'px';
+    if (gap.right > 0) el.style.paddingRight = Math.ceil(gap.right) + 'px';
+    if (gap.top > 0) el.style.paddingTop = Math.ceil(gap.top) + 'px';
+  }
+  function keepClearBand(el) {
+    const refresh = () => clearBand(el);
+    refresh();
+    const stop = onChange(refresh);
+    const unfollow = followLayout(refresh, el);
+    return () => {
+      stop();
+      unfollow();
+      el.style.paddingLeft = '';
+      el.style.paddingRight = '';
+      el.style.paddingTop = '';
     };
   }
 
@@ -168,5 +217,5 @@ const GfsBar = (function () {
   GfsLink.ready.then(() => take(GfsLink.bar()));
   GfsLink.onBar(next => take(next));
 
-  return { edge, zone, overlaps, limits, apart, bite, settle, keepClear, onChange, hide };
+  return { edge, zone, overlaps, limits, apart, bite, settle, keepClear, keepClearBand, onChange, hide };
 })();

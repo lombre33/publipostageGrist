@@ -85,8 +85,13 @@ const FindReplacePanel = (function () {
     replaceRow.append(spacer, replacement, one, all);
 
     findBar.append(findRow, replaceRow);
-    container.parentNode.insertBefore(findBar, container);
+    // La barre se pose AVANT les lignes des languettes (le plan du document, le panneau du haut : css/document-outline.css, css/bar-fold.css) : elles sont de hauteur nulle et pendent sous ce qui les
+    // précède, sur le document ; posée entre elles et le texte, la barre passait dessous - la languette du plan recouvrait le chevron « Remplacer par », celle du panneau le haut du champ.
+    const dock = document.getElementById('v2-outline-dock') || document.getElementById('v2-bar-fold') || container;
+    dock.parentNode.insertBefore(findBar, dock);
     container.addEventListener('scroll', placeWindow, { passive: true });
+    // La barre de GFS à gauche (le bord par défaut) tombe sur le chevron « Remplacer par », à droite sur la croix et sur « Tout remplacer » : la barre de recherche lui cède la place (retrait, js/gfs-bar.js).
+    if (typeof GfsBar !== 'undefined') GfsBar.keepClearBand(findBar);
     refs = { toggle, find, count, prev, next, matchCase, wholeWord, regex, close, replaceRow, replacement, one, all };
     wirePanel();
     applyTexts();
