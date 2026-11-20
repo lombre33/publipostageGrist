@@ -61,6 +61,7 @@ const GROUPS = {
   images: 'scenarios-images',
   pageBreakToc: 'scenarios-pagebreak-toc',
   headerFooter: 'scenarios-headerfooter',
+  pageNumberLive: 'scenarios-page-number-live', // le vrai numéro dans la pastille verte de numéro de page (éditeur : texte, présentation, écriture d'un en-tête ou d'un pied ; Lecture et PDF : une pastille posée dans le texte)
   emojiPaste: 'scenarios-emoji-paste', // un emoji collé comme une image (Teams, Gmail, WhatsApp Web, Outlook sur le web : `<img alt="😀">`) se colle comme son caractère (js/emoji-paste.js) dans le document, une grille, un tableau et les champs texte, et arrive dans la Lecture, le HTML, le Markdown, le PDF et le Word ; ce qui n'est pas un emoji est laissé tel quel
   webImagePaste: 'scenarios-web-image-paste', // les images d'une page web collée (`<img src="https://…">` du HTML de Chromium) restent dans le document comme images de l'éditeur : adresse web ou data URI seulement, largeur en px, rien d'autre de la balise, image d'un autre site masquée jusqu'au clic (js/editor.js : `webImagesAsEditorImages`)
   emojiChip: 'scenarios-emoji-chip', // la puce « Smiley » (js/emoji-chip.js) : ~175 smileys sans doublon, HTML du modèle relu, pose par le menu « # » (une puce sélectionnée, grille ouverte, un Annuler), changement au clic en un seul geste d'Annuler, clavier (Entrée, flèches, Échap), un emoji tapé ou collé reste du texte, pas de puce dans les champs texte, et la Lecture, le HTML, le Markdown, le PDF (aucune case vide pour aucun smiley) et le Word

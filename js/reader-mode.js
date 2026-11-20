@@ -765,6 +765,22 @@ const ReaderMode = (function () {
     wrapper.classList.add('v2-paper-backed');
     return layer;
   }
+  // Le numéro des pastilles de numéro de page posées dans le TEXTE (un en-tête ou un pied, eux, les résolvent page par page : addEdgeSpacers, layoutSeams) : celui de la page où elles tombent, lu sur
+  // la mise en page qui vient d'être faite (le haut de chaque page, `sheet.pages`), dans le format de la pastille (« 3 », « Page 3 », « 3/12 »), comme l'aperçu paginé de l'éditeur. Sans cela, la Lecture
+  // et l'impression écrivaient « # » (Word, lui, pose un vrai champ de page). Celle d'une présentation est déjà résolue (`data-slide-number`, js/slides-entry.js:resolveSlideNumbers). `pageBase` : le nombre
+  // de pages qui précèdent cette feuille de lecture, `totalPages` celui du document.
+  function resolveBodyPageNumbers(wrapper, sheet, pageBase, totalPages) {
+    const badges = wrapper.querySelectorAll('.page-number-badge:not([data-slide-number])');
+    if (!badges.length) return;
+    badges.forEach((badge) => {
+      const rect = badge.getBoundingClientRect();
+      const y = sheet.toLayoutY(rect.top + rect.height / 2);
+      let index = 0;
+      for (let k = 1; k < sheet.pages.length && sheet.pages[k].top <= y; k++) index = k;
+      const text = PageLayout.pageNumberText(badge.getAttribute('data-format') || 'n', pageBase + index + 1, totalPages);
+      if (badge.textContent !== text) badge.textContent = text;
+    });
+  }
   function renderPaginationPreview(container, wrapper, zones, plan) {
     // Insère les espaceurs de bord (vrais frères DOM de `wrapper`, en flux normal) et les bandes "couture" aux limites intermédiaires
     // (position:absolute, peuvent recouvrir un peu de texte pile à la limite - résidu assumé). Synchrone et refaisable : clearPagination retire tout
@@ -784,6 +800,7 @@ const ReaderMode = (function () {
 
     const edges = addEdgeSpacers(container, wrapper, zones, geometry, { first: pageBase + 1, last: pageBase + offsets.length + 1, total: totalPages });
     const sheet = layoutSeams({ container, wrapper, zones, geometry, offsets, totalPages, pageBase, wrapperChildren, edges });
+    resolveBodyPageNumbers(wrapper, sheet, pageBase, totalPages);
     const layer = addBackdrop(container, wrapper, edges, sheet);
     // Le bas de la dernière page : le bas de la feuille, bande du pied comprise (celui des autres pages vient de leur couture, cf. placeSeam).
     sheet.pages[sheet.pages.length - 1].bottom = sheet.toLayoutY((edges.edgeBottomEl || wrapper).getBoundingClientRect().bottom);

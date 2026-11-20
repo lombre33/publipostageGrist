@@ -1832,7 +1832,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       && /const dom = smartChipElement\(node\.attrs\);\s*showTextMarks\(dom, node\.marks\);\s*return \{ dom \};/.test(nodes) && /if \(marks\) showTextMarks\(dom, marks\);/.test(nodes)
       && /chipView\(chipSpec\(HTMLAttributes, node\), node\.marks\)/.test(mention) && /if \(marks\) EditorNodes\.showTextMarks\(dom, marks\);/.test(mention) && /calcBadgeLabel, showTextMarks, createPageNumberBadgeNode/.test(nodes), 'js/editor-nodes.js, js/mention.js');
   check('bulles et puces : le numéro de page, la note de bas de page et la case conditionnelle relèvent eux aussi les marques du nœud (showTextMarks dans leur vue d’éditeur), et les règles de css/variable-actions.css les visent (la note, seulement pour sa couleur)',
-    /dom\.textContent = LABELS\[node\.attrs\.format\] \|\| LABELS\.n;\s*showTextMarks\(dom, node\.marks\);\s*return \{ dom \};/.test(nodes)
+    /const label = LABELS\[node\.attrs\.format\] \|\| LABELS\.n;\s*dom\.textContent = label;\s*showTextMarks\(dom, node\.marks\);\s*return \{ dom, destroy: HeaderFooterPreview\.watchPageNumber\(\{ dom, format: node\.attrs\.format \|\| 'n', label \}\) \};/.test(nodes)
       && /marker\.className = 'footnote-ref-marker';\s*showTextMarks\(marker, node\.marks\);/.test(nodes)
       && /dom\.setAttribute\('role', 'button'\);\s*showTextMarks\(dom, node\.marks\);/.test(nodes)
       && ['[data-mark-lines]', '[data-mark-color]', '[data-mark-highlight]'].every(attr => read('css/variable-actions.css').split('\n').some(line => line.startsWith(':where(:root[data-bubble-marks])') && line.includes(attr)

@@ -4866,6 +4866,11 @@ const PdfExport = (function () {
     const measure = (toMeasure) => {
       giveWholeIds(toMeasure);
       if (runsOf(toMeasure)) return layoutRuns(toMeasure, filename, headerFooterChunks);
+      // Une pastille de numéro de page dans le texte (`n/total`) veut le nombre de pages réel : la mesure le garde (renderOnce, comme le PDF final).
+      if (pageBadgesOf(toMeasure).length) {
+        const definition = buildNativeDocDefinition(toMeasure, filename, headerFooterChunks);
+        return renderOnce(window.pdfMake.createPdf(definition), definition, true).then((rendered) => { toMeasure._measuredPageCount = rendered.pageCount; });
+      }
       return guardedPdfmake(resolve => { window.pdfMake.createPdf(buildNativeDocDefinition(toMeasure, filename, headerFooterChunks)).getBuffer(() => resolve()); });
     };
     // Les lignes justifiées posées à la main sont étirées sur une largeur estimée dans le navigateur : une première mise en page en mesure l'écart,
@@ -4880,7 +4885,7 @@ const PdfExport = (function () {
     // de la passe de mesure.
     const hasFloatOverlays = floatAnchorsOf(content).length > 0;
     // Un contenu qui mêle des formats de page est mesuré lui aussi : le nombre de pages de chaque suite (`_runPages`) donne à l'en-tête et au pied la numérotation du document entier.
-    if (hasFootnotes || hasFloatOverlays || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0 || runsOf(content)) {
+    if (hasFootnotes || hasFloatOverlays || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0 || runsOf(content) || pageBadgesOf(content).length > 0) {
       // Marges de cette passe : identiques à celles de la passe réelle, pour que la pagination mesurée ici corresponde exactement au document final.
       const { topMarginPt, bottomMarginPt } = pageMarginsPt(headerFooterChunks, hasFootnotes);
       content = await relocateMeasured(content, { buildContent, measure, floatBreaks, hasFloatOverlays, topMarginPt, bottomMarginPt });
@@ -4960,14 +4965,49 @@ const PdfExport = (function () {
     // (déjà connue, cf. _pageGrid). Les images en attente en sont exclues (placeholder {x:0, y:0}, position pas encore significative) : sinon une image
     // pourrait être choisie comme sa propre ancre, retirée de `content` puis jamais réinsérée (indexOf introuvable), et disparaître du PDF.
     const pendingImageObjs = new Set((content._pendingImages || []).map(p => p.image));
+    const blockPageNumbers = content.map(b => { if (pendingImageObjs.has(b)) return null; const pos = firstPosition(b); return pos ? pos.pageNumber : null; });
     return {
       headingPageNumbers: (content._headingBlocks || []).map(b => pageNumberOf(b._headingLeaf || b)),
       footnotePageNumbers: (content._footnoteBlocks || []).map(fb => pageNumberOf(fb.block)),
       resolvedAnchors: (content._pendingImages || []).map(resolvedAnchorOf),
-      blockPageNumbers: content.map(b => { if (pendingImageObjs.has(b)) return null; const pos = firstPosition(b); return pos ? pos.pageNumber : null; }),
+      blockPageNumbers,
       floatPositions: floatAnchorsOf(content).map(firstPosition),
       framePageNumbers: (content._frames || []).map(frame => pageNumberOf(frame.marker)),
+      badgePageNumbers: pageBadgesOf(content).map(badge => pageNumberOf(badge.block)),
+      pageCount: measuredPageCount(content, blockPageNumbers),
     };
+  }
+
+  // Les pastilles de numéro de page posées dans le TEXTE du document (celles d'un en-tête ou d'un pied ne sont pas dans `content` : pageHeaderFor et pageFooterFor les résolvent page par page), dans l'ordre
+  // du document : { run, block }, `block` étant le bloc de premier niveau qui la porte, dont la page mesurée est la sienne (comme une note de bas de page). Le texte d'une présentation est déjà résolu
+  // (`data-slide-number`, js/slides-entry.js:resolveSlideNumbers) : il n'y en a plus.
+  function pageBadgesOf(content) {
+    const found = [];
+    const walk = (node, block) => {
+      if (Array.isArray(node)) { node.forEach(child => walk(child, block)); return; }
+      if (!node || typeof node !== 'object') return;
+      if (node._pendingPageNumber) { found.push({ run: node, block }); return; }
+      ['stack', 'columns', 'ul', 'ol', 'text'].forEach((key) => { if (node[key] && typeof node[key] === 'object') walk(node[key], block); });
+      if (node.table && Array.isArray(node.table.body)) node.table.body.forEach(row => walk(row, block));
+    };
+    for (let i = 0; i < content.length; i++) walk(content[i], content[i]);
+    return found;
+  }
+  // Le nombre de pages du document mesuré : celui de pdfmake (un seul format de page), la somme des suites sinon (`_runPages`), à défaut la dernière page où un bloc a été posé.
+  function measuredPageCount(content, blockPageNumbers) {
+    if (content._measuredPageCount > 0) return content._measuredPageCount;
+    if (content._runPages && content._runPages.length) return content._runPages.reduce((sum, n) => sum + n, 0);
+    return Math.max(0, ...blockPageNumbers.filter(n => n != null));
+  }
+  // Écrit dans le contenu reconstruit le numéro de la page de chaque pastille du texte, dans son format (« 3 », « Page 3 », « 3/12 »). Une pastille que la mesure n'a pas située garde « # ».
+  function fillBodyPageNumbers(content, pages, total) {
+    const badges = pageBadgesOf(content);
+    if (badges.length !== pages.length) return;
+    badges.forEach(({ run }, i) => {
+      if (!pages[i]) return;
+      run.text = PageLayout.pageNumberText(run._pendingPageNumber.format, pages[i], total);
+      delete run._pendingPageNumber;
+    });
   }
 
   // Les voisins mesurés d'une image en attente : la position et la page du bloc au-dessus, de celui en dessous et du paragraphe hôte (pt), avec leurs
@@ -5006,6 +5046,7 @@ const PdfExport = (function () {
     const originalBlocks = content.slice();
     const slotStartPages = slotStartPagesOf(content, blockPageNumbers);
     fillTocPageNumbers(content, headingPageNumbers);
+    fillBodyPageNumbers(content, measured.badgePageNumbers, measured.pageCount);
     content._footnoteByPage = footnotesByPage(content, footnotePageNumbers);
     const behindByPage = {};
     content._backgroundByPage = behindByPage;
