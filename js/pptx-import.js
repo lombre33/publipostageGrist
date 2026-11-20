@@ -843,10 +843,15 @@ const PptxImport = (function () {
     const spaceOf = spacing => (!spacing ? null : (spacing.pct ? (spacing.val / 100000) * size * POWERPOINT_LINE * grow : (spacing.val / 100) * grow));
     const exact = !!(para.lnSpc && !para.lnSpc.pct);
     const percent = (((para.lnSpc ? para.lnSpc.val : 100000) / 1000) - (shape.lineCut || 0)) / 100;
-    const line = exact ? (para.lnSpc.val / 100) / size : percent * ParagraphFormat.NATURAL_LINE;
+    const ppt = exact ? (para.lnSpc.val / 100) / size : percent * ParagraphFormat.NATURAL_LINE;
+    // L'éditeur pose chaque ligne au moins à la hauteur du corps de son paragraphe (14 px, 10,5 pt) fois l'interligne, quelle que soit la taille des séries de caractères : un texte de 9 pt y aurait des lignes de 12,3 pt
+    // au lieu de 10,5, un tableau de lignes de 18 pt des lignes de 19 pt dont le texte, réduit en vain jusqu'à 60 %, ne tiendrait toujours pas (retour d'Antoine du 20/11). L'interligne est donc ramené au rapport de la
+    // taille posée au corps de l'éditeur quand elle est plus petite : la ligne mesure alors ce que PowerPoint lui donne.
+    const placed = size * grow;
+    const line = placed > 0 && placed < STRUT_PT ? ppt * placed / STRUT_PT : ppt;
     const page = shape.env.ctx.k / EMU_PER_PT;
     return {
-      pptLine: exact ? line : percent * POWERPOINT_LINE,
+      pptLine: exact ? ppt : percent * POWERPOINT_LINE,
       lineHeight: line, spaceBefore: first ? null : spaceOf(para.spcBef), spaceAfter: last ? null : spaceOf(para.spcAft),
       indentLeft: indents ? para.marL * page : null, indentFirst: indents ? para.indent * page : null,
     };

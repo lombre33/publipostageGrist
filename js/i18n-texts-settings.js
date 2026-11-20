@@ -57,6 +57,9 @@ const I18nTextsSettings = {
   'readingLine.position': { fr: 'ligne {n} sur {total}', en: 'row {n} of {total}' },
   'readingLine.prev': { fr: 'Ligne précédente', en: 'Previous row' },
   'readingLine.next': { fr: 'Ligne suivante', en: 'Next row' },
+  'readingLine.noRow': { fr: 'Aucune ligne sélectionnée', en: 'No row selected' },
+  'readingLine.noRowHint': { fr: 'Aucune ligne n’est sélectionnée dans Grist : les champs de fusion restent vides. Cliquez sur une ligne du tableau pour voir le document avec ses données.', en: 'No row is selected in Grist: merge fields stay empty. Click a row of the table to see the document with its data.' },
+  'readingLine.noRowHelp': { fr: 'Comment relier ce widget à un tableau ?', en: 'How to link this widget to a table?' },
   'readingLine.failed': { fr: 'Impossible de passer à cette ligne : Grist n\u2019a pas déplacé son curseur.', en: 'Could not move to that row: Grist did not move its cursor.' },
   // La pastille « ‹ Santé · valeur 1 sur 2 › » de la Lecture (js/reading-value.js) : la valeur d'une liste réglée « Un document par valeur ».
   'readingValue.position': { fr: 'valeur {n} sur {total}', en: 'value {n} of {total}' },

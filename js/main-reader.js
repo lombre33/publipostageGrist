@@ -14,9 +14,10 @@ const MainReader = (function () {
       if (PdfReading.isActive()) { ReadingValue.clear(); await PdfReading.render(readerContainer); return; }
       if (typeof record === 'undefined') record = getLatestRecord() || GristAPI.getCurrentRecord();
       let tableId = recordTableId || GristAPI.getCurrentTableId() || getCurrentTableId();
-      // Sans ligne sélectionnée, ReaderMode.render() affiche tout de même son état vide : un simple `return` laisserait #reader-container vide, un
-      // écran blanc sans explication. onCreateEmail (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps
-      // résolu sans changer de mode : #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
+      // Sans ligne sélectionnée, ReaderMode.render() montre le document tout de même (champs de fusion vides) et js/reading-line.js le dit par sa pastille « Aucune ligne
+      // sélectionnée » ; sans l'accès complet il montre la carte de js/reader-guide.js à la place : un simple `return` laisserait #reader-container vide, un écran blanc sans
+      // explication. onCreateEmail (mode email) appelle aussi renderReader() alors que currentMode reste 'edit', pour lire le corps résolu sans changer de mode :
+      // #reader-container reste display:none tant que currentMode !== 'read' (cf. switchMode).
       if (!record) { ReadingValue.clear(); await ReaderMode.render(await currentDocumentHtml(tableId, null, { anchors: true }), tableId, null, Editor.getHeaderFooterData()); return; }
       if (!tableId) {
         const ctx = await GristAPI.detectCurrentContext();
