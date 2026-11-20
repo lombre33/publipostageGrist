@@ -1431,11 +1431,13 @@ const ReaderMode = (function () {
   const PRINT_VIEW = { tint: false };
   const PRINT_SETTLE_MS = 8000;
   const PRINT_RELAYOUTS_MAX = 3;
-  async function renderInto(container, htmlContent, tableId, record, headerFooterData) {
+  // `checkpoint` (facultatif, js/print-export.js:checkpointOf) : appelé aux endroits où le rendu peut s'abandonner sans rien laisser derrière lui (il rejette quand plus personne n'attend le rendu).
+  async function renderInto(container, htmlContent, tableId, record, headerFooterData, checkpoint) {
     return GristAPI.withReadPass(async () => {
       if (typeof htmlContent === 'function') htmlContent = await htmlContent();
       const wrapper = readerWrapperFrom(htmlContent, PRINT_VIEW);
       const resolved = await resolveReaderBody(wrapper, tableId, record, () => false);
+      if (checkpoint) await checkpoint();
       container.innerHTML = '';
       container.appendChild(wrapper);
       // Dans l'arbre ombre de l'impression, un lien `#adresse` ne trouverait pas sa cible (le navigateur la cherche dans le document, pas dans l'arbre ombre) et sortirait en lien mort :
@@ -1457,6 +1459,7 @@ const ReaderMode = (function () {
       const fonts = container.ownerDocument.fonts;
       const settle = async () => { await settleImages(container, PRINT_SETTLE_MS); if (fonts) await fonts.ready; };
       await settle();
+      if (checkpoint) await checkpoint();
       // Les tailles qui décident des coupures : la feuille et chaque image. Une image ou une police qui arrive après la première mesure les change ; la mise
       // en page se refait alors (comme watchGeometry à l'écran) jusqu'à ce qu'elles ne bougent plus.
       const sizes = () => wrappers.concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
@@ -1466,6 +1469,7 @@ const ReaderMode = (function () {
       for (let round = 0; round < PRINT_RELAYOUTS_MAX; round++) {
         const before = sizes();
         await settle();
+        if (checkpoint) await checkpoint();
         if (sizes() === before) break;
         clearPagination(container, wrappers);
         paged = layOut();

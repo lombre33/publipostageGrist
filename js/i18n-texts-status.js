@@ -79,6 +79,43 @@ const I18nTextsStatus = {
   'pdf.comment.status.reopened': { fr: 'Commentaire rouvert.', en: 'Comment reopened.' },
   'status.gristApiError': { fr: 'Erreur init API Grist.', en: 'Error initializing Grist API.' },
   'status.schemaRenamed': { fr: 'Les tables du widget dans ce document ont pris des noms anglais (Publipostage_Templates…) : vos modèles et vos données sont intacts.', en: 'The widget\'s tables in this document now have English names (Publipostage_Templates…): your templates and data are unchanged.' },
+  // Deux tables pour les mêmes données (js/table-doubles.js) : une table du widget portée sous son ancien nom ET sous son nom anglais, que le widget et Grist Factory Suite ne lisent pas de la même façon.
+  // La question posée à l'ouverture, la réunion, puis la suppression de l'ancienne table, que la personne confirme.
+  'doubles.title': { fr: 'Deux tables pour les mêmes données', en: 'Two tables for the same data' },
+  'doubles.message': {
+    fr: 'Ce document garde des données du widget dans deux tables : l’une sous l’ancien nom, l’autre sous le nom anglais. Le widget et Grist Factory Suite n’y lisent pas la même, et ne montrent donc pas le même rangement.\n\n{list}\n\n« Réunir » copie dans la table que le widget lit ce que l’ancienne a en plus, sans rien écraser de ce qui s’y trouve. Rien n’est supprimé sans votre accord.',
+    en: 'This document keeps some of the widget’s data in two tables: one under the old name, the other under the English name. The widget and Grist Factory Suite don’t read the same one, so they don’t show the same filing.\n\n{list}\n\n“Merge” copies into the table the widget reads whatever the old one has in addition, without overwriting anything in it. Nothing is deleted without your consent.',
+  },
+  'doubles.line': { fr: '{label} : « {extra} » ({rows}) à côté de « {kept} »', en: '{label}: “{extra}” ({rows}) next to “{kept}”' },
+  'doubles.rows.one': { fr: '{n} ligne', en: '{n} row' },
+  'doubles.rows.many': { fr: '{n} lignes', en: '{n} rows' },
+  'doubles.label.Templates': { fr: 'Les documents', en: 'Documents' },
+  'doubles.label.TemplatePreferences': { fr: 'Le rangement', en: 'The filing' },
+  'doubles.label.Comments': { fr: 'Les commentaires', en: 'Comments' },
+  'doubles.label.Abbreviations': { fr: 'Les abréviations', en: 'Abbreviations' },
+  'doubles.label.PageFormats': { fr: 'Les formats de page', en: 'Page formats' },
+  'doubles.label.TableLinks': { fr: 'Les liens entre tables', en: 'Table links' },
+  'doubles.merge': { fr: 'Réunir', en: 'Merge' },
+  'doubles.later': { fr: 'Plus tard', en: 'Later' },
+  // Ajouté au nom d’un document repris de l’ancienne table quand la table en service en a déjà un du même nom.
+  'doubles.copySuffix': { fr: ' (ancienne table)', en: ' (old table)' },
+  'doubles.status.pending': { fr: 'Deux tables pour les mêmes données : rouvrez le widget pour les réunir.', en: 'Two tables for the same data: reopen the widget to merge them.' },
+  'doubles.status.merging': { fr: 'Réunion des tables…', en: 'Merging the tables…' },
+  'doubles.status.failed': { fr: 'La réunion s’est arrêtée : rien n’est supprimé, elle reprendra à la prochaine ouverture.', en: 'The merge stopped: nothing was deleted, it will resume the next time the widget opens.' },
+  'doubles.status.merged': { fr: 'Tables réunies. {summary} L’ancienne table est gardée.', en: 'Tables merged. {summary} The old table is kept.' },
+  'doubles.status.removed': { fr: 'Tables réunies, ancienne table supprimée.', en: 'Tables merged, old table deleted.' },
+  'doubles.done.counts': { fr: 'Lignes reprises : {added}, complétées : {filled}.', en: 'Rows copied: {added}, completed: {filled}.' },
+  'doubles.done.left': { fr: 'Lignes laissées dans l’ancienne table : {n}.', en: 'Rows left in the old table: {n}.' },
+  'doubles.remove.title': { fr: 'Supprimer « {extra} » ?', en: 'Delete “{extra}”?' },
+  'doubles.remove.message': {
+    fr: '« {kept} » porte maintenant tout ce que « {extra} » avait en plus. {summary}\nSupprimer « {extra} » la retire de ce document Grist, avec sa page ; le widget ne peut pas l’annuler.',
+    en: '“{kept}” now holds everything “{extra}” had in addition. {summary}\nDeleting “{extra}” removes it from this Grist document, with its page; the widget can’t undo it.',
+  },
+  'doubles.remove.left': { fr: 'Attention : {n} {n|ligne|lignes} de l’ancienne table {n|n’est pas reprise et serait perdue|ne sont pas reprises et seraient perdues}.', en: 'Careful: {n} {n|row|rows} of the old table {n|was|were} not copied and would be lost.' },
+  'doubles.remove.confirm': { fr: 'Supprimer', en: 'Delete' },
+  'doubles.remove.keep': { fr: 'La garder', en: 'Keep it' },
+  'doubles.remove.failedTitle': { fr: 'Suppression impossible', en: 'Can’t delete' },
+  'doubles.remove.failed': { fr: 'Le document n’a pas permis de supprimer « {extra} ». Supprimez-la vous-même dans Grist (liste des pages) : ses données sont reprises.', en: 'The document didn’t allow deleting “{extra}”. Delete it yourself in Grist (page list): its data has been copied.' },
   // init() (js/main.js) n'a de filet que sur TemplateTreeSelect.attach() : une exception ailleurs bloquerait tout le reste (Enregistrer, Ctrl+S,
   // l'auto-save) sans le moindre message, seule la console en montrant la cause. init().catch(...) affiche l'erreur ici plutôt que de laisser le
   // widget muet.
