@@ -721,13 +721,13 @@
     });
 
   add('pptx_import_spaces_follow_the_text_size_when_the_text_is_reduced_or_the_page_is_scaled',
-    'Le texte réduit par PowerPoint (normAutofit) garde sa réduction d\'interligne (80 % pour 20 % de réduction : 0,938) et ses espaces suivent la réduction des caractères (10 pt x 62,5 % = 6,25 pt) ; sur une page ramenée à la plus grande de l\'éditeur, un espace de 10 pt suit l\'échelle ; un interligne exact suit la taille du texte réduit',
+    'Le texte réduit par PowerPoint (normAutofit) garde sa réduction d\'interligne (80 % pour 20 % de réduction : 0,938, ramené à 0,781 pour un texte posé sous le corps de l\'éditeur) et ses espaces suivent la réduction des caractères (10 pt x 62,5 % = 6,25 pt) ; sur une page ramenée à la plus grande de l\'éditeur, un espace de 10 pt suit l\'échelle ; un interligne exact suit la taille du texte réduit',
     async () => {
       const { bad, expect } = checker();
       const paras = para(sm('Un')) + para(sm('Deux'), '', spcPts('spcBef', 10)) + para(sm('Trois'), '', lnPts(21));
       const reduced = await run1({ slides: [{ shapes: textBox(40, 100, 800, 300, paras, { id: 2, bodyXml: '<a:normAutofit fontScale="62500" lnSpcReduction="20000"/>' }) }] });
-      expect('fontScale 62,5 % et lnSpcReduction 20 % : l\'interligne simple devient 80 % (0,938), 10 pt avant deviennent 6,25 pt, 21 pt exacts sur du 14 pt font toujours 1,5 fois la taille',
-        settingsOf(slidesOf(reduced.html)[0].frames[0].el) === 'Un[0.938|-|-] Deux[0.938|6.25|-] Trois[1.5|-|-]', settingsOf(slidesOf(reduced.html)[0].frames[0].el));
+      expect('fontScale 62,5 % et lnSpcReduction 20 % : l\'interligne simple devient 80 % (0,938), 10 pt avant deviennent 6,25 pt, 21 pt exacts sur du 14 pt font toujours 1,5 fois la taille ; le texte posé fait 8,75 pt, sous le corps de l\'éditeur (10,5 pt, plancher de ses lignes) : chaque interligne est ramené dans le rapport 8,75 / 10,5 (0,781 et 1,25)',
+        settingsOf(slidesOf(reduced.html)[0].frames[0].el) === 'Un[0.781|-|-] Deux[0.781|6.25|-] Trois[1.25|-|-]', settingsOf(slidesOf(reduced.html)[0].frames[0].el));
       const exact = await run1({ slides: [{ shapes: textBox(40, 100, 800, 300, para(sm('Un')) + para(sm('Deux'), '', lnPct(100)), { id: 2 }) }] });
       expect('sans réduction, l\'interligne simple n\'est pas touché par un lnSpcReduction absent : 1,172', settingsOf(slidesOf(exact.html)[0].frames[0].el) === 'Un[1.172|-|-] Deux[1.172|-|-]', settingsOf(slidesOf(exact.html)[0].frames[0].el));
       // 2 880 x 1 620 pt : la page est ramenée à 1 584 pt de large (k = 0,55).
@@ -1742,6 +1742,29 @@
       const s = sheet();
       const box = document.querySelector('.tiptap .pp-free-frame .pp-free-frame-box');
       expect('dans l\'éditeur, la boîte du texte réduit mesure 50 pt (3 % de plus au plus), pas les 64 pt qu\'il aurait à sa taille d\'origine', !!box && heightPt(box, s) <= 50 * 1.06 + 1, box && heightPt(box, s));
+      return result(bad);
+    });
+
+  add('pptx_import_small_text_keeps_powerpoints_line_height_so_a_dense_table_or_a_box_is_not_shrunk_for_nothing',
+    'Retour d\'Antoine du 20/11 (« Tableau de bord des RH » : 28 lignes de 18 pt, texte de 9 pt) : l\'éditeur pose chaque ligne au moins à 10,5 pt fois l\'interligne, un texte plus petit y avait donc des lignes trop hautes ; l\'import ramène l\'interligne au rapport de la taille posée au corps de l\'éditeur, la ligne mesure ce que PowerPoint lui donne, le tableau tient dans sa hauteur à sa taille d\'origine et un texte de 9 pt tient dans sa boîte sans réduction',
+    async (h) => {
+      const rows = [];
+      for (let i = 0; i < 28; i++) rows.push({ h: 18, cells: ['Gouvernance / impacts', 'Chargée de programme', 'DIESE - RIPI', 'Hélène Schwalm'].map(text => ({ text, attrs: 'sz="900" b="1"' })) });
+      const lines = n => Array.from({ length: n }, (_, i) => para(run('Ligne ' + (i + 1) + ' de neuf points', 'sz="900"'))).join('');
+      const r = await run1({ slides: [{ shapes: table({ x: 40, y: 20, cols: [165, 290, 190, 215], rows }) }, { shapes: textBox(40, 100, 300, 5 * 9 * 1.2 + 7.2, lines(5), { id: 2 }) }] });
+      const { bad, expect } = checker();
+      const slides = slidesOf(r.html);
+      const grid = slides[0].tableFrames[0];
+      const sizes = Array.from(new Set(Array.from(grid.el.querySelectorAll('[style*="font-size"]')).map(el => /font-size: ([\d.]+)pt/.exec(el.getAttribute('style'))[1])));
+      expect('le tableau garde son texte à 9 pt (aucune réduction) : ni taille de 5,4 pt ni mention au rapport', sizes.join() === '9' && !reportOf(r).shrunk, { sizes, report: r.report });
+      expect('le tableau mesure sa hauteur du fichier, 28 x 18 pt = 504 pt (3 % de plus au plus), marges du cadre comprises', grid.h <= 504 * 1.03 + 2 * 3.6 + 1, grid.h);
+      const box = slides[1].frames[0];
+      expect('un texte de 9 pt sur cinq lignes tient dans sa boîte de 61,2 pt : taille gardée à 9 pt', /font-size: 9pt/.test(box.inner) && !/font-size: (?!9pt)/.test(box.inner), box.inner.slice(0, 200));
+      await inEditor(h, r);
+      const s = sheet();
+      const frames = Array.from(document.querySelectorAll('.tiptap .pp-free-frame .pp-free-frame-box'));
+      const tableBox = frames.find(el => el.querySelector('table'));
+      expect('dans l\'éditeur, le tableau mesure 504 pt à 3 % près : les lignes ne dépassent pas leur hauteur', !!tableBox && heightPt(tableBox, s) <= 504 * 1.03 + 2 * 3.6 + 1, tableBox && heightPt(tableBox, s));
       return result(bad);
     });
 
