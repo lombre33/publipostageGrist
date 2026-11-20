@@ -1848,31 +1848,38 @@ const FloatingToolbars = (function () {
   // verrouillée, « Détacher » en retire le repère). Pour le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de copie.
   function createCopyToolbar(editor) {
     function wire() {
-      const html = `<span class="v2-copy-name"></span><button type="button" data-action="copy-refresh" class="v2-copy-refresh">${Icons.svg('refresh')}</button><button type="button" data-action="copy-detach" class="v2-copy-detach">${Icons.svg('unlink')}<span></span></button>`;
+      const html = `<span class="v2-copy-name"></span><button type="button" data-action="copy-edit" class="v2-copy-edit">${Icons.svg('edit')}<span></span></button><button type="button" data-action="copy-refresh" class="v2-copy-refresh">${Icons.svg('refresh')}</button><button type="button" data-action="copy-detach" class="v2-copy-detach">${Icons.svg('unlink')}<span></span></button>`;
       let shown = null;
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-copy-toolbar', html, (action) => {
         if (action === 'copy-detach') SlideCopies.detach(editor);
         // « Mettre à jour maintenant » : la relecture à l'instant de la diapositive que la sélection suit.
         else if (action === 'copy-refresh') SlideCopies.updateNow(editor, shown);
+        // « Modifier la diapo » : le volet « Insérer depuis » rouvert sur cette diapositive (et son double clic, plus bas).
+        else if (action === 'copy-edit') SlideCopies.edit(editor);
       });
       EditorCore.registerFloatingPanel(panel);
       const name = panel.el.querySelector('.v2-copy-name');
       const detach = panel.el.querySelector('.v2-copy-detach');
       const refresh = panel.el.querySelector('.v2-copy-refresh');
+      const editButton = panel.el.querySelector('.v2-copy-edit');
       const check = ({ transaction } = {}) => {
         // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
         if (transaction && transaction.getMeta('blur')) return;
-        const status = SlideCopies.statusAt(editor.state);
+        // Une diapositive posée sans lien (un bloc) n'a que « Modifier la diapo » : ni mise à jour ni « Détacher ».
+        const status = SlideCopies.statusAt(editor.state) || SlideCopies.freeBlockAt(editor.state);
         if (!status) { panel.hide(); return; }
         const dom = editor.view.nodeDOM(status.from);
         // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
         if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
-        const label = I18n.t(status.gone ? 'slides.copy.barGone' : 'slides.copy.bar', { n: status.n, name: status.name });
+        const label = status.free ? (status.name ? I18n.t('slides.copy.barFreeFrom', { name: status.name }) : I18n.t('slides.copy.barFree')) : I18n.t(status.gone ? 'slides.copy.barGone' : 'slides.copy.bar', { n: status.n, name: status.name });
         name.textContent = label;
         name.title = label;
         shown = status;
+        editButton.querySelector('span').textContent = I18n.t('slides.edit.button');
+        editButton.title = I18n.t('slides.edit.tip');
         // Sans sa diapositive d'origine, il n'y a rien à reprendre : le bouton se retire (« Détacher » reste).
-        refresh.hidden = !!status.gone;
+        refresh.hidden = !!status.gone || !!status.free;
+        detach.hidden = !!status.free;
         refresh.title = I18n.t('slides.copy.refreshTip');
         refresh.setAttribute('aria-label', I18n.t('slides.copy.refresh'));
         detach.querySelector('span').textContent = I18n.t('slides.copy.detach');
@@ -1882,6 +1889,8 @@ const FloatingToolbars = (function () {
       };
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);
+      // Le double clic sur une diapositive posée (son image, ou son texte en copie liée) rouvre le volet sur elle, comme le bouton : le premier clic en a posé la sélection.
+      editor.view.dom.addEventListener('dblclick', () => { if (editor.isEditable && !panel.el.hidden) SlideCopies.edit(editor); });
       return panel;
     }
     return { wire };

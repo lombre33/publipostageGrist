@@ -268,8 +268,8 @@ const SlideLinks = (function () {
     return parseBody(editor, HtmlSanitize.parseInert(String(html || '')));
   }
   // La même lecture d'un texte déjà assaini (HtmlSanitize.parseInert) : le volet « Importer » a lu celui de sa source pour ses miniatures, et le rend à anchorSource plutôt que de le faire relire.
-  function parseBody(editor, body) {
-    const doc = libs.PMDOMParser.fromSchema(editor.schema).parse(body);
+  // Le texte lu d'un document `doc` : ses diapositives et leurs numéros (sans le relire de son HTML).
+  function readDoc(doc) {
     const slides = slidesOf(doc);
     const byId = new Map();
     slides.forEach((slide, index) => {
@@ -277,6 +277,15 @@ const SlideLinks = (function () {
       if (id && !byId.has(id)) byId.set(id, index);
     });
     return { doc, slides, byId };
+  }
+  // Le même corps assaini n'est lu qu'une fois (20/11, une présentation de 30 Mo : plus d'une demi-seconde de page prise à chaque liaison d'une diapositive du même volet).
+  const parsedBodies = new WeakMap();
+  function parseBody(editor, body) {
+    const kept = parsedBodies.get(body);
+    if (kept && kept.schema === editor.schema) return kept.parsed;
+    const parsed = readDoc(libs.PMDOMParser.fromSchema(editor.schema).parse(body));
+    parsedBodies.set(body, { schema: editor.schema, parsed });
+    return parsed;
   }
   function parseModel(editor, model) {
     const contenu = String(model.contenu || '');
@@ -600,7 +609,10 @@ const SlideLinks = (function () {
   // Ce que ce widget a lu ou écrit en dernier de la présentation ouverte (js/main.js : à son ouverture et après chaque enregistrement) : son texte et ses autres réglages.
   let known = null;
   const settingsOf = tpl => JSON.stringify([tpl.nom, tpl.nomFichierPDF, tpl.headerFooter, tpl.marginsMm, tpl.typeModele]);
+  // La ligne du DOCUMENT ouvert telle que ce widget la connaît (même rôle que `known`, pour `adoptPageMarkers`).
+  let knownDoc = null;
   function noteKnown(tpl) {
+    knownDoc = tpl && (tpl.typeModele || 'document') === 'document' ? { id: String(tpl.id), contenu: String(tpl.contenu || ''), settings: settingsOf(tpl) } : null;
     const next = tpl && tpl.typeModele === TYPE ? { id: String(tpl.id), contenu: String(tpl.contenu || ''), settings: settingsOf(tpl) } : null;
     // Une autre présentation à l'écran : les versions arrivées pour celle d'avant ne la concernent plus.
     if (!next || !known || known.id !== next.id) { incoming.clear(); taken.clear(); republish.clear(); given.clear(); }
@@ -613,6 +625,7 @@ const SlideLinks = (function () {
   // « Demander » propose l'autre (resolveIncoming). Vrai quand c'est fait : js/main.js prend la date de la ligne pour la sienne ; faux, et le bandeau s'ouvre comme toujours.
   const incoming = new Map();   // numéro d'une diapositive source -> la version arrivée que la personne n'a pas encore prise (« Demander »)
   function adopt(editor, remoteTpl) {
+    if (remoteTpl && remoteTpl.typeModele !== TYPE) return adoptPageMarkers(editor, remoteTpl);
     if (paused(editor) || !known || !remoteTpl || String(remoteTpl.id) !== known.id || remoteTpl.typeModele !== TYPE) return false;
     if (settingsOf(remoteTpl) !== known.settings) return false;
     const before = parseHtml(editor, known.contenu);
@@ -682,6 +695,38 @@ const SlideLinks = (function () {
       else say('slides.link.differsHere', { n: asked[0].index + 1 });
     }
     ui.changed();
+    return true;
+  }
+
+  // Un DOCUMENT dont une page est importée « Garder liée » dans une présentation (js/page-copies.js:anchorPage) voit sa ligne changer pendant qu'on l'édite : le repère de la page (un élément de plus,
+  // rien d'autre) y est écrit. Comme pour une présentation, ce repère se pose sans bandeau, hors de l'historique, sans rendre le document « à enregistrer » : la frappe de la personne reste à
+  // enregistrer, et l'enregistrement suivant garde le repère (sans lui, « Recharger la dernière version » perdrait la frappe, et « Enregistrer » effacerait le repère de la source : le lien de la
+  // présentation ne retrouverait plus sa page). Tout autre changement (du texte, un repère qui disparaît, un autre nombre de pages, d'autres réglages) laisse le bandeau. Vrai quand c'est fait.
+  function adoptPageMarkers(editor, remoteTpl) {
+    if (!libs || !editor || editor.isDestroyed || SlidesEntry.presentationShown() || Editor.isTrackChangesOn() || LiveEntry.isLive() || HeaderFooterPreview.getHfMode() || (editor.view && editor.view.composing)) return false;
+    if (!knownDoc || String(remoteTpl.id) !== knownDoc.id || (remoteTpl.typeModele || 'document') !== 'document') return false;
+    if (settingsOf(remoteTpl) !== knownDoc.settings) return false;
+    const before = parseHtml(editor, knownDoc.contenu);
+    const after = parseHtml(editor, remoteTpl.contenu);
+    const here = slidesOf(editor.state.doc);
+    if (before.slides.length !== after.slides.length || here.length !== before.slides.length) return false;
+    const attrsText = ({ node }) => JSON.stringify(node.attrs);
+    const adds = [];
+    for (let i = 0; i < after.slides.length; i++) {
+      if (slideHash(before.slides[i]) !== slideHash(after.slides[i])) return false;
+      const was = before.slides[i].tags.map(attrsText);
+      const now = after.slides[i].tags.map(attrsText);
+      if (was.some(text => !now.includes(text))) return false;
+      const mine = here[i].tags.map(attrsText);
+      const added = after.slides[i].tags.filter(tag => !was.includes(attrsText(tag)) && !mine.includes(attrsText(tag)));
+      if (added.length) adds.push({ at: here[i].end, nodes: added.map(tag => tag.node) });
+    }
+    if (adds.length) {
+      const tr = editor.state.tr;
+      adds.slice().reverse().forEach(({ at, nodes }) => tr.insert(at, nodes));
+      editor.view.dispatch(tr.setMeta(OWN_META, 'sync').setMeta('addToHistory', false));
+    }
+    noteKnown(remoteTpl);
     return true;
   }
 
@@ -949,7 +994,8 @@ const SlideLinks = (function () {
   //    (Templates.saveContent, son texte seul) : les liaisons suivantes de cette présentation passent par le premier cas. Un numéro porté par deux diapositives (une diapositive dupliquée dans
   //    Slides+ en copie le repère) est refait pour celle qu'on lie : sans quoi le lien suivrait la première des deux.
   // Entre deux pas lourds (lire, assainir, écrire) la page respire : la frappe et la souris ne restent pas prises pendant toute la liaison.
-  const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
+  // Rend la main à la page (tâche ordinaire : WorkPacer.yieldTask, sinon un minuteur) : la frappe, la souris et le dessin du cadre « chargement » passent avant le pas suivant.
+  const breathe = () => (typeof WorkPacer !== 'undefined' ? WorkPacer.yieldTask() : new Promise(resolve => setTimeout(resolve, 0)));
   async function anchorSource(editor, id, index, seen, seenBody) {
     const fail = (reason) => { const error = new Error(reason); error.reason = reason; throw error; };
     if (!libs || !editor) fail('slides.link.failed');
@@ -965,15 +1011,22 @@ const SlideLinks = (function () {
       const html = strip(Editor.getHTML(editor.schema.topNodeType.create(null, nodes)));
       return { html, link: { linkModel: model.id, linkKey: key, linkSlide: slideId, linkMode: 'both', srcHash: slideHash(parsed.slides[at]), name: model.nom } };
     };
-    // `seenBody` : ce texte déjà assaini par le volet (rien ne le relit) ; un gros PowerPoint (30 Mo) se lit en une demi-seconde et plus, jamais deux fois ici.
-    const before = seenBody ? parseBody(editor, seenBody) : parseHtml(editor, seen);
+    // Le texte d'une présentation déjà lu (la dernière liaison l'a gardé en l'écrivant, ou le suivi des liens l'a lu) ; null sinon.
+    const keptFor = (model, text) => {
+      const kept = model && parsedModels.get(String(model.id));
+      return kept && kept.schema === editor.schema && kept.contenu === String(text || '') ? kept.parsed : null;
+    };
+    // `seenBody` : ce texte déjà assaini par le volet (rien ne le relit) ; un gros PowerPoint (30 Mo) se lit en une demi-seconde et plus, jamais deux fois ici : ni d'une liaison à l'autre.
+    const readSeen = () => keptFor(Templates.byId(id), seen) || (seenBody ? parseBody(editor, seenBody) : parseHtml(editor, seen));
+    const before = readSeen();
+    await breathe();
     const wanted = before.slides[index];
     if (!wanted) fail('slides.link.changed');
     const wantedHash = slideHash(wanted);
     // Le texte que le cache garde porte-t-il déjà son numéro ? (le volet vient de le lire, ou une liaison d'avant l'a posé)
     const known = Templates.byId(id);
     if (known && known.typeModele === TYPE && known.jeton) {
-      const cached = String(known.contenu || '') === String(seen || '') ? before : parseHtml(editor, known.contenu);
+      const cached = String(known.contenu || '') === String(seen || '') ? before : (keptFor(known, known.contenu) || parseModel(editor, known));
       const at = findIn(cached, wantedHash);
       const slideId = at < 0 ? '' : ownId(cached, at);
       if (slideId) return done(cached, at, known, known.jeton, slideId);
@@ -986,7 +1039,7 @@ const SlideLinks = (function () {
     const key = model.jeton || await Templates.ensureToken(model.id, { fresh: true });
     if (!key) fail('slides.link.failed');
     // La source relue est celle que la personne a vue (le cas courant) : la lecture d'avant sert, rien n'est relu.
-    const parsed = String(model.contenu || '') === String(seen || '') ? before : parseHtml(editor, model.contenu);
+    const parsed = String(model.contenu || '') === String(seen || '') ? before : parseModel(editor, model);
     const at = findIn(parsed, wantedHash);
     if (at < 0) fail('slides.link.changed');
     let slideId = ownId(parsed, at);
@@ -1008,6 +1061,10 @@ const SlideLinks = (function () {
       const written = Editor.getHTML(tr.doc);
       await breathe();
       await Templates.saveContent(model.id, written);
+      // Le texte numéroté est celui de `tr.doc` : la liaison suivante le trouve lu, sans relire les 30 Mo que le cache vient de recevoir.
+      const stored = Templates.byId(model.id);
+      if (stored && String(stored.contenu || '') === written) parsedModels.set(String(model.id), { contenu: written, schema: editor.schema, parsed: readDoc(tr.doc) });
+      await breathe();
     }
     return done(parsed, at, model, key, slideId);
   }
