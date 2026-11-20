@@ -354,7 +354,7 @@ const SlidesEntry = (function () {
   const showSlide = index => !!(strip && typeof strip.showSlide === 'function' && strip.showSlide(index));
 
   // Une diapositive en texte de document
-  // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
+  // Posé par l'extension à son chargement (extensions/diapositives/slide-import.js) : { open(byKeyboard), edit(target), close(), isOpen(), syncScreen(shown), keepsFormat() } ; le volet des diapositives
   // d'une présentation, ouvert depuis un document.
   function registerTextImport(next) { textImport = next; }
   // La photo d'une diapositive (extensions/diapositives/slide-raster.js, posée par le volet une fois chargé : registerBlockRaster) : `blockSnapshot(html, tpl)` dessine le HTML d'une diapositive de la
@@ -377,6 +377,15 @@ const SlidesEntry = (function () {
     if (shown.type !== 'document' || !shown.editing) return false;
     if (!(await ensureFor(TYPE, TEXT_FEATURE_KEY)) || !textImport) return false;
     textImport.open(byKeyboard);
+    return true;
+  }
+  // « Modifier la diapo » (js/slide-copies.js : `edit`, la barre flottante d'une diapositive posée dans un document et son double clic) : le volet s'ouvre sur cette diapositive, et le clic suivant sur une
+  // miniature la remplace. `target` : ce que SlideCopies.editTargetAt rend. Vrai quand le volet est ouvert ; rien hors de l'Édition d'un document ni sans l'extension.
+  async function editInserted(target) {
+    const shown = context();
+    if (shown.type !== 'document' || !shown.editing) return false;
+    if (!(await ensureFor(TYPE, TEXT_FEATURE_KEY)) || !textImport || !textImport.edit) return false;
+    textImport.edit(target);
     return true;
   }
   // Le HTML collé dans un document (js/editor.js : transformPastedHTML) : une diapositive copiée de la bande y devient du texte du document, à la taille du document (ou celle de la diapositive,
@@ -420,6 +429,6 @@ const SlidesEntry = (function () {
   return {
     ID, TYPE, FEATURE_KEY, SLIDE_BREAK_ATTR, setHooks, setContext, isAvailable, isPresentation, reason, startNew, ensureFor, unavailableReason, pageFor, pageSizeOf, onChange: Extensions.onChange,
     changed: sync, register, explainOff, relayout, status, showsEveryPage, presentationShown, seamLabel, outputHtml, resolveSlideNumbers, TEXT_SIZE, HEADING_SIZES, createTextExtension, textMarks,
-    registerTextImport, registerBlockRaster, blockSnapshot, openTextImport, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
+    registerTextImport, registerBlockRaster, blockSnapshot, openTextImport, editInserted, pastedInDocument, registerTheme, openTheme, shownSlide, showSlide,
   };
 })();

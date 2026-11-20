@@ -75,3 +75,6 @@ body.pp-slide-import-on .pp-page-zoom { right: calc(var(--pp-zoom-right, 0px) + 
   .pp-slide-import, .pp-slide-import-zoom { display: none; }
   body.pp-slide-import-on #editor-container { padding-right: 14px; }
 }
+
+/* « Modifier la diapo » (slide-import.js : openFor) : la miniature de la diapositive du document que le prochain clic remplace, entourée de l'accent. */
+.pp-slide-import .pp-slide-item.pp-slide-current .pp-slide-thumb { box-shadow: 0 0 0 2px var(--accent); }

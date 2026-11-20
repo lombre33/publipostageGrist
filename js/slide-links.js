@@ -268,8 +268,8 @@ const SlideLinks = (function () {
     return parseBody(editor, HtmlSanitize.parseInert(String(html || '')));
   }
   // La même lecture d'un texte déjà assaini (HtmlSanitize.parseInert) : le volet « Importer » a lu celui de sa source pour ses miniatures, et le rend à anchorSource plutôt que de le faire relire.
-  function parseBody(editor, body) {
-    const doc = libs.PMDOMParser.fromSchema(editor.schema).parse(body);
+  // Le texte lu d'un document `doc` : ses diapositives et leurs numéros (sans le relire de son HTML).
+  function readDoc(doc) {
     const slides = slidesOf(doc);
     const byId = new Map();
     slides.forEach((slide, index) => {
@@ -277,6 +277,15 @@ const SlideLinks = (function () {
       if (id && !byId.has(id)) byId.set(id, index);
     });
     return { doc, slides, byId };
+  }
+  // Le même corps assaini n'est lu qu'une fois (20/11, une présentation de 30 Mo : plus d'une demi-seconde de page prise à chaque liaison d'une diapositive du même volet).
+  const parsedBodies = new WeakMap();
+  function parseBody(editor, body) {
+    const kept = parsedBodies.get(body);
+    if (kept && kept.schema === editor.schema) return kept.parsed;
+    const parsed = readDoc(libs.PMDOMParser.fromSchema(editor.schema).parse(body));
+    parsedBodies.set(body, { schema: editor.schema, parsed });
+    return parsed;
   }
   function parseModel(editor, model) {
     const contenu = String(model.contenu || '');
@@ -949,7 +958,8 @@ const SlideLinks = (function () {
   //    (Templates.saveContent, son texte seul) : les liaisons suivantes de cette présentation passent par le premier cas. Un numéro porté par deux diapositives (une diapositive dupliquée dans
   //    Slides+ en copie le repère) est refait pour celle qu'on lie : sans quoi le lien suivrait la première des deux.
   // Entre deux pas lourds (lire, assainir, écrire) la page respire : la frappe et la souris ne restent pas prises pendant toute la liaison.
-  const breathe = () => new Promise(resolve => setTimeout(resolve, 0));
+  // Rend la main à la page (tâche ordinaire : WorkPacer.yieldTask, sinon un minuteur) : la frappe, la souris et le dessin du cadre « chargement » passent avant le pas suivant.
+  const breathe = () => (typeof WorkPacer !== 'undefined' ? WorkPacer.yieldTask() : new Promise(resolve => setTimeout(resolve, 0)));
   async function anchorSource(editor, id, index, seen, seenBody) {
     const fail = (reason) => { const error = new Error(reason); error.reason = reason; throw error; };
     if (!libs || !editor) fail('slides.link.failed');
@@ -965,15 +975,22 @@ const SlideLinks = (function () {
       const html = strip(Editor.getHTML(editor.schema.topNodeType.create(null, nodes)));
       return { html, link: { linkModel: model.id, linkKey: key, linkSlide: slideId, linkMode: 'both', srcHash: slideHash(parsed.slides[at]), name: model.nom } };
     };
-    // `seenBody` : ce texte déjà assaini par le volet (rien ne le relit) ; un gros PowerPoint (30 Mo) se lit en une demi-seconde et plus, jamais deux fois ici.
-    const before = seenBody ? parseBody(editor, seenBody) : parseHtml(editor, seen);
+    // Le texte d'une présentation déjà lu (la dernière liaison l'a gardé en l'écrivant, ou le suivi des liens l'a lu) ; null sinon.
+    const keptFor = (model, text) => {
+      const kept = model && parsedModels.get(String(model.id));
+      return kept && kept.schema === editor.schema && kept.contenu === String(text || '') ? kept.parsed : null;
+    };
+    // `seenBody` : ce texte déjà assaini par le volet (rien ne le relit) ; un gros PowerPoint (30 Mo) se lit en une demi-seconde et plus, jamais deux fois ici : ni d'une liaison à l'autre.
+    const readSeen = () => keptFor(Templates.byId(id), seen) || (seenBody ? parseBody(editor, seenBody) : parseHtml(editor, seen));
+    const before = readSeen();
+    await breathe();
     const wanted = before.slides[index];
     if (!wanted) fail('slides.link.changed');
     const wantedHash = slideHash(wanted);
     // Le texte que le cache garde porte-t-il déjà son numéro ? (le volet vient de le lire, ou une liaison d'avant l'a posé)
     const known = Templates.byId(id);
     if (known && known.typeModele === TYPE && known.jeton) {
-      const cached = String(known.contenu || '') === String(seen || '') ? before : parseHtml(editor, known.contenu);
+      const cached = String(known.contenu || '') === String(seen || '') ? before : (keptFor(known, known.contenu) || parseModel(editor, known));
       const at = findIn(cached, wantedHash);
       const slideId = at < 0 ? '' : ownId(cached, at);
       if (slideId) return done(cached, at, known, known.jeton, slideId);
@@ -986,7 +1003,7 @@ const SlideLinks = (function () {
     const key = model.jeton || await Templates.ensureToken(model.id, { fresh: true });
     if (!key) fail('slides.link.failed');
     // La source relue est celle que la personne a vue (le cas courant) : la lecture d'avant sert, rien n'est relu.
-    const parsed = String(model.contenu || '') === String(seen || '') ? before : parseHtml(editor, model.contenu);
+    const parsed = String(model.contenu || '') === String(seen || '') ? before : parseModel(editor, model);
     const at = findIn(parsed, wantedHash);
     if (at < 0) fail('slides.link.changed');
     let slideId = ownId(parsed, at);
@@ -1008,6 +1025,10 @@ const SlideLinks = (function () {
       const written = Editor.getHTML(tr.doc);
       await breathe();
       await Templates.saveContent(model.id, written);
+      // Le texte numéroté est celui de `tr.doc` : la liaison suivante le trouve lu, sans relire les 30 Mo que le cache vient de recevoir.
+      const stored = Templates.byId(model.id);
+      if (stored && String(stored.contenu || '') === written) parsedModels.set(String(model.id), { contenu: written, schema: editor.schema, parsed: readDoc(tr.doc) });
+      await breathe();
     }
     return done(parsed, at, model, key, slideId);
   }
