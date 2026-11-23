@@ -383,16 +383,18 @@ const PerfTrace = (function () {
       all.forEach((entry) => {
         let host = '?';
         try { host = new URL(entry.name).host; } catch (error) { /* adresse illisible */ }
-        const known = hosts[host] || { n: 0, last: 0 };
+        const known = hosts[host] || { n: 0, last: 0, first: Infinity, bytes: 0 };
         known.n += 1;
         known.last = Math.max(known.last, Math.round(entry.responseEnd));
+        known.first = Math.min(known.first, Math.round(entry.startTime));
+        known.bytes += entry.transferSize || 0;
         hosts[host] = known;
       });
       const slow = all.slice().sort((a, b) => (b.responseEnd - b.startTime) - (a.responseEnd - a.startTime)).slice(0, 6)
         .map(entry => entry.name.split('/').pop().split('?')[0].slice(0, 40) + ' ' + Math.round(entry.responseEnd - entry.startTime) + ' ms (début à ' + Math.round(entry.startTime) + ' ms)');
       return [
         'Fichiers : ' + all.length + ' lus, dont ' + free + ' sur ' + own.length + ' de la page sans transfert (cache du navigateur)',
-        '   par site : ' + Object.keys(hosts).map(host => host + ' ' + hosts[host].n + ' (le dernier reçu à ' + hosts[host].last + ' ms)').join(' ; '),
+        '   par site : ' + Object.keys(hosts).map(host => host + ' ' + hosts[host].n + ' (le dernier reçu à ' + hosts[host].last + ' ms, le premier demandé à ' + hosts[host].first + ' ms' + (hosts[host].bytes ? ', ' + megabytes(hosts[host].bytes) + ' transférés' : '') + ')').join(' ; '),
         '   les plus lents : ' + slow.join(' ; '),
       ];
     } catch (error) { return ['Fichiers : illisibles']; }

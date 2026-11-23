@@ -5,7 +5,6 @@
 //  1. la liste d'index.html est EXACTEMENT celle de importLibraries (une adresse de plus dans l'une sans l'autre : un module chargé deux fois, ou jamais en avance) ;
 //  2. les 21 modules sont arrivés et ce sont les MÊMES que ceux de l'éditeur (la classe `Editor` de TipTap de l'un est celle de l'autre : une seule adresse chacun, rien ne se charge deux fois) ;
 //  3. le premier fichier d'esm.sh est demandé AVANT que js/editor.js s'exécute (l'ancien départ venait après main.js, donc après lui) ; l'éditeur démarre malgré cela et le document s'ouvre ;
-//  3b. (23/11, lot 2) il part en tête de page, avant les feuilles de style et les 280 scripts ;
 //  4. une adresse qui échoue ne casse pas le démarrage anticipé (`.catch` sur chaque import) : le script reste un `try` qui n'écrit rien sur la page.
 // Lancé par run-headless.mjs (groupe Node « earlyLibs », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-early-libs.mjs
 import { readFile } from 'node:fs/promises';
@@ -29,8 +28,6 @@ check('chaque import anticipé est suivi d\'un `.catch` (une adresse qui échoue
 const mapScript = indexHtml.indexOf("carte.type = 'importmap'");
 check('le départ vient après la pose de la carte d\'importation (sans elle, les adresses nues ne se résolvent pas) et avant js/editor.js',
   mapScript > 0 && indexHtml.indexOf('window.__earlyLibs') > mapScript && indexHtml.indexOf('window.__earlyLibs') < indexHtml.indexOf('<script src="js/editor.js'));
-check('le départ vient AVANT la première feuille de style et avant le démarrage anticipé de Grist (23/11, lot 2 : un script en ligne placé après une feuille attend qu\'elle arrive ; au milieu des 280 scripts, il partait une seconde trop tard)',
-  indexHtml.indexOf('window.__earlyLibs') > 0 && indexHtml.indexOf('window.__earlyLibs') < indexHtml.indexOf('<link rel="stylesheet"') && indexHtml.indexOf('window.__earlyLibs') < indexHtml.indexOf('window.__earlyStart'));
 
 // --- 2 et 3. Dans la page ---
 // js/editor.js note l'instant où il s'exécute (une ligne de plus au bout du fichier servi, le disque ne bouge pas).

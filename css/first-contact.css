@@ -16,3 +16,15 @@
 .pp-first-contact-details { margin: 0 0 6px; color: var(--text-muted); }
 .pp-first-contact-details summary { cursor: pointer; font-size: 12px; }
 .pp-first-contact-details pre { margin: 6px 0 0; padding: 8px; max-height: 110px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); color: var(--text); font-size: 11.5px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* L'ÉCRAN D'ATTENTE (23/11, « qqch de plus instantané » au chargement depuis GFS) : <html class="pp-opening"> est posé par index.html et retiré par js/first-contact.js dès que le premier document est à l'écran (ready), qu'une erreur de
+   démarrage s'affiche (failed) ou au bout de 60 s. Tant qu'il est là, une feuille aux lignes grises qui pulse recouvre le plan de travail au lieu d'un grand blanc, et le premier affichage de la page la montre sans attendre ni
+   scripts ni Grist. Rien ne l'écoute : elle laisse passer les clics (`pointer-events: none`), n'a aucun texte (pas de langue à choisir avant que les textes arrivent) et se coupe d'elle-même sous « réduire les animations ». */
+.pp-opening #editor-container::before { content: ''; position: absolute; inset: 0; background: var(--pp-page-gutter, #eef1f5); pointer-events: none; }
+.pp-opening #editor-container::after {
+  content: ''; position: absolute; top: 22px; left: 50%; box-sizing: border-box; width: min(794px, calc(100% - 28px)); height: min(1123px, calc(100% - 22px)); transform: translateX(-50%);
+  padding: 72px 64px; border: 1px solid var(--border); background: repeating-linear-gradient(to bottom, var(--border) 0 10px, transparent 10px 28px) content-box, var(--pp-paper-sheet, #fff);
+  box-shadow: var(--shadow-card); pointer-events: none; animation: pp-opening-pulse 1.5s ease-in-out infinite;
+}
+@keyframes pp-opening-pulse { 0%, 100% { opacity: .72; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pp-opening #editor-container::after { animation: none; } }
