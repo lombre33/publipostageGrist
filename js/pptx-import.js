@@ -988,10 +988,15 @@ const PptxImport = (function () {
   function assemble(items) {
     let out = '';
     const stack = [];
+    // Les niveaux du fichier des listes ouvertes, du premier au dernier : le rang d'un niveau dans cette pile est sa profondeur. Un texte dont le premier point est de niveau 2 (un schéma SmartArt écrit ses points au niveau 1
+    // ou 2, avec les mêmes retraits) et dont les suivants sont de ce même niveau est une liste à plat, non un premier point suivi de sous-points.
+    const levels = [];
     const closeTo = (depth) => { while (stack.length > depth) out += '</li></' + (stack.pop().tag === 'ol' ? 'ol' : 'ul') + '>'; };
     items.forEach((item) => {
-      if (!item.list) { closeTo(0); out += paragraphTag(item, false); return; }
-      const level = Math.min(item.list.level, stack.length);
+      if (!item.list) { closeTo(0); levels.length = 0; out += paragraphTag(item, false); return; }
+      while (levels.length && levels[levels.length - 1] > item.list.level) levels.pop();
+      if (!levels.length || levels[levels.length - 1] < item.list.level) levels.push(item.list.level);
+      const level = Math.min(levels.length - 1, stack.length);
       closeTo(level + 1);
       const key = item.list.tag + ':' + item.list.style + ':' + (item.list.char || '') + ':' + (item.rtl ? 'rtl' : '');
       const top = stack[level];
@@ -1863,20 +1868,42 @@ const PptxImport = (function () {
     const frame = { x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : kind, fill: fillHex ? '#' + fillHex : '', line: lineHex ? '#' + lineHex : '', lw: edge, fillTr: fillInk.tr, lineTr: lineInk.tr, dash: lineHex && edge > 0 ? look.dash : '', cap: lineHex && edge > 0 ? look.cap : '', cmpd: lineHex && edge > 0 ? look.cmpd : '', rot: box.rot, layer: env.decor || '', alt: altOfObject(sp), decorative: decorativeOfObject(sp) ? '1' : '' };
     Object.assign(frame, frameOfShape(frame.shape, box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
     if (frameLink) frame.link = frameLink;
+    // Un rectangle à fond ou à trait dont les marges du texte sont loin de celles de l'éditeur (une marge haute de 41,7 pt sous le titre d'une case de schéma, par exemple) se pose en DEUX cadres : la forme, sans texte,
+    // et le texte, posé comme un texte sans fond (sa place est celle que les marges du fichier lui laissent). Le cadre de l'éditeur n'a qu'une marge par forme : le texte démarrait sinon contre le haut de la case.
+    let back = null;
+    const insetPt = (name, fallback) => bodyNum(bodies, name, fallback) / EMU_PER_PT * k;
+    if (hasText && rectLike && !plain && !box.rot && !ctx.ownExport
+      && [insetPt('lIns', 91440) - FRAME_PAD_X_PT, insetPt('rIns', 91440) - FRAME_PAD_X_PT, insetPt('tIns', 45720) - FRAME_PAD_Y_PT, insetPt('bIns', 45720) - FRAME_PAD_Y_PT].some(gap => Math.abs(gap) >= SPLIT_INSET_PT)) {
+      back = Object.assign({}, frame, { shape: 'rect' });
+      Object.assign(back, frameOfShape('rect', box, lineHex && edge > 0 ? edge : 0, adj, frame.cap));
+      Object.assign(frame, { shape: '', fill: '', line: '', lw: 0, fillTr: 0, lineTr: 0, dash: '', cap: '', cmpd: '', alt: '', decorative: '' }, frameOfShape('', box, 0, adj, ''));
+    }
+    const lone = plain || !!back;   // un texte sans fond ni trait, d'origine ou après séparation de sa forme
     // Les colonnes de texte (`numCol`) et l'écart entre elles (`spcCol`, 0 sans autre mot), à l'échelle du texte posé comme les marges.
     if (hasText && bodyNum(bodies, 'numCol', 1) > 1) Object.assign(frame, { cols: bodyNum(bodies, 'numCol', 1), colGap: bodyNum(bodies, 'spcCol', 0) / EMU_PER_PT * k });
     // Le texte tourné d'un quart de tour (`vert`, `vert270`).
     if (hasText && TURNED_TEXT.test(bodyAttr(bodies, 'vert') || '')) frame.vert = bodyAttr(bodies, 'vert');
     // Un texte posé (sans fond ni trait) : les marges intérieures d'origine sont compensées par la boîte.
-    if (plain) {
+    if (lone) {
       const left = bodyNum(bodies, 'lIns', 91440) / EMU_PER_PT * k;
       const right = bodyNum(bodies, 'rIns', 91440) / EMU_PER_PT * k;
       const top = bodyNum(bodies, 'tIns', 45720) / EMU_PER_PT * k;
       const bottom = bodyNum(bodies, 'bIns', 45720) / EMU_PER_PT * k;
-      frame.x += left - FRAME_PAD_X_PT;
-      frame.w += 2 * FRAME_PAD_X_PT - left - right;
-      frame.y += top - FRAME_PAD_Y_PT;
-      frame.h += 2 * FRAME_PAD_Y_PT - top - bottom;
+      // Le cadre prend la place du texte (la boîte moins ses marges, plus celles du cadre). Le milieu de cette place est décalé du milieu de la boîte dans les axes DE LA BOÎTE : un objet tourné tourne ce décalage avec
+      // lui (un texte de bandeau à 270 degrés dont la marge est du côté de son bout descend ou monte le long du bandeau, et ne glisse pas de côté).
+      const shiftLeft = left - FRAME_PAD_X_PT;
+      const shiftRight = right - FRAME_PAD_X_PT;
+      const shiftTop = top - FRAME_PAD_Y_PT;
+      const shiftBottom = bottom - FRAME_PAD_Y_PT;
+      const ownX = (shiftLeft - shiftRight) / 2;
+      const ownY = (shiftTop - shiftBottom) / 2;
+      const turn = (frame.rot || 0) * Math.PI / 180;
+      const centerX = frame.x + frame.w / 2 + ownX * Math.cos(turn) - ownY * Math.sin(turn);
+      const centerY = frame.y + frame.h / 2 + ownX * Math.sin(turn) + ownY * Math.cos(turn);
+      frame.w -= shiftLeft + shiftRight;
+      frame.h -= shiftTop + shiftBottom;
+      frame.x = centerX - frame.w / 2;
+      frame.y = centerY - frame.h / 2;
       // La première ligne de base de PowerPoint : le texte en haut est descendu (ou monté) de l'écart d'interligne ; centré ou en bas, c'est plus bas, quand la hauteur du texte est mesurée.
       if (!box.rot && !ctx.ownExport && anchor === 't' && items.length && !frame.vert) frame.y += firstLineShift(items[0].lead, 't', 0);
       const first = items.find(item => !item.empty);
@@ -1902,20 +1929,24 @@ const PptxImport = (function () {
       const fitted = fitText(ctx, frame, txBody, shape, room, cap, items, turned ? measuredThickness : measuredHeight);
       items = fitted.items;
       if (fitted.scale < shape.scale - 0.001) { ctx.report.shrunk += 1; noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(fitted.scale)); }
-      if (turned && plain && !box.rot && fitted.natural < frame.w - 1) {
+      if (turned && lone && !box.rot && fitted.natural < frame.w - 1) {
         // Le bloc de lignes d'un texte tourné se pose dans la largeur de la boîte comme celui d'un texte à l'horizontale dans sa hauteur : `t` du côté où ses lignes commencent (à droite pour `vert`, à gauche
         // pour `vert270`), `ctr` au milieu, `b` de l'autre côté. Le cadre prend la largeur du texte et va là où il est : sans cela, le texte colle au bord gauche de sa boîte.
         const spare = frame.w - fitted.natural;
         const startsRight = frame.vert === 'vert';
         frame.x += anchor === 'ctr' ? spare / 2 : ((anchor === 'b') === startsRight ? 0 : spare);
         frame.w = fitted.natural;
-      } else if (!turned && plain && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
+      } else if (!turned && lone && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
         frame.y += anchor === 'b' ? frame.h - fitted.natural : (frame.h - fitted.natural) / 2;
         frame.h = fitted.natural;
         if (!ctx.ownExport && items.length) frame.y += firstLineShift(items[0].lead, anchor, fitted.natural);
       }
     }
     if (hasText && PROBE_SLIDES.includes(ctx.slideNumber)) probeText(ctx, sp, bodies, txBody, box, frame, anchor, shape);   // DÉBOGAGE TEMPORAIRE
+    if (back) {
+      snapToPage(back, env.page, BLEED_PT);
+      out.push(FreeFrame.html(back, '<p></p>'));
+    }
     out.push(FreeFrame.html(frame, hasText ? assemble(animateParagraphs(items, attr(kid(nv, 'cNvPr'), 'id'), env)) : '<p></p>'));
   }
   // Les réglages d'une forme prédéfinie (`a:avLst`) : { adj: 25000, ... }, ceux écrits en « val N » (les seuls que PowerPoint écrit).
@@ -2015,6 +2046,9 @@ const PptxImport = (function () {
 
   // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Un tableau de PowerPoint devient un tableau de l'éditeur dans un cadre libre, à sa place exacte : ses colonnes et ses hauteurs de ligne, ses cases fusionnées, leur fond, leurs bords, leur alignement vertical et leur texte.
+  const PAGE_FIT_TOLERANCE_PT = 0.3;                // le bas d'un tableau qui dépasse la page de moins que cela y est tenu (arrondis de la mesure)
+  const MIN_ROW_SQUEEZE = 0.5;                     // les lignes d'un tableau se resserrent jusqu'à la moitié de leur hauteur dans le fichier, pour tenir dans la page
+  const SPLIT_INSET_PT = 8;                        // un rectangle à fond dont une marge du texte s'écarte de celle de l'éditeur de plus que cela est posé en deux cadres : la forme, puis le texte
   const TABLE_FIT_SLACK = 0.03;                    // un tableau jusqu'à 3 % plus haut que dans le fichier y reste tel quel
   const TABLE_FLAGS = ['firstRow', 'lastRow', 'firstCol', 'lastCol', 'bandRow', 'bandCol'];
   const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -2095,7 +2129,7 @@ const PptxImport = (function () {
     const cols = grid.length;
     const rowsData = [];
     for (let r = 0; r < rows; r++) {
-      const rowData = { open: '<tr data-row-height="' + Math.max(1, Math.round(heights[r] * PX_PER_PT)) + '">', cells: [] };
+      const rowData = { px: heights[r] * PX_PER_PT, cells: [] };
       rowsData.push(rowData);
       let c = 0;
       const cells = kids(trs[r], 'tc');
@@ -2170,33 +2204,59 @@ const PptxImport = (function () {
       }
     }
     // Le tableau à la taille de texte `scale` ; `report` : où compter les liens (le premier tracé les compte, les essais de réduction ne les recomptent pas).
-    const render = (scale, report) => '<table><tbody>' + rowsData.map(row => row.open + row.cells.map(cell => cell.open
+    // Le tableau à la taille de texte `scale` et aux hauteurs de lignes du fichier multipliées par `squeeze` ; `report` : où compter les liens (le premier tracé les compte, les essais de réduction ne les recomptent pas).
+    const render = (scale, report, squeeze = 1) => '<table><tbody>' + rowsData.map(row => '<tr data-row-height="' + Math.max(1, Math.round(row.px * squeeze)) + '">' + row.cells.map(cell => cell.open
       + ((cell.txBody && assemble(paragraphsOf(cell.txBody, Object.assign({}, cell.shape, { scale, report, losses: report ? null : cell.shape.losses })))) || '<p></p>') + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
     const columns = grid.map(w => Math.max(1, Math.round(px(w))));
     let html = render(1);
     let natural = measuredTable(ctx, html, columns);
+    let scaled = 1;
     // Les lignes d'un tableau grandissent avec leur texte, et celui de l'éditeur (interligne 1,42) est plus haut que celui de PowerPoint : un tableau plus haut que dans le fichier a son texte réduit (jusqu'à 60 %).
-    // Jamais plus bas que la page (comme un texte, fitText) : la tolérance de 3 % ne fait pas sortir de la diapositive un tableau qui, dans le fichier, finit au ras de son bord.
-    const limit = Math.min(box.h * (1 + TABLE_FIT_SLACK) + 1, Math.max(env.page.h - box.y, 12));
-    if (natural > limit) {
-      const scratch = blankReport();
-      const trial = (scale) => { const tried = render(scale, scratch); return { html: tried, natural: measuredTable(ctx, tried, columns), scale }; };
-      let best = trial(MIN_FIT_SCALE);
-      if (best.natural <= limit) {
-        let low = MIN_FIT_SCALE;
-        let high = 1;
-        for (let i = 0; i < 6; i++) {
-          const mid = (low + high) / 2;
-          const tried = trial(mid);
-          if (tried.natural <= limit) { best = tried; low = mid; } else { high = mid; }
-        }
+    const limit = box.h * (1 + TABLE_FIT_SLACK) + 1;
+    const scratch = blankReport();
+    const trial = (scale, squeeze = 1) => { const tried = render(scale, scratch, squeeze); return { html: tried, natural: measuredTable(ctx, tried, columns), scale, squeeze }; };
+    // La plus grande taille de texte (au plus `high`, au moins `low`) dont le tableau, à ces hauteurs de lignes, tient dans `room` ; `low` quand aucune ne tient.
+    const largestFit = (low, high, squeeze, room) => {
+      let best = trial(low, squeeze);
+      if (best.natural > room) return best;
+      let lower = low;
+      let upper = high;
+      for (let i = 0; i < 6; i++) {
+        const mid = (lower + upper) / 2;
+        const tried = trial(mid, squeeze);
+        if (tried.natural <= room) { best = tried; lower = mid; } else { upper = mid; }
       }
+      return best;
+    };
+    if (natural > limit) {
+      const best = largestFit(MIN_FIT_SCALE, 1, 1, limit);
       html = best.html;
       natural = best.natural;
-      ctx.report.shrunk += 1;
-      noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(best.scale));
+      scaled = best.scale;
     }
-    probe(ctx, 'table "' + objectNameOf(node) + '" slide ' + ctx.slideNumber + ' file=(' + [box.x, box.y, box.w, box.h].map(probeRound).join(',') + ') page=' + probeRound(env.page.w) + 'x' + probeRound(env.page.h) + ' natural=' + probeRound(natural) + ' limit=' + probeRound(limit) + ' bottom=' + probeRound(box.y + Math.max(box.h, natural)) + ' rows=' + rows + ' cols=' + cols);   // DÉBOGAGE TEMPORAIRE
+    // Jamais plus bas que la page (comme un texte, fitText) : la tolérance de 3 % ne fait pas sortir de la diapositive un tableau qui, dans le fichier, finit au ras de son bord. Les hauteurs de lignes du fichier se
+    // resserrent d'abord (un tableau de la hauteur de la page n'a pas de marge : ses lignes sont celles de PowerPoint, à un point près), puis, si le texte seul les garde trop hautes, le texte se réduit encore.
+    const room = Math.max(env.page.h - box.y, 12);
+    let squeeze = 1;
+    if (natural > room + PAGE_FIT_TOLERANCE_PT) {
+      for (let i = 0; i < 4 && natural > room + PAGE_FIT_TOLERANCE_PT && squeeze > MIN_ROW_SQUEEZE; i++) {
+        squeeze = Math.max(MIN_ROW_SQUEEZE, squeeze * room / natural);
+        const tried = trial(scaled, squeeze);
+        html = tried.html;
+        natural = tried.natural;
+      }
+      if (natural > room + PAGE_FIT_TOLERANCE_PT) {
+        const best = largestFit(scaled * MIN_FIT_SCALE, scaled, squeeze, room + PAGE_FIT_TOLERANCE_PT);
+        html = best.html;
+        natural = best.natural;
+        scaled = best.scale;
+      }
+    }
+    if (scaled < 1 - 0.001) {
+      ctx.report.shrunk += 1;
+      noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(scaled));
+    }
+    probe(ctx, 'table "' + objectNameOf(node) + '" slide ' + ctx.slideNumber + ' file=(' + [box.x, box.y, box.w, box.h].map(probeRound).join(',') + ') page=' + probeRound(env.page.w) + 'x' + probeRound(env.page.h) + ' natural=' + probeRound(natural) + ' limit=' + probeRound(limit) + ' room=' + probeRound(room) + ' scale=' + probeRound(scaled) + ' squeeze=' + probeRound(squeeze) + ' bottom=' + probeRound(box.y + Math.max(box.h, natural)) + ' rows=' + rows + ' cols=' + cols);   // DÉBOGAGE TEMPORAIRE
     // Le tableau est un cadre libre à sa place exacte (comme un cadre de texte : ses marges intérieures sont celles de l'éditeur, le tableau est donc reculé d'autant), de la hauteur du tableau tel que l'éditeur le dessinera.
     out.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: Math.max(box.h, natural) + 2 * FRAME_PAD_Y_PT, rot: 0, layer: '' }, html));
     // Le texte alternatif d'un tableau n'a pas de place dans l'éditeur : compté.
@@ -2284,6 +2344,7 @@ const PptxImport = (function () {
     if (shapes.length > MAX_DIAGRAM_SHAPES) { refuse('tooMany', { n: shapes.length, max: MAX_DIAGRAM_SHAPES }); return; }
     shapes.forEach((shape) => { if (shape.localName === 'sp') diagramTextInsets(shape); });
     const frame = Object.assign({}, xf, { chOff: { x: 0, y: 0 }, chExt: { w: xf.w, h: xf.h } });
+    if (PROBE_SLIDES.includes(ctx.slideNumber)) probeDiagramXml(ctx, shapes);   // DÉBOGAGE TEMPORAIRE
     const from = out.length;
     await walkTree(tree, Object.assign({}, env, { slideRels: drawing.rels }), [frame].concat(groups), 1, out);
     probeDiagram(ctx, objectNameOf(node), out.slice(from));   // DÉBOGAGE TEMPORAIRE
@@ -2737,6 +2798,13 @@ const PptxImport = (function () {
     });
     probe(ctx, 'diagram "' + name + '" slide ' + ctx.slideNumber + ' : ' + rows.length + ' shapes with text');
     rows.slice(0, 14).forEach(row => probe(ctx, row));
+  }
+  // Le XML des deux premières formes à texte d'un schéma des diapositives suivies : leur fond et leur trait (`spPr`), leur style et leur premier paragraphe, de quoi lire d'où vient la couleur d'un texte.
+  function probeDiagramXml(ctx, shapes) {
+    const plain = el => new XMLSerializer().serializeToString(el).replace(/\s+xmlns(:\w+)?="[^"]*"/g, '').replace(/\s+/g, ' ');
+    shapes.filter(shape => shape.localName === 'sp' && descendants(shape, 't').some(t => t.textContent.trim())).slice(0, 2).forEach((shape, i) => {
+      [['spPr', kid(shape, 'spPr')], ['style', kid(shape, 'style')], ['p', kid(kid(shape, 'txBody'), 'p')]].forEach(([name, el]) => { if (el) probe(ctx, '    xml' + i + ' ' + name + ' ' + plain(el).slice(0, 900)); });
+    });
   }
   function probeText(ctx, sp, bodies, txBody, box, frame, anchor, shape) {
     const fit = kid(bodies[bodies.length - 1], ['spAutoFit', 'normAutofit', 'noAutofit']);

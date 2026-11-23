@@ -3517,6 +3517,89 @@
       return result(bad);
     });
 
+  // Retour du fichier du 23/11 (diapositive 8) : un tableau de la hauteur de la page entière (de 8,4 à 405,5 pt sur 405,1) dont les lignes du fichier font toutes leur hauteur ; l'éditeur y ajoute la bordure de chaque ligne et
+  // le tableau finit un point trop bas. Le texte réduit à 60 % n'y change rien (les lignes sont des hauteurs minimales) : ce sont les lignes qui se resserrent, le texte garde sa taille.
+  add('pptx_import_table_as_tall_as_the_page_squeezes_its_rows_not_its_text',
+    'Un tableau de 8 lignes de 50 pt qui finit au ras du bas de la page (y = 140, 540 pt) mesure 401 pt dans l\'éditeur (la bordure de chaque ligne) : ses lignes se resserrent de moins d\'un pour cent pour qu\'il tienne dans la page, son texte garde ses 12 pt (rien n\'est « réduit »)',
+    async (h) => {
+      const rows = Array.from({ length: 8 }, (_, i) => ({ h: 50, cells: [{ text: 'Ligne ' + (i + 1) }, { text: String(i) }] }));
+      const r = await run1({ slides: [{ shapes: table({ x: 40, y: 140, cols: [300, 200], rows }) }] });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].tableFrames[0];
+      await inEditor(h, r);
+      const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+      const tbl = document.querySelector('.tiptap .pp-free-frame table');
+      const bottom = frame.y + 3.6 + tbl.getBoundingClientRect().height / zoom * 0.75;
+      expect('le bas du tableau, dans l\'éditeur, est à 540 pt au plus (0,5 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 540.5, { y: frame.y, bottom });
+      expect('le texte garde ses 12 pt : rien n\'est réduit', !r.report.some(item => item.key === 'shrunk') && !/font-size: ([0-9]|1[01])(\.\d+)?pt/.test(frame.el.innerHTML), r.report.map(item => item.key));
+      expect('chaque ligne a une hauteur de 50 pt moins un pour cent au plus', Array.from(tbl.querySelectorAll('tr')).every(tr => { const hpx = parseFloat(tr.getAttribute('data-row-height')); return hpx >= 66 && hpx <= 66.7; }), Array.from(tbl.querySelectorAll('tr')).map(tr => tr.getAttribute('data-row-height')));
+      return result(bad);
+    });
+
+  // Retour du fichier du 23/11 (diapositive 28) : les points d'une liste de schéma SmartArt sont tous du niveau 2 du fichier (avec le même retrait) ; le premier se posait au niveau 1 de l'éditeur, le suivant, de ce même
+  // niveau 2, était emboîté dessous (« Programmes » puis « 2026 » en retrait).
+  add('pptx_import_list_whose_first_point_is_level_two_stays_flat',
+    'Une liste dont le premier point est de niveau 2 et les suivants de ce même niveau est une liste à plat (quatre points dans un seul `ul`) ; un point de niveau 3 qui suit est emboîté sous le précédent, un point de niveau 2 qui revient est de nouveau à plat ; la liste d\'un texte de niveaux 1, 2, 1 reste inchangée (un sous-point emboîté)',
+    async () => {
+      const point = (text, level) => para(run(text, 'sz="1200"'), `lvl="${level}" marL="114300" indent="-114300"`, '<a:buChar char="•"/>');
+      const r = await run1({
+        slides: [{
+          shapes: textBox(40, 40, 400, 300, point('Programmes', 1) + point('2026', 1) + point('2027', 1) + point('Détail', 2) + point('Trajectoire', 1), { id: 2 })
+            + textBox(500, 40, 400, 300, point('Premier', 0) + point('Sous-point', 1) + point('Deuxième', 0), { id: 3 }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const [flat, ordinary] = slidesOf(r.html)[0].frames;
+      const shapeOf = (frame) => Array.from(frame.el.querySelectorAll('.pp-free-frame-content > ul > li')).map(li => li.firstElementChild.textContent + (li.querySelector(':scope > ul') ? '{' + Array.from(li.querySelectorAll(':scope > ul > li')).map(sub => sub.textContent).join('|') + '}' : '')).join(' ; ');
+      expect('une seule liste de quatre points : Programmes ; 2026 ; 2027{Détail} ; Trajectoire', shapeOf(flat) === 'Programmes ; 2026 ; 2027{Détail} ; Trajectoire', shapeOf(flat));
+      expect('niveaux 1, 2, 1 : Premier{Sous-point} ; Deuxième', shapeOf(ordinary) === 'Premier{Sous-point} ; Deuxième', shapeOf(ordinary));
+      return result(bad);
+    });
+
+  // Le texte d'un bandeau tourné de 270 degrés dont la marge de droite est de 41,7 pt (le texte est loin du bout du bandeau) : le cadre prend la place du texte, et son milieu est décalé du milieu de la boîte dans
+  // les axes de la boîte (ici le long du bandeau, vers le bas), non de côté : le texte glissait sur la gauche et touchait le bord de la diapositive.
+  add('pptx_import_turned_box_with_an_inset_slides_along_its_own_axis',
+    'Une zone de texte de 250 x 47,2 pt tournée de 270 degrés (texte de bandeau) dont la marge de droite est de 41,7 pt : le cadre est large de 222,7 pt et son milieu est à 20,85 pt SOUS celui de la boîte (le long du bandeau), à la même abscisse ; sans rotation, le même cadre est décalé de 20,85 pt vers la gauche',
+    async () => {
+      const text = para(run('AXE ECOSYSTEME', 'sz="1400" b="1"'));
+      const body = 'lIns="0" tIns="0" rIns="529590" bIns="0"';
+      const r = await run1({
+        slides: [{
+          shapes: textBox(100, 100, 250, 47.2, text, { id: 2, body, xf: 'rot="16200000"' }) + textBox(100, 300, 250, 47.2, text, { id: 3, body }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const [turned, flat] = slidesOf(r.html)[0].frames;
+      const center = f => [f.x + f.w / 2, f.y + f.h / 2];
+      expect('tourné : large de 222,7 pt, haut de 54,4 pt (la boîte, ses marges, celles du cadre)', near(turned.w, 222.7, 0.3) && near(turned.h, 54.4, 0.3), turned);
+      expect('tourné : le milieu est à (225 ; 144,45) : même abscisse que celui de la boîte, 20,85 pt plus bas', near(center(turned)[0], 225, 0.3) && near(center(turned)[1], 123.6 + 20.85, 0.3), center(turned));
+      expect('sans rotation : le cadre commence 7,2 pt avant le bord gauche de la boîte (x = 92,8) et finit 34,5 pt avant son bord droit : son milieu est à 20,85 pt à gauche de celui de la boîte', near(flat.x, 92.8, 0.3) && near(center(flat)[0], 225 - 20.85, 0.3), flat);
+      return result(bad);
+    });
+
+  // Une case de schéma à fond dont le texte commence 41,7 pt sous son haut (marge haute du fichier) : l'éditeur n'a qu'une marge par forme, le texte démarrait collé en haut de la case. Elle devient deux cadres : la forme (fond, sans
+  // texte) puis le texte (sans fond), posé là où les marges du fichier le mettent. Une case aux marges ordinaires reste UN seul cadre.
+  add('pptx_import_filled_box_with_a_deep_top_inset_is_a_shape_and_a_text_frame',
+    'Un rectangle bleu de 235,2 x 250 pt à 100 / 100 dont la marge haute est de 41,7 pt et le texte en haut : deux cadres, d\'abord le rectangle bleu sans texte (même boîte), puis le texte sans fond dont le haut est à 41,7 - 3,6 pt sous celui de la case ; un rectangle aux marges ordinaires reste un seul cadre à fond',
+    async () => {
+      const text = para(run('Titre de la case', 'sz="1400"'));
+      const r = await run1({
+        slides: [{
+          shapes: sp({ id: 2, x: 100, y: 100, w: 235.2, h: 250, fill: solid('0070C0'), body: 'lIns="120650" tIns="529590" rIns="120650" bIns="120650"', text })
+            + sp({ id: 3, x: 400, y: 100, w: 235.2, h: 120, fill: solid('0070C0'), text }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      expect('trois cadres : la forme et le texte de la grande case, la petite case en un seul', frames.length === 3, frames.map(f => [f.shape, f.fill, f.text]));
+      const [back, front, small] = frames;
+      expect('la forme : un rectangle bleu à la boîte du fichier, sans texte', back.shape === 'rect' && back.fill === '#0070c0' && back.text === '' && near(back.x, 100, 0.3) && near(back.y, 100, 0.3) && near(back.w, 235.2, 0.3) && near(back.h, 250, 0.3), back);
+      expect('le texte : sans fond ni forme, « Titre de la case », son haut à 38,1 pt sous celui de la case (41,7 - 3,6) et au moins', front.shape === '' && front.fill === '' && /Titre de la case/.test(front.text) && front.y >= 100 + 38.1 - 0.3 && front.y <= 100 + 38.1 + 8, front);
+      expect('le texte reste dans la case : son bas ne dépasse pas celui de la case', front.y + front.h <= 350.3 && front.x >= 100 - 0.3 && front.x + front.w <= 335.5, front);
+      expect('la petite case aux marges ordinaires : UN cadre, fond bleu et texte', small.fill === '#0070c0' && /Titre de la case/.test(small.text), small);
+      return result(bad);
+    });
+
   // Les mêmes briques pour le test à la vraie souris (dev-tests/verify-pptx-import-mouse.mjs) : il charge ce fichier dans la page et y fabrique ses fichiers .pptx, sans fichier binaire dans le dépôt.
   window.PptxFixtures = { pptx, sp, textBox, cxn, pic, grp, table, png, TWO_TONE, para, run, solid, scheme, ln, xfrm, emu, IMAGE_REL, CLR_MAP, BG1, ownBg, everyKindOfObject, everyKindOfLoss };
   window.EditorTestSuites = window.EditorTestSuites || {};
