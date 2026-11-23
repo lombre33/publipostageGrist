@@ -1,6 +1,8 @@
 # Feuille de route — fonctionnalités Beta
 
 > **Statut au 4 octobre 2026 : liste du 14 septembre, plus tenue à jour** (seules les lignes 14 et 15 portent un « Livré le 01/10 »). La feuille de route de référence est le classeur `RoadMap_Suite_Grist_Factory_fusionnee.xlsx` du dossier du projet, relu sur `main` le 01/10/2026 ; les fonctions en ligne sont décrites dans le [README](../README.md).
+>
+> **Les idées de fonctions et d'études lancées depuis dans le chat sont recensées dans [IDEES.md](IDEES.md)** (une ligne par idée : date, usage, état).
 
 Consolidation de la liste de fonctionnalités fournie par l'utilisateur le 2026-09-14 (deux jets : une
 liste brute au fil de l'eau, puis une liste affinée listant les items jugés les plus prioritaires) —
