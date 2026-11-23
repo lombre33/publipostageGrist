@@ -24,7 +24,24 @@ const modelsRead = start1.calls.find(call => call.label === 'fetchTable Publipos
 check('le démarrage a lu la table des modèles, et le journal l\'a compté (au moins une lecture, avec ses signes)', !!modelsRead && modelsRead.n >= 1 && modelsRead.chars > 100, { modelsRead });
 check('le rapport a sa section « Appels à Grist » avec la ligne de la table des modèles, ses lectures, sa durée et ses signes', /Appels à Grist : \d+ en tout/.test(start1.report) && /fetchTable Publipostage_Modeles : \d+ fois?, [\d.,]+ ?(?:ms|s) en tout, le plus long [\d.,]+ ?(?:ms|s), [\d.,]+ (?:Ko|Mo) de signes/.test(start1.report), { head: start1.report.split('\n').filter(line => /Grist|fetchTable/.test(line)).slice(0, 6) });
 check('le rapport dit aussi les fichiers du chargement : le compte, ceux sans transfert, le dernier de chaque site, les plus lents', /Fichiers : \d+ lus, dont \d+ sur \d+ de la page sans transfert/.test(start1.report) && /par site : .*\(le dernier reçu à \d+ ms\)/.test(start1.report) && /les plus lents : .* ms \(début à \d+ ms\)/.test(start1.report), { files: start1.report.split('\n').filter(line => /Fichiers|par site|plus lents/.test(line)) });
-check('l\'ouverture du départ laisse « document ouvert » (id, type, Ko, temps de la fonction), sans `depuisLeMenuMs` : elle ne vient pas du menu', start1.opened.length >= 1 && typeof start1.opened[0].ms === 'number' && typeof start1.opened[0].Ko === 'number' && !!start1.opened[0].type && start1.opened[0].depuisLeMenuMs === undefined, { opened: start1.opened });
+check('l\'ouverture du départ laisse « document ouvert » (id, type, Ko, temps de la fonction), sans `depuisLeMenuMs` : elle ne vient pas du menu', start1.opened.length >= 1 && typeof start1.opened[0].fonctionMs === 'number' && typeof start1.opened[0].Ko === 'number' && !!start1.opened[0].type && start1.opened[0].depuisLeMenuMs === undefined, { opened: start1.opened });
+
+// 23/11, lot 2 : de quoi lire le DÉPART (d'où part la chronologie, à quel moment la personne voit quelque chose), les étapes du démarrage et ce dont se compose la table des modèles.
+const startMarks = await page.evaluate(() => PerfTrace.events().filter(e => e.kind === 'mark').map(e => e.label));
+const at = label => startMarks.indexOf(label);
+check('le démarrage laisse ses étapes dans le journal : Grist prêt, table des modèles reçue puis mise en cache, éditeur prêt, liste des documents prête, widget prêt',
+  ['démarrage : Grist prêt', 'modèles : table reçue', 'modèles : en cache', 'démarrage : éditeur prêt', 'démarrage : liste des documents prête', 'démarrage : widget prêt'].every(label => at(label) >= 0) && at('modèles : table reçue') < at('modèles : en cache') && at('démarrage : liste des documents prête') < at('démarrage : widget prêt'), startMarks);
+check('le rapport dit d\'où part sa chronologie (millisecondes après le début du chargement de la page) et ce que le navigateur sait du premier affichage',
+  /Départ : la chronologie ci-dessous commence \d+ ms après le début du chargement de la page \(temps de la page : index\.html reçu à \d+ ms ; premier affichage (?:\d+ ms|non donné), premier contenu (?:\d+ ms|non donné)/.test(start1.report), start1.report.split('\n').filter(l => /^Départ/.test(l)));
+check('le rapport dit de quoi se compose la table des modèles : lignes, colonnes les plus lourdes, lignes les plus lourdes, et le travail du widget une fois la table reçue',
+  /Table des modèles : \d+ lignes, [\d.,]+ (?:Ko|Mo) ; par colonne : \S+ [\d.,]+ (?:Ko|Mo)/.test(start1.report) && /les plus lourdes : #\d+ \S+ « .* » [\d.,]+ (?:Ko|Mo)/.test(start1.report) && /comptage \d+ ms, mise en cache des lignes \d+ ms/.test(start1.report), start1.report.split('\n').filter(l => /Table des modèles|les plus lourdes|comptage/.test(l)));
+const frozen = await page.evaluate(async () => {
+  const end = performance.now() + 450;
+  while (performance.now() < end) { /* la page est tenue occupée, un arrêt se voit */ }
+  await new Promise(resolve => setTimeout(resolve, 300));
+  return PerfTrace.report().split('\n').filter(line => /ARRÊT de la page : /.test(line));
+});
+check('un arrêt de la page est dit avec son début ET sa fin (« jusqu\'à N ms »), pour le placer parmi les appels à Grist qui reviennent', frozen.some(line => /ARRÊT de la page : \d(?:\.\d)? s \(jusqu’à \d+ ms\)/.test(line)), frozen);
 
 // --- 2. La surveillance est transparente ---
 const transparent = await page.evaluate(async () => {
@@ -82,11 +99,11 @@ const picked = await page.evaluate(async () => {
   select.dispatchEvent(new Event('change', { bubbles: true }));
   await new Promise(resolve => setTimeout(resolve, 600));
   const fresh = PerfTrace.events().slice(before).filter(e => e.kind === 'mark');
-  return { fresh: fresh.map(e => ({ label: e.label, id: e.id, type: e.type, Ko: e.Ko, ms: e.ms, depuisLeMenuMs: e.depuisLeMenuMs })), picked: target.value };
+  return { fresh: fresh.map(e => ({ label: e.label, id: e.id, type: e.type, Ko: e.Ko, fonctionMs: e.fonctionMs, depuisLeMenuMs: e.depuisLeMenuMs })), picked: target.value };
 });
 const choose = picked.fresh.find(e => e.label === 'menu : document choisi');
 const opened = picked.fresh.find(e => e.label === 'document ouvert');
-check('choisir un document dans le menu laisse « menu : document choisi » (son id) puis « document ouvert » (id, type, Ko, temps de la fonction)', !!choose && String(choose.id) === String(picked.picked) && !!opened && String(opened.id) === String(picked.picked) && typeof opened.Ko === 'number' && typeof opened.ms === 'number' && !!opened.type, picked);
+check('choisir un document dans le menu laisse « menu : document choisi » (son id) puis « document ouvert » (id, type, Ko, temps de la fonction)', !!choose && String(choose.id) === String(picked.picked) && !!opened && String(opened.id) === String(picked.picked) && typeof opened.Ko === 'number' && typeof opened.fonctionMs === 'number' && !!opened.type, picked);
 check('et « document ouvert » dit le temps écoulé depuis le choix dans le menu', !!opened && typeof opened.depuisLeMenuMs === 'number' && opened.depuisLeMenuMs >= 0 && opened.depuisLeMenuMs < 5000, opened);
 const secondOpen = await page.evaluate(async () => {
   const before = PerfTrace.events().length;

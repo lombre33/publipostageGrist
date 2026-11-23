@@ -336,7 +336,7 @@
 
   // Le journal d'ouverture (js/perf-trace.js:opened) : quel document, de quel type et de quel poids, et le temps que loadTemplateIntoEditor a tenu la page (la suite d'une présentation qui se pose par morceaux a ses propres repères).
   function traceOpened(tpl, type, startedAt) {
-    PerfTrace.opened({ id: tpl ? tpl.id : null, type, Ko: Math.round(String(tpl && tpl.contenu || '').length / 1024), ms: Math.round(performance.now() - startedAt) });
+    PerfTrace.opened({ id: tpl ? tpl.id : null, type, Ko: Math.round(String(tpl && tpl.contenu || '').length / 1024), fonctionMs: Math.round(performance.now() - startedAt) });
   }
 
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
@@ -1261,6 +1261,7 @@
     const editorReady = Editor.init();
     editorReady.catch(() => {}); // l'échec se lit plus bas, à l'attente ; ici seulement pas d'« unhandled rejection » le temps que Grist réponde
     try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
+    PerfTrace.mark('démarrage : Grist prêt');
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
     // Au plus ACCESS_STARTUP_WAIT_MS : le widget démarre verrouillé (lecture seule) tant que les droits ne sont pas connus. Une seule attente, quel que soit le nombre de fois qu'on la demande.
@@ -1291,6 +1292,7 @@
     PdfReading.onChange(onPdfReadingChange);
     PdfReading.onLocksChanged(applyPdfLocks);
     await editorReady;
+    PerfTrace.mark('démarrage : éditeur prêt');
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
     Comments.wireReader(readerContainer);
@@ -1300,6 +1302,7 @@
     GristAPI.onRecord(onRecordChange);
     BatchScope.onViewChange(onViewRowsChanged);
     await refreshTemplateList(templatesLoaded);
+    PerfTrace.mark('démarrage : liste des documents prête');
     // Enveloppe #template-select avant l'écriture de templateSelect.value ci-dessous (modèle par défaut) : TemplateTreeSelect intercepte cet
     // accesseur pour se synchroniser (js/template-tree-select.js), donc l'ordre importe ; attaché après, le premier affichage du modèle par défaut
     // serait manqué.
@@ -1335,6 +1338,7 @@
     // la vue et le ★. Son identifiant vient du fragment de l'adresse du cadre, effacé aussitôt, jamais du stockage du navigateur (le cadre isolé de GFS le refuse). Les extensions viennent du contexte de GFS
     // (une présentation ne s'ouvre que si « diapositives » est active) : on l'attend d'abord, comme js/gfs-open.js. Modèle supprimé entre-temps ou que ce widget ne sait pas ouvrir : l'ordre habituel, sans message.
     await GfsLink.ready;
+    PerfTrace.mark('démarrage : GFS prête');
     const reopenId = Settings.takeReopenId();
     const reopenedTemplate = reopenId == null ? undefined : Templates.openableById(reopenId);
     const reopenTemplateId = reopenedTemplate ? reopenedTemplate.id : null;
@@ -1376,6 +1380,7 @@
     // `importing` : un fichier ou un modèle de départ que GFS donne va s'ouvrir juste après (« Nouveau > Importer », « Nouveau > Depuis un modèle ») : il se pose dans l'éditeur, le départ est en Édition.
     await switchMode(startMode({ blank: gfsBlankOpened || gfsBlankType !== null, importing: !!opening && (opening.raison === 'importer' || opening.raison === 'modele'), hasTemplate: startupTemplateId !== undefined }));
     FirstContact.ready();
+    PerfTrace.mark('démarrage : widget prêt');
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et l'import que GFS demande (« Nouveau > Importer ») puis les appels `ouvrir` reçus pendant le démarrage sont traités à la fin de ce tour.
     GfsOpen.startupDone();

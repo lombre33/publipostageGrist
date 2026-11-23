@@ -230,6 +230,22 @@
   document.head.appendChild(carte);
 })();
 </script>
+<script>
+(function () {
+  // Le tampon des fichiers que le rapport de fluidité (js/perf-trace.js) relit : 250 entrées par défaut, les 280 scripts le remplissent avant le reste ; il en garde assez pour tout voir.
+  try { performance.setResourceTimingBufferSize(1000); } catch (e) { /* navigateur sans cette fonction */ }
+  // Les bibliothèques de l'éditeur (TipTap, ProseMirror : les import() de js/editor.js:importLibraries) ne partaient qu'à Editor.init, après les 280 scripts : la page n'était prête qu'à 3,2 s alors que ses scripts
+  // finissaient à 1,5 s (rapport Firefox du 2026-11-20). Elles partent ici, dès la carte d'importation posée (23/11 : avant les feuilles de style et les 280 scripts, pas après les 210 premiers), importLibraries reprend les mêmes modules (une seule adresse chacun : ce que l'import() d'avant a déjà
+  // chargé ne se recharge pas). Une adresse qui échoue ici échouera aussi à Editor.init, qui le dit comme avant. Cette liste est celle de importLibraries (dev-tests/verify-early-libs.mjs la compare).
+  try {
+    window.__earlyLibs = ['@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-text-align', '@tiptap/extension-text-style', '@tiptap/extension-font-family', '@tiptap/suggestion', '@tiptap/extension-document', '@tiptap/extension-table', '@tiptap/extension-table-row', '@tiptap/extension-table-cell', '@tiptap/extension-table-header', '@tiptap/extension-task-list', '@tiptap/extension-task-item', '@tiptap/extension-placeholder', '@floating-ui/dom', 'prosemirror-state', 'prosemirror-view', 'prosemirror-tables', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-history'].map(function (nom) {
+      var module = import(nom);
+      module.catch(function () {});
+      return module;
+    });
+  } catch (e) { /* pas d'import() dynamique ici : Editor.init charge tout, comme avant */ }
+})();
+</script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
 <link rel="stylesheet" href="css/style.css?v=0.112">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.6">
@@ -1495,16 +1511,6 @@
     templatesLoaded.catch(() => {});
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
-  // Les bibliothèques de l'éditeur (TipTap, ProseMirror : les import() de js/editor.js:importLibraries) ne partaient qu'à Editor.init, après les 280 scripts : la page n'était prête qu'à 3,2 s alors que ses scripts
-  // finissaient à 1,5 s (rapport Firefox du 2026-11-20). Elles partent ici, en même temps que les scripts ; importLibraries reprend les mêmes modules (une seule adresse chacun : ce que l'import() d'avant a déjà
-  // chargé ne se recharge pas). Une adresse qui échoue ici échouera aussi à Editor.init, qui le dit comme avant. Cette liste est celle de importLibraries (dev-tests/verify-early-libs.mjs la compare).
-  try {
-    window.__earlyLibs = ['@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-text-align', '@tiptap/extension-text-style', '@tiptap/extension-font-family', '@tiptap/suggestion', '@tiptap/extension-document', '@tiptap/extension-table', '@tiptap/extension-table-row', '@tiptap/extension-table-cell', '@tiptap/extension-table-header', '@tiptap/extension-task-list', '@tiptap/extension-task-item', '@tiptap/extension-placeholder', '@floating-ui/dom', 'prosemirror-state', 'prosemirror-view', 'prosemirror-tables', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-history'].map(function (nom) {
-      var module = import(nom);
-      module.catch(function () {});
-      return module;
-    });
-  } catch (e) { /* pas d'import() dynamique ici : Editor.init charge tout, comme avant */ }
 </script>
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.215"></script>

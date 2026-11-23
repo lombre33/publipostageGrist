@@ -1259,8 +1259,8 @@ const GristAPI = (function () {
   // est un GET simple (ni corps ni en-tête particulier : pas de pré-requête CORS) ; elle ne peut rien écrire. Rend les lignes, des objets { colonne: valeur } aux valeurs brutes de SQLite (un booléen y est 0 ou 1,
   // une date des secondes). Lève une erreur dont `reason` dit pourquoi : 'jeton' (Grist n'en donne pas), 'réseau' (hors ligne, CORS, politique de GFS), 'http' (avec `status` : droits, instance sans cette
   // interface), 'délai', 'forme' (réponse sans `records`). Rien ne dépend d'elle : celui qui l'appelle sait toujours lire autrement.
-  async function lightQuery(sql, timeoutMs) {
-    const fail = (reason, extra) => Object.assign(new Error('lightQuery : ' + reason), { reason }, extra);
+  async function lightGet(path, timeoutMs) {
+    const fail = (reason, extra) => Object.assign(new Error('lightGet : ' + reason), { reason }, extra);
     let info;
     try { info = await getAccessTokenCached(); } catch (e) { throw fail('jeton'); }
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -1268,14 +1268,33 @@ const GristAPI = (function () {
     try {
       let response;
       try {
-        response = await fetch(info.baseUrl + '/sql?q=' + encodeURIComponent(sql) + '&auth=' + encodeURIComponent(info.token), { method: 'GET', credentials: 'omit', signal: controller ? controller.signal : undefined });
+        response = await fetch(info.baseUrl + path + (path.indexOf('?') === -1 ? '?' : '&') + 'auth=' + encodeURIComponent(info.token), { method: 'GET', credentials: 'omit', signal: controller ? controller.signal : undefined });
       } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'réseau'); }
-      if (!response.ok) throw fail('http', { status: response.status });
+      if (!response.ok) {
+        // Ce que Grist dit de son refus (« {"error": …} ») : quelques mots, pour le rapport de fluidité ; jamais l'adresse (elle porte le jeton).
+        let detail = '';
+        try { detail = (await response.text()).replace(/\s+/g, ' ').slice(0, 160); } catch (e) { /* corps illisible */ }
+        throw fail('http', { status: response.status, detail });
+      }
+      let text;
+      try { text = await response.text(); } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'forme'); }
       let body;
-      try { body = await response.json(); } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'forme'); }
-      if (!body || !Array.isArray(body.records)) throw fail('forme');
-      return body.records.map(record => (record && record.fields) || {});
+      try { body = JSON.parse(text); } catch (e) { throw fail('forme'); }
+      return { body, bytes: text.length };
     } finally { clearTimeout(timer); }
+  }
+  async function lightQuery(sql, timeoutMs) {
+    const { body } = await lightGet('/sql?q=' + encodeURIComponent(sql), timeoutMs);
+    if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightQuery : forme'), { reason: 'forme' });
+    return body.records.map(record => (record && record.fields) || {});
+  }
+  // Les lignes d'une table par l'interface REST (`/tables/<table>/records`), au jeton en lecture seule, sans passer par la lecture complète du module de Grist : `ids` les restreint à ces numéros de ligne (le filtre de Grist). Rend
+  // { records: [{ id, fields }], bytes }. Lecture seule, une seule demande ; refusée ou illisible : la même erreur que lightQuery (reason, status, detail).
+  async function lightRecords(table, ids, timeoutMs) {
+    const filter = Array.isArray(ids) ? '&filter=' + encodeURIComponent(JSON.stringify({ id: ids })) : '';
+    const { body, bytes } = await lightGet('/tables/' + encodeURIComponent(table) + '/records?limit=' + (Array.isArray(ids) ? ids.length : 1) + filter, timeoutMs);
+    if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightRecords : forme'), { reason: 'forme' });
+    return { records: body.records, bytes };
   }
 
   // L'hôte de l'instance de Grist qui sert le document (`grist.numerique.gouv.fr`, `docs.getgrist.com`...), en minuscules : celui de l'adresse de l'interface de programmation que donne le jeton d'accès. '' quand Grist ne
@@ -1457,5 +1476,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, lightRecords, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

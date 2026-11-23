@@ -242,6 +242,9 @@ const Templates = (function () {
     }
   }
 
+  // Une étape du démarrage dans le rapport de fluidité (js/perf-trace.js, temporaire) ; sans lui (page de test), rien.
+  const traceStep = (label, extra) => { if (typeof PerfTrace !== 'undefined') PerfTrace.mark(label, extra); };
+
   async function readTable() {
     // Lecture de la table des modèles, null si elle est absente ou illisible (document neuf : les migrations de loadAll la créent).
     try {
@@ -255,16 +258,33 @@ const Templates = (function () {
   // Poids de la dernière lecture de la table, en caractères de texte (contenus et images en base64 compris) : js/main.js en tire l'attente de la
   // relecture au repos, plus longue quand la table est lourde.
   let loadedChars = 0;
-  function charsOf(data) {
+  // `weights` : de quoi se compose cette lecture (par colonne, et les lignes les plus lourdes), pour le rapport de fluidité (js/perf-trace.js, temporaire) : la table pèse 42 Mo chez une personne, et ce qui la remplit décide de ce qu'on peut alléger.
+  let loadWeights = null;
+  const HEAVIEST_ROWS = 6;
+  function charsOf(data, weights) {
     let chars = 0;
+    const rowChars = weights && Array.isArray(data.id) ? new Array(data.id.length).fill(0) : null;
     Object.keys(data).forEach(column => {
       const values = data[column];
       if (!Array.isArray(values)) return;
-      for (let i = 0; i < values.length; i++) if (typeof values[i] === 'string') chars += values[i].length;
+      let columnChars = 0;
+      for (let i = 0; i < values.length; i++) {
+        if (typeof values[i] !== 'string') continue;
+        columnChars += values[i].length;
+        if (rowChars) rowChars[i] += values[i].length;
+      }
+      chars += columnChars;
+      if (weights) weights.columns[column] = columnChars;
     });
+    if (rowChars) {
+      weights.rows = rowChars.length;
+      weights.heaviest = rowChars.map((total, i) => ({ id: data.id[i], chars: total, type: (data.TemplateType && data.TemplateType[i]) || 'document', name: String((data.Name && data.Name[i]) || '').slice(0, 24) }))
+        .sort((a, b) => b.chars - a.chars).slice(0, HEAVIEST_ROWS);
+    }
     return chars;
   }
   function getLoadedChars() { return loadedChars; }
+  function getLoadWeights() { return loadWeights; }
 
   // Une ligne de la table des modèles, au format du cache : `cell` lit la colonne si elle existe (une table migrée à moitié, un accès restreint),
   // sinon la valeur par défaut.
@@ -496,19 +516,26 @@ const Templates = (function () {
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const tableData = first && migrationRuns === runsBefore ? first : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
-      loadedChars = charsOf(tableData);
+      const weights = { columns: {}, rows: 0, heaviest: [] };
+      const weighStart = performance.now();
+      loadedChars = charsOf(tableData, weights);
+      loadWeights = Object.assign(weights, { weighMs: Math.round(performance.now() - weighStart) });
+      traceStep('modèles : table reçue', { lignes: weights.rows, signesMo: Math.round(loadedChars / 104857.6) / 10 });
       confirmPredictedDates(tableData, writtenAtStart);
       // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
       const templates = [];
       let settingsAt = -1;
+      const rowsStart = performance.now();
       tableData.id.forEach((id, i) => {
         if (!isSettingsRow(tableData, i)) templates.push(templateFromRow(tableData, i));
         else if (settingsAt === -1) settingsAt = i;
       });
+      loadWeights.rowsMs = Math.round(performance.now() - rowsStart);
       templatesCache = keepWrittenSince(templates, writtenAtStart);
       cacheReadAt = readStartedAt;
       cacheArrivedAt = Date.now();
       adoptDocumentSettings(tableData, settingsAt, settingsEpochAtStart);
+      traceStep('modèles : en cache', { rowsMs: loadWeights.rowsMs });
     } catch (e) {
       console.error('Erreur chargement modèles', e);
       templatesCache = [];
@@ -1104,7 +1131,7 @@ const Templates = (function () {
     loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, verifyStored, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
+    sameDateModif, verifyStored, getLoadedChars, getLoadWeights, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();

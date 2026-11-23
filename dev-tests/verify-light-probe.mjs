@@ -7,7 +7,9 @@
 //  3. quand l'interface répond, le rapport dit le temps, le nombre de lignes, et compare dates et longueurs à celles du cache (« N sur N ») ;
 //  4. quand elle refuse (HTTP 403), n'aboutit pas (réseau coupé), répond autre chose que du SQL ou tarde, le rapport dit pourquoi, et rien d'autre ne casse (l'erreur n'est jamais levée jusqu'à la page) ;
 //  5. le geste Ctrl + Alt + Maj + L sonde avant d'écrire le rapport ;
-//  6. la sonde n'écrit rien : seul un jeton en lecture seule a été demandé.
+//  6. la sonde n'écrit rien : seul un jeton en lecture seule a été demandé ;
+//  7. (23/11, lot 2) elle lit aussi UNE ligne par l'interface REST (`/tables/<table>/records`, filtrée sur la ligne ouverte) : si elle répond, un document peut s'afficher sans attendre la table entière ; le rapport dit le temps, les octets,
+//     et si le texte est celui du cache ; un refus de Grist est dit avec ce que Grist répond (`{"error": …}`).
 // L'interface SQL de Grist n'est PAS jouée ici (le faux Grist ne la connaît pas : le cas lui fait répondre ce que la documentation de Grist décrit, `{ statement, records: [{ fields }] }`) ; que le vrai Grist, celui de
 // la personne, réponde ainsi est ce que le rapport d'Antoine dira.
 // Lancé par run-headless.mjs (groupe Node « lightProbe », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-light-probe.mjs
@@ -20,6 +22,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Ce que la route répond, réglé par le cas ; `sqlRows` : les lignes que « Grist » rend (posées depuis le cache de la page).
 const mode = { kind: 'ok', delay: 0 };
 let sqlRows = [];
+let tableRows = [];   // les lignes que la lecture REST (`/tables/<table>/records`) rend, avec le filtre `{ id: [...] }` qu'elle porte
 const seen = [];
 const BASE = 'http://grist.test/api/docs/DOC1';
 
@@ -32,6 +35,11 @@ const { page } = await t.openPage({
       seen.push({ method: request.method(), url: request.url(), headers: request.headers() });
       if (mode.delay) await sleep(mode.delay);
       const cors = { 'Access-Control-Allow-Origin': '*' };
+      const asked = new URL(request.url());
+      if (mode.kind === 'ok' && /\/tables\/[^/]+\/records$/.test(asked.pathname)) {
+        const ids = JSON.parse(asked.searchParams.get('filter') || '{"id":[]}').id || [];
+        return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ records: tableRows.filter(fields => ids.includes(fields.id)).map(fields => ({ id: fields.id, fields })) }) });
+      }
       if (mode.kind === 'abort') return route.abort('failed');
       if (mode.kind === 'http403') return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: '{"error":"Forbidden"}' });
       if (mode.kind === 'html') return route.fulfill({ status: 200, headers: cors, contentType: 'text/html', body: '<html>pas du SQL</html>' });
@@ -52,6 +60,10 @@ sqlRows = await page.evaluate(() => Templates.getCached().map(template => ({
   id: template.id, ModifiedAt: template.dateModif, taille: Array.from(String(template.contenu || '')).length,
 })));
 
+// Les lignes de la table que la lecture REST rend : sous le nom de colonne que le DOCUMENT porte pour le texte.
+const contentAt = await page.evaluate(() => SchemaColumns.whereIs(Templates.TABLE_NAME, 'Content'));
+tableRows = await page.evaluate((column) => Templates.getCached().map(template => ({ id: template.id, [column]: template.contenu })), contentAt.column);
+
 // --- 2 et 3. La sonde qui répond ---
 const ok = await page.evaluate(async () => ({ result: await PerfTrace.probeLight(), report: PerfTrace.report(), cached: Templates.getCached().length, tokens: window.__gristStub.state.tokenCalls.slice() }));
 check('la sonde rend « ok » avec une ligne par modèle du cache, des dates et des longueurs qui s\'égalent toutes', ok.result.state === 'ok' && ok.result.rows === ok.cached && ok.result.seen === ok.cached && ok.result.sameDates === ok.cached && ok.result.sameLengths === ok.cached && ok.cached > 0, ok.result);
@@ -65,6 +77,12 @@ const names = await page.evaluate(() => ({ date: SchemaColumns.whereIs(Templates
 check('la requête SQL ne lit que id, la date et la longueur du texte : jamais le texte des modèles, et rien qui écrive', /^SELECT id, "[A-Za-z]+" AS ModifiedAt, length\("[A-Za-z]+"\) AS taille FROM "[A-Za-z_]+"$/.test(asked), asked);
 check('elle porte les noms que le DOCUMENT a (ses anciens noms français quand il les garde), pas ceux du code', asked === `SELECT id, "${names.date.column}" AS ModifiedAt, length("${names.content.column}") AS taille FROM "${names.date.table}"`, { asked, names });
 check('seul un jeton en lecture seule a été demandé (la sonde n\'écrit rien)', ok.tokens.length >= 1 && ok.tokens.every(call => call.readOnly === true), ok.tokens);
+const restAsk = seen.find(request => /\/tables\/[^/]+\/records/.test(request.url));
+const restUrl = restAsk ? new URL(restAsk.url) : null;
+check('la lecture d\'une ligne est un GET simple vers `/tables/<table>/records`, filtrée sur UNE ligne, au jeton en lecture seule dans `auth` (ni en-tête Authorization, ni corps)',
+  !!restAsk && restAsk.method === 'GET' && restUrl.pathname === '/api/docs/DOC1/tables/' + names.date.table + '/records' && restUrl.searchParams.get('auth') === 'stub-token' && !restAsk.headers.authorization && !restAsk.headers['content-type']
+  && /^\{"id":\[\d+\]\}$/.test(restUrl.searchParams.get('filter') || '') && restUrl.searchParams.get('limit') === '1', restAsk);
+check('le rapport dit le temps de la lecture d\'une ligne, ses octets, et que son texte est identique à celui du cache', /Lecture d’une ligne par REST : répond en \d+ ms \(ligne #\d+, [\d.,]+ (?:Ko|Mo), 1 ligne rendue, texte identique à celui du cache : oui\)/.test(ok.report), ok.report.split('\n').filter(l => /REST/.test(l)));
 
 // --- 4. Ce qui ne marche pas ---
 async function probeWith(kind, delay) {
@@ -73,6 +91,7 @@ async function probeWith(kind, delay) {
 }
 const refused = await probeWith('http403');
 check('un refus d\'Grist (HTTP 403) est dit avec son code, sans lever d\'erreur dans la page', refused.result.state === 'refused' && refused.result.reason === 'http' && refused.result.status === 403 && /Lecture légère \(SQL\) : refusée après \d+ ms - Grist a refusé \(HTTP 403\)/.test(refused.report), refused.report.split('\n').filter(l => /Lecture légère/.test(l)));
+check('le rapport dit aussi ce que Grist a répondu en refusant (son message), pour la lecture SQL comme pour celle d\'une ligne', /\(HTTP 403\) : « \{"error":"Forbidden"\} »/.test(refused.report) && /Lecture d’une ligne par REST : refusée après \d+ ms - Grist a refusé \(HTTP 403\) : « \{"error":"Forbidden"\} »/.test(refused.report), refused.report.split('\n').filter(l => /Lecture/.test(l)));
 const down = await probeWith('abort');
 check('une demande qui n\'aboutit pas (réseau coupé, politique du site) est dite « n\'a pas abouti »', down.result.state === 'refused' && down.result.reason === 'réseau' && /n’a pas abouti/.test(down.report), down.result);
 const html = await probeWith('html');
@@ -88,7 +107,7 @@ const requestsBefore = seen.length;
 const download = page.waitForEvent('download', { timeout: 15000 }).catch(() => null);
 await page.keyboard.press('Control+Alt+Shift+L');
 const file = await download;
-check('Ctrl + Alt + Maj + L enregistre le rapport APRÈS avoir sondé (une demande SQL de plus, et le fichier porte la lecture légère)', seen.length === requestsBefore + 1 && !!file, { requests: seen.length - requestsBefore, file: !!file });
+check('Ctrl + Alt + Maj + L enregistre le rapport APRÈS avoir sondé (deux demandes de plus : la SQL et la ligne REST, et le fichier porte la lecture légère)', seen.length === requestsBefore + 2 && !!file, { requests: seen.length - requestsBefore, file: !!file });
 await page.waitForSelector('.dialog-overlay, .modal-overlay, [role="dialog"], dialog', { timeout: 5000 }).catch(() => {});
 await page.keyboard.press('Escape');
 
