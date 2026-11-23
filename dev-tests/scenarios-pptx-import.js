@@ -2089,6 +2089,10 @@
     lossCase('objet masqué : repris masqué (lot 10c), rien au rapport', {}, card({ cnv: 'hidden="1"' })),
     lossCase('tableau masqué : repris dans un cadre masqué, rien au rapport', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
     lossCase('objet masqué du masque : non recopié sur les diapositives, compté', { hiddenObjects: 1 }, '', { options: { master: { shapes: sp({ id: 9, name: 'Bandeau', x: 0, y: 0, w: 960, h: 40, fill: solid('2F5597'), cnv: 'hidden="1"' }) } } }),
+    lossCase('graphique lisible : remplacé par un cadre avec ses chiffres, compté à part', { chartTables: 1 },
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="8" name="Graphique lisible"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' + xfrm(60, 60, 200, 100, '', 'p:xfrm')
+        + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId40"/></a:graphicData></a:graphic></p:graphicFrame>',
+      { slide: { rels: LOSS_RELS.concat([{ id: 'rId40', type: 'chart', target: '../charts/chart1.xml' }]) }, options: { parts: { 'ppt/charts/chart1.xml': chartPartXml() } } }),
     lossCase('graphique masqué : compté comme un graphique, pas comme un objet du masque', { charts: 1 },
       '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="8" name="Graphique" hidden="1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' + xfrm(60, 60, 200, 100, '', 'p:xfrm')
         + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/></a:graphicData></a:graphic></p:graphicFrame>'),
@@ -2134,6 +2138,14 @@
   };
   // Tout ce que le fichier peut demander, une fois chaque : une diapositive par cas (les cas qui changent tout le fichier n'y sont pas) ; `expect` en est le rapport attendu. Le test à la vraie souris le donne à choisir
   // pour voir la fenêtre au rapport le plus long.
+  // La partie d'un graphique en barres de PowerPoint (2 séries sur 3 catégories, titre « Résultats »), pour les essais du rapport et du cadre de chiffres.
+  function chartPartXml() {
+      const C = 'xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+      const str = (list, tag) => `<c:${tag}><c:strRef><c:f>Feuil1!A1</c:f><c:strCache><c:ptCount val="${list.length}"/>${list.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:strCache></c:strRef></c:${tag}>`;
+      const num = (list, tag) => `<c:${tag}><c:numRef><c:f>Feuil1!B2</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${list.length}"/>${list.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:numCache></c:numRef></c:${tag}>`;
+      const ser = (idx, name, values, color) => `<c:ser><c:idx val="${idx}"/><c:order val="${idx}"/>${str([name], 'tx')}<c:spPr>${color ? `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>` : ''}</c:spPr>${str(['T1', 'T2', 'T3'], 'cat')}${num(values, 'val')}</c:ser>`;
+      return `${'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'}<c:chartSpace ${C}><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Résultats</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>${ser(0, 'Ventes', [12, 18.5, 9], '0070C0')}${ser(1, 'Coûts', [7, 10, 4], '')}</c:barChart></c:plotArea></c:chart></c:chartSpace>`;
+  }
   function everyKindOfLoss() {
     const cases = textLosses().concat(objectLosses(), fileLosses()).filter(c => !c.alone);
     const options = { media: { 'p.png': TWO_TONE(), 'q.emf': btoa('EMF') }, slides: cases.map(c => Object.assign({ rels: LOSS_RELS }, c.slide, { shapes: c.shapes })) };
@@ -3597,6 +3609,32 @@
       expect('le texte : sans fond ni forme, « Titre de la case », son haut à 38,1 pt sous celui de la case (41,7 - 3,6) et au moins', front.shape === '' && front.fill === '' && /Titre de la case/.test(front.text) && front.y >= 100 + 38.1 - 0.3 && front.y <= 100 + 38.1 + 8, front);
       expect('le texte reste dans la case : son bas ne dépasse pas celui de la case', front.y + front.h <= 350.3 && front.x >= 100 - 0.3 && front.x + front.w <= 335.5, front);
       expect('la petite case aux marges ordinaires : UN cadre, fond bleu et texte', small.fill === '#0070c0' && /Titre de la case/.test(small.text), small);
+      return result(bad);
+    });
+
+  // Un graphique de PowerPoint : le dessin n'est pas celui de l'import (c'est Grist BI) ; le graphique est repris à sa place en un cadre avec son titre, son genre et le tableau de ses chiffres, et son modèle (celui de
+  // extensions/graphique/chart-office.js) va dans `stats.charts` et au pied du compte rendu. Un graphique dont la partie manque reste « non repris ».
+  add('pptx_import_chart_becomes_a_frame_with_its_figures_and_a_model_for_grist_bi',
+    'Un graphique en barres de 2 séries (Ventes en bleu, Coûts) sur 3 catégories, titré « Résultats », à 60 / 80 : un cadre à sa place avec le titre, « Barres », et un tableau de 3 lignes et 3 colonnes aux chiffres du fichier ; le modèle { kind bar, categories, series avec nom, couleur, valeurs } est dans les statistiques ; le rapport dit « remplacé par un cadre avec ses chiffres » et non « non repris » ; un graphique sans partie lisible reste non repris',
+    async (h) => {
+      const chartXml = chartPartXml();
+      const frameOf = (id, rid, x, y) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Graphique ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(x, y, 400, 250, '', 'p:xfrm')}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${rid}"/></a:graphicData></a:graphic></p:graphicFrame>`;
+      const r = await run1({
+        parts: { 'ppt/charts/chart1.xml': chartXml },
+        slides: [{ rels: [{ id: 'rId5', type: 'chart', target: '../charts/chart1.xml' }], shapes: frameOf(30, 'rId5', 60, 80) + frameOf(31, 'rId9', 60, 340) }],
+      });
+      const { bad, expect } = checker();
+      const slide = slidesOf(r.html)[0];
+      expect('un seul cadre (celui du graphique lisible : le deuxième graphique, sans partie, n\'en a pas), avec un tableau de 4 lignes (titres + 3 catégories) et 3 colonnes', slide.frames.length === 1 && !!slide.frames[0].el.querySelector('table') && slide.frames[0].el.querySelectorAll('tr').length === 4 && slide.frames[0].el.querySelectorAll('tr')[1].children.length === 3, slide.frames.map(f => f.text));
+      const f = slide.frames[0];
+      expect('à sa place : x et y du graphique reculés des marges du cadre', near(f.x, 60 - 7.2, 0.5) && near(f.y, 80 - 3.6, 0.5), [f.x, f.y]);
+      expect('le titre « Résultats », le genre « Barres », 2 séries et 3 catégories', /Résultats/.test(f.text) && /Barres/.test(f.text) && /2 séries/.test(f.text) && /3 catégories/.test(f.text), f.text);
+      expect('les chiffres du fichier : 12, 18,5, 9 et 7, 10, 4 ; les noms Ventes et Coûts', /Ventes/.test(f.text) && /Coûts/.test(f.text) && /18,5/.test(f.text) && /T3/.test(f.text), f.text);
+      expect('les statistiques : un modèle, kind bar, trois catégories, deux séries, la couleur de la première', r.stats.charts && r.stats.charts.length === 1 && r.stats.charts[0].kind === 'bar' && r.stats.charts[0].categories.join() === 'T1,T2,T3' && r.stats.charts[0].series.length === 2 && r.stats.charts[0].series[0].color === '#0070c0' && r.stats.charts[0].series[1].values.join() === '7,10,4' && r.stats.charts[0].title === 'Résultats' && r.stats.charts[0].slide === 1, r.stats.charts);
+      const written = slidesOf(await inEditor(h, r))[0];
+      expect('l\'éditeur garde le cadre : le titre, le tableau de 4 lignes et les chiffres', written.frames.length === 1 && /Résultats/.test(written.frames[0].text) && written.frames[0].el.querySelectorAll('tr').length === 4 && /18,5/.test(written.frames[0].text), written.frames.map(f => f.text));
+      const keys = r.report.map(entry => entry.key);
+      expect('le rapport : un graphique remplacé, un graphique non repris (partie manquante)', keys.includes('chartTables') && keys.includes('charts') && r.report.find(entry => entry.key === 'chartTables').n === 1 && r.report.find(entry => entry.key === 'charts').n === 1, keys);
       return result(bad);
     });
 

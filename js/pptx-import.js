@@ -2287,7 +2287,7 @@ const PptxImport = (function () {
     }
     const ole = kid(data, 'oleObj') || descendants(data, 'oleObj')[0];
     if (/\/table$/.test(uri)) await tableObject(node, env, groups, out);
-    else if (/chart/i.test(uri)) { report.charts += 1; noteTo(report, 'charts', await chartKindOf(data, env)); }
+    else if (/chart/i.test(uri)) await chartObject(node, data, env, groups, out);
     else if (/diagram/i.test(uri)) await diagramObject(node, data, env, groups, out);
     else if (/\/ole$/.test(uri) || ole) { report.embedded += 1; noteTo(report, 'embedded', attr(ole, 'progId')); }
     else { report.unreadable += 1; noteTo(report, 'unreadable', I18n.t('importReport.unreadable.graphic', { name: uri.split('/').pop() || '?' })); }
@@ -2359,6 +2359,120 @@ const PptxImport = (function () {
     } catch (e) {
       return '';
     }
+  }
+  // --- Les graphiques ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Un graphique de PowerPoint (`ppt/charts/chartN.xml`) n'est pas dessiné par l'import : le dessin est celui du module de Grist BI. Il est repris en deux choses : (1) à sa place et à sa taille, un cadre avec son titre,
+  // son genre et le TABLEAU de ses chiffres (ceux que le fichier garde en cache : les séries en colonnes, une ligne par catégorie), qui se lit et se corrige ; (2) son MODÈLE, celui d'extensions/graphique/chart-office.js
+  // (`{ v: 1, kind, title, horizontal, stacked, categories, series: [{ name, color, type, values }] }`, plus `slide` et `name`), dans `stats.charts` et au pied du compte rendu : c'est ce que le module de Grist BI reçoit
+  // pour tracer le graphique à la place du tableau. Un graphique sans chiffres lisibles reste « non repris ».
+  const CHART_KINDS = { barChart: 'bar', bar3DChart: 'bar', lineChart: 'line', line3DChart: 'line', stockChart: 'line', areaChart: 'area', area3DChart: 'area', pieChart: 'pie', pie3DChart: 'pie', ofPieChart: 'pie', doughnutChart: 'donut', scatterChart: 'scatter', bubbleChart: 'scatter', radarChart: 'radar' };
+  const CHART_SERIES_TYPES = { bar: 'column', line: 'line', area: 'area', radar: 'line' };
+  const CHART_ROWS_MAX = 40;      // lignes du tableau d'un graphique (le modèle garde toutes les catégories)
+  const CHART_SERIES_MAX = 8;     // colonnes de chiffres du tableau (le modèle garde toutes les séries, jusqu'à CHART_MODEL_SERIES_MAX)
+  const CHART_MODEL_SERIES_MAX = 24;
+  const CHART_MODEL_POINTS_MAX = 2000;
+  const escapeHtml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // Les points d'un cache de graphique (`strCache`, `numCache`, ou le niveau le plus bas d'un `multiLvlStrCache`) : un tableau de textes (null où le point manque) et son code de format.
+  function chartCacheOf(holder) {
+    if (!holder) return { points: [], format: '' };
+    const cache = descendants(holder, 'strCache')[0] || descendants(holder, 'numCache')[0] || descendants(holder, 'lvl')[0];
+    const list = cache ? kids(cache, 'pt') : [];
+    let count = cache ? numAttr(kid(cache, 'ptCount'), 'val', 0) : 0;
+    list.forEach((pt) => { count = Math.max(count, numAttr(pt, 'idx', 0) + 1); });
+    const points = new Array(Math.min(count, CHART_MODEL_POINTS_MAX)).fill(null);
+    list.forEach((pt) => { const at = numAttr(pt, 'idx', 0); if (at < points.length) points[at] = (kid(pt, 'v') || { textContent: '' }).textContent; });
+    const literal = kid(holder, 'v');
+    return { points: cache || !literal ? points : [literal.textContent], format: (kid(cache, 'formatCode') || { textContent: '' }).textContent };
+  }
+  const chartNumber = text => (text === null || text === '' || !isFinite(Number(text)) ? null : Number(text));
+  async function chartModelOf(data, env) {
+    const rel = env.slideRels.byId.get(relAttr(descendants(data, 'chart')[0], 'id'));
+    const doc = rel && rel.target ? await env.ctx.pkg.xml(rel.target) : null;
+    const chart = doc ? kid(doc.documentElement, 'chart') : null;
+    const plot = chart ? kid(chart, 'plotArea') : null;
+    if (!plot) return null;
+    const kinds = [];
+    const series = [];
+    let categories = [];
+    let horizontal = false;
+    let stacked = '';
+    let format = '';
+    kids(plot).filter(el => CHART_KINDS[el.localName]).forEach((group) => {
+      const kind = CHART_KINDS[group.localName];
+      kinds.push(group.localName);
+      if (kid(group, 'barDir') && attr(kid(group, 'barDir'), 'val') === 'bar') horizontal = true;
+      const grouping = attr(kid(group, 'grouping'), 'val') || '';
+      if (/stacked/i.test(grouping)) stacked = /percent/i.test(grouping) ? 'percent' : 'stacked';
+      kids(group, 'ser').forEach((ser) => {
+        if (series.length >= CHART_MODEL_SERIES_MAX) return;
+        const x = chartCacheOf(kid(ser, 'cat') || kid(ser, 'xVal'));
+        const y = chartCacheOf(kid(ser, 'val') || kid(ser, 'yVal'));
+        if (!y.points.length) return;
+        if (x.points.length > categories.length) categories = x.points.map((text, at) => (text === null || text === '' ? String(at + 1) : text));
+        if (!format) format = y.format;
+        const fill = fillIn(kid(ser, 'spPr'), env);
+        const name = chartCacheOf(kid(ser, 'tx')).points[0];
+        const entry = { name: name || (I18n.t('pptx.import.chart.series', { n: series.length + 1 })), values: y.points.map(chartNumber) };
+        if (CHART_SERIES_TYPES[kind]) entry.type = CHART_SERIES_TYPES[kind];
+        if (fill && fill.color && fill.kind !== 'none' && fill.kind !== 'group') entry.color = '#' + flatten(fill.color, env.bgRgb);
+        series.push(entry);
+      });
+    });
+    if (!series.length) return null;
+    const titleNode = kid(chart, 'title');
+    let title = titleNode ? descendants(titleNode, 't').map(t => t.textContent).join('').trim() : '';
+    if (!title && !titleNode && series.length === 1 && attr(kid(chart, 'autoTitleDeleted'), 'val') !== '1' && attr(kid(chart, 'autoTitleDeleted'), 'val') !== 'true') title = series[0].name;
+    const longest = Math.max.apply(null, series.map(entry => entry.values.length));
+    while (categories.length < longest) categories.push(String(categories.length + 1));
+    const model = { v: 1, kind: CHART_KINDS[kinds[0]], title, categories, series };
+    if (horizontal) model.horizontal = true;
+    if (stacked) model.stacked = stacked;
+    if (format && format !== 'General') model.format = format;
+    return { model, kinds };
+  }
+  const chartNumberText = value => (value === null ? '' : value.toLocaleString(I18n.getLang() === 'en' ? 'en' : 'fr', { maximumFractionDigits: 4 }));
+  async function chartObject(node, data, env, groups, out) {
+    const ctx = env.ctx;
+    const report = ctx.report;
+    let read = null;
+    try { read = await chartModelOf(data, env); } catch (e) { read = null; }
+    const xf = xfrmOf(node);
+    if (!read || !xf) { report.charts += 1; noteTo(report, 'charts', await chartKindOf(data, env)); return; }
+    const { model, kinds } = read;
+    model.slide = ctx.slideNumber;
+    model.name = objectNameOf(node);
+    const box = inPoints(place(xf, groups), ctx.k);
+    const shown = model.series.slice(0, CHART_SERIES_MAX);
+    const columnWidths = [Math.round(box.w * 0.34 * PX_PER_PT)].concat(shown.map(() => Math.max(20, Math.round(box.w * 0.66 / shown.length * PX_PER_PT))));
+    const tableOf = (rows) => {
+      const head = '<tr data-row-height="24">' + ['<th colwidth="' + columnWidths[0] + '"><p></p></th>'].concat(shown.map((entry, i) => '<th colwidth="' + columnWidths[i + 1] + '"><p><strong>' + escapeHtml(entry.name) + '</strong></p></th>')).join('') + '</tr>';
+      const body = [];
+      for (let r = 0; r < rows; r++) {
+        body.push('<tr>' + ['<td colwidth="' + columnWidths[0] + '"><p>' + escapeHtml(model.categories[r]) + '</p></td>'].concat(shown.map((entry, i) => '<td colwidth="' + columnWidths[i + 1] + '"><p>' + escapeHtml(chartNumberText(r < entry.values.length ? entry.values[r] : null)) + '</p></td>')).join('') + '</tr>');
+      }
+      return '<table><tbody>' + head + body.join('') + '</tbody></table>';
+    };
+    const total = Math.min(model.categories.length, CHART_ROWS_MAX);
+    const kindName = I18n.t('pptx.import.chart.kind.' + model.kind);
+    const caption = I18n.t('pptx.import.chart.caption', { kind: kindName, series: model.series.length, cats: model.categories.length });
+    const head = (model.title ? '<p><strong>' + escapeHtml(model.title) + '</strong></p>' : '') + '<p><em>' + escapeHtml(caption) + '</em></p>';
+    const headHeight = (model.title ? 22 : 0) + 22;
+    const room = Math.max(Math.min(box.h * (1 + TABLE_FIT_SLACK), env.page.h - box.y) - headHeight, 24);
+    let rows = total;
+    let html = tableOf(rows);
+    let natural = measuredTable(ctx, html, columnWidths);
+    if (natural > room && rows > 1) {
+      const per = (natural - 24) / rows;
+      rows = Math.max(1, Math.min(rows - 1, Math.floor((room - 24) / per)));
+      html = tableOf(rows);
+      natural = measuredTable(ctx, html, columnWidths);
+    }
+    const hidden = (model.categories.length - rows) + Math.max(0, model.series.length - shown.length);
+    const label = kinds.join('+') + (hidden > 0 ? ' (' + I18n.t('pptx.import.chart.cut', { rows, total: model.categories.length }) + ')' : '');
+    report.chartTables += 1;
+    noteTo(report, 'chartTables', label);
+    ctx.charts.push(model);
+    out.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: Math.max(box.h, headHeight + natural) + 2 * FRAME_PAD_Y_PT, rot: 0, layer: '' }, head + html));
   }
   async function groupObject(node, env, groups, depth, out) {
     const xf = xfrmOf(kid(node, 'grpSpPr'));
@@ -2942,7 +3056,7 @@ const PptxImport = (function () {
   // --- Le fichier ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les genres du rapport, dans l'ordre où la fenêtre les dit : d'abord ce qui n'arrive pas ou arrive remplacé, puis ce que le fichier demande et que l'éditeur ne sait pas encore faire, famille par famille (le texte, les puces,
   // les formes et les traits, les images, les tableaux, les diapositives, le fichier), enfin les limites (objets du masque, diapositives en trop, objets illisibles).
-  const REPORT_KEYS = ['animations', 'charts', 'diagrams', 'tables', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
+  const REPORT_KEYS = ['animations', 'charts', 'chartTables', 'diagrams', 'tables', 'shrunk', 'embedded', 'media', 'ink', 'freeDrawings', 'equations', 'comments', 'images', 'shapes', 'gradients', 'transitions', 'advanceClick', 'slideLinks',
     'tabs', 'vertical',
     'textEffects', 'textGradient', 'underlines', 'fonts',
     'bulletChars', 'bulletImages',
@@ -3019,7 +3133,7 @@ const PptxImport = (function () {
     const writtenBy = appProps ? ((descendants(appProps.documentElement, 'Application')[0] || {}).textContent || '') : '';
     const ctx = {
       ownExport: /^\s*Grist Factory\s*$/i.test(writtenBy),
-      pkg, k: page.k, pageEmu, probes: [], report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
+      pkg, k: page.k, pageEmu, charts: [], probes: [], report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
     const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;
@@ -3070,7 +3184,7 @@ const PptxImport = (function () {
     // sur une série de caractères reste celle du fichier. Un fichier sans thème lisible n'en a pas (la présentation d'avant).
     const stats = {
       fileBytes: buffer.byteLength, slides: texts.length, objects: ctx.objects, heavy: ctx.heavy, images: Array.from(ctx.images.values()).filter(Boolean).length, imageBytes: ctx.imageBytes, decorBytes: ctx.decorBytes,
-      holders: decorStats(ctx), probes: ctx.probes, ms: Math.round(performance.now() - startedAt),
+      holders: decorStats(ctx), charts: ctx.charts, probes: ctx.probes, ms: Math.round(performance.now() - startedAt),
     };
     const said = REPORT_KEYS.filter(key => report[key] > 0);
     const imported = { orientation: page.orientation, format: page.format };

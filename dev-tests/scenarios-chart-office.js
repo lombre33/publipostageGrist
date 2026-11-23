@@ -603,15 +603,19 @@
   });
 
   cases.push({
-    id: 'chart_office_pptx_reimport_reports_the_exported_chart_as_not_imported',
-    description: 'PowerPoint : réimporté, un graphique exporté est compté « graphique non repris » par le rapport de l\'import (l\'import ne lit pas encore les graphiques de PowerPoint : une limite dite, pas une perte silencieuse), et la diapositive garde son titre',
+    id: 'chart_office_pptx_reimport_gives_back_the_exported_chart_as_figures_and_a_model',
+    description: 'PowerPoint : réimporté, un graphique exporté devient un cadre avec ses chiffres et un modèle pour Grist BI (kind bar, les mêmes catégories, noms, couleurs et valeurs de séries), compté « chartTables » par le rapport (le dessin est celui de Grist BI) ; la diapositive garde son titre',
     run: async () => {
       await ExportEngines.ensure('pptxImport');
       const exported = await PptxExport.fromHtml('<h1>Ventes</h1>' + drawnHtml(BAR_MODEL), { title: 'essai' });
       const r = await PptxImport.fromBuffer(await exported.arrayBuffer());
+      const model = r.stats && r.stats.charts && r.stats.charts[0];
+      const same = !!model && model.kind === 'bar' && model.categories.join() === months.join() && model.series.length === 2
+        && model.series[0].name === 'Paris' && model.series[0].color === '#2b78ae' && model.series[0].values.join() === '12,19,8'
+        && model.series[1].name === 'Lyon' && model.series[1].color === '#fe945b' && model.series[1].values.join() === '7,11,14';
       return {
-        pass: r.report.some(line => line.key === 'charts' && line.n === 1) && /Ventes/.test(r.html),
-        notes: JSON.stringify({ report: r.report, html: String(r.html).slice(0, 160) }),
+        pass: r.report.some(line => line.key === 'chartTables' && line.n === 1) && !r.report.some(line => line.key === 'charts') && same && /Ventes/.test(r.html),
+        notes: JSON.stringify({ report: r.report, model }),
       };
     },
   });
