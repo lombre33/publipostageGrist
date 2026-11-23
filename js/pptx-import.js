@@ -51,6 +51,7 @@ const PptxImport = (function () {
   const MAX_OBJECTS = 20000;
   const MAX_DECOR_OBJECTS = 150;                   // le décor d'un masque ou d'une mise en page (recopié sur chaque diapositive) : au delà, il n'est pas repris
   const HEAVY_FILE_BYTES = 15 * 1024 * 1024;       // un fichier de cette taille ou plus est « lourd » : ses images sont ramenées à TARGET_PPI et leur poids total est plafonné (un fichier plus léger est lu comme avant, image pour image)
+  const METAFILE_MAX_PX = 1600;                    // le grand côté, en pixels, d'un dessin Windows (EMF, WMF) rendu en image
   const TARGET_PPI = 220;                          // la définition utile d'une image : celle que PowerPoint garde par défaut ; au delà, une image d'un fichier lourd est ramenée à deux fois et demie (220 / 96) la taille de sa boîte
   const MAX_EMBEDDED_CHARS = 64 * 1024 * 1024;     // fichier lourd : le poids de toutes les images écrites dans le texte (une par objet, même quand deux objets montrent la même) ; au delà, les suivantes ne sont pas reprises (le rapport le dit)
   const MAX_DECOR_IMAGE = 400 * 1024;              // une image du décor (en caractères de son adresse de données) : plus lourde, elle est réduite, puis laissée
@@ -143,6 +144,7 @@ const PptxImport = (function () {
   const SYMBOL = { '·': '•', '¨': '♦', '§': '♣', '¤': '↔', '¾': '⎯' };
   const NUMBERING = { alphaLcPeriod: 'alpha', alphaLcParenR: 'alpha', alphaLcParenBoth: 'alpha', alphaUcPeriod: 'alpha', alphaUcParenR: 'alpha', alphaUcParenBoth: 'alpha', romanLcPeriod: 'roman', romanLcParenR: 'roman', romanLcParenBoth: 'roman', romanUcPeriod: 'roman', romanUcParenR: 'roman', romanUcParenBoth: 'roman' };
   const UNREADABLE_IMAGES = /^(emf|wmf|tif|tiff|wdp|jxr|hdp|pict|ico|cur|emz|wmz)$/;
+  const METAFILES = /^(emf|wmf|emz|wmz)$/; // les dessins vectoriels de Windows : dessinés en PNG par js/metafile-render.js (le navigateur ne les lit pas)
   // Le sens d'une transition : l'inverse de la table de l'export (js/pptx-export.js, DIRECTIONS), du côté d'où la diapositive arrive.
   const FROM_SIDE = { l: 'r', r: 'l', d: 't', u: 'b' };
   const TRANSITIONS = { fade: 'fade', push: 'push', wipe: 'wipe', cover: 'cover', pull: 'uncover', zoom: 'zoom', split: 'split', blinds: 'blinds', circle: 'circle', diamond: 'diamond', plus: 'plus' };
@@ -178,7 +180,11 @@ const PptxImport = (function () {
       const file = pkg.fileOf(path);
       return file && file._data && Number.isFinite(file._data.uncompressedSize) ? file._data.uncompressedSize : 0;
     };
-    return { xml: pkg.xml, rels: pkg.rels, base64, sizeOf, has: pkg.has };
+    const bytes = async (path) => {
+      const file = pkg.fileOf(path);
+      return file ? file.async('uint8array') : null;
+    };
+    return { xml: pkg.xml, rels: pkg.rels, base64, bytes, sizeOf, has: pkg.has };
   }
 
   // --- Les couleurs ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1204,6 +1210,22 @@ const PptxImport = (function () {
     report.images += 1;
     noteTo(report, 'images', I18n.t('importReport.image.' + why, { name: (String(path || '').split('/').pop() || '?').slice(0, 60), size: size ? megabytes(size) : '' }));
   }
+  // Un dessin vectoriel de Windows (EMF, WMF, EMZ, WMZ) du paquet en image PNG (adresse de données), ou null : le dessinateur ne sait pas le lire, il n'a rien dessiné, il est trop lourd ou le moteur est injoignable.
+  async function metafileImage(ctx, path, extension) {
+    const size = ctx.pkg.sizeOf(path);
+    if (size > MAX_IMAGE_BYTES) return null;
+    try {
+      if (typeof MetafileRender === 'undefined' && typeof ExportEngines !== 'undefined') await ExportEngines.ensure('metafile');
+      if (typeof MetafileRender === 'undefined') return null;
+      const bytes = await ctx.pkg.bytes(path);
+      const image = bytes && await MetafileRender.toImage(bytes, extension, { maxPx: METAFILE_MAX_PX });
+      if (!image || ctx.imageBytes + image.src.length > MAX_IMAGES_BYTES) return null;
+      ctx.imageBytes += image.src.length;
+      return image.src;
+    } catch (e) {
+      return null;
+    }
+  }
   // Une image de la présentation en adresse de données, ou null : son format n'est pas lisible, elle est introuvable ou trop lourde (le rapport le dit).
   async function imageData(path, env) {
     const ctx = env.ctx;
@@ -1211,7 +1233,10 @@ const PptxImport = (function () {
     if (ctx.images.has(path)) return ctx.images.get(path);
     const extension = (path.split('.').pop() || '').toLowerCase();
     let data = null;
-    if (UNREADABLE_IMAGES.test(extension) || !IMAGE_TYPES[extension]) {
+    if (METAFILES.test(extension) && ctx.pkg.has(path)) {
+      data = await metafileImage(ctx, path, extension);
+      if (!data) lostImage(ctx.report, path, 'format');
+    } else if (UNREADABLE_IMAGES.test(extension) || !IMAGE_TYPES[extension]) {
       lostImage(ctx.report, path, 'format');
     } else if (!ctx.pkg.has(path)) {
       lostImage(ctx.report, path, 'missing');
