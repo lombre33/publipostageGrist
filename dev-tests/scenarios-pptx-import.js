@@ -2089,6 +2089,10 @@
     lossCase('objet masqué : repris masqué (lot 10c), rien au rapport', {}, card({ cnv: 'hidden="1"' })),
     lossCase('tableau masqué : repris dans un cadre masqué, rien au rapport', {}, table({ id: 6, x: 60, y: 60, cols: [150, 150], rows: [{ h: 40, cells: [{ text: 'A' }, { text: 'B' }] }] }).replace('name="Tableau"', 'name="Tableau" hidden="1"')),
     lossCase('objet masqué du masque : non recopié sur les diapositives, compté', { hiddenObjects: 1 }, '', { options: { master: { shapes: sp({ id: 9, name: 'Bandeau', x: 0, y: 0, w: 960, h: 40, fill: solid('2F5597'), cnv: 'hidden="1"' }) } } }),
+    lossCase('graphique lisible : remplacé par un cadre avec ses chiffres, compté à part', { chartTables: 1 },
+      '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="8" name="Graphique lisible"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' + xfrm(60, 60, 200, 100, '', 'p:xfrm')
+        + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId40"/></a:graphicData></a:graphic></p:graphicFrame>',
+      { slide: { rels: LOSS_RELS.concat([{ id: 'rId40', type: 'chart', target: '../charts/chart1.xml' }]) }, options: { parts: { 'ppt/charts/chart1.xml': chartPartXml() } } }),
     lossCase('graphique masqué : compté comme un graphique, pas comme un objet du masque', { charts: 1 },
       '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="8" name="Graphique" hidden="1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>' + xfrm(60, 60, 200, 100, '', 'p:xfrm')
         + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId9"/></a:graphicData></a:graphic></p:graphicFrame>'),
@@ -2134,6 +2138,14 @@
   };
   // Tout ce que le fichier peut demander, une fois chaque : une diapositive par cas (les cas qui changent tout le fichier n'y sont pas) ; `expect` en est le rapport attendu. Le test à la vraie souris le donne à choisir
   // pour voir la fenêtre au rapport le plus long.
+  // La partie d'un graphique en barres de PowerPoint (2 séries sur 3 catégories, titre « Résultats »), pour les essais du rapport et du cadre de chiffres.
+  function chartPartXml() {
+      const C = 'xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+      const str = (list, tag) => `<c:${tag}><c:strRef><c:f>Feuil1!A1</c:f><c:strCache><c:ptCount val="${list.length}"/>${list.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:strCache></c:strRef></c:${tag}>`;
+      const num = (list, tag) => `<c:${tag}><c:numRef><c:f>Feuil1!B2</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${list.length}"/>${list.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:numCache></c:numRef></c:${tag}>`;
+      const ser = (idx, name, values, color) => `<c:ser><c:idx val="${idx}"/><c:order val="${idx}"/>${str([name], 'tx')}<c:spPr>${color ? `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>` : ''}</c:spPr>${str(['T1', 'T2', 'T3'], 'cat')}${num(values, 'val')}</c:ser>`;
+      return `${'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'}<c:chartSpace ${C}><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Résultats</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>${ser(0, 'Ventes', [12, 18.5, 9], '0070C0')}${ser(1, 'Coûts', [7, 10, 4], '')}</c:barChart></c:plotArea></c:chart></c:chartSpace>`;
+  }
   function everyKindOfLoss() {
     const cases = textLosses().concat(objectLosses(), fileLosses()).filter(c => !c.alone);
     const options = { media: { 'p.png': TWO_TONE(), 'q.emf': btoa('EMF') }, slides: cases.map(c => Object.assign({ rels: LOSS_RELS }, c.slide, { shapes: c.shapes })) };
@@ -3514,6 +3526,115 @@
       expect('la ligne du tableau dit sa boîte du fichier, la page, sa hauteur naturelle et son bas', /file=\(40,100,400,30\) page=960(\.\d)?x540 natural=\d/.test(tableLine) && /bottom=\d/.test(tableLine) && / rows=1 cols=2$/.test(tableLine), tableLine);
       expect('la ligne du texte de la diapositive 8 dit l\'ancrage, l\'ajustement avec son fontScale, les marges (7,2 et 3,6), le niveau et le retrait', /anchor=ctr /.test(textLine) && /fit=normAutofit fontScale=92500 lnSpcReduction=10000 /.test(textLine) && / ins=7.2\/3.6\/7.2\/3.6 /.test(textLine) && /lvl=1 marL=342900 indent=-342900$/.test(textLine) && /first="Bonjour le monde"/.test(textLine), textLine);
       expect('le texte de la diapositive 1 (non suivie) n\'a pas de ligne', !probes.some(line => /Zone ignorée/.test(line)), probes);
+      return result(bad);
+    });
+
+  // Retour du fichier du 23/11 (diapositive 8) : un tableau de la hauteur de la page entière (de 8,4 à 405,5 pt sur 405,1) dont les lignes du fichier font toutes leur hauteur ; l'éditeur y ajoute la bordure de chaque ligne et
+  // le tableau finit un point trop bas. Le texte réduit à 60 % n'y change rien (les lignes sont des hauteurs minimales) : ce sont les lignes qui se resserrent, le texte garde sa taille.
+  add('pptx_import_table_as_tall_as_the_page_squeezes_its_rows_not_its_text',
+    'Un tableau de 8 lignes de 50 pt qui finit au ras du bas de la page (y = 140, 540 pt) mesure 401 pt dans l\'éditeur (la bordure de chaque ligne) : ses lignes se resserrent de moins d\'un pour cent pour qu\'il tienne dans la page, son texte garde ses 12 pt (rien n\'est « réduit »)',
+    async (h) => {
+      const rows = Array.from({ length: 8 }, (_, i) => ({ h: 50, cells: [{ text: 'Ligne ' + (i + 1) }, { text: String(i) }] }));
+      const r = await run1({ slides: [{ shapes: table({ x: 40, y: 140, cols: [300, 200], rows }) }] });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].tableFrames[0];
+      await inEditor(h, r);
+      const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+      const tbl = document.querySelector('.tiptap .pp-free-frame table');
+      const bottom = frame.y + 3.6 + tbl.getBoundingClientRect().height / zoom * 0.75;
+      expect('le bas du tableau, dans l\'éditeur, est à 540 pt au plus (0,5 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 540.5, { y: frame.y, bottom });
+      expect('le texte garde ses 12 pt : rien n\'est réduit', !r.report.some(item => item.key === 'shrunk') && !/font-size: ([0-9]|1[01])(\.\d+)?pt/.test(frame.el.innerHTML), r.report.map(item => item.key));
+      expect('chaque ligne a une hauteur de 50 pt moins un pour cent au plus', Array.from(tbl.querySelectorAll('tr')).every(tr => { const hpx = parseFloat(tr.getAttribute('data-row-height')); return hpx >= 66 && hpx <= 66.7; }), Array.from(tbl.querySelectorAll('tr')).map(tr => tr.getAttribute('data-row-height')));
+      return result(bad);
+    });
+
+  // Retour du fichier du 23/11 (diapositive 28) : les points d'une liste de schéma SmartArt sont tous du niveau 2 du fichier (avec le même retrait) ; le premier se posait au niveau 1 de l'éditeur, le suivant, de ce même
+  // niveau 2, était emboîté dessous (« Programmes » puis « 2026 » en retrait).
+  add('pptx_import_list_whose_first_point_is_level_two_stays_flat',
+    'Une liste dont le premier point est de niveau 2 et les suivants de ce même niveau est une liste à plat (quatre points dans un seul `ul`) ; un point de niveau 3 qui suit est emboîté sous le précédent, un point de niveau 2 qui revient est de nouveau à plat ; la liste d\'un texte de niveaux 1, 2, 1 reste inchangée (un sous-point emboîté)',
+    async () => {
+      const point = (text, level) => para(run(text, 'sz="1200"'), `lvl="${level}" marL="114300" indent="-114300"`, '<a:buChar char="•"/>');
+      const r = await run1({
+        slides: [{
+          shapes: textBox(40, 40, 400, 300, point('Programmes', 1) + point('2026', 1) + point('2027', 1) + point('Détail', 2) + point('Trajectoire', 1), { id: 2 })
+            + textBox(500, 40, 400, 300, point('Premier', 0) + point('Sous-point', 1) + point('Deuxième', 0), { id: 3 }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const [flat, ordinary] = slidesOf(r.html)[0].frames;
+      const shapeOf = (frame) => Array.from(frame.el.querySelectorAll('.pp-free-frame-content > ul > li')).map(li => li.firstElementChild.textContent + (li.querySelector(':scope > ul') ? '{' + Array.from(li.querySelectorAll(':scope > ul > li')).map(sub => sub.textContent).join('|') + '}' : '')).join(' ; ');
+      expect('une seule liste de quatre points : Programmes ; 2026 ; 2027{Détail} ; Trajectoire', shapeOf(flat) === 'Programmes ; 2026 ; 2027{Détail} ; Trajectoire', shapeOf(flat));
+      expect('niveaux 1, 2, 1 : Premier{Sous-point} ; Deuxième', shapeOf(ordinary) === 'Premier{Sous-point} ; Deuxième', shapeOf(ordinary));
+      return result(bad);
+    });
+
+  // Le texte d'un bandeau tourné de 270 degrés dont la marge de droite est de 41,7 pt (le texte est loin du bout du bandeau) : le cadre prend la place du texte, et son milieu est décalé du milieu de la boîte dans
+  // les axes de la boîte (ici le long du bandeau, vers le bas), non de côté : le texte glissait sur la gauche et touchait le bord de la diapositive.
+  add('pptx_import_turned_box_with_an_inset_slides_along_its_own_axis',
+    'Une zone de texte de 250 x 47,2 pt tournée de 270 degrés (texte de bandeau) dont la marge de droite est de 41,7 pt : le cadre est large de 222,7 pt et son milieu est à 20,85 pt SOUS celui de la boîte (le long du bandeau), à la même abscisse ; sans rotation, le même cadre est décalé de 20,85 pt vers la gauche',
+    async () => {
+      const text = para(run('AXE ECOSYSTEME', 'sz="1400" b="1"'));
+      const body = 'lIns="0" tIns="0" rIns="529590" bIns="0"';
+      const r = await run1({
+        slides: [{
+          shapes: textBox(100, 100, 250, 47.2, text, { id: 2, body, xf: 'rot="16200000"' }) + textBox(100, 300, 250, 47.2, text, { id: 3, body }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const [turned, flat] = slidesOf(r.html)[0].frames;
+      const center = f => [f.x + f.w / 2, f.y + f.h / 2];
+      expect('tourné : large de 222,7 pt, haut de 54,4 pt (la boîte, ses marges, celles du cadre)', near(turned.w, 222.7, 0.3) && near(turned.h, 54.4, 0.3), turned);
+      expect('tourné : le milieu est à (225 ; 144,45) : même abscisse que celui de la boîte, 20,85 pt plus bas', near(center(turned)[0], 225, 0.3) && near(center(turned)[1], 123.6 + 20.85, 0.3), center(turned));
+      expect('sans rotation : le cadre commence 7,2 pt avant le bord gauche de la boîte (x = 92,8) et finit 34,5 pt avant son bord droit : son milieu est à 20,85 pt à gauche de celui de la boîte', near(flat.x, 92.8, 0.3) && near(center(flat)[0], 225 - 20.85, 0.3), flat);
+      return result(bad);
+    });
+
+  // Une case de schéma à fond dont le texte commence 41,7 pt sous son haut (marge haute du fichier) : l'éditeur n'a qu'une marge par forme, le texte démarrait collé en haut de la case. Elle devient deux cadres : la forme (fond, sans
+  // texte) puis le texte (sans fond), posé là où les marges du fichier le mettent. Une case aux marges ordinaires reste UN seul cadre.
+  add('pptx_import_filled_box_with_a_deep_top_inset_is_a_shape_and_a_text_frame',
+    'Un rectangle bleu de 235,2 x 250 pt à 100 / 100 dont la marge haute est de 41,7 pt et le texte en haut : deux cadres, d\'abord le rectangle bleu sans texte (même boîte), puis le texte sans fond dont le haut est à 41,7 - 3,6 pt sous celui de la case ; un rectangle aux marges ordinaires reste un seul cadre à fond',
+    async () => {
+      const text = para(run('Titre de la case', 'sz="1400"'));
+      const r = await run1({
+        slides: [{
+          shapes: sp({ id: 2, x: 100, y: 100, w: 235.2, h: 250, fill: solid('0070C0'), body: 'lIns="120650" tIns="529590" rIns="120650" bIns="120650"', text })
+            + sp({ id: 3, x: 400, y: 100, w: 235.2, h: 120, fill: solid('0070C0'), text }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      expect('trois cadres : la forme et le texte de la grande case, la petite case en un seul', frames.length === 3, frames.map(f => [f.shape, f.fill, f.text]));
+      const [back, front, small] = frames;
+      expect('la forme : un rectangle bleu à la boîte du fichier, sans texte', back.shape === 'rect' && back.fill === '#0070c0' && back.text === '' && near(back.x, 100, 0.3) && near(back.y, 100, 0.3) && near(back.w, 235.2, 0.3) && near(back.h, 250, 0.3), back);
+      expect('le texte : sans fond ni forme, « Titre de la case », son haut à 38,1 pt sous celui de la case (41,7 - 3,6) et au moins', front.shape === '' && front.fill === '' && /Titre de la case/.test(front.text) && front.y >= 100 + 38.1 - 0.3 && front.y <= 100 + 38.1 + 8, front);
+      expect('le texte reste dans la case : son bas ne dépasse pas celui de la case', front.y + front.h <= 350.3 && front.x >= 100 - 0.3 && front.x + front.w <= 335.5, front);
+      expect('la petite case aux marges ordinaires : UN cadre, fond bleu et texte', small.fill === '#0070c0' && /Titre de la case/.test(small.text), small);
+      return result(bad);
+    });
+
+  // Un graphique de PowerPoint : le dessin n'est pas celui de l'import (c'est Grist BI) ; le graphique est repris à sa place en un cadre avec son titre, son genre et le tableau de ses chiffres, et son modèle (celui de
+  // extensions/graphique/chart-office.js) va dans `stats.charts` et au pied du compte rendu. Un graphique dont la partie manque reste « non repris ».
+  add('pptx_import_chart_becomes_a_frame_with_its_figures_and_a_model_for_grist_bi',
+    'Un graphique en barres de 2 séries (Ventes en bleu, Coûts) sur 3 catégories, titré « Résultats », à 60 / 80 : un cadre à sa place avec le titre, « Barres », et un tableau de 3 lignes et 3 colonnes aux chiffres du fichier ; le modèle { kind bar, categories, series avec nom, couleur, valeurs } est dans les statistiques ; le rapport dit « remplacé par un cadre avec ses chiffres » et non « non repris » ; un graphique sans partie lisible reste non repris',
+    async (h) => {
+      const chartXml = chartPartXml();
+      const frameOf = (id, rid, x, y) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Graphique ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(x, y, 400, 250, '', 'p:xfrm')}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="${rid}"/></a:graphicData></a:graphic></p:graphicFrame>`;
+      const r = await run1({
+        parts: { 'ppt/charts/chart1.xml': chartXml },
+        slides: [{ rels: [{ id: 'rId5', type: 'chart', target: '../charts/chart1.xml' }], shapes: frameOf(30, 'rId5', 60, 80) + frameOf(31, 'rId9', 60, 340) }],
+      });
+      const { bad, expect } = checker();
+      const slide = slidesOf(r.html)[0];
+      expect('un seul cadre (celui du graphique lisible : le deuxième graphique, sans partie, n\'en a pas), avec un tableau de 4 lignes (titres + 3 catégories) et 3 colonnes', slide.frames.length === 1 && !!slide.frames[0].el.querySelector('table') && slide.frames[0].el.querySelectorAll('tr').length === 4 && slide.frames[0].el.querySelectorAll('tr')[1].children.length === 3, slide.frames.map(f => f.text));
+      const f = slide.frames[0];
+      expect('à sa place : x et y du graphique reculés des marges du cadre', near(f.x, 60 - 7.2, 0.5) && near(f.y, 80 - 3.6, 0.5), [f.x, f.y]);
+      expect('le titre « Résultats », le genre « Barres », 2 séries et 3 catégories', /Résultats/.test(f.text) && /Barres/.test(f.text) && /2 séries/.test(f.text) && /3 catégories/.test(f.text), f.text);
+      expect('les chiffres du fichier : 12, 18,5, 9 et 7, 10, 4 ; les noms Ventes et Coûts', /Ventes/.test(f.text) && /Coûts/.test(f.text) && /18,5/.test(f.text) && /T3/.test(f.text), f.text);
+      expect('les statistiques : un modèle, kind bar, trois catégories, deux séries, la couleur de la première', r.stats.charts && r.stats.charts.length === 1 && r.stats.charts[0].kind === 'bar' && r.stats.charts[0].categories.join() === 'T1,T2,T3' && r.stats.charts[0].series.length === 2 && r.stats.charts[0].series[0].color === '#0070c0' && r.stats.charts[0].series[1].values.join() === '7,10,4' && r.stats.charts[0].title === 'Résultats' && r.stats.charts[0].slide === 1, r.stats.charts);
+      const written = slidesOf(await inEditor(h, r))[0];
+      expect('l\'éditeur garde le cadre : le titre, le tableau de 4 lignes et les chiffres', written.frames.length === 1 && /Résultats/.test(written.frames[0].text) && written.frames[0].el.querySelectorAll('tr').length === 4 && /18,5/.test(written.frames[0].text), written.frames.map(f => f.text));
+      const keys = r.report.map(entry => entry.key);
+      expect('le rapport : un graphique remplacé, un graphique non repris (partie manquante)', keys.includes('chartTables') && keys.includes('charts') && r.report.find(entry => entry.key === 'chartTables').n === 1 && r.report.find(entry => entry.key === 'charts').n === 1, keys);
       return result(bad);
     });
 
