@@ -83,6 +83,8 @@ const ConditionalStyleWindow = (function () {
     if (!rules) key = state.grist ? 'condStyle.gristGone' : !source && state.table ? (state.scope === 'rows' ? 'condStyle.gristRow' : 'condStyle.gristNoVar') : 'condStyle.gristNone';
     else if (state.grist) key = 'condStyle.gristOn';
     gristNote.textContent = I18n.t(key, { count: rules ? rules.length : 0 });
+    // Grisée, la case tient sur une ligne : sa raison est dans l'info-bulle de la ligne (et lue avec la case) ; non grisée, la note dit l'état.
+    gristNote.hidden = blocked;
     gristRow.title = blocked ? gristNote.textContent : '';
   }
 
@@ -409,8 +411,12 @@ const ConditionalStyleWindow = (function () {
     const gristText = el('span', 'cond-style-grist-text');
     gristLabel.append(gristBox, gristText);
     const gristNote = el('p', 'cond-style-grist-note');
+    // La note reste la description de la case, même cachée (la case grisée dit ainsi pourquoi aux lecteurs d'écran).
+    gristNote.id = 'cond-style-grist-note';
+    gristBox.setAttribute('aria-describedby', gristNote.id);
     gristRow.append(gristLabel, gristNote);
-    const { box: previewArea, lines: [gristLine, currentLine, countLine] } = VariableModal.previewBox(3);
+    // Le résultat est collé en bas (gabarit commun, js/variable-modal.js) : la ligne de la ligne sélectionnée dit l'essentiel, le décompte des lignes de la table est dans « Détail ».
+    const { box: previewArea, lines: [gristLine, currentLine, countLine] } = VariableModal.previewBox(3, { detail: { first: 1 } });
     const removeBtn = button('var-modal-danger');
     const cancelBtn = button();
     const saveBtn = button('var-modal-primary');
@@ -419,8 +425,11 @@ const ConditionalStyleWindow = (function () {
     const endGroup = el('div', 'var-modal-actions-end');
     endGroup.append(cancelBtn, saveBtn);
     win.actions.append(startGroup, endGroup);
-    win.body.append(intro, scopeRow, gristRow, list, addBtn, ignored, previewArea, hint);
-    refs = { title: win.title, intro, scopeRow, scopeButtons, hint, gristRow, gristBox, gristText, gristNote, list, addBtn, ignored, gristLine, currentLine, countLine, removeBtn, cancelBtn, saveBtn };
+    // « Aide » : comment les règles se combinent se lit une fois ; l'avertissement des règles ignorées, lui, reste écrit quand il y a lieu.
+    const help = VariableModal.fold('', '');
+    help.body.appendChild(hint);
+    win.body.append(intro, scopeRow, gristRow, list, addBtn, ignored, help.box, previewArea);
+    refs = { title: win.title, intro, scopeRow, scopeButtons, hint, help, gristRow, gristBox, gristText, gristNote, list, addBtn, ignored, gristLine, currentLine, countLine, removeBtn, cancelBtn, saveBtn };
 
     addBtn.addEventListener('click', () => {
       if (!state || state.working.length >= ConditionalStyle.MAX_RULES) return;
@@ -508,7 +517,7 @@ const ConditionalStyleWindow = (function () {
   // Ce qui change avec le volet : l'introduction, les deux boutons, la case de Grist, « Retirer ».
   function refreshTableShell() {
     const r = refs;
-    r.intro.textContent = I18n.t(state.scope === 'rows' ? 'condStyle.intro.row' : 'condStyle.intro.cell');
+    VariableModal.setIntro(r.intro, null, I18n.t(state.scope === 'rows' ? 'condStyle.intro.row' : 'condStyle.intro.cell'));
     Object.keys(r.scopeButtons).forEach((scope) => {
       const on = scope === state.scope;
       r.scopeButtons[scope].classList.toggle('is-active', on);
@@ -523,6 +532,7 @@ const ConditionalStyleWindow = (function () {
     const r = refs;
     r.title.textContent = I18n.t('condStyle.title');
     r.hint.textContent = I18n.t('condStyle.order');
+    r.help.setTitle(I18n.t('varModal.help'), I18n.t('condStyle.help.what'));
     r.gristText.textContent = I18n.t('condStyle.grist');
     r.scopeButtons.cells.textContent = I18n.t('condStyle.scopeCells');
     r.scopeButtons.rows.textContent = I18n.t('condStyle.scopeRow');
@@ -566,10 +576,10 @@ const ConditionalStyleWindow = (function () {
     const existing = ConditionalStyle.normalize(node.attrs.condStyle);
     state = { editor, pos, node, hadStyle: !!existing, grist: !!(existing && existing.grist), working: existing && existing.rules.length ? existing.rules : [newRule()], open: 0 };
     const r = refs;
-    if (node.type.name === 'varBadge') r.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(node)), document.createTextNode(' ' + I18n.t(INTRO.varBadge)));
-    else if (node.type.name === 'mention') r.intro.replaceChildren(el('span', 'mention-chip', node.attrs.label || ''), document.createTextNode(' ' + I18n.t(INTRO.mention)));
-    else if (node.type.name === 'smartChip') r.intro.replaceChildren(el('span', 'smart-chip', EditorNodes.smartChipLabel(node.attrs.kind)), document.createTextNode(' ' + I18n.t(INTRO.smartChip)));
-    else r.intro.textContent = I18n.t(INTRO[node.type.name]);
+    if (node.type.name === 'varBadge') VariableModal.setIntro(r.intro, el('span', 'var-badge', VariableModal.badgeText(node)), I18n.t(INTRO.varBadge));
+    else if (node.type.name === 'mention') VariableModal.setIntro(r.intro, el('span', 'mention-chip', node.attrs.label || ''), I18n.t(INTRO.mention));
+    else if (node.type.name === 'smartChip') VariableModal.setIntro(r.intro, el('span', 'smart-chip', EditorNodes.smartChipLabel(node.attrs.kind)), I18n.t(INTRO.smartChip));
+    else VariableModal.setIntro(r.intro, null, I18n.t(INTRO[node.type.name]));
     present();
   }
 

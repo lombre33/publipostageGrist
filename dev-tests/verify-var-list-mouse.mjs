@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { reveal } from './reveal-in-window.mjs'; // un champ sous le résultat collé ou dans un repli fermé : la souris le découvre comme la personne
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -138,6 +139,7 @@ async function shot(name) { if (SHOTS) await page.screenshot({ path: join(SHOTS,
 
 // Centre d'un élément, entièrement dans le panneau ?, au premier plan (un contrôle recouvert par autre chose ne recevrait pas le clic) ?
 async function hitTest(selector) {
+  await reveal(page, selector);
   return page.evaluate(sel => {
     const el = document.querySelector(sel);
     if (!el) return { found: false };

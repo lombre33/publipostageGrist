@@ -19,6 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { reveal } from './reveal-in-window.mjs'; // un champ sous le résultat collé ou dans un repli fermé : la souris le découvre comme la personne
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -130,6 +131,7 @@ async function openWidget(colorScheme) {
 
 // Centre d'un élément, entièrement dans le panneau ?, et au premier plan (un contrôle recouvert par autre chose ne recevrait pas le clic) ?
 async function hitTest(page, selector) {
+  await reveal(page, selector);
   return page.evaluate(sel => {
     const el = document.querySelector(sel);
     if (!el) return { found: false };
@@ -639,7 +641,10 @@ async function wheelIntoView(page, selector, scope) {
       if (!el || !body) return null;
       const r = el.getBoundingClientRect();
       const v = body.getBoundingClientRect();
-      return { fully: r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5, below: r.bottom > v.bottom, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
+      // Le résultat est collé au bas de la zone qui défile : ce qu'il recouvre n'est pas encore sous les yeux (le bas utile s'arrête à son bord haut).
+      const res = body.querySelector(':scope > .var-result');
+      const floor = res ? Math.min(v.bottom, res.getBoundingClientRect().top) : v.bottom;
+      return { fully: r.top >= v.top - 0.5 && r.bottom <= floor + 0.5, below: r.bottom > floor, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
     }, { sel: selector, scope: scope || '#var-condition-modal' });
     if (!last || last.fully) return last;
     await page.mouse.move(last.x, last.y);
@@ -759,8 +764,8 @@ async function runOtherwise(theme, lang) {
   check(`${label} - clic dans le champ puis deux lignes tapées (Entrée au clavier) : le focus est dans le champ, les deux lignes y sont, la fenêtre est restée ouverte`,
     row.focused && row.value === OTHERWISE_LINES.join('\n') && stillOpen, { row, stillOpen });
   check(`${label} - l'aperçu dit que la ligne sélectionnée écrit le sinon, ses deux lignes séparées par « / »`, lines.length >= 1 && T.line.test(lines[0]), lines);
-  check(`${label} - l'aperçu a pris de la place sous les doigts (${debugBefore} → ${debugAfter} px) et le champ tapé est resté entier dans la partie visible de la fenêtre`,
-    debugAfter > debugBefore + 8 && row.inBody && row.bodyOverflowX <= 0, { debugBefore, debugAfter, row });
+  check(`${label} - le résultat collé garde sa place (${debugBefore} → ${debugAfter} px : il ne pousse rien, ne rétrécit pas) et le champ tapé est resté entier dans la partie visible de la fenêtre`,
+    debugAfter >= debugBefore - 1 && debugAfter <= debugBefore + 40 && row.inBody && row.bodyOverflowX <= 0, { debugBefore, debugAfter, row });
 
   // 4) Enregistrer reste visible et au premier plan quelle que soit la position du défilement ; un vrai clic.
   const saveBtn = await hitTest(page, '#var-condition-modal .var-modal-primary');

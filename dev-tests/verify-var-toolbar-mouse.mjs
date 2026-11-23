@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { reveal } from './reveal-in-window.mjs'; // un champ sous le résultat collé ou dans un repli fermé : la souris le découvre comme la personne
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -140,6 +141,7 @@ await page.waitForTimeout(300);
 
 // Centre d'un élément et ce qui s'y trouve réellement au premier plan (un bouton recouvert par autre chose ne recevrait pas le clic).
 async function hitTest(selector) {
+  await reveal(page, selector);
   return page.evaluate(sel => {
     const el = document.querySelector(sel);
     if (!el) return { found: false };
@@ -150,6 +152,7 @@ async function hitTest(selector) {
       found: true, x, y, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
       inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
       onTop: !!top && (top === el || el.contains(top)),
+      covered: top && !(top === el || el.contains(top)) ? top.tagName + '.' + String(top.className).slice(0, 60) : null,
     };
   }, selector);
 }
@@ -590,7 +593,7 @@ const authorRow = await page.evaluate(() => {
   if (!found) return { names: rows.map(r => r.querySelector('.ss-name').textContent) };
   const r = found.getBoundingClientRect();
   const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: !!top && found.contains(top), inViewport: r.top >= 0 && r.bottom <= innerHeight + 0.5, names: rows.map(x => x.querySelector('.ss-name').textContent) };
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: !!top && found.contains(top), covered: top && !found.contains(top) ? (top.tagName + '.' + top.className) : null, inViewport: r.top >= 0 && r.bottom <= innerHeight + 0.5, names: rows.map(x => x.querySelector('.ss-name').textContent) };
 });
 check('la liste montre les deux colonnes qui mènent à la tâche, « Auteur » atteignable', !!authorRow.x && authorRow.onTop && authorRow.inViewport && JSON.stringify(authorRow.names) === JSON.stringify(['Tache', 'Auteur']), authorRow);
 if (authorRow.x) await page.mouse.click(authorRow.x, authorRow.y);
@@ -940,7 +943,7 @@ const rnFr = await page.evaluate(() => ({
 }));
 const rnCell = await rnInfo();
 check('un vrai clic sur « La variable, dans sa case » : la note dit que les 2 autres variables de la ligne ne suivent pas, et comment les faire suivre',
-  rnCell.repeat === 'inline' && rnCell.shown && rnCell.text === rnFr.first + ' ' + rnFr.how && rnCell.text.startsWith('2 autres variables de la ligne ne suivront pas la boucle'), { rnCell, rnFr });
+  rnCell.repeat === 'inline' && rnCell.shown && rnCell.text === rnFr.first + ' ' + rnFr.how && rnCell.text.startsWith('2 autres variables de la ligne ne sont pas répétées.'), { rnCell, rnFr });
 check('la note est sous le choix, entière dans la fenêtre, sans texte coupé', rnCell.below && rnCell.inside && rnCell.unclipped, rnCell);
 const rnBox = await revealInLoopWindow(ROW_NOTE_SEL);
 check('la note se lit en entier à la molette (au premier plan, dans le panneau)', rnBox.found && rnBox.onTop && rnBox.inViewport, rnBox);
@@ -959,7 +962,7 @@ if (rnEnButton.found) await page.mouse.click(rnEnButton.x, rnEnButton.y);
 await page.waitForTimeout(300);
 const rnEn = await rnInfo();
 check('en anglais : la note est traduite, entière et dans la fenêtre',
-  rnEn.shown && rnEn.text === '2 other variables in the row will not follow the loop: only this cell is repeated. To repeat the whole row, choose “The table row”.' && rnEn.below && rnEn.inside && rnEn.unclipped, rnEn);
+  rnEn.shown && rnEn.text === '2 other variables in the row are not repeated. To repeat the whole row, choose “The table row”.' && rnEn.below && rnEn.inside && rnEn.unclipped, rnEn);
 await page.evaluate(() => I18n.setLang('fr'));
 await page.waitForTimeout(200);
 const rnCancel = await hitTest('#var-loop-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)');

@@ -80,8 +80,12 @@ const VariableList = (function () {
     const splitHint = el('span', 'var-loop-hint');
     splitHint.id = 'var-list-split-hint';
     split.input.setAttribute('aria-describedby', 'var-list-split-hint');
+    // Ce que le réglage change se lit derrière un « i » (cachée, l'indication reste la description de la case pour les lecteurs d'écran) ; dans un champ texte, où la case est grisée,
+    // l'indication dit pourquoi : elle reste écrite.
+    splitHint.hidden = true;
     const splitText = el('div', 'var-list-split-text');
-    splitText.append(split.label, splitHint);
+    const splitInfo = VariableModal.infoButton(splitHint);
+    splitText.append(split.label, splitInfo, splitHint);
     const splitBlock = el('div', 'var-list-split');
     splitBlock.append(split.input, splitText);
 
@@ -91,9 +95,12 @@ const VariableList = (function () {
 
     const { first: resetBtn, cancel: cancelBtn, ok: saveBtn } = win.addButtons('var-modal-danger');
 
-    win.body.append(intro, pickLabel, pickSeg, separators.row, numberRow, splitBlock, previewArea);
+    // Gabarit commun (js/variable-modal.js) : l'étiquette du choix au-dessus de ses quatre boutons (ils ne tiennent pas dans une case à droite), puis ce qu'il demande.
+    const decisions = VariableModal.form({ stacked: true });
+    decisions.row(pickLabel, [pickSeg, separators.row, numberRow]);
+    win.body.append(intro, decisions.box, splitBlock, previewArea);
     refs = {
-      title: win.title, intro, pickLabel, pickButtons, separators, numberRow, number, numberHint, split, splitHint, previewLine, splitLine, resetBtn, cancelBtn, saveBtn,
+      title: win.title, intro, splitInfo, pickLabel, pickButtons, separators, numberRow, number, numberHint, split, splitHint, previewLine, splitLine, resetBtn, cancelBtn, saveBtn,
     };
 
     // Le numéro est lu pendant la frappe (le champ peut être vide un instant) et ramené à 1-999 en le quittant, comme l'enregistrement le fera.
@@ -122,7 +129,7 @@ const VariableList = (function () {
     let text = I18n.t('varList.intro.choice');
     if (crossed) text = I18n.t('varList.intro.path', { table: crossed });
     else if (target && target.list) text = I18n.t('varList.intro.ref', { table: target.table });
-    refs.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(state.node)), document.createTextNode(' ' + text));
+    VariableModal.setIntro(refs.intro, el('span', 'var-badge', VariableModal.badgeText(state.node)), text, true);
   }
   // Le bouton du choix en cours est enfoncé ; les champs de « toutes » et de « n-ième » n'apparaissent que pour leur choix.
   function renderPick() {
@@ -234,6 +241,10 @@ const VariableList = (function () {
     number.input.value = String(state.working.index);
     split.label.textContent = I18n.t('varList.split.label');
     splitHint.textContent = I18n.t(inField ? 'varList.split.hintField' : 'varList.split.hint');
+    // Dans un champ, l'indication dit pourquoi la case est grisée : elle reste écrite, sans « i ».
+    splitHint.hidden = !inField;
+    refs.splitInfo.hidden = inField;
+    refs.splitInfo.setAttribute('aria-expanded', 'false');
     split.input.checked = state.working.perValue;
     split.input.disabled = inField;
     resetBtn.textContent = I18n.t('varList.reset');

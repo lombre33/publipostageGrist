@@ -39,7 +39,9 @@
    css/variable-actions.css. */
 /* La liste « # » ouverte depuis le champ de la formule garde le niveau des menus (--z-menu, css/editor-v2.css) : js/variables.js la passe devant
    la fenêtre à chaque placement (Layers.raise(boîte, fenêtre), js/layers.js), sans niveau ni z-index de plus ici. */
-.pp-calc-functions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.pp-calc-functions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+/* « Aide » : les notes qu'elle replie n'ont pas besoin de leur marge du haut. */
+.pp-calc-box .var-fold-body .pp-link-note { margin: 0; }
 .pp-calc-functions-label { margin-right: 2px; font-size: 12px; font-weight: 700; color: var(--text); }
 .pp-calc-function { font-family: var(--font-ui); font-size: 12px; font-weight: 600; height: 26px; padding: 0 9px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
 .pp-calc-function:hover { background: var(--surface-sunken); }
@@ -47,7 +49,7 @@
 /* Le résultat pour la ligne courante, sous les fonctions : discret tant que le calcul se construit, le texte plein quand il aboutit ; après une
    validation refusée, le filet rouge (comme .pp-link-error : --danger ne fait que 4,4:1 sur blanc, le filet et le contour du champ portent
    l'erreur, le texte garde sa couleur). */
-.pp-calc-status { min-height: 1.45em; margin: 14px 0 0; padding-left: 8px; border-left: 3px solid var(--border-strong); font-size: 12.5px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.pp-calc-status { min-height: 1.45em; margin: 0; padding-left: 8px; border-left: 3px solid var(--border-strong); font-size: 12.5px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
 .pp-calc-status[data-state="ok"] { color: var(--text); font-weight: 600; border-left-color: var(--accent-solid); }
 .pp-calc-status[data-state="error"] { color: var(--text); font-weight: 600; border-left-color: var(--danger); }
 .pp-calc-box .pp-dialog-input[aria-invalid="true"] { border-color: var(--danger); }

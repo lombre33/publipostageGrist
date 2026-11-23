@@ -8,6 +8,7 @@
 //   - les huit paragraphes attendus sont là, lignes vides comprises, et le premier se colle à la suite du texte du curseur ; aucun saut de ligne forcé ;
 //   - à l'écran, une ligne vide laisse sa hauteur d'une ligne entre deux paragraphes (une, puis deux de suite), et rien ne déborde du panneau ;
 //   - un seul Ctrl+Z défait le collage, Ctrl+Maj+Z le rend ;
+//   - Ctrl+A puis Ctrl+C redonne le texte à l'identique, une ligne par paragraphe : recollé dans un éditeur de texte, aucune ligne n'est doublée (23/11 : « deux sauts de ligne à chaque fois ») ;
 //   - une seule ligne collée reste dans le paragraphe du curseur ; le Markdown n'est pas lu (« # » reste un « # »).
 // Lancé par run-headless.mjs (groupe Node « plainTextPasteMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-plain-text-paste-mouse.mjs
 import { createServer } from 'node:http';
@@ -204,6 +205,13 @@ async function flow(scheme, label) {
     await page.keyboard.press('Control+Shift+Z');
     await page.waitForTimeout(300);
     check(`${label}, ${how} - Ctrl+Maj+Z le rend`, (await docJson(page)) === after);
+    // Le retour : tout sélectionner (Ctrl+A) et copier (Ctrl+C) donne le texte tel qu'il est écrit, une ligne par paragraphe, sans ligne vide de plus (le vrai presse-papiers, relu).
+    await page.keyboard.press('Control+A');
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    check(`${label}, ${how} - Ctrl+A puis Ctrl+C redonne le texte à l'identique, une ligne par paragraphe, sans ligne vide de plus (de quoi le recoller dans un éditeur de texte)`, copied.replace(/\r\n/g, '\n') === EXPECTED.join('\n'), copied);
   }
 
   // Une seule ligne : elle reste dans le paragraphe du curseur, pas de paragraphe de plus.

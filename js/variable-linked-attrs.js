@@ -171,7 +171,7 @@ const VariableLinkedAttrs = (function () {
     else if (!box.checked && index !== -1) state.picks.splice(index, 1);
     syncActionButtons();
   }
-  // « Insérer » dit combien d'attributs il pose ; lui et « Remplacer » restent grisés tant que rien n'est coché. Pour le choix d'une colonne, « Choisir » reste
+  // « Insérer » dit combien de colonnes il pose (juste « Insérer » tant qu'aucune n'est cochée) ; lui et « Remplacer » restent grisés tant que rien n'est coché. Pour le choix d'une colonne, « Choisir » reste
   // grisé tant qu'aucune n'est sélectionnée, et la ligne sous la liste dit laquelle l'est.
   function syncActionButtons() {
     const count = state ? state.picks.length : 0;
@@ -181,7 +181,8 @@ const VariableLinkedAttrs = (function () {
       renderNote();
       return;
     }
-    refs.insertBtn.textContent = I18n.t('varLinked.insert', { count });
+    // Rien de coché : le bouton, grisé, dit « Insérer » - « Insérer 0 colonne » ne dit rien qu'on puisse faire.
+    refs.insertBtn.textContent = count ? I18n.t('varLinked.insert', { count }) : I18n.t('varLinked.insertNone');
     refs.insertBtn.disabled = count === 0;
     refs.replaceBtn.disabled = count === 0;
   }

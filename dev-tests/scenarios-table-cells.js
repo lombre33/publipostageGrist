@@ -653,8 +653,8 @@
   });
 
   cases.push({
-    id: 'cells_copy_of_ordinary_text_keeps_the_default_plain_text',
-    description: 'Hors sélection de cases, Ctrl+C garde le texte brut d\'avant : deux paragraphes entiers sont séparés par une ligne vide, un morceau de phrase est copié tel quel',
+    id: 'cells_copy_of_ordinary_text_is_one_line_per_paragraph',
+    description: 'Hors sélection de cases, Ctrl+C écrit un paragraphe par ligne (23/11 : copier vers un éditeur de texte doublait les lignes, js/editor.js `copiedPlainText`) : deux paragraphes entiers se suivent sur deux lignes, un morceau de phrase est copié tel quel',
     run: async (h) => withTable(h, async () => {
       Editor.setHTML('<p>Premier</p><p>Second</p><p>Un morceau de phrase</p>');
       await sleep(120);
@@ -667,7 +667,7 @@
       const dtPart = new DataTransfer();
       fireClipboard('copy', dtPart);
       const two = clipOf(dtTwo).text, part = clipOf(dtPart).text;
-      return { pass: two === 'Premier\n\nSecond' && part === part.trim() && part.length === 5, notes: JSON.stringify({ two, part }) };
+      return { pass: two === 'Premier\nSecond' && part === part.trim() && part.length === 5, notes: JSON.stringify({ two, part }) };
     }),
   });
 
