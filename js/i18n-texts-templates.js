@@ -40,8 +40,10 @@ const I18nTextsTemplates = {
   'templateTree.default.note': { fr: 'au démarrage', en: 'at startup' },
   'templateTree.pinnedSection': { fr: 'Épinglés', en: 'Pinned' },
   'templateTree.allSection': { fr: 'Tous les documents', en: 'All documents' },
-  // En-tête du panneau : titre et bouton « Organiser » (son info-bulle et son aria-label restent 'toolbar.organizeTemplates').
-  'templateTree.title': { fr: 'Documents', en: 'Documents' },
+  // En-tête du panneau : le champ de recherche (il tient la place de l'ancien titre « Documents ») et le bouton « Organiser » (son info-bulle et son aria-label restent 'toolbar.organizeTemplates').
+  // `noMatch` : la phrase d'une recherche sans résultat.
+  'templateTree.search': { fr: 'Rechercher un document…', en: 'Search for a document…' },
+  'templateTree.noMatch': { fr: 'Aucun document ne correspond à cette recherche.', en: 'No document matches this search.' },
   'templateTree.organize': { fr: 'Organiser', en: 'Organize' },
   'templateTree.empty': { fr: 'Aucun document enregistré.', en: 'No saved document yet.' },
   // --- Modale "Organiser mes modèles" (créer des dossiers, y ranger des modèles), js/template-organize-modal.js ---
