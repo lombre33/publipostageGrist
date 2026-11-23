@@ -1,0 +1,36 @@
+/* La notice du document (js/template-notice.js) : le bandeau fin (#pp-notice-bar : les classes `macro-return-*` de css/toolbar-v2.css, comme les autres bandeaux fins), la fenêtre qui la lit et l'écrit, et la ligne du menu du crayon.
+   Les couleurs viennent des jetons de css/style.css (clair et sombre, 4,5:1 au moins). Tout tient dans le panneau de 700x400 de Grist : seul le contenu de la fenêtre défile (css/modal-base.css). Jamais imprimée. */
+.pp-notice-bar-title { color: var(--text); font-weight: 700; margin-right: 6px; }
+body.pp-clean-reading #pp-notice-bar { display: none; }
+
+/* Le texte lu : celui que la personne a écrit (titres, paragraphes, listes, liens, gras, italique), à la taille de la fenêtre. */
+.pp-notice-text { font-family: var(--font-ui); font-size: 13px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.pp-notice-text[hidden] { display: none; }
+.pp-notice-text h3 { margin: 0 0 6px; font-size: 14.5px; font-weight: 700; }
+.pp-notice-text p { margin: 0 0 8px; }
+.pp-notice-text ul, .pp-notice-text ol { margin: 0 0 8px; padding-left: 22px; }
+.pp-notice-text li { margin: 2px 0; }
+.pp-notice-text li > p { margin: 0; }
+.pp-notice-text a { color: var(--accent-ink); text-decoration: underline; }
+.pp-notice-text > :last-child { margin-bottom: 0; }
+
+/* L'écriture : la phrase d'aide, la rangée d'outils, puis le texte dans un cadre (il défile à partir de 40 % de la hauteur de la fenêtre du navigateur, le reste de la fenêtre tient dans 700x400). */
+.pp-notice-hint { margin: 0 0 8px; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+.pp-notice-hint[hidden], .pp-notice-tools[hidden], .pp-notice-editor[hidden], .pp-notice-problem[hidden] { display: none; }
+.pp-notice-tools { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.pp-notice-tool { min-width: 30px; height: 26px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius-xs, 5px); background: transparent; color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 600; cursor: pointer; }
+.pp-notice-tool:hover { background: var(--surface); border-color: var(--border); }
+.pp-notice-tool[aria-pressed="true"] { background: var(--surface); border-color: var(--border-strong); box-shadow: inset 0 -2px 0 var(--accent); }
+.pp-notice-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pp-notice-editor { box-sizing: border-box; min-height: 110px; max-height: 40vh; overflow: auto; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+.pp-notice-editor:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pp-notice-prose { min-height: 92px; outline: none; white-space: pre-wrap; word-wrap: break-word; font-family: var(--font-ui); font-size: 13px; line-height: 1.5; }
+.pp-notice-prose h3 { margin: 0 0 6px; font-size: 14.5px; }
+.pp-notice-prose p { margin: 0 0 8px; }
+.pp-notice-prose ul, .pp-notice-prose ol { margin: 0 0 8px; padding-left: 22px; }
+.pp-notice-prose a { color: var(--accent-ink); text-decoration: underline; }
+.pp-notice-problem { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--danger-ink); }
+
+@media print {
+  #pp-notice-bar, #pp-notice-modal { display: none !important; }
+}

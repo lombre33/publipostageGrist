@@ -55,6 +55,8 @@ const SchemaColumns = (function () {
         ['ModifiedBy', 'ModifiePar', 'Modifié par'],
         ['PdfPassword', 'MotDePassePdf', 'Mot de passe des PDF protégés'],
         ['LinkedEmail', 'EmailLie', 'Email lié'],
+        // La notice du modèle (js/template-notice.js) : née en anglais (rien d'avant à renommer), son nom d'avant est donc le même.
+        ['Notice', 'Notice'],
       ],
     },
     {

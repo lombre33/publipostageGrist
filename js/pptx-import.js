@@ -1105,14 +1105,21 @@ const PptxImport = (function () {
     const box = host.querySelector('.pp-free-frame-box');
     return box ? box.getBoundingClientRect().height / PX_PER_PT : 0;
   }
-  // Le texte d'un objet, réduit s'il ne tient pas dans `room` points de haut (jusqu'à 60 % de sa taille : au delà, il dépasse). Rend { items, natural (sa hauteur mesurée), scale }.
-  function fitText(ctx, frame, txBody, shape, room, cap, first) {
+  // L'épaisseur, en points, d'un cadre dont le texte est TOURNÉ d'un quart de tour (`vert`, `vert270`) : la place que son texte prend de gauche à droite, marges comprises, ses lignes ayant pour longueur la
+  // hauteur du cadre. Le texte est mesuré mis à plat (la boîte reçoit pour largeur sa hauteur), avec les marges tournées avec lui : les 7,2 pt de chaque côté du cadre deviennent ceux du haut et du bas de la boîte à plat.
+  const TURN_PAD_PT = 2 * (FRAME_PAD_X_PT - FRAME_PAD_Y_PT);
+  function measuredThickness(ctx, frame, items) {
+    return measuredHeight(ctx, Object.assign({}, frame, { vert: '', w: frame.h + TURN_PAD_PT }), items) + TURN_PAD_PT;
+  }
+  // Le texte d'un objet, réduit s'il ne tient pas dans `room` points de haut (jusqu'à 60 % de sa taille : au delà, il dépasse). Rend { items, natural (sa hauteur mesurée), scale }. `measure` : la mesure
+  // d'un texte tourné (`measuredThickness`), dont `room` est alors la largeur de la boîte.
+  function fitText(ctx, frame, txBody, shape, room, cap, first, measure = measuredHeight) {
     const limit = Math.min(room * (1 + FIT_SLACK), cap);
-    const natural = measuredHeight(ctx, frame, first);
+    const natural = measure(ctx, frame, first);
     if (natural <= limit) return { items: first, natural, scale: shape.scale };
     const trial = (scale) => {
       const items = paragraphsOf(txBody, Object.assign({}, shape, { scale, report: blankReport(), losses: null }));
-      return { items, natural: measuredHeight(ctx, frame, items), scale };
+      return { items, natural: measure(ctx, frame, items), scale };
     };
     let low = shape.scale * MIN_FIT_SCALE;
     let best = trial(low);
@@ -1871,9 +1878,9 @@ const PptxImport = (function () {
       frame.y += top - FRAME_PAD_Y_PT;
       frame.h += 2 * FRAME_PAD_Y_PT - top - bottom;
       // La première ligne de base de PowerPoint : le texte en haut est descendu (ou monté) de l'écart d'interligne ; centré ou en bas, c'est plus bas, quand la hauteur du texte est mesurée.
-      if (!box.rot && !ctx.ownExport && anchor === 't' && items.length) frame.y += firstLineShift(items[0].lead, 't', 0);
+      if (!box.rot && !ctx.ownExport && anchor === 't' && items.length && !frame.vert) frame.y += firstLineShift(items[0].lead, 't', 0);
       const first = items.find(item => !item.empty);
-      if (bodyAttr(bodies, 'wrap') === 'none' && first && !box.rot) {
+      if (bodyAttr(bodies, 'wrap') === 'none' && first && !box.rot && !frame.vert) {
         // Un peu plus large, du côté où le texte déborde, sans sortir de la page.
         const toLeft = Math.max(0, frame.x);
         const toRight = Math.max(0, env.page.w - frame.x - frame.w);
@@ -1886,17 +1893,29 @@ const PptxImport = (function () {
     }
     snapToPage(frame, env.page, hasText || kind !== 'rect' ? BLEED_PT : Infinity);
     if (hasText) {
-      // Le texte tient dans sa boîte (une boîte qui s'adapte à son texte, dans ce qui reste de la page sous elle), et jamais plus bas que la page ; sinon il est réduit.
-      const room = fitKindOf(bodies) === 'spAutoFit' ? Math.max(frame.h, env.page.h - frame.y - 1) : frame.h;
-      const fitted = fitText(ctx, frame, txBody, shape, room, frame.rot ? Infinity : Math.max(env.page.h - frame.y, 12), items);
+      // Le texte tient dans sa boîte (une boîte qui s'adapte à son texte, dans ce qui reste de la page sous elle), et jamais plus bas que la page ; sinon il est réduit. Un texte tourné d'un quart de tour
+      // (`vert`, `vert270`) se mesure en largeur : ses lignes ont pour longueur la hauteur de la boîte.
+      const turned = !!frame.vert;
+      const auto = fitKindOf(bodies) === 'spAutoFit';
+      const room = turned ? (auto ? Math.max(frame.w, env.page.w - frame.x - 1) : frame.w) : (auto ? Math.max(frame.h, env.page.h - frame.y - 1) : frame.h);
+      const cap = frame.rot ? Infinity : (turned ? Math.max(env.page.w - frame.x, 12) : Math.max(env.page.h - frame.y, 12));
+      const fitted = fitText(ctx, frame, txBody, shape, room, cap, items, turned ? measuredThickness : measuredHeight);
       items = fitted.items;
       if (fitted.scale < shape.scale - 0.001) { ctx.report.shrunk += 1; noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(fitted.scale)); }
-      if (plain && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
+      if (turned && plain && !box.rot && fitted.natural < frame.w - 1) {
+        // Le bloc de lignes d'un texte tourné se pose dans la largeur de la boîte comme celui d'un texte à l'horizontale dans sa hauteur : `t` du côté où ses lignes commencent (à droite pour `vert`, à gauche
+        // pour `vert270`), `ctr` au milieu, `b` de l'autre côté. Le cadre prend la largeur du texte et va là où il est : sans cela, le texte colle au bord gauche de sa boîte.
+        const spare = frame.w - fitted.natural;
+        const startsRight = frame.vert === 'vert';
+        frame.x += anchor === 'ctr' ? spare / 2 : ((anchor === 'b') === startsRight ? 0 : spare);
+        frame.w = fitted.natural;
+      } else if (!turned && plain && !box.rot && fitted.natural < frame.h - 1 && anchor !== 't') {
         frame.y += anchor === 'b' ? frame.h - fitted.natural : (frame.h - fitted.natural) / 2;
         frame.h = fitted.natural;
         if (!ctx.ownExport && items.length) frame.y += firstLineShift(items[0].lead, anchor, fitted.natural);
       }
     }
+    if (hasText && PROBE_SLIDES.includes(ctx.slideNumber)) probeText(ctx, sp, bodies, txBody, box, frame, anchor, shape);   // DÉBOGAGE TEMPORAIRE
     out.push(FreeFrame.html(frame, hasText ? assemble(animateParagraphs(items, attr(kid(nv, 'cNvPr'), 'id'), env)) : '<p></p>'));
   }
   // Les réglages d'une forme prédéfinie (`a:avLst`) : { adj: 25000, ... }, ceux écrits en « val N » (les seuls que PowerPoint écrit).
@@ -2157,7 +2176,8 @@ const PptxImport = (function () {
     let html = render(1);
     let natural = measuredTable(ctx, html, columns);
     // Les lignes d'un tableau grandissent avec leur texte, et celui de l'éditeur (interligne 1,42) est plus haut que celui de PowerPoint : un tableau plus haut que dans le fichier a son texte réduit (jusqu'à 60 %).
-    const limit = box.h * (1 + TABLE_FIT_SLACK) + 1;
+    // Jamais plus bas que la page (comme un texte, fitText) : la tolérance de 3 % ne fait pas sortir de la diapositive un tableau qui, dans le fichier, finit au ras de son bord.
+    const limit = Math.min(box.h * (1 + TABLE_FIT_SLACK) + 1, Math.max(env.page.h - box.y, 12));
     if (natural > limit) {
       const scratch = blankReport();
       const trial = (scale) => { const tried = render(scale, scratch); return { html: tried, natural: measuredTable(ctx, tried, columns), scale }; };
@@ -2176,6 +2196,7 @@ const PptxImport = (function () {
       ctx.report.shrunk += 1;
       noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(best.scale));
     }
+    probe(ctx, 'table "' + objectNameOf(node) + '" slide ' + ctx.slideNumber + ' file=(' + [box.x, box.y, box.w, box.h].map(probeRound).join(',') + ') page=' + probeRound(env.page.w) + 'x' + probeRound(env.page.h) + ' natural=' + probeRound(natural) + ' limit=' + probeRound(limit) + ' bottom=' + probeRound(box.y + Math.max(box.h, natural)) + ' rows=' + rows + ' cols=' + cols);   // DÉBOGAGE TEMPORAIRE
     // Le tableau est un cadre libre à sa place exacte (comme un cadre de texte : ses marges intérieures sont celles de l'éditeur, le tableau est donc reculé d'autant), de la hauteur du tableau tel que l'éditeur le dessinera.
     out.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: Math.max(box.h, natural) + 2 * FRAME_PAD_Y_PT, rot: 0, layer: '' }, html));
     // Le texte alternatif d'un tableau n'a pas de place dans l'éditeur : compté.
@@ -2263,7 +2284,9 @@ const PptxImport = (function () {
     if (shapes.length > MAX_DIAGRAM_SHAPES) { refuse('tooMany', { n: shapes.length, max: MAX_DIAGRAM_SHAPES }); return; }
     shapes.forEach((shape) => { if (shape.localName === 'sp') diagramTextInsets(shape); });
     const frame = Object.assign({}, xf, { chOff: { x: 0, y: 0 }, chExt: { w: xf.w, h: xf.h } });
+    const from = out.length;
     await walkTree(tree, Object.assign({}, env, { slideRels: drawing.rels }), [frame].concat(groups), 1, out);
+    probeDiagram(ctx, objectNameOf(node), out.slice(from));   // DÉBOGAGE TEMPORAIRE
   }
   // Le genre d'un graphique de PowerPoint (`barChart`, `pieChart`, `lineChart`…, plusieurs liés par « + » pour un graphique combiné), lu dans sa partie : le détail du rapport le nomme, sans rien changer à ce qui est repris.
   async function chartKindOf(data, env) {
@@ -2695,6 +2718,37 @@ const PptxImport = (function () {
     return list.filter(Boolean).join(' ; ');
   }
 
+  // --- DÉBOGAGE TEMPORAIRE (23/11 : le fichier n'est pas déposé, son compte rendu porte les mesures) -----------------------------------------------------------------------------------------
+  // À RETIRER avec le reste du débogage : ce bloc, les appels `probe(` (tableObject, diagramObject, shapeObject), `ctx.probes`, `stats.probes` et les lignes « probes » de js/main-import.js `pptxReportText`. Ce que l'import
+  // a mesuré et décidé pour un tableau (sa boîte du fichier, sa hauteur dans l'éditeur, la page), pour le texte de chaque forme d'un schéma (la couleur du texte et celle du fond, pour trouver un texte invisible) et
+  // pour les textes des diapositives de PROBE_SLIDES (la boîte du fichier, celle du cadre, l'ancrage, l'ajustement, les marges, la première ligne).
+  const PROBE_SLIDES = [8, 9, 24, 26, 27, 28];
+  const MAX_PROBES = 160;
+  function probe(ctx, line) { if (ctx.probes && ctx.probes.length < MAX_PROBES) ctx.probes.push(line); }
+  const probeRound = value => Math.round(value * 10) / 10;
+  function probeDiagram(ctx, name, frames) {
+    const rows = [];
+    frames.forEach((html) => {
+      if (typeof html !== 'string') return;
+      const el = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').querySelector('.pp-free-frame');
+      if (!el || !el.textContent.trim()) return;
+      const colors = Array.from(new Set(Array.from(el.querySelectorAll('[style*="color"]')).map(node => node.style.color || '?')));
+      rows.push('    fill=' + (el.getAttribute('data-ff-fill') || '-') + ' shape=' + (el.getAttribute('data-ff-shape') || 'text') + ' colors=' + (colors.join('|') || 'none') + ' text="' + el.textContent.trim().replace(/\s+/g, ' ').slice(0, 36) + '"');
+    });
+    probe(ctx, 'diagram "' + name + '" slide ' + ctx.slideNumber + ' : ' + rows.length + ' shapes with text');
+    rows.slice(0, 14).forEach(row => probe(ctx, row));
+  }
+  function probeText(ctx, sp, bodies, txBody, box, frame, anchor, shape) {
+    const fit = kid(bodies[bodies.length - 1], ['spAutoFit', 'normAutofit', 'noAutofit']);
+    const first = kids(txBody, 'p')[0];
+    const pPr = first ? kid(first, 'pPr') : null;
+    const inset = (name, fallback) => probeRound(bodyNum(bodies, name, fallback) / EMU_PER_PT);
+    const ph = placeholderOf(sp);
+    probe(ctx, 'text "' + objectNameOf(sp) + '" slide ' + ctx.slideNumber + (ph ? ' ph=' + ph.type + '/' + ph.idx : '') + ' file=(' + [box.x, box.y, box.w, box.h].map(probeRound).join(',') + ') frame=(' + [frame.x, frame.y, frame.w, frame.h].map(probeRound).join(',')
+      + ') anchor=' + anchor + ' wrap=' + (bodyAttr(bodies, 'wrap') || '-') + ' fit=' + (fit ? fit.localName + (attr(fit, 'fontScale') ? ' fontScale=' + attr(fit, 'fontScale') : '') + (attr(fit, 'lnSpcReduction') ? ' lnSpcReduction=' + attr(fit, 'lnSpcReduction') : '') : '-')
+      + ' ins=' + [inset('lIns', 91440), inset('tIns', 45720), inset('rIns', 91440), inset('bIns', 45720)].join('/') + ' scale=' + probeRound(shape.scale) + ' vert=' + (frame.vert || '-') + ' first="' + (first ? paragraphText(first).slice(0, 30) : '') + '"'
+      + (pPr ? ' lvl=' + (attr(pPr, 'lvl') || 0) + ' marL=' + (attr(pPr, 'marL') || '-') + ' indent=' + (attr(pPr, 'indent') || '-') : ''));
+  }
   // --- DÉBOGAGE TEMPORAIRE (11/11 : « améliore le code pour avoir plus de debug, on fera sauter au moment de le sortir ») ------------------------------------------------------------------------------
   // À RETIRER avant la sortie : ce bloc, `decorDebug` dans `decorStats`, `holderUse[].slides`, `ctx.pageEmu`, les lignes « DÉBOGAGE » du texte copié (js/main-import.js `pptxReportText`) et `importReport.debug`.
   // Ce que le décor d'un masque ou d'une mise en page a de concret, pour décider quoi en faire : le fichier, les diapositives qui le montrent, la boîte de chaque groupe (en % de la page), les images, les couleurs
@@ -2897,7 +2951,7 @@ const PptxImport = (function () {
     const writtenBy = appProps ? ((descendants(appProps.documentElement, 'Application')[0] || {}).textContent || '') : '';
     const ctx = {
       ownExport: /^\s*Grist Factory\s*$/i.test(writtenBy),
-      pkg, k: page.k, pageEmu, report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
+      pkg, k: page.k, pageEmu, probes: [], report, realReport: report, images: new Map(), imageBytes: 0, decorBytes: 0, prepared: new Map(), skipped: new Set(), objects: 0, masters: new Map(), layouts: new Map(), counted: new Set(), holderUse: new Map(),
       defaultText: kid(presentation, 'defaultTextStyle'), presentationRels, pace: pacer(), embedded: 0, heavy: buffer.byteLength >= HEAVY_FILE_BYTES,
     };
     const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;
@@ -2948,7 +3002,7 @@ const PptxImport = (function () {
     // sur une série de caractères reste celle du fichier. Un fichier sans thème lisible n'en a pas (la présentation d'avant).
     const stats = {
       fileBytes: buffer.byteLength, slides: texts.length, objects: ctx.objects, heavy: ctx.heavy, images: Array.from(ctx.images.values()).filter(Boolean).length, imageBytes: ctx.imageBytes, decorBytes: ctx.decorBytes,
-      holders: decorStats(ctx), ms: Math.round(performance.now() - startedAt),
+      holders: decorStats(ctx), probes: ctx.probes, ms: Math.round(performance.now() - startedAt),
     };
     const said = REPORT_KEYS.filter(key => report[key] > 0);
     const imported = { orientation: page.orientation, format: page.format };

@@ -3,6 +3,8 @@ const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Templates';
   // La colonne où le document garde, quand la personne le choisit, le mot de passe commun des PDF protégés (cf. writePdfPassword plus bas).
   const PDF_PASSWORD_COLUMN = 'PdfPassword';
+  // La colonne où chaque modèle garde sa notice (cf. ensureNoticeColumn, saveNotice).
+  const NOTICE_COLUMN = 'Notice';
   // La colonne où un document ou une grille garde l'email que la personne lui a lié (cf. setLinkedEmail plus bas) : le JETON de cet email, jamais son numéro de ligne.
   const LINKED_EMAIL_COLUMN = 'LinkedEmail';
   let templatesCache = [];
@@ -140,18 +142,21 @@ const Templates = (function () {
     // d'ajouter une colonne enregistre quand même, sans elle (cf. modifiedByColumnReady).
     const ensureModifiedByColumn = ensureColumns([['ModifiedBy', 'Text']]);
 
+    // La notice du modèle (js/template-notice.js : « comment se servir de ce modèle », du HTML court, jamais exporté) : une colonne à part, hors de Content, pour qu'aucun export ne puisse la lire. Comme le jeton, ni loadAll ni
+    // saveRow ne la lancent : un document dont aucun modèle n'a de notice n'a pas de colonne de plus ; elle se crée à la première écriture d'une notice (saveNotice), jamais pour lire.
+    const ensureNoticeColumn = ensureColumns([[NOTICE_COLUMN, 'Text']]);
     // L'email lié à un document ou à une grille (setLinkedEmail) : le jeton de l'email, dans la ligne du document. Comme le jeton et le mot de passe des PDF, ni loadAll ni saveRow ne la lancent - un document qui ne lie aucun
     // email n'a pas de colonne de plus ; elle se crée au premier lien posé - et un enregistrement n'écrit jamais cette colonne : un document enregistré garde son lien, et un enregistrement automatique qui part d'un cache
     // en retard ne défait pas le lien qu'une autre personne vient de poser.
     const ensureLinkedEmailColumn = ensureColumns([[LINKED_EMAIL_COLUMN, 'Text']]);
     return {
       ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
-      ensureLinkedEmailColumn,
+      ensureLinkedEmailColumn, ensureNoticeColumn,
     };
   }
   const {
     ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
-    ensureLinkedEmailColumn,
+    ensureLinkedEmailColumn, ensureNoticeColumn,
   } = defineColumnMigrations();
 
   // La colonne « Modifié par » existe-t-elle (ou vient-elle d'être créée) ? Faux quand la personne n'a pas le droit d'ajouter une colonne : l'enregistrement la laisse alors de côté (un UpdateRecord sur une
@@ -318,6 +323,8 @@ const Templates = (function () {
       jeton: String(cell('Token', '') || ''),
       // Qui a écrit cet état (cf. ensureModifiedByColumn) : '' quand on ne le sait pas (modèle d'avant la colonne, personne non identifiée).
       modifiePar: String(cell('ModifiedBy', '') || ''),
+      // La notice du modèle (cf. ensureNoticeColumn) : du HTML tel que la table le garde, '' quand il n'y en a pas. Elle n'est lue qu'à travers TemplateNotice.clean, jamais posée telle quelle dans la page.
+      notice: String(cell(NOTICE_COLUMN, '') || ''),
       // Le jeton de l'email que ce document ou cette grille a pour compagnon (cf. setLinkedEmail) : '' quand aucun n'est lié, ou pour un document d'avant la colonne. Le jeton seul ne désigne rien : EmailLink.emailOf le cherche.
       emailLie: String(cell(LINKED_EMAIL_COLUMN, '') || ''),
     };
@@ -336,7 +343,7 @@ const Templates = (function () {
     cacheWritten(id);
     const cached = byId(id);
     if (!cached) return;
-    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], [LINKED_EMAIL_COLUMN]: [cached.emailLie], ModifiedAt: [dateModif] };
+    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], [LINKED_EMAIL_COLUMN]: [cached.emailLie], [NOTICE_COLUMN]: [cached.notice], ModifiedAt: [dateModif] };
     Object.keys(columns).forEach(column => { if (column !== 'ModifiedAt') row[column] = [columns[column]]; });
     Object.assign(cached, templateFromRow(row, 0));
   }
@@ -949,6 +956,23 @@ const Templates = (function () {
     return token;
   }
 
+  // La notice d'un modèle (js/template-notice.js), écrite dans la colonne `Notice` SEULE : ni Content ni ModifiedAt, donc aucun conflit avec l'enregistrement automatique du texte (même règle qu'ensureToken). Crée la colonne à la
+  // première notice. Un modèle d'un type inconnu n'est pas écrit (refuseUnwritable) ; une colonne qu'on ne peut pas créer (compte qui n'a pas le droit d'ajouter une colonne, Lecteur) lève : la fenêtre le dit, rien n'est perdu.
+  // Le cache prend la notice tout de suite et la garde contre une lecture de la table partie avant l'écriture (keepWrittenSince). Rend le HTML écrit.
+  function saveNotice(id, html) {
+    return writes.track(async () => {
+      refuseUnwritable(id);
+      const value = typeof html === 'string' ? html : '';
+      await ensureTableExists();
+      if (!(await ensureNoticeColumn())) throw new Error('La colonne des notices ne peut pas être créée : rien n’a été enregistré.');
+      await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, id, { [NOTICE_COLUMN]: value }]]);
+      // Cherché après l'écriture : une relecture de la table a pu remplacer les objets du cache pendant qu'elle durait.
+      const cached = byId(id);
+      if (cached) { cached.notice = value; cacheWritten(id); }
+      return value;
+    });
+  }
+
   // L'email que le document (ou la grille) `id` a pour compagnon : le jeton de `emailId` dans la colonne LinkedEmail de sa ligne, `null` pour retirer le lien. Le jeton et non le numéro de la ligne, comme le lien d'un tableau (cf.
   // ensureToken) : un numéro rendu à un autre modèle ne fait pas passer le lien sur un email sans rapport, et un email supprimé puis rendu par Annuler (même jeton) retrouve ses documents. Écrit la colonne seule - ni Content ni
   // ModifiedAt - et crée la colonne au premier lien posé (jamais pour retirer un lien qui n'existe pas). Le jeton de l'email se crée au besoin. Refuse (erreur) un document ou un email qui n'existe plus, ou qui n'est pas d'un type
@@ -1068,7 +1092,7 @@ const Templates = (function () {
 
   // Les colonnes qu'une ligne de la table porte pour le widget (celles que templateFromRow lit et que saveRow écrit) : de quoi rendre une ligne supprimée telle qu'elle était. Pas les autres colonnes du document : Grist
   // refuse toute valeur dans une colonne à formule, et tout le lot sur une colonne qu'il ne connaît pas.
-  const ROW_COLUMNS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', LINKED_EMAIL_COLUMN];
+  const ROW_COLUMNS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', LINKED_EMAIL_COLUMN, NOTICE_COLUMN];
 
   // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
   // ligne n'existe plus ou si la table ne se lit pas.
@@ -1128,7 +1152,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail,
+    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail, saveNotice,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, verifyStored, getLoadedChars, getLoadWeights, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
