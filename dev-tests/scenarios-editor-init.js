@@ -118,7 +118,7 @@
 
   cases.push({
     id: 'editor_init_clipboard_props',
-    description: 'le presse-papiers : texte copié d\'une sélection (une ligne par paragraphe : copiedPlainText ; les cas sont ceux de plainTextPaste), tableau de tableur nettoyé et préféré à son image, collage de texte brut en paragraphes lignes vides comprises (plainTextToSlice ; ses cas sont ceux de plainTextPaste)',
+    description: 'le presse-papiers : texte copié d\'une sélection (une ligne par paragraphe : copiedPlainText ; les cas sont ceux de plainTextPaste), HTML copié (un bloc vide garde son retour : clipboardHtmlSerializer), tableau de tableur nettoyé et préféré à son image, collage de texte brut en paragraphes lignes vides comprises (plainTextToSlice ; ses cas sont ceux de plainTextPaste)',
     run: () => {
       const ed = editor();
       const props = ed.options.editorProps;
@@ -133,7 +133,15 @@
         type => (type === 'text/html' ? sheetHtml : '')));
       const cleaned = props.transformPastedHTML(sheetHtml);
       const checks = {
-        keys: Object.keys(props).sort().join(',') === 'clipboardTextParser,clipboardTextSerializer,handlePaste,transformPastedHTML',
+        keys: Object.keys(props).sort().join(',') === 'clipboardSerializer,clipboardTextParser,clipboardTextSerializer,handlePaste,transformPastedHTML',
+        // Le HTML copié : un bloc de texte vide garde son retour à la ligne (`<p><br></p>`), un bloc qui a du texte est celui du schéma, sans rien de plus.
+        htmlSerializer: (() => {
+          const doc = document.implementation.createHTMLDocument('');
+          const node = ed.schema.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph' }, { type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] });
+          const box = doc.createElement('div');
+          box.appendChild(props.clipboardSerializer.serializeFragment(node.content, { document: doc }));
+          return box.innerHTML === '<p><br></p><p>a</p>';
+        })(),
         serializer: TableSelect.clipboardText(slice) === null && props.clipboardTextSerializer(slice) === 'Bonjour',
         cleaned: cleaned !== sheetHtml && cleaned === GridTable.cleanPastedDocumentHtml(sheetHtml) && props.transformPastedHTML('<p>texte</p>') === '<p>texte</p>',
         textOnly: textOnly === false,

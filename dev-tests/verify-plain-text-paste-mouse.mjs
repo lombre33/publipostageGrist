@@ -212,6 +212,26 @@ async function flow(scheme, label) {
     await page.waitForTimeout(250);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     check(`${label}, ${how} - Ctrl+A puis Ctrl+C redonne le texte à l'identique, une ligne par paragraphe, sans ligne vide de plus (de quoi le recoller dans un éditeur de texte)`, copied.replace(/\r\n/g, '\n') === EXPECTED.join('\n'), copied);
+    // Le HTML de la même copie (ce que lit ONLYOFFICE quand on colle « en reproduisant la mise en forme ») : chaque ligne vide y est un paragraphe avec son retour, `<p><br></p>`, et le
+    // navigateur la dessine avec une hauteur de ligne (un `<p></p>` n'en a aucune : les traitements de texte l'écartaient).
+    const copiedHtml = await page.evaluate(async () => {
+      const items = await navigator.clipboard.read();
+      const item = items.find(it => it.types.includes('text/html'));
+      return item ? await (await item.getType('text/html')).text() : '';
+    });
+    const copiedShape = await page.evaluate(html => {
+      const holder = document.createElement('div');
+      holder.style.cssText = 'position:fixed;left:0;top:0;width:600px;font:16px/20px sans-serif;visibility:hidden';
+      holder.innerHTML = html;
+      holder.querySelectorAll('p').forEach(p => { p.style.margin = '0'; });
+      document.body.appendChild(holder);
+      const blocks = Array.from(holder.querySelectorAll('p')).map(p => ({ html: p.innerHTML, height: p.getBoundingClientRect().height }));
+      holder.remove();
+      return blocks;
+    }, copiedHtml);
+    check(`${label}, ${how} - le HTML copié (vrai presse-papiers) a ses huit paragraphes, dont trois lignes vides écrites \`<p><br></p>\``,
+      copiedShape.length === EXPECTED.length && copiedShape.filter(b => b.html === '<br>').length === EXPECTED.filter(line => line === '').length && copiedShape.every((b, i) => (EXPECTED[i] === '') === (b.html === '<br>')), copiedHtml);
+    check(`${label}, ${how} - un logiciel qui dessine ce HTML (sans marge) laisse à chaque ligne vide la hauteur d'une ligne : aucune ne s'écrase`, copiedShape.length > 0 && copiedShape.every(b => b.height >= 19), copiedShape);
   }
 
   // Une seule ligne : elle reste dans le paragraphe du curseur, pas de paragraphe de plus.

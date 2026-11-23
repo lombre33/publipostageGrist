@@ -102,8 +102,8 @@
   });
 
   // Retour du 23/11, juste après : « je recopie depuis l'éditeur vers un éditeur de texte, j'ai deux sauts de ligne à chaque fois ». Le texte brut d'une copie séparait chaque paragraphe par une ligne
-  // vide (le « \n\n » de ProseMirror) : comme une ligne collée est un paragraphe (plus haut), un texte collé puis recopié doublait ses lignes. Un paragraphe est une ligne (`blockSeparator: '\n'`
-  // du `clipboardTextSerializer` de TipTap, js/editor.js `coreExtensionOptions`) : ce qui est collé revient à l'identique, une ligne vide est un paragraphe vide, comme dans Word et Google Docs.
+  // vide (le « \n\n » de ProseMirror) : comme une ligne collée est un paragraphe (plus haut), un texte collé puis recopié doublait ses lignes. Un paragraphe est une ligne (`copiedPlainText` de
+  // js/editor.js, clé `clipboardTextSerializer`) : ce qui est collé revient à l'identique, une ligne vide est un paragraphe vide, comme dans Word et Google Docs.
   async function copyText(h, html, select) {
     await h.resetEditor();
     Editor.setHTML(html);
@@ -184,6 +184,51 @@
       const copied = await copyText(h, converted.html);
       if (copied.plain.replace(/\n+$/, '') !== 'Titre\nTexte sous le titre\nPara\nsur deux lignes\npuce un\npuce deux') bad.push('.md importé : ' + JSON.stringify(copied.plain));
       return { pass: bad.length === 0, notes: bad.join(' ; ') || 'un saut de ligne chacun' };
+    },
+  });
+
+  // Retour du 23/11, ONLYOFFICE : « quand je colle en reproduisant la mise en forme, je perds les sauts de ligne ; en conservant uniquement le texte, je les ai ». Le texte brut d'une copie gardait
+  // déjà ses lignes vides ; le HTML, lui, écrivait un paragraphe vide `<p></p>`, que ONLYOFFICE, Word et leurs semblables écartent (aucune hauteur). `clipboardSerializer` de js/editor.js écrit
+  // `<p><br></p>` : une ligne vide visible pour eux, et un paragraphe vide, ni plus ni moins, quand c'est l'éditeur qui recolle.
+  const parseBody = html => new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
+  cases.push({
+    id: 'copied_html_writes_an_empty_paragraph_as_a_blank_line_other_software_keeps',
+    description: 'Le HTML copié écrit un paragraphe vide (et un titre vide) avec un retour à la ligne dedans, `<p><br></p>`, pour qu\'un logiciel qui colle « en reproduisant la mise en forme » garde la ligne vide ; un paragraphe qui a du texte, un saut de ligne forcé ou une marque n\'en reçoit aucun de plus ; le texte brut copié et le HTML enregistré du document restent inchangés',
+    run: async (h) => {
+      const bad = [];
+      const source = '<p>Ligne un</p><p></p><p>Para deux</p><p>Avant<br>Après</p><h2></h2><p><strong>Gras</strong></p><p></p><p>Fin</p>';
+      const copied = await copyText(h, source);
+      const blocks = Array.from(parseBody(copied.html).children);
+      const shape = blocks.map(node => node.nodeName.toLowerCase() + ':' + node.innerHTML);
+      const want = ['p:Ligne un', 'p:<br>', 'p:Para deux', 'p:Avant<br>Après', 'h2:<br>', 'p:<strong>Gras</strong>', 'p:<br>', 'p:Fin'];
+      if (!same(shape, want)) bad.push('html copié : ' + JSON.stringify(shape));
+      if (copied.plain !== 'Ligne un\n\nPara deux\nAvant\nAprès\n\nGras\n\nFin') bad.push('texte brut : ' + JSON.stringify(copied.plain));
+      // Le HTML enregistré du document n'a pas bougé : un paragraphe vide y reste `<p></p>`.
+      if (!/<p><\/p>/.test(Editor.getHTML()) || /<p><br\b[^>]*><\/p>/.test(Editor.getHTML())) bad.push('html enregistré : ' + Editor.getHTML());
+      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'trois blocs vides copiés avec leur retour, rien de plus' };
+    },
+  });
+
+  cases.push({
+    id: 'copied_html_pasted_back_in_the_editor_gives_the_same_empty_paragraphs',
+    description: 'Un document copié en entier puis recollé à sa place (le HTML de la copie, `<p><br></p>` compris) redonne exactement les mêmes blocs : un paragraphe vide reste UN paragraphe vide, aucun saut de ligne forcé n\'apparaît, le texte copié ne change pas',
+    run: async (h) => {
+      const bad = [];
+      const source = '<p>Ligne un</p><p></p><p>Para deux</p><p></p><p></p><p>Fin</p>';
+      const copied = await copyText(h, source);
+      const editor = EditorCore.getEditor();
+      const before = JSON.stringify(editor.state.doc.toJSON());
+      editor.commands.selectAll();
+      await h.sleep(60);
+      const dt = new DataTransfer();
+      dt.setData('text/html', copied.html);
+      dt.setData('text/plain', copied.plain);
+      editor.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      const after = JSON.stringify(editor.state.doc.toJSON());
+      if (after !== before) bad.push('le document a changé : ' + after + ' au lieu de ' + before);
+      if (/<br/.test(Editor.getHTML())) bad.push('un saut de ligne forcé est apparu : ' + Editor.getHTML());
+      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'aller-retour identique, trois paragraphes vides' };
     },
   });
 

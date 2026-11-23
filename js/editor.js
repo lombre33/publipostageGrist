@@ -424,10 +424,28 @@ const Editor = (function () {
     return TableSelect.clipboardText(slice) || slice.content.textBetween(0, slice.content.size, '\n', copiedLeafText);
   }
 
+  // Le HTML d'une copie (ce que lisent ONLYOFFICE, Word, Google Docs ou un client de messagerie quand on colle « en reproduisant la mise en forme ») : un paragraphe vide s'écrit `<p></p>` dans le
+  // document, et un `<p></p>` n'a aucune hauteur dans ces logiciels, qui l'écartent : toutes les lignes vides disparaissaient au collage, alors que « conserver uniquement le texte » les gardait (relevé
+  // du 23/11, ONLYOFFICE). Un bloc de texte vide se copie donc avec un retour à la ligne dedans, `<p><br></p>`, l'écriture que les navigateurs et les traitements de texte donnent eux-mêmes à une ligne
+  // vide. Le collage dans l'éditeur n'y voit toujours qu'un paragraphe vide (le `<br>` final d'un bloc est écarté à la lecture : `parseFromClipboard`, `ruleFromNode`). Le texte brut de la copie n'est
+  // pas concerné (copiedPlainText), ni le HTML enregistré du document (documentHtml : `<p></p>` comme avant).
+  const CLIPBOARD_TEXT_BLOCKS = 'p, h1, h2, h3, h4, h5, h6';
+  const clipboardHtmlSerializer = {
+    serializeFragment(fragment, options, target) {
+      const copied = domSerializerClass.fromSchema(editor.schema).serializeFragment(fragment, options, target);
+      copied.querySelectorAll(CLIPBOARD_TEXT_BLOCKS).forEach(block => {
+        if (!block.firstChild) block.appendChild(block.ownerDocument.createElement('br'));
+      });
+      return copied;
+    },
+  };
+
   function clipboardProps() {
     return {
       // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le reste, une ligne par paragraphe (copiedPlainText).
       clipboardTextSerializer: copiedPlainText,
+      // Le HTML copié garde ses lignes vides pour un logiciel qui colle « en reproduisant la mise en forme » (clipboardHtmlSerializer).
+      clipboardSerializer: clipboardHtmlSerializer,
       // Le texte brut collé garde ses lignes vides (plainTextToSlice) : une ligne, un paragraphe.
       clipboardTextParser: plainTextToSlice,
       // Le remplissage que Windows ajoute autour du HTML copié est retiré d'abord (withoutFragmentPadding : sans lui, une variable copiée seule se colle suivie de deux sauts de ligne),
