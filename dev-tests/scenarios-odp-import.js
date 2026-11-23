@@ -314,16 +314,18 @@
     return result(bad);
   });
 
-  add('odpImport_a_plain_rectangle_path_is_a_rectangle_and_costs_nothing', 'une forme dessinée par son chemin (`non-primitive`, comme l\'export OpenDocument l\'écrit) qui n\'est qu\'un rectangle plein cadre est un rectangle sans rien de perdu ; un autre chemin reste une forme inconnue, comptée', async () => {
+  add('odpImport_a_plain_rectangle_path_is_a_rectangle_and_costs_nothing', 'une forme dessinée par son chemin (`non-primitive`, comme l\'export OpenDocument l\'écrit) qui n\'est qu\'un rectangle plein cadre est un rectangle sans rien de perdu ; un autre chemin simple (un triangle) est une forme libre, reprise elle aussi sans rien de perdu ; un chemin à formules reste une forme inconnue, comptée', async () => {
     const { bad, expect } = checker();
     const rectangle = ' svg:viewBox="0 0 600 300" draw:enhanced-path="M 0 0 L 600 0 L 600 300 L 0 300 Z N"';
     const triangle = ' svg:viewBox="0 0 600 300" draw:enhanced-path="M 0 0 L 600 0 L 0 300 Z N"';
+    const formulas = ' svg:viewBox="0 0 600 300" draw:enhanced-path="M 0 0 L ?f0 0 L 0 300 Z N"';
     const { out, frames } = await slideOne(
-      shape('non-primitive', { style: 'gr1', box: { x: 2, y: 2, w: 6, h: 3 }, geometryExtra: rectangle }) + shape('non-primitive', { style: 'gr1', box: { x: 10, y: 2, w: 6, h: 3 }, geometryExtra: triangle }),
+      shape('non-primitive', { style: 'gr1', box: { x: 2, y: 2, w: 6, h: 3 }, geometryExtra: rectangle }) + shape('non-primitive', { style: 'gr1', box: { x: 10, y: 2, w: 6, h: 3 }, geometryExtra: triangle })
+      + shape('non-primitive', { style: 'gr1', box: { x: 2, y: 8, w: 6, h: 3 }, geometryExtra: formulas }),
       { auto: graphic('gr1', 'draw:fill="solid" draw:fill-color="#ff8800" draw:stroke="none"') },
     );
-    expect('deux cadres, deux rectangles orange', frames.length === 2 && frames.every(frame => frame.shape === 'rect' && frame.fill === '#ff8800'), frames.map(f => [f.shape, f.fill]));
-    expect('le tracé de rectangle n\'est pas compté, l\'autre l\'est : shapes une fois', countOf(out.report, 'shapes') === 1, out.report);
+    expect('trois cadres orange : le rectangle, le triangle libre et le rectangle de remplacement', frames.length === 3 && frames.every(frame => frame.fill === '#ff8800') && frames[0].shape === 'rect' && /^cust:.* M 0 0 L 10000 0 L 0 10000 Z$/.test(frames[1].shape) && frames[2].shape === 'rect', frames.map(f => [f.shape, f.fill]));
+    expect('le tracé de rectangle et le triangle libre ne sont pas comptés, celui à formules l\'est : shapes une fois', countOf(out.report, 'shapes') === 1, out.report);
     return result(bad);
   });
 
@@ -359,12 +361,35 @@
     return result(bad);
   });
 
+  // Un dessin Windows (EMF) écrit octet par octet : un en-tête, des enregistrements, la fin (le même que les essais de l'import PowerPoint).
+  const U32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+  const U16 = v => [v & 255, (v >>> 8) & 255];
+  const emfRec = (type, ...words) => { const body = words.flat(Infinity); return [...U32(type), ...U32(8 + body.length), ...body]; };
+  const emfOf = (w, h, records) => {
+    const body = records.concat([emfRec(14, U32(0), U32(16), U32(20))]).flat(Infinity);
+    const header = [...U32(1), ...U32(88), ...U32(0), ...U32(0), ...U32(w - 1), ...U32(h - 1), ...U32(0), ...U32(0), ...U32(w * 25), ...U32(h * 25), ...U32(0x464d4520), ...U32(0x10000), ...U32(88 + body.length), ...U32(records.length + 1),
+      ...U16(3), ...U16(0), ...U32(0), ...U32(0), ...U32(0), ...U32(w), ...U32(h), ...U32(w / 4), ...U32(h / 4)];
+    return Uint8Array.from(header.concat(body));
+  };
+  const b64Of = bytes => { let text = ''; bytes.forEach((byte) => { text += String.fromCharCode(byte); }); return btoa(text); };
+  const redSquare = () => emfOf(800, 400, [emfRec(39, U32(1), U32(0), U32(0x0000ff), U32(0)), emfRec(37, U32(1)), emfRec(37, U32(0x80000008)), emfRec(43, U32(0), U32(0), U32(400), U32(400))]);
+  add('odpImport_windows_drawings_are_drawn_as_pictures', 'un dessin Windows (EMF) d\'une présentation, que le navigateur ne lit pas, est dessiné en image PNG au lieu d\'être compté perdu ; un EMF illisible reste compté', async () => {
+    const { bad, expect } = checker();
+    const { out, frames } = await slideOne(
+      pictureFrame('Pictures/dessin.emf', { box: { x: 2, y: 3, w: 8, h: 4 } }) + pictureFrame('Pictures/casse.emf', { box: { x: 12, y: 3, w: 4, h: 3 } }),
+      { files: { 'Pictures/dessin.emf': b64Of(redSquare()), 'Pictures/casse.emf': btoa('EMF-pas-une-image') } },
+    );
+    expect('le dessin est repris : un cadre avec une image PNG', frames.length === 1 && /<img[^>]*src="data:image\/png;base64,/.test(frames[0].el.innerHTML), frames.map(f => f.el.innerHTML.slice(0, 80)));
+    expect('l\'EMF illisible est compté (une image), le bon ne l\'est pas', countOf(out.report, 'images') === 1, out.report);
+    return result(bad);
+  });
+
   add('odpImport_groups_are_flattened_and_what_is_not_carried_is_counted', 'un groupe est mis à plat (ses objets gardent leur place) ; un tracé libre, un graphique, un objet incorporé, un son ou une vidéo, une animation d\'objet sont comptés chacun à sa place', async () => {
     const { bad, expect } = checker();
     const object = (href) => `<draw:frame ${place({ x: 1, y: 1, w: 4, h: 3 })}><draw:object xlink:href="${href}"/></draw:frame>`;
     const { out, frames } = await slideOne(
       `<draw:g>${shape('ooxml-rect', { style: 'gr1', box: { x: 1, y: 1, w: 3, h: 2 } })}${shape('ooxml-ellipse', { style: 'gr1', box: { x: 5, y: 1, w: 3, h: 2 } })}</draw:g>`
-      + '<draw:polygon draw:points="0,0 10,10 0,10" svg:viewBox="0 0 10 10" svg:x="1cm" svg:y="1cm" svg:width="2cm" svg:height="2cm"/>'
+      + '<draw:path svg:d="n\'est pas un tracé" svg:viewBox="0 0 10 10" svg:x="1cm" svg:y="1cm" svg:width="2cm" svg:height="2cm"/>'
       + object('./Object 1') + object('./Object 2') + `<draw:frame ${place()}><draw:plugin xlink:href="video.mp4"/></draw:frame>`
       + '<anim:par presentation:node-type="on-click"><anim:par presentation:node-type="with-previous"/></anim:par>',
       { auto: graphic('gr1', 'draw:fill="solid" draw:fill-color="#112233" draw:stroke="none"') },
@@ -437,6 +462,102 @@
     return result(bad);
   });
 
+  // Un tracé libre : le fichier dit une zone de dessin (`svg:viewBox`) et des commandes ; la forme de l'éditeur est celle que l'import PowerPoint donne à une forme libre (`cust:...`).
+  const freeStyle = graphic('gr1', 'draw:fill="solid" draw:fill-color="#336699" draw:stroke="solid" svg:stroke-color="#112233" svg:stroke-width="0.1cm"');
+  const freeBox = 'svg:x="2cm" svg:y="3cm" svg:width="6cm" svg:height="4cm"';
+  add('odpImport_free_drawings_become_free_shapes', 'un polygone, une ligne brisée, une courbe (`draw:path`) et une forme libre simple (`non-primitive`) sont repris comme formes libres, à leur boîte, avec leur fond et leur trait ; la ligne brisée n\'a pas de fond ; un tracé illisible est compté', async () => {
+    const { bad, expect } = checker();
+    const { out, frames } = await slideOne(
+      `<draw:polygon draw:style-name="gr1" draw:points="0,0 100,0 50,100" svg:viewBox="0 0 100 100" ${freeBox}/>`
+      + `<draw:polyline draw:style-name="gr1" draw:points="0,0 50,100 100,0" svg:viewBox="0 0 100 100" ${freeBox}/>`
+      + `<draw:path draw:style-name="gr1" svg:d="M 0 0 C 0 50 50 100 100 100 L 0 100 Z" svg:viewBox="0 0 100 100" ${freeBox}/>`
+      + `<draw:custom-shape draw:style-name="gr1" ${freeBox}><draw:enhanced-geometry svg:viewBox="0 0 21600 21600" draw:type="non-primitive" draw:enhanced-path="M 0 0 L 21600 10800 0 21600 Z N"/></draw:custom-shape>`
+      + `<draw:path draw:style-name="gr1" svg:d="n'est pas un tracé" svg:viewBox="0 0 10 10" ${freeBox}/>`,
+      { auto: freeStyle },
+    );
+    expect('quatre formes libres reprises (le tracé illisible non)', frames.length === 4, frames.map(f => f.shape));
+    expect('chacune porte un nom de forme libre `cust:`', frames.every(f => /^cust:/.test(f.shape)), frames.map(f => String(f.shape).slice(0, 12)));
+    const [polygon, polyline, curve, arrow] = frames;
+    // La boîte d'une forme à trait déborde de la boîte du fichier de ce que son trait ajoute (js/shape-geometry.js : frameOfShape, la pointe d'un triangle déborde plus que ses côtés) : à l'épaisseur du trait près.
+    expect('le polygone : à sa boîte (2, 3, 6 x 4 cm, à son trait près), fond bleu et trait', polygon && near(polygon.x, 2 * CM, 2 * polygon.lw) && near(polygon.y, 3 * CM, 2 * polygon.lw) && near(polygon.w, 6 * CM, 3 * polygon.lw) && near(polygon.h, 4 * CM, 3 * polygon.lw) && /336699/i.test(polygon.fill) && /112233/i.test(polygon.line), polygon);
+    expect('le polygone est fermé : un trait ferme son contour (Z)', polygon && / Z($|\|)/.test(polygon.shape), polygon && polygon.shape);
+    expect('la ligne brisée n\'a pas de fond (chemin f0) mais a son trait', polyline && /;f0 /.test(polyline.shape) && /112233/i.test(polyline.line), polyline && polyline.shape);
+    expect('la courbe garde ses courbes de Bézier (C)', curve && / C /.test(curve.shape), curve && curve.shape);
+    expect('la forme libre simple de LibreOffice (flèche en trois sommets) est reprise', arrow && / L /.test(arrow.shape) && !/ C /.test(arrow.shape), arrow && arrow.shape);
+    expect('seul le tracé illisible est compté', countOf(out.report, 'freeDrawings') === 1 && countOf(out.report, 'shapes') === 0, out.report);
+    return result(bad);
+  });
+
+  add('odpImport_free_drawings_read_every_kind_of_svg_command', 'les données SVG d\'un tracé : droites et courbes relatives (m, l, h, v, c, s, q, t, z), arcs (a) : ils finissent au bon point ; un tracé qui ne commence pas par un déplacement, ou plein de formules d\'une forme, est compté', async () => {
+    const { bad, expect } = checker();
+    const { out, frames } = await slideOne(
+      `<draw:path draw:style-name="gr1" svg:d="m 10 10 h 80 v 80 h -80 z" svg:viewBox="0 0 100 100" ${freeBox}/>`
+      + `<draw:path draw:style-name="gr1" svg:d="M 0 0 q 25 50 50 0 t 50 0 s 25 50 50 50 a 25 25 0 0 1 -50 0 z" svg:viewBox="0 0 150 150" ${freeBox}/>`
+      + `<draw:path draw:style-name="gr1" svg:d="L 10 10 L 20 20" svg:viewBox="0 0 100 100" ${freeBox}/>`
+      + `<draw:custom-shape draw:style-name="gr1" ${freeBox}><draw:enhanced-geometry svg:viewBox="0 0 21600 21600" draw:type="non-primitive" draw:enhanced-path="M 0 0 L ?f0 21600 21600 0 Z N" draw:equations="..."/></draw:custom-shape>`,
+      { auto: freeStyle },
+    );
+    expect('deux tracés repris (le carré relatif et la courbe aux arcs) et le rectangle de remplacement de la forme à formules', frames.length === 3 && /^cust:/.test(frames[0].shape) && /^cust:/.test(frames[1].shape) && frames[2].shape === 'rect', frames.map(f => f.shape));
+    expect('le carré relatif a ses quatre côtés (M, L, L, L, Z)', frames[0] && (frames[0].shape.match(/ L /g) || []).length === 3 && / Z/.test(frames[0].shape), frames[0] && frames[0].shape);
+    expect('la courbe a des courbes de Bézier (Q, T, S, A en C)', frames[1] && (frames[1].shape.match(/ C /g) || []).length >= 5, frames[1] && frames[1].shape);
+    expect('le tracé sans déplacement est compté, la forme à formules est un rectangle compté', countOf(out.report, 'freeDrawings') === 1 && countOf(out.report, 'shapes') === 1, out.report);
+    return result(bad);
+  });
+
+  add('odpImport_a_link_on_an_object_is_counted_and_the_object_is_kept', 'un objet dans un lien (`draw:a`) ou qui porte une action au clic n\'est plus perdu : l\'objet est repris ; l\'adresse devient le lien du cadre, l\'action sans cible lisible (une diapositive absente) est comptée ; les pointes d\'une ligne brisée comptées à part', async () => {
+    const { bad, expect } = checker();
+    const { out, frames, text } = await slideOne(
+      `<draw:a xlink:href="https://exemple.fr" xlink:type="simple">${shape('ooxml-rect', { style: 'gr1', box: { x: 1, y: 1, w: 3, h: 2 } })}</draw:a>`
+      + `<draw:custom-shape draw:style-name="gr1" ${freeBox.replace('2cm', '12cm')}><office:event-listeners><presentation:event-listener presentation:action="show" xlink:href="#Diapositive 3"/></office:event-listeners><draw:enhanced-geometry draw:type="ooxml-ellipse"/></draw:custom-shape>`
+      + `<draw:custom-shape draw:style-name="gr1" ${freeBox.replace('2cm', '14cm')}><office:event-listeners><presentation:event-listener presentation:action="none"/></office:event-listeners><draw:enhanced-geometry draw:type="ooxml-ellipse"/></draw:custom-shape>`
+      + `<draw:polyline draw:style-name="gr3" draw:points="0,0 100,100" svg:viewBox="0 0 100 100" ${freeBox}/>`,
+      { auto: freeStyle + graphic('gr3', 'draw:stroke="solid" svg:stroke-color="#000000" draw:marker-end="Arrow" draw:fill="none"') },
+    );
+    expect('les trois objets et la ligne sont repris', frames.length === 4, frames.map(f => f.shape));
+    expect('une action comptée (« aller à » une diapositive que le fichier n\'a pas ; « aucune » n\'est pas un lien, l\'adresse est reprise)', countOf(out.report, 'objectLinks') === 1, out.report);
+    expect('l\'adresse de `draw:a` est le lien du premier cadre', dom(text).querySelector('.pp-free-frame').getAttribute('data-ff-link') === 'https://exemple.fr', text.slice(0, 300));
+    expect('une pointe de ligne brisée comptée', countOf(out.report, 'pathEnds') === 1, out.report);
+    return result(bad);
+  });
+
+  add('odpImport_object_actions_become_the_frame_link_and_the_target_slide_gets_its_anchor', 'l\'écouteur de clic d\'un objet devient son lien : une adresse, un saut du diaporama (suivante, précédente, première, dernière, dernière vue, fin) ou une diapositive du fichier, désignée par son nom, qui reçoit alors son signet ; un programme ou un son est compté', async () => {
+    const { bad, expect } = checker();
+    const listener = attrs => `<office:event-listeners><presentation:event-listener ${attrs}/></office:event-listeners>`;
+    const button = (attrs, x) => `<draw:custom-shape draw:style-name="gr1" svg:x="${x}cm" svg:y="1cm" svg:width="3cm" svg:height="1cm">${listener(attrs)}<draw:enhanced-geometry draw:type="ooxml-rect"/></draw:custom-shape>`;
+    const out = await imported({
+      auto: freeStyle,
+      pages: [
+        page('Diapositive 1', button('presentation:action="show" xlink:href="https://exemple.fr/b" xlink:type="simple"', 1) + button('presentation:action="next-page"', 5) + button('presentation:action="previous-page"', 9) + button('presentation:action="first-page"', 13)
+          + button('presentation:action="last-page"', 17) + button('presentation:action="last-visited-page"', 21) + button('presentation:action="stop"', 25) + button('presentation:action="show" xlink:href="#Diapositive 2" xlink:type="simple"', 29)
+          + button('presentation:action="execute" xlink:href="file:///prog.exe" xlink:type="simple"', 33)),
+        page('Diapositive 2', ''),
+      ],
+    });
+    const links = Array.from(dom(out.slideTexts[0]).querySelectorAll('.pp-free-frame')).map(el => el.getAttribute('data-ff-link') || '');
+    expect('neuf cadres, huit liens (adresse, suivante, précédente, première, dernière, dernière vue, fin, diapositive 2) et le programme sans lien', links.length === 9 && links[8] === '', links);
+    expect('l\'adresse est reprise', links[0] === 'https://exemple.fr/b', links[0]);
+    expect('les sauts du diaporama sont les actions de l\'éditeur', links.slice(1, 7).join(' ') === 'pp:next pp:prev pp:first pp:last pp:back pp:end', links.slice(1, 7));
+    expect('la diapositive visée est désignée par son signet', links[7] === '#slide-2', links[7]);
+    const second = dom(out.slideTexts[1]).querySelector('.pp-slide-props');
+    expect('la diapositive 2 porte son signet, nommé', !!second && second.getAttribute('data-anchor') === 'slide-2' && /2/.test(second.getAttribute('data-anchor-name') || ''), out.slideTexts[1].slice(0, 300));
+    expect('la première, que rien ne vise, n\'a pas de signet', !/data-anchor=/.test(out.slideTexts[0]), out.slideTexts[0].slice(0, 200));
+    expect('le programme est compté, rien d\'autre', countOf(out.report, 'objectLinks') === 1, out.report);
+    return result(bad);
+  });
+
+  add('odpImport_the_exact_transition_duration_comes_before_the_three_speeds', 'la durée du passage : `anim:transitionFilter smil:dur="2.3s"` (celle que LibreOffice et l\'export de l\'éditeur écrivent) l\'emporte sur les trois vitesses du style ; sans elle, la vitesse (lente : 1 s)', async () => {
+    const { bad, expect } = checker();
+    const timing = dur => `<anim:par presentation:node-type="timing-root"><anim:par smil:begin="id1.begin"><anim:transitionFilter smil:dur="${dur}" smil:type="pushWipe" smil:subtype="fromRight"/></anim:par><anim:seq smil:dur="0s" presentation:node-type="main-sequence"/></anim:par>`;
+    const style = '<style:style style:name="dp1" style:family="drawing-page"><style:drawing-page-properties presentation:transition-speed="slow" smil:type="pushWipe" smil:subtype="fromRight"/></style:style>';
+    const exact = await imported({ auto: style, pages: [page('Diapositive 1', timing('2.3s'), { style: 'dp1' })] });
+    expect('2,3 s écrites : 2300 ms', propsOf(exact.slideTexts[0]).dur === 2300 && propsOf(exact.slideTexts[0]).transition === 'push', propsOf(exact.slideTexts[0]));
+    const speed = await imported({ auto: style, pages: [page('Diapositive 1', '', { style: 'dp1' })] });
+    expect('sans durée exacte, la vitesse « lente » : 1000 ms', propsOf(speed.slideTexts[0]).dur === 1000, propsOf(speed.slideTexts[0]));
+    const absurd = await imported({ auto: style, pages: [page('Diapositive 1', timing('9999s'), { style: 'dp1' })] });
+    expect('une durée absurde est ignorée : la vitesse du style', propsOf(absurd.slideTexts[0]).dur === 1000, propsOf(absurd.slideTexts[0]));
+    return result(bad);
+  });
+
   // ============================================================================================================================================================================================
   // 6. Le compte rendu et les plafonds
   // ============================================================================================================================================================================================
@@ -444,7 +565,7 @@
     const { bad, expect } = checker();
     const { out } = await slideOne(
       frameText(paragraph(span('Papyrus', 'T1') + '<text:a xlink:href="javascript:alert(1)">piège</text:a>'), { style: 'gr1', box: { x: 1, y: 1, w: 10, h: 2 } })
-      + shape('mso-inconnue', { style: 'gr2', box: { x: 1, y: 5, w: 3, h: 2 } }) + '<draw:polygon draw:points="0,0 1,1 0,1" svg:viewBox="0 0 1 1" svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm"/>',
+      + shape('mso-inconnue', { style: 'gr2', box: { x: 1, y: 5, w: 3, h: 2 } }) + '<draw:polygon draw:points="0,0 1" svg:viewBox="0 0 1 1" svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm"/>',
       { auto: graphic('gr1', 'draw:fill="none" draw:stroke="none"', { parent: 'Object_20_with_20_no_20_fill_20_and_20_no_20_line' }) + graphic('gr2', 'draw:fill="solid" draw:fill-color="#445566" draw:stroke="none"') + textStyle('T1', 'style:font-name="Papyrus" fo:font-size="20pt"') },
     );
     const keys = keysOf(out.report);

@@ -86,7 +86,8 @@
     [1, 2, 3, 4, 5, 6].forEach(level => expect('le titre ' + level + ' garde son niveau', root.querySelectorAll('h' + level).length === 1 && root.querySelector('h' + level).textContent === ['Un', 'Deux', 'Trois', 'Quatre', 'Cinq', 'Six'][level - 1], out.html.slice(0, 200)));
     expect('les titres gardent la taille de l\'éditeur (aucune taille inline en trop)', !/<h[1-6][^>]*>\s*<span style="font-size/.test(out.html), out.html.slice(0, 300));
     expect('la citation est une citation', !!root.querySelector('blockquote') && /Une citation/.test(root.querySelector('blockquote').textContent), out.html);
-    expect('le code garde ses deux lignes, en police à chasse fixe', /ligne 1/.test(root.textContent) && /ligne 2/.test(root.textContent) && /Courier New|monospace/i.test(out.html), out.html);
+    expect('le code revient en bloc de code, avec ses deux lignes', !!root.querySelector('pre > code') && root.querySelector('pre > code').textContent === 'ligne 1\nligne 2', out.html);
+    expect('le trait horizontal revient en trait horizontal', !!root.querySelector('hr'), out.html);
     expect('le texte courant et la fin sont là, dans l\'ordre', /Texte courant\./.test(root.textContent) && root.textContent.indexOf('Texte courant') < root.textContent.indexOf('Fin'));
     return result(bad);
   });
@@ -176,7 +177,8 @@
     expect('liste numérotée : deux items au premier niveau, une sous-liste en lettres', !!root.querySelector('ol > li > ol[data-number-style="alpha"]') && root.querySelectorAll('ol > li').length >= 3, out.html);
     const roman = root.querySelector('ol[data-number-style="roman"]');
     expect('numéros romains qui partent de 4', !!roman && roman.getAttribute('start') === '4' && /Quatre/.test(roman.textContent), roman && roman.outerHTML);
-    expect('liste de tâches : ☑ et ☐ devant le texte', /☑\s*Fait/.test(root.textContent) && /☐\s*À faire/.test(root.textContent), root.textContent);
+    const tasks = Array.from(root.querySelectorAll('ul[data-type="taskList"] > li[data-type="taskItem"]'));
+    expect('liste de tâches : une vraie liste de cases à cocher, la première cochée, la seconde non', tasks.length === 2 && tasks[0].getAttribute('data-checked') === 'true' && /Fait/.test(tasks[0].textContent) && tasks[1].getAttribute('data-checked') === 'false' && /À faire/.test(tasks[1].textContent), root.innerHTML.slice(-400));
     expect('toutes les listes sont lues', lists.length >= 5, lists.length);
     return result(bad);
   });
@@ -214,6 +216,30 @@
     expect('les largeurs de colonnes sont à peu près celles du document (120, 200, 80 px)', Math.abs(widths[0] - 120) < 6 && Math.abs(widths[1] - 200) < 8 && Math.abs(widths[2] - 80) < 6, widths);
     expect('la hauteur de la première ligne est gardée (40 px)', /data-row-height="(39|40|41)"/.test(out.html), out.html.slice(0, 400));
     expect('le texte après le tableau est là', /Après/.test(out.html) && out.html.indexOf('Après') > out.html.indexOf('</table>'));
+    return result(bad);
+  });
+
+  add('odtExport_a_patterned_cell_fill_takes_the_average_tone_of_the_pattern', 'un fond de case à motif : l\'OpenDocument texte n\'a pas de trame de case, la case prend la teinte moyenne du motif sur son fond (blanc à défaut) ; un fond uni garde sa couleur, une encre illisible aussi', async () => {
+    const { bad, expect } = checker();
+    const cell = (attrs, text) => '<td' + attrs + '><p>' + text + '</p></td>';
+    const html = '<table><tbody><tr>'
+      + cell(' data-fill-pattern="pct50" data-fill-ink="#000000"', 'gris') + cell(' data-fill-pattern="pct50" data-fill-ink="#000000" style="background-color: #ffff00"', 'sur jaune')
+      + cell(' style="background-color: #d9e2f3"', 'uni') + cell(' data-fill-pattern="pct50" data-fill-ink="rouge" style="background-color: #00ff00"', 'illisible')
+      + '</tr></tbody></table>';
+    const made = await packageOf(html);
+    const content = new DOMParser().parseFromString(await made.text('content.xml'), 'application/xml');
+    const NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0', NS_STYLE = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0', NS_FO = 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
+    const styleFill = {};
+    Array.from(content.getElementsByTagNameNS(NS_STYLE, 'style')).forEach((style) => {
+      const props = style.getElementsByTagNameNS(NS_STYLE, 'table-cell-properties')[0];
+      if (props) styleFill[style.getAttributeNS(NS_STYLE, 'name')] = props.getAttributeNS(NS_FO, 'background-color');
+    });
+    const fills = Array.from(content.getElementsByTagNameNS(NS_TABLE, 'table-cell')).map(cell => styleFill[cell.getAttributeNS(NS_TABLE, 'style-name')] || null);
+    expect('quatre cases', fills.length === 4, fills);
+    expect('50 % d\'encre noire sur blanc : gris moyen', fills[0] === '#808080' || fills[0] === '#7f7f7f', fills[0]);
+    expect('50 % d\'encre noire sur jaune : jaune assombri de moitié', fills[1] === '#808000' || fills[1] === '#7f7f00', fills[1]);
+    expect('un fond uni garde sa couleur', fills[2] === '#d9e2f3', fills[2]);
+    expect('une encre illisible laisse le fond uni', fills[3] === '#00ff00', fills[3]);
     return result(bad);
   });
 

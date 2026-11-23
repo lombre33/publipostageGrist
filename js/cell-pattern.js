@@ -9,6 +9,8 @@
 //   CellPattern.paint(kind, ink)        la peinture seule : `background-image: ...; background-size: ...`
 //   CellPattern.fromPowerPoint(prst)    { kind, exact } : le motif de PowerPoint repris, exact ou rapproché ; null pour un nom inconnu
 //   CellPattern.autoInk(backgroundHex)  la couleur de motif qui se lit sur ce fond (le motif choisi sans couleur)
+//   CellPattern.averageTone(pattern, backgroundHex)  la teinte moyenne de la case (pour une sortie qui ne sait pas tramer)
+//   CellPattern.word(kind), .excel(kind)   le nom du motif le plus proche dans Word (`w:shd`) et dans Excel (`patternType`) ; .fromWord(nom) le chemin inverse (import)
 const CellPattern = (function () {
   const INK = /^#[0-9a-f]{6}$/i;
   const SLANT = Math.SQRT1_2; // d'un pas mesuré sur l'axe à la distance entre deux traits obliques
@@ -98,8 +100,46 @@ const CellPattern = (function () {
     const [r, g, b] = [0, 2, 4].map(at => parseInt(hex.slice(at, at + 2), 16));
     return (0.299 * r + 0.587 * g + 0.114 * b) < 128 ? '#d9d9d9' : '#595959';
   }
+  // La part du fond que l'encre couvre, pour chaque motif (traits : épaisseur sur pas ; points : surface du point sur celle de la maille).
+  const COVERAGE = {
+    pct10: 0.125, pct25: 0.25, pct50: 0.5, pct75: 0.75,
+    ltHorz: 0.25, horz: 0.25, dkHorz: 0.5, ltVert: 0.25, vert: 0.25, dkVert: 0.5,
+    ltDnDiag: 0.25, dnDiag: 0.125, dkDnDiag: 0.5, wdDnDiag: 0.375, ltUpDiag: 0.25, upDiag: 0.125, dkUpDiag: 0.5, wdUpDiag: 0.375,
+    cross: 0.23, diagCross: 0.23, smGrid: 0.44, lgGrid: 0.23, smCheck: 0.5, lgCheck: 0.5,
+  };
+  // La teinte moyenne d'une case à motif (`#rrggbb`) : l'encre sur la part qu'elle couvre, le fond (à défaut blanc) sur le reste. Pour une sortie qui ne sait pas tramer (le PDF de pdfmake 0.2.7 n'a pas de motif
+  // de remplissage, l'OpenDocument texte non plus) : la case a au moins le ton qu'elle a à l'écran.
+  function averageTone(pattern, backgroundHex) {
+    const part = pattern && COVERAGE[pattern.kind] !== undefined && ink(pattern.ink) ? COVERAGE[pattern.kind] : null;
+    const back = String(backgroundHex || '#ffffff').replace(/^#/, '');
+    if (part === null || !/^[0-9a-f]{6}$/i.test(back)) return /^#?[0-9a-f]{6}$/i.test(String(backgroundHex || '')) ? '#' + String(backgroundHex).replace(/^#/, '').toLowerCase() : null;
+    const front = pattern.ink.replace(/^#/, '');
+    const mix = at => Math.round(parseInt(front.slice(at, at + 2), 16) * part + parseInt(back.slice(at, at + 2), 16) * (1 - part)).toString(16).padStart(2, '0');
+    return '#' + mix(0) + mix(2) + mix(4);
+  }
+  // Les motifs des autres formats : le nom qu'y porte le plus proche (jamais exact pour tous : le damier n'existe ni dans Word ni dans Excel). Word : `w:shd w:val` ; Excel : `patternFill patternType`.
+  const WORD = {
+    pct10: 'pct10', pct25: 'pct25', pct50: 'pct50', pct75: 'pct75',
+    ltHorz: 'thinHorzStripe', horz: 'horzStripe', dkHorz: 'horzStripe', ltVert: 'thinVertStripe', vert: 'vertStripe', dkVert: 'vertStripe',
+    ltDnDiag: 'thinDiagStripe', dnDiag: 'diagStripe', dkDnDiag: 'diagStripe', wdDnDiag: 'diagStripe',
+    ltUpDiag: 'thinReverseDiagStripe', upDiag: 'reverseDiagStripe', dkUpDiag: 'reverseDiagStripe', wdUpDiag: 'reverseDiagStripe',
+    cross: 'horzCross', diagCross: 'diagCross', smGrid: 'thinHorzCross', lgGrid: 'horzCross', smCheck: 'pct50', lgCheck: 'pct50',
+  };
+  // Le chemin inverse (à l'import) : le motif de l'éditeur que dit une trame de Word. Les pourcentages de Word sont rangés au plus proche de ceux de PowerPoint ; la trame sans équivalent propre (`thinDiagCross`) prend le damier de traits croisés.
+  const FROM_WORD = {
+    pct5: 'pct10', pct10: 'pct10', pct12: 'pct10', pct15: 'pct10', pct20: 'pct25', pct25: 'pct25', pct30: 'pct25', pct35: 'pct25', pct37: 'pct25', pct40: 'pct50', pct45: 'pct50', pct50: 'pct50',
+    pct55: 'pct50', pct60: 'pct50', pct62: 'pct75', pct65: 'pct75', pct70: 'pct75', pct75: 'pct75', pct80: 'pct75', pct85: 'pct75', pct87: 'pct75', pct90: 'pct75', pct95: 'pct75',
+    thinHorzStripe: 'ltHorz', horzStripe: 'horz', thinVertStripe: 'ltVert', vertStripe: 'vert', thinDiagStripe: 'ltDnDiag', diagStripe: 'dnDiag', thinReverseDiagStripe: 'ltUpDiag', reverseDiagStripe: 'upDiag',
+    horzCross: 'cross', thinHorzCross: 'smGrid', diagCross: 'diagCross', thinDiagCross: 'diagCross',
+  };
+  const EXCEL = {
+    pct10: 'gray125', pct25: 'lightGray', pct50: 'mediumGray', pct75: 'darkGray',
+    ltHorz: 'lightHorizontal', horz: 'darkHorizontal', dkHorz: 'darkHorizontal', ltVert: 'lightVertical', vert: 'darkVertical', dkVert: 'darkVertical',
+    ltDnDiag: 'lightDown', dnDiag: 'darkDown', dkDnDiag: 'darkDown', wdDnDiag: 'darkDown', ltUpDiag: 'lightUp', upDiag: 'darkUp', dkUpDiag: 'darkUp', wdUpDiag: 'darkUp',
+    cross: 'lightGrid', diagCross: 'lightTrellis', smGrid: 'lightGrid', lgGrid: 'darkGrid', smCheck: 'darkTrellis', lgCheck: 'darkTrellis',
+  };
   // Les couleurs de motif que le menu propose.
   const INKS = ['#000000', '#595959', '#a6a6a6', '#ffffff', '#1f4e79', '#c00000', '#548235', '#bf8f00'];
 
-  return { KINDS, INKS, parse, attributes, paint, fromPowerPoint, autoInk, isInk: value => !!ink(value) };
+  return { KINDS, INKS, parse, attributes, paint, fromPowerPoint, autoInk, averageTone, word: kind => WORD[kind] || null, fromWord: name => FROM_WORD[name] || null, excel: kind => EXCEL[kind] || null, isInk: value => !!ink(value) };
 }());

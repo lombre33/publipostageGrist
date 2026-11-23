@@ -301,6 +301,29 @@
     return result(bad);
   });
 
+  add('odpExport_the_exact_transition_duration_is_written_as_libreoffice_does', 'la durée exacte du passage : `anim:transitionFilter smil:dur` dans la page (« 0.9s »), comme LibreOffice l\'écrit, en plus des trois vitesses du style ; une diapositive sans passage n\'en porte pas', async (h) => {
+    const { bad, expect } = checker();
+    await seed(h);
+    const x = await exportDeck(slideOne(props(' data-trans="push" data-trans-from="l" data-trans-dur="900"'), '<h2>Un</h2>', BREAK, '<h2>Deux</h2>'));
+    const filters = all(x.content, 'anim', 'transitionFilter');
+    expect('une seule durée écrite, 0,9 s, pour la première diapositive', filters.length === 1 && attr(filters[0], 'smil', 'dur') === '0.9s' && attr(filters[0], 'smil', 'type') === 'pushWipe', filters.map(el => el.outerHTML));
+    expect('elle est dans la première page, qui porte son identifiant de page (id1) et le début du passage s\'y accroche', x.pages[0].contains(filters[0]) && x.pages[0].getAttributeNS('http://www.w3.org/XML/1998/namespace', 'id') === 'id1' && all(x.pages[0], 'anim', 'par').some(el => attr(el, 'smil', 'begin') === 'id1.begin'), x.pages[0].outerHTML.slice(0, 300));
+    expect('la deuxième page n\'a pas de passage ni de minuterie', !all(x.pages[1], 'anim', 'par').length, x.pages[1].outerHTML.slice(0, 300));
+    return result(bad);
+  });
+
+  add('odpExport_a_pattern_cell_fill_becomes_its_average_tone', 'le fond à motif d\'une case de tableau : l\'OpenDocument n\'a pas de trame de case, la case prend la teinte moyenne du motif sur son fond (comme l\'export OpenDocument texte), pas « transparent »', async (h) => {
+    const { bad, expect } = checker();
+    await seed(h);
+    const x = await exportDeck('<h2>Tableau</h2><table><tbody><tr><td data-fill-pattern="dnDiag" data-fill-ink="#c00000" style="background-color: #ffff00"><p>Hachures</p></td><td><p>Sans fond</p></td></tr></tbody></table>');
+    const cells = all(x.content, 'table', 'table-cell');
+    const tone = CellPattern.averageTone({ kind: 'dnDiag', ink: '#c00000' }, '#ffff00');
+    const fillOf = cell => attr(kids(x.named[attr(cell, 'table', 'style-name')], 'style', 'table-cell-properties')[0], 'fo', 'background-color');
+    expect('la première case a la teinte moyenne du motif, ni le fond seul ni du transparent', fillOf(cells[0]).toLowerCase() === tone && tone !== '#ffff00' && tone !== 'transparent', [fillOf(cells[0]), tone]);
+    expect('la seconde n\'a pas de fond', fillOf(cells[1]) === 'transparent', fillOf(cells[1]));
+    return result(bad);
+  });
+
   add('odpExport_theme_decor_goes_to_the_master_pages', 'le décor du thème : une page maîtresse pour le bandeau, le numéro et le pied (derrière le texte), une seconde pour la première diapositive quand son décor est autre, le fond du thème, la couleur du texte du thème', async (h) => {
     const { bad, expect } = checker();
     await seed(h);

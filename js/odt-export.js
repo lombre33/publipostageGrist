@@ -481,7 +481,10 @@ const OdtExport = (function () {
   const borderOf = value => (value === 'none' ? 'none' : '0.75pt solid ' + (/^#[0-9a-f]{6}$/i.test(String(value || '')) ? value.toLowerCase() : DEFAULT_BORDER));
   function cellStyleOf(ctx, cell, sides) {
     const css = cell.style;
-    const fill = css && css.backgroundColor ? cssColorHex(css.backgroundColor) : null;
+    let fill = css && css.backgroundColor ? cssColorHex(css.backgroundColor) : null;
+    // Un fond à motif (js/cell-pattern.js) : l'OpenDocument texte n'a pas de motif de fond de case, la case prend la teinte moyenne du motif sur son fond (à défaut blanc).
+    const pattern = CellPattern.parse(cell);
+    if (pattern) fill = (CellPattern.averageTone(pattern, fill) || '').replace(/^#/, '') || fill;
     const valign = ExportCommon.cellVerticalAlign(cell);
     const spec = { fill: fill ? '#' + fill.toLowerCase() : '', valign: valign || '', sides: sides ? ['top', 'right', 'bottom', 'left'].map(side => sides[side]) : null };
     return styleNameOf(ctx, 'Cell', JSON.stringify(spec), (name) => {

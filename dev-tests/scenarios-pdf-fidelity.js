@@ -208,6 +208,22 @@
   });
 
   cases.push({
+    id: 'pdffid_table_cell_pattern_takes_its_average_tone_over_its_background',
+    description: 'Hachures de cases (lot 2) : pdfmake 0.2.7 ne remplit qu\'en couleur unie, la case à motif (js/cell-pattern.js) prend la teinte moyenne de son motif sur son fond (à défaut blanc), au lieu d\'être vide ou de ne garder que son fond',
+    run: async (h) => {
+      await h.resetEditor();
+      const td = (text, kind, ink, back) => '<td data-fill-pattern="' + kind + '" data-fill-ink="' + ink + '" style="' + (back ? 'background-color: ' + back + '; ' : '') + CellPattern.paint(kind, ink) + '"><p>' + text + '</p></td>';
+      const html = '<table><tbody><tr>' + td('A', 'dkHorz', '#000000', '#ffffff') + td('B', 'pct50', '#0000ff', '') + '<td style="background-color: #c8f7c5"><p>C</p></td><td><p>D</p></td></tr></tbody></table>';
+      const result = await h.exportPdfContent(html, null);
+      const tableBlocks = h.flattenPdfContent(result.content).filter(b => b && b.table && b.table.body);
+      if (!tableBlocks.length) return { pass: false, notes: 'aucun bloc table trouvé' };
+      const fills = tableBlocks[0].table.body[0].map(cell => cell.fillColor || null);
+      const out = { dark: fills[0] === '#808080', blue: fills[1] === '#8080ff', plain: String(fills[2]).toLowerCase() === '#c8f7c5', none: fills[3] === null };
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify({ out, fills }) };
+    },
+  });
+
+  cases.push({
     id: 'pdffid_table_default_reaches_the_right_margin',
     description: 'Le tableau que le bouton insère (deux colonnes, toute la largeur) va jusqu\'à la marge de droite du PDF : plus aucune espace retranchée à chaque colonne',
     run: async (h) => {

@@ -118,7 +118,7 @@
 
   cases.push({
     id: 'editor_init_clipboard_props',
-    description: 'le presse-papiers : texte copié d\'une sélection, tableau de tableur nettoyé et préféré à son image, collage de texte laissé à ProseMirror',
+    description: 'le presse-papiers : texte copié d\'une sélection, tableau de tableur nettoyé et préféré à son image, collage de texte brut en paragraphes lignes vides comprises (plainTextToSlice ; ses cas sont ceux de plainTextPaste)',
     run: () => {
       const ed = editor();
       const props = ed.options.editorProps;
@@ -133,10 +133,12 @@
         type => (type === 'text/html' ? sheetHtml : '')));
       const cleaned = props.transformPastedHTML(sheetHtml);
       const checks = {
-        keys: Object.keys(props).sort().join(',') === 'clipboardTextSerializer,handlePaste,transformPastedHTML',
+        keys: Object.keys(props).sort().join(',') === 'clipboardTextParser,clipboardTextSerializer,handlePaste,transformPastedHTML',
         serializer: props.clipboardTextSerializer(slice) === TableSelect.clipboardText(slice),
         cleaned: cleaned !== sheetHtml && cleaned === GridTable.cleanPastedDocumentHtml(sheetHtml) && props.transformPastedHTML('<p>texte</p>') === '<p>texte</p>',
         textOnly: textOnly === false,
+        // Un texte brut : une ligne, un paragraphe, les lignes vides comprises ; la main rendue à ProseMirror (null) dans une grille et dans un e-mail.
+        plainText: (() => { const parsed = props.clipboardTextParser('a\r\n\r\nb', ed.state.doc.resolve(1), false, ed.view); return !!parsed && parsed.content.childCount === 3 && parsed.content.child(1).childCount === 0; })(),
         imageWithoutFile: imageWithoutFile === false,
         sheetBeatsImage: sheetWithImage === false,
         nothingPrevented: prevented.length === 0,

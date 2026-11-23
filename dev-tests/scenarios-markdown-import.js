@@ -76,7 +76,7 @@
 
   // --- Le texte ---------------------------------------------------------------------------------------------------------------------------------------
   add('markdown_import_marks_links_and_inline_html_survive',
-    'Gras, italique, barré, code et liens (adresse entre chevrons, adresse nue, lien par référence, e-mail, téléphone) sont repris ; ce que l\'export du widget écrit en HTML en ligne aussi : souligné, exposant, indice, couleur et taille du texte ; un lien javascript: perd son adresse mais garde son texte ; deux espaces ou « \\ » en fin de ligne font un retour à la ligne, un retour seul n\'est qu\'un blanc',
+    'Gras, italique, barré, code et liens (adresse entre chevrons, adresse nue, lien par référence, e-mail, téléphone) sont repris ; ce que l\'export du widget écrit en HTML en ligne aussi : souligné, exposant, indice, couleur et taille du texte ; un lien javascript: perd son adresse mais garde son texte ; deux espaces ou « \\ » en fin de ligne, comme un retour seul, font un retour à la ligne',
     async (h) => {
       const { edited } = await inEditor(h, doc('<u>souligné</u> x<sup>2</sup> H<sub>2</sub>O <span style="color: #ff0000">rouge</span> <span style="font-size: 24px">grand</span> **gras** *ital* ~~barré~~ `code`', '',
         '<https://exemple.fr/auto> et https://nue.fr/x et [réf][1] et [mail](mailto:a@b.fr) et [tél](tel:+33123) et [piège](javascript:alert(1))', '', '[1]: https://reference.fr', '',
@@ -89,7 +89,48 @@
       const links = Object.fromEntries(all(edited, 'a').map(a => [a.textContent, a.getAttribute('href')]));
       expect('liens', links['https://exemple.fr/auto'] === 'https://exemple.fr/auto' && links['https://nue.fr/x'] === 'https://nue.fr/x' && links['réf'] === 'https://reference.fr' && links['mail'] === 'mailto:a@b.fr' && links['tél'] === 'tel:+33123', links);
       expect('lien dangereux : le texte reste, l\'adresse non', /piège/.test(edited) && !/javascript/i.test(edited) && !links['piège']);
-      expect('retours à la ligne : deux espaces en font un, un retour seul non', /Ligne un<br>Ligne deux Ligne trois/.test(edited), edited.slice(-200));
+      expect('retours à la ligne : deux espaces, « \\ » et un retour seul en font un chacun', /Ligne un<br>Ligne deux<br>Ligne trois/.test(edited), edited.slice(-200));
+      return result(bad);
+    });
+
+  // Retour d'Antoine du 23/11 : « j'ai un document md ouvert sur Notepad++, je vois les sauts de ligne ; en important le fichier, je les perds ». marked fusionnait un retour seul en un blanc (réglage
+  // `breaks: false`, la lecture stricte de CommonMark) : deux lignes écrites l'une sous l'autre n'en faisaient qu'une. Ce que la personne voit dans son éditeur de texte (Notepad++, Obsidian, Typora,
+  // GitHub) est un retour à la ligne : il reste un retour à la ligne, et la ligne vide qui sépare deux paragraphes reste ce qui les sépare (aucun paragraphe vide de plus, aucun de moins).
+  add('markdown_import_a_single_line_break_stays_a_line_break',
+    'Un fichier écrit sous Windows (fins de ligne \\r\\n, comme Notepad++) garde ses retours à la ligne : deux lignes l\'une sous l\'autre dans un paragraphe, une puce, une citation, une alerte ou une case de liste font un retour à la ligne, pas un blanc ; la ligne vide sépare toujours les paragraphes (aucun paragraphe vide de plus), un titre suivi de texte reste un titre, un bloc de code garde ses lignes sans <br>, un tableau n\'est pas touché, et deux espaces ou « \\ » en fin de ligne ne font toujours qu\'un seul retour',
+    async (h) => {
+      const crlf = [
+        '# Titre', 'Première ligne', 'Deuxième ligne', '',
+        'Autre paragraphe', 'suite du paragraphe', 'et fin', '',
+        '- puce un', '  suite de la puce', '- puce deux', '',
+        '> citation un', '> citation deux', '',
+        '> [!NOTE]', '> Texte de l\'alerte', '> deuxième ligne de l\'alerte', '',
+        '- [ ] case à faire', '  suite de la case', '',
+        '```js', 'const a = 1;', 'const b = 2;', '```', '',
+        '| a | b |', '|---|---|', '| 1 | 2 |', '',
+        'Barre inverse\\', 'Deux espaces  ', 'Retour seul', 'Dernière',
+      ].join('\r\n') + '\r\n';
+      const { converted, edited } = await inEditor(h, crlf);
+      const { bad, expect } = checker();
+      const paragraphs = all(edited, 'body > p');
+      const lines = p => Array.from(p.childNodes).map(n => n.nodeName === 'BR' ? '|' : n.textContent).join('');
+      expect('un titre, son texte reste un seul paragraphe de deux lignes', textsOf(edited, 'h1').join() === 'Titre' && paragraphs[0] && lines(paragraphs[0]) === 'Première ligne|Deuxième ligne', paragraphs[0] && paragraphs[0].outerHTML);
+      expect('trois lignes, deux retours', paragraphs[1] && lines(paragraphs[1]) === 'Autre paragraphe|suite du paragraphe|et fin', paragraphs[1] && paragraphs[1].outerHTML);
+      expect('la ligne vide sépare toujours : aucun paragraphe vide, aucun fusionné', paragraphs.every(p => p.textContent.trim()) && paragraphs[0].textContent.indexOf('Autre') < 0, paragraphs.length);
+      const bullets = all(edited, 'ul:not([data-type="taskList"]) > li');
+      expect('puce : la suite en retrait est une ligne de plus', bullets.length === 2 && /puce un<br>suite de la puce/.test(bullets[0].innerHTML) && !/<br>/.test(bullets[1].innerHTML), bullets.map(li => li.innerHTML));
+      expect('citation : deux lignes', /citation un<br>citation deux/.test(all(edited, 'blockquote')[0] ? all(edited, 'blockquote')[0].innerHTML : ''), all(edited, 'blockquote').map(b => b.innerHTML));
+      const callout = all(edited, 'div.callout')[0];
+      expect('alerte : deux lignes de texte, aucun retour devant le texte, le repère [!NOTE] retiré', !!callout && /^<p>Texte de l'alerte<br>deuxième ligne de l'alerte<\/p>$/.test(callout.innerHTML) && callout.textContent.indexOf('[!NOTE]') < 0, callout && callout.innerHTML);
+      const task = all(edited, 'li[data-type="taskItem"]')[0];
+      expect('case à cocher : la suite est une ligne de plus', !!task && /case à faire<br>suite de la case/.test(task.innerHTML), task && task.innerHTML);
+      const code = all(edited, 'pre code')[0];
+      expect('bloc de code : ses lignes, sans <br>', !!code && code.textContent === 'const a = 1;\nconst b = 2;' && !code.querySelector('br'), code && code.innerHTML);
+      const cells = textsOf(edited, 'table td');
+      expect('tableau intact', all(edited, 'table').length === 1 && cells.join('|') === '1|2' && textsOf(edited, 'table th').join('|') === 'a|b' && !all(edited, 'table br').length, cells);
+      const last = paragraphs[paragraphs.length - 1];
+      expect('« \\ », deux espaces et retour seul : un retour chacun, pas deux', !!last && lines(last) === 'Barre inverse|Deux espaces|Retour seul|Dernière', last && last.outerHTML);
+      expect('le HTML converti porte les mêmes <br> (avant l\'éditeur)', (converted.html.match(/<br\s*\/?>/g) || []).length >= 9, (converted.html.match(/<br\s*\/?>/g) || []).length);
       return result(bad);
     });
 
@@ -120,7 +161,7 @@
       expect('couleurs dans l\'ordre', callouts.map(c => c.getAttribute('data-color')).join() === 'blue,green,purple,amber,red', callouts.map(c => c.getAttribute('data-color')));
       expect('icônes assorties', callouts.map(c => c.getAttribute('data-icon')).join() === 'info,bulb,alert,warning,alert', callouts.map(c => c.getAttribute('data-icon')));
       expect('texte de la note : le repère [!NOTE] n\'y est plus', !/\[!/.test(callouts.map(c => c.textContent).join('')) || /pas une alerte/.test(edited), callouts[0] && callouts[0].textContent);
-      expect('la note garde ses deux lignes en un paragraphe', callouts[0] && /Une note sur deux lignes/.test(callouts[0].textContent.replace(/\s+/g, ' ')), callouts[0] && callouts[0].textContent);
+      expect('la note garde ses deux lignes en un paragraphe, à la ligne', callouts[0] && all(callouts[0].innerHTML, 'p').length === 1 && /Une note<br>sur deux lignes/.test(callouts[0].innerHTML), callouts[0] && callouts[0].innerHTML);
       expect('l\'avertissement a deux paragraphes', callouts[3] && textsOf(callouts[3].outerHTML, 'p').filter(Boolean).join('|') === 'Premier|Second', callouts[3] && callouts[3].innerHTML);
       expect('le gras est gardé', callouts[4] && textsOf(callouts[4].outerHTML, 'strong').join() === 'gras');
       const quotes = all(edited, 'blockquote');

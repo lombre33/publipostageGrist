@@ -1416,7 +1416,10 @@ const PdfExport = (function () {
     if (content._nestedPending) { t.nestedPending.push(...content._nestedPending); delete content._nestedPending; }
     const pdfCell = Object.assign({ border: [true, true, true, true], lineHeight: LINE_HEIGHT_RATIO }, content);
     if (!pdfCell.stack) { const align = alignment(cell); if (align) pdfCell.alignment = align; }
-    if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
+    // Un fond à motif (js/cell-pattern.js) : pdfmake 0.2.7 ne sait remplir qu'en couleur unie, la case prend la teinte moyenne du motif sur son fond (à défaut blanc), jamais moins que le fond seul.
+    const pattern = CellPattern.parse(cell);
+    if (pattern) pdfCell.fillColor = CellPattern.averageTone(pattern, cell.style.backgroundColor ? cssColorToHex(cell.style.backgroundColor) : null) || (cell.style.backgroundColor ? cssColorToHex(cell.style.backgroundColor) : null);
+    else if (cell.style.backgroundColor) pdfCell.fillColor = cssColorToHex(cell.style.backgroundColor);
     const sides = t.borderSides && t.borderSides.get(cell);
     if (sides) {
       const edges = [sides.left, sides.top, sides.right, sides.bottom];
