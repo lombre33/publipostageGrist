@@ -7,7 +7,11 @@
 //  - les ARRÊTS de la page : un battement toutes les 100 ms, un retard de 150 ms ou plus est un arrêt (marche dans tous les navigateurs, Firefox compris) ;
 //  - les longues tâches et les longues images d'animation (`longtask`, `long-animation-frame` : Chromium seulement ; ces dernières disent QUEL script a pris le temps) ;
 //  - les étapes que le code nomme (`PerfTrace.mark`) et la durée des fonctions de l'éditeur qui dépassent 40 ms (`PerfTrace.watch`) ;
-//  - la mémoire de la page quand le navigateur la donne (Chromium : `performance.memory`), la machine et la taille du document.
+//  - la mémoire de la page quand le navigateur la donne (Chromium : `performance.memory`), la machine et la taille du document ;
+//  - LE JOURNAL D'OUVERTURE (23/11, « explorer des pistes pour que l'ouverture soit encore plus rapide » : tous les documents, le démarrage du widget, le changement de document par le menu) : chaque appel à Grist
+//    (`grist.docApi` : lecture d'une table, écriture, jeton) avec sa durée et ce qu'il porte, cumulé par appel dans le rapport, de quoi voir ce que le démarrage et les relectures de l'enregistrement automatique
+//    lisent ; les fichiers du chargement (les plus lents, ceux servis sans transfert, le dernier reçu de chaque site : l'éditeur arrive-t-il de esm.sh après les scripts ?) ; le temps de chaque document ouvert
+//    depuis le menu (`menu : document choisi`, `document ouvert`).
 const PerfTrace = (function () {
   const T0 = performance.now();
   const MAX_EVENTS = 600;
@@ -144,8 +148,89 @@ const PerfTrace = (function () {
   window.addEventListener('error', (event) => { if (errors.length < 8) errors.push(String(event.message || event.error || '').slice(0, 200)); });
   window.addEventListener('unhandledrejection', (event) => { if (errors.length < 8) errors.push('promesse : ' + String(event.reason && event.reason.message || event.reason || '').slice(0, 200)); });
 
+  // --- Les appels à Grist (le journal d'ouverture) ---
+  // Une ligne par appel plus long que GRIST_EVENT_MS, ou qui porte plus de GRIST_EVENT_CHARS signes, dans la chronologie ; tous les appels comptent dans le cumul du rapport (par « appel table »). La durée est celle de
+  // l'aller-retour vu d'ici (la requête, Grist, la réponse) : le travail de la page sur la réponse n'y est pas.
+  const GRIST_EVENT_MS = 60;
+  const GRIST_EVENT_CHARS = 102400;
+  const gristCalls = new Map();
+  // Ce qu'un appel porte, en signes : les textes d'une table lue ou d'une écriture (un nombre compte pour 8). Plafonné : un tableau de plus de 200 000 valeurs est estimé sur son début.
+  function charsOf(value, depth) {
+    if (typeof value === 'string') return value.length;
+    if (value === null || typeof value !== 'object' || depth > 3) return typeof value === 'number' ? 8 : 0;
+    const list = Array.isArray(value) ? value : Object.keys(value).map(key => value[key]);
+    const limit = Math.min(list.length, 200000);
+    let sum = 0;
+    for (let i = 0; i < limit; i++) sum += charsOf(list[i], depth + 1);
+    return limit < list.length ? Math.round(sum * list.length / limit) : sum;
+  }
+  // « fetchTable Publipostage_Modeles », « apply… 1 action UpdateRecord Publipostage_Modeles » (les écritures de grist.docApi portent un nom en « apply ») : ce que l'appel demande, sans ses valeurs.
+  const isWrite = name => /^apply/.test(name);
+  function describeGristCall(name, args) {
+    const first = args[0];
+    if (name === 'fetchTable' && typeof first === 'string') return name + ' ' + first;
+    if (isWrite(name) && Array.isArray(first) && first.length) {
+      const action = Array.isArray(first[0]) ? first[0] : [];
+      return name + ' ' + first.length + (first.length > 1 ? ' actions ' : ' action ') + action.slice(0, 2).filter(part => typeof part === 'string').join(' ');
+    }
+    return name;
+  }
+  function noteGristCall(label, start, chars) {
+    const ms = performance.now() - start;
+    const known = gristCalls.get(label) || { n: 0, ms: 0, max: 0, chars: 0 };
+    known.n += 1;
+    known.ms += ms;
+    known.max = Math.max(known.max, ms);
+    known.chars += chars;
+    gristCalls.set(label, known);
+    if (ms >= GRIST_EVENT_MS || chars >= GRIST_EVENT_CHARS) push({ t: rel(start), kind: 'grist', label, ms: Math.round(ms), chars });
+  }
+  // Surveille les fonctions de `api` (grist.docApi) : le résultat, la promesse et l'exception passent tels quels, le compte se fait à côté. Rend le nombre de fonctions surveillées.
+  function watchGrist(api) {
+    let watched = 0;
+    if (!api || typeof api !== 'object') return watched;
+    Object.keys(api).forEach((name) => {
+      const original = api[name];
+      if (typeof original !== 'function' || original.__perfGrist) return;
+      const wrapped = function () {
+        const start = performance.now();
+        const label = describeGristCall(name, arguments);
+        const sent = isWrite(name) ? charsOf(arguments[0], 0) : 0;
+        let result;
+        try { result = original.apply(this, arguments); } catch (error) { noteGristCall(label, start, sent); throw error; }
+        if (result && typeof result.then === 'function') {
+          result.then(value => noteGristCall(label, start, name === 'fetchTable' ? charsOf(value, 0) : sent), () => noteGristCall(label, start, sent));
+        } else noteGristCall(label, start, sent);
+        return result;
+      };
+      wrapped.__perfGrist = true;
+      try { api[name] = wrapped; watched += 1; } catch (error) { /* une propriété que l'objet refuse de changer reste telle qu'elle est */ }
+    });
+    return watched;
+  }
+  // `grist` est là avant ce fichier (le script de l'API de Grist est chargé en tête d'index.html) : les premiers appels du démarrage passent déjà par ici.
+  try { if (typeof grist !== 'undefined' && grist && grist.docApi) watchGrist(grist.docApi); } catch (error) { /* hors de Grist (une page de test sans API) : rien à surveiller */ }
+
+  // --- Le document choisi dans le menu ---
+  // Le menu des documents (#template-select) : l'instant du choix, pour que `opened` dise ce qui s'est passé entre le choix et le texte à l'écran (une attente d'enregistrement, une lecture dans Grist...).
+  let pickAt = 0;
+  document.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!target || target.id !== 'template-select') return;
+    pickAt = performance.now();
+    mark('menu : document choisi', { id: target.value });
+  }, true);
+  // Un document est posé dans l'éditeur (js/main.js:loadTemplateIntoEditor) : `info` dit lequel (id, type, Ko) et le temps que la fonction a pris ; `depuisLeMenuMs` : depuis le choix dans le menu, quand c'est de là qu'il vient.
+  function opened(info) {
+    const since = pickAt ? Math.round(performance.now() - pickAt) : null;
+    pickAt = 0;
+    mark('document ouvert', Object.assign({}, info, since === null ? {} : { depuisLeMenuMs: since }));
+  }
+
   // --- Le rapport ---
   const seconds = ms => (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + ' s';
+  const span = ms => (ms < 1000 ? Math.round(ms) + ' ms' : seconds(ms));
+  const megabytes = chars => (chars >= 1048576 ? (chars / 1048576).toFixed(1) + ' Mo' : Math.max(1, Math.round(chars / 1024)) + ' Ko');
   function describe(entry) {
     const when = String(entry.t).padStart(7) + ' ms  ';
     const heap = entry.heapMb === undefined ? '' : '  [mémoire JS ' + entry.heapMb + ' Mo]';
@@ -155,6 +240,7 @@ const PerfTrace = (function () {
       case 'longtask': return when + 'longue tâche : ' + entry.ms + ' ms';
       case 'frame': return when + 'longue image : ' + entry.ms + ' ms (dont ' + entry.blockingMs + ' ms bloquants)' + (entry.scripts.length ? ' par ' + entry.scripts.join(' ; ') : '');
       case 'call': return when + entry.label + ' : ' + entry.ms + ' ms';
+      case 'grist': return when + 'Grist ' + entry.label + ' : ' + entry.ms + ' ms' + (entry.chars ? ', ' + megabytes(entry.chars) : '');
       default: return when + entry.label + (extra ? '  ' + extra : '') + heap;
     }
   }
@@ -175,6 +261,40 @@ const PerfTrace = (function () {
       return 'DOMContentLoaded ' + Math.round(navigation.domContentLoadedEventEnd) + ' ms, page chargée ' + Math.round(navigation.loadEventEnd) + ' ms, ' + files + ' fichiers lus (scripts et feuilles)';
     } catch (e) { return 'illisible'; }
   }
+  // Les appels à Grist, cumulés : ce que le démarrage lit, ce que l'enregistrement automatique relit toutes les 15 s au repos, ce qu'une écriture envoie.
+  function gristFacts() {
+    const rows = Array.from(gristCalls.entries()).sort((a, b) => b[1].ms - a[1].ms).slice(0, 12);
+    const total = Array.from(gristCalls.values()).reduce((sum, item) => ({ n: sum.n + item.n, ms: sum.ms + item.ms }), { n: 0, ms: 0 });
+    if (!rows.length) return ['Appels à Grist : aucun vu (ce rapport est fait hors de Grist, ou avant le premier appel)'];
+    return ['Appels à Grist : ' + total.n + ' en tout, ' + span(total.ms) + ' cumulées (les plus longs d’abord ; un « signes » = ce que l’appel lit ou envoie)']
+      .concat(rows.map(([label, item]) => '   ' + label + ' : ' + item.n + ' fois, ' + span(item.ms) + ' en tout, le plus long ' + span(item.max) + (item.chars ? ', ' + megabytes(item.chars) + ' de signes' : '')));
+  }
+  // Les fichiers du chargement : les plus lents, ceux servis sans transfert (le cache du navigateur : seulement pour ceux de la page, un autre site ne donne pas sa taille), et pour chaque site le dernier fichier reçu
+  // (l'éditeur vient de esm.sh : s'il arrive longtemps après les scripts, la page l'attend).
+  function fileFacts() {
+    try {
+      const all = performance.getEntriesByType('resource');
+      if (!all.length) return ['Fichiers : non donnés par ce navigateur'];
+      const own = all.filter(entry => entry.name.indexOf(location.origin) === 0);
+      const free = own.filter(entry => entry.transferSize === 0 && entry.decodedBodySize > 0).length;
+      const hosts = {};
+      all.forEach((entry) => {
+        let host = '?';
+        try { host = new URL(entry.name).host; } catch (error) { /* adresse illisible */ }
+        const known = hosts[host] || { n: 0, last: 0 };
+        known.n += 1;
+        known.last = Math.max(known.last, Math.round(entry.responseEnd));
+        hosts[host] = known;
+      });
+      const slow = all.slice().sort((a, b) => (b.responseEnd - b.startTime) - (a.responseEnd - a.startTime)).slice(0, 6)
+        .map(entry => entry.name.split('/').pop().split('?')[0].slice(0, 40) + ' ' + Math.round(entry.responseEnd - entry.startTime) + ' ms (début à ' + Math.round(entry.startTime) + ' ms)');
+      return [
+        'Fichiers : ' + all.length + ' lus, dont ' + free + ' sur ' + own.length + ' de la page sans transfert (cache du navigateur)',
+        '   par site : ' + Object.keys(hosts).map(host => host + ' ' + hosts[host].n + ' (le dernier reçu à ' + hosts[host].last + ' ms)').join(' ; '),
+        '   les plus lents : ' + slow.join(' ; '),
+      ];
+    } catch (error) { return ['Fichiers : illisibles']; }
+  }
   function report() {
     const nav = navigator;
     const heap = heapMb();
@@ -185,6 +305,8 @@ const PerfTrace = (function () {
       'Machine : ' + (nav.hardwareConcurrency || '?') + ' cœurs, mémoire annoncée ' + (nav.deviceMemory ? nav.deviceMemory + ' Go' : 'inconnue') + ', écran ' + screen.width + 'x' + screen.height + ' à ' + (window.devicePixelRatio || 1) + ', fenêtre ' + innerWidth + 'x' + innerHeight,
       'Mémoire JS maintenant : ' + (heap === null ? 'non donnée par ce navigateur' : heap + ' Mo'),
       'Chargement de la page : ' + loadFacts(),
+      ...fileFacts(),
+      ...gristFacts(),
       'Document : ' + documentFacts(),
       'Arrêts de la page (retard de ' + GAP_MS + ' ms ou plus) : ' + totals.gaps + ', ' + seconds(totals.blockedMs) + ' au total, le plus long ' + seconds(totals.maxGapMs) + ' ; longues tâches ' + totals.longTasks + ' ; fonctions lentes ' + totals.slowCalls,
     ];
@@ -225,5 +347,5 @@ const PerfTrace = (function () {
   }, true);
 
   mark('page ouverte');
-  return { mark, watch, report, summary, download, events: () => events.slice(), totals: () => Object.assign({}, totals) };
+  return { mark, watch, watchGrist, opened, report, summary, download, events: () => events.slice(), totals: () => Object.assign({}, totals), gristCalls: () => Array.from(gristCalls.entries()).map(([label, item]) => Object.assign({ label }, item)) };
 })();

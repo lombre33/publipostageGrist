@@ -60,7 +60,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-c/RaE/NMLwhbIqtrdmjl9RCu79OAuzu3vCnqyiaF9Zs='
     'sha256-T5mKluScfRtuj0P/t6/XPNGRtl1KicJ00NJXmuWrmxk=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
-    'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
+    'sha256-3pld5q8DliXcQRd9eIdK7uML8T2+GEQBbkk8dKd859s=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -316,7 +316,7 @@
 <link rel="preload" as="script" href="js/gfs-bar.js?v=0.6">
 <link rel="preload" as="script" href="js/gfs-ambiance.js?v=0.1">
 <link rel="preload" as="script" href="js/gfs-correcteurs.js?v=0.1">
-<link rel="preload" as="script" href="js/perf-trace.js?v=0.4">
+<link rel="preload" as="script" href="js/perf-trace.js?v=0.5">
 <link rel="preload" as="script" href="js/dom.js?v=0.4">
 <link rel="preload" as="script" href="js/image-io.js?v=0.4">
 <link rel="preload" as="script" href="js/heavy-images.js?v=0.1">
@@ -590,7 +590,7 @@
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
 <link rel="preload" as="script" href="js/main-live.js?v=0.6">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.268">
+<link rel="preload" as="script" href="js/main.js?v=0.269">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -1444,7 +1444,7 @@
 <script src="js/gfs-bar.js?v=0.6"></script>
 <script src="js/gfs-ambiance.js?v=0.1"></script>
 <script src="js/gfs-correcteurs.js?v=0.1"></script>
-<script src="js/perf-trace.js?v=0.4"></script>
+<script src="js/perf-trace.js?v=0.5"></script>
 <script src="js/dom.js?v=0.4"></script>
 <script src="js/image-io.js?v=0.4"></script>
 <script src="js/heavy-images.js?v=0.1"></script>
@@ -1467,6 +1467,16 @@
     templatesLoaded.catch(() => {});
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
+  // Les bibliothèques de l'éditeur (TipTap, ProseMirror : les import() de js/editor.js:importLibraries) ne partaient qu'à Editor.init, après les 280 scripts : la page n'était prête qu'à 3,2 s alors que ses scripts
+  // finissaient à 1,5 s (rapport Firefox du 2026-11-20). Elles partent ici, en même temps que les scripts ; importLibraries reprend les mêmes modules (une seule adresse chacun : ce que l'import() d'avant a déjà
+  // chargé ne se recharge pas). Une adresse qui échoue ici échouera aussi à Editor.init, qui le dit comme avant. Cette liste est celle de importLibraries (dev-tests/verify-early-libs.mjs la compare).
+  try {
+    window.__earlyLibs = ['@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-text-align', '@tiptap/extension-text-style', '@tiptap/extension-font-family', '@tiptap/suggestion', '@tiptap/extension-document', '@tiptap/extension-table', '@tiptap/extension-table-row', '@tiptap/extension-table-cell', '@tiptap/extension-table-header', '@tiptap/extension-task-list', '@tiptap/extension-task-item', '@tiptap/extension-placeholder', '@floating-ui/dom', 'prosemirror-state', 'prosemirror-view', 'prosemirror-tables', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-history'].map(function (nom) {
+      var module = import(nom);
+      module.catch(function () {});
+      return module;
+    });
+  } catch (e) { /* pas d'import() dynamique ici : Editor.init charge tout, comme avant */ }
 </script>
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.215"></script>
@@ -1756,6 +1766,6 @@
 <script src="js/main-reader.js?v=0.2"></script>
 <script src="js/main-live.js?v=0.6"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.268"></script>
+<script src="js/main.js?v=0.269"></script>
 </body>
 </html>
