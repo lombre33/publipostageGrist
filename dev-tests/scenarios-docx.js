@@ -455,6 +455,33 @@
       return { pass: fills.length === 9 && !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(fills.map(f => f.text + '=' + f.fill)) };
     });
 
+  add('docx_a_patterned_cell_fill_becomes_the_nearest_word_shading',
+    'Un fond de case à motif sort en <w:shd> de Word : la trame la plus proche en w:val (hachures → diagStripe, quadrillage → horzCross, points → pctNN), l\'encre en w:color, le fond de la case en w:fill (blanc à défaut) ; une case au fond uni reste « clear »',
+    async (h) => {
+      const cell = (attrs, inner) => '<td' + attrs + '><p>' + inner + '</p></td>';
+      const html = '<table><tbody>'
+        + '<tr>' + cell(' data-fill-pattern="dnDiag" data-fill-ink="#c00000" style="background-color: #ffff00"', 'hachure') + cell(' data-fill-pattern="pct25" data-fill-ink="#000000"', 'points') + '</tr>'
+        + '<tr>' + cell(' data-fill-pattern="diagCross" data-fill-ink="#1f4e79"', 'croisé') + cell(' style="background-color: #ffff00"', 'uni') + '</tr>'
+        + '<tr>' + cell(' data-fill-pattern="dnDiag" data-fill-ink="rouge" style="background-color: #00ff00"', 'encre illisible') + cell('', 'nu') + '</tr>'
+        + '</tbody></table>';
+      const parts = await h.exportDocxParts(html);
+      const fills = Object.fromEntries(Array.from(parts.doc.getElementsByTagName('w:tc')).map((tc) => {
+        const tcPr = Array.from(tc.children).find(n => n.nodeName === 'w:tcPr');
+        const shd = tcPr && Array.from(tcPr.children).find(n => n.nodeName === 'w:shd');
+        return [tc.textContent, shd ? { val: shd.getAttribute('w:val'), fill: shd.getAttribute('w:fill'), color: shd.getAttribute('w:color') } : null];
+      }));
+      const wanted = {
+        hachure: { val: 'diagStripe', fill: 'FFFF00', color: 'C00000' },
+        points: { val: 'pct25', fill: 'FFFFFF', color: '000000' },
+        'croisé': { val: 'diagCross', fill: 'FFFFFF', color: '1F4E79' },
+        uni: { val: 'clear', fill: 'FFFF00', color: 'auto' },
+        'encre illisible': { val: 'clear', fill: '00FF00', color: 'auto' },
+        nu: null,
+      };
+      const bad = Object.keys(wanted).filter(name => JSON.stringify(fills[name]) !== JSON.stringify(wanted[name])).map(name => name + ' : ' + JSON.stringify(fills[name]) + ' (attendu ' + JSON.stringify(wanted[name]) + ')');
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : JSON.stringify(fills) };
+    });
+
   // --- Réglages de la grille sur un tableau de document (tableau réglé : bords, alignement vertical, hauteurs de lignes, quadrillage masqué, largeur) ---
   // Le Word lisait la couleur de fond et rien d'autre : un tableau de document réglé avec la barre de la case (js/grid-editor.js, marques `data-border-*`, `data-valign`,
   // `data-row-height`, `data-grid-lines`) sortait avec les traits de départ de Word, tous les contenus en haut des cases et des lignes à la hauteur de leur texte.

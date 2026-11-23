@@ -3382,6 +3382,31 @@
       return result(bad);
     });
 
+  add('pptx_import_cell_patterns_round_trip_through_the_editor_s_own_powerpoint_export',
+    'Lot 2 des hachures de cases : un fond de case à motif écrit par l\'export PowerPoint de l\'éditeur est un vrai `a:pattFill` (le nom du motif, l\'encre en avant-plan, le fond en arrière-plan, blanc à défaut) et se relit tel quel à l\'import ; la teinte moyenne d\'un motif (PDF, OpenDocument) est celle de l\'encre sur la part qu\'elle couvre',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const td = (text, kind, ink, back) => `<td data-fill-pattern="${kind}" data-fill-ink="${ink}" style="${back ? 'background-color: ' + back + '; ' : ''}${CellPattern.paint(kind, ink)}"><p>${text}</p></td>`;
+      const html = SlideProps.html({ bg: '#ffffff' }) + '<table><tbody><tr>' + td('A', 'dnDiag', '#ff0000', '#ffff00') + td('B', 'pct50', '#0000ff', '') + td('C', 'smCheck', '#000000', '#ffffff') + '</tr></tbody></table><p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const slideXml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const { bad, expect } = checker();
+      expect('le fichier écrit trois `a:pattFill` aux noms de PowerPoint, l\'encre en avant-plan, le fond (blanc à défaut) en arrière-plan',
+        (slideXml.match(/<a:pattFill prst="(dnDiag|pct50|smCheck)">/g) || []).length === 3
+        && /<a:pattFill prst="dnDiag"><a:fgClr><a:srgbClr val="FF0000"\/><\/a:fgClr><a:bgClr><a:srgbClr val="FFFF00"\/><\/a:bgClr>/.test(slideXml)
+        && /<a:pattFill prst="pct50"><a:fgClr><a:srgbClr val="0000FF"\/><\/a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"\/><\/a:bgClr>/.test(slideXml), slideXml.slice(slideXml.indexOf('pattFill') - 40, slideXml.indexOf('pattFill') + 300));
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const cells = Array.from(slidesOf(imported.html)[0].tables[0].querySelectorAll('td'));
+      const marks = cell => [cell.getAttribute('data-fill-pattern'), cell.getAttribute('data-fill-ink'), cell.style.backgroundColor].join('|');
+      expect('relu, chaque case redonne son motif, son encre et son fond', marks(cells[0]) === 'dnDiag|#ff0000|rgb(255, 255, 0)' && marks(cells[1]) === 'pct50|#0000ff|rgb(255, 255, 255)' && marks(cells[2]) === 'smCheck|#000000|rgb(255, 255, 255)', cells.map(marks));
+      expect('la teinte moyenne : rouge sur 12,5 % de jaune (a), bleu à moitié sur blanc (b), noir à moitié sur blanc (c), un motif inconnu garde le fond',
+        CellPattern.averageTone({ kind: 'dnDiag', ink: '#ff0000' }, '#ffff00') === '#ffdf00' && CellPattern.averageTone({ kind: 'pct50', ink: '#0000ff' }, null) === '#8080ff'
+        && CellPattern.averageTone({ kind: 'smCheck', ink: '#000000' }, '#ffffff') === '#808080' && CellPattern.averageTone({ kind: 'inconnu', ink: '#000000' }, '#fff2cc') === '#fff2cc', [CellPattern.averageTone({ kind: 'dnDiag', ink: '#ff0000' }, '#ffff00'), CellPattern.averageTone({ kind: 'pct50', ink: '#0000ff' }, null)]);
+      return result(bad);
+    });
+
   add('pptx_import_report_detail_of_a_heavy_decor_gives_the_concrete_debug_file_slides_groups_colors_points_and_a_map_of_the_page',
     'DÉBOGAGE TEMPORAIRE : le décor d\'un masque dit son fichier, les diapositives qui le montrent, la boîte de son groupe (en % de la page), les couleurs de ses formes, ses points de tracé et une carte de la page en 10 lignes de 48 cases (à retirer avec le débogage)',
     async () => {

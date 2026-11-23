@@ -217,6 +217,30 @@
     return result(bad);
   });
 
+  add('odtExport_a_patterned_cell_fill_takes_the_average_tone_of_the_pattern', 'un fond de case à motif : l\'OpenDocument texte n\'a pas de trame de case, la case prend la teinte moyenne du motif sur son fond (blanc à défaut) ; un fond uni garde sa couleur, une encre illisible aussi', async () => {
+    const { bad, expect } = checker();
+    const cell = (attrs, text) => '<td' + attrs + '><p>' + text + '</p></td>';
+    const html = '<table><tbody><tr>'
+      + cell(' data-fill-pattern="pct50" data-fill-ink="#000000"', 'gris') + cell(' data-fill-pattern="pct50" data-fill-ink="#000000" style="background-color: #ffff00"', 'sur jaune')
+      + cell(' style="background-color: #d9e2f3"', 'uni') + cell(' data-fill-pattern="pct50" data-fill-ink="rouge" style="background-color: #00ff00"', 'illisible')
+      + '</tr></tbody></table>';
+    const made = await packageOf(html);
+    const content = new DOMParser().parseFromString(await made.text('content.xml'), 'application/xml');
+    const NS_TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0', NS_STYLE = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0', NS_FO = 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
+    const styleFill = {};
+    Array.from(content.getElementsByTagNameNS(NS_STYLE, 'style')).forEach((style) => {
+      const props = style.getElementsByTagNameNS(NS_STYLE, 'table-cell-properties')[0];
+      if (props) styleFill[style.getAttributeNS(NS_STYLE, 'name')] = props.getAttributeNS(NS_FO, 'background-color');
+    });
+    const fills = Array.from(content.getElementsByTagNameNS(NS_TABLE, 'table-cell')).map(cell => styleFill[cell.getAttributeNS(NS_TABLE, 'style-name')] || null);
+    expect('quatre cases', fills.length === 4, fills);
+    expect('50 % d\'encre noire sur blanc : gris moyen', fills[0] === '#808080' || fills[0] === '#7f7f7f', fills[0]);
+    expect('50 % d\'encre noire sur jaune : jaune assombri de moitié', fills[1] === '#808000' || fills[1] === '#7f7f00', fills[1]);
+    expect('un fond uni garde sa couleur', fills[2] === '#d9e2f3', fills[2]);
+    expect('une encre illisible laisse le fond uni', fills[3] === '#00ff00', fills[3]);
+    return result(bad);
+  });
+
   add('odtExport_a_table_wider_than_the_page_is_fitted_and_a_table_in_a_list_item_is_kept', 'un tableau plus large que la page est ramené à sa largeur ; un tableau dans l\'item d\'une liste n\'est pas perdu', async () => {
     const { bad, expect } = checker();
     const wide = '<table><tbody><tr><td colwidth="900"><p>Large</p></td><td colwidth="900"><p>Plus large</p></td></tr></tbody></table>';

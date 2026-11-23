@@ -1062,8 +1062,12 @@ const DocxExport = (function () {
   const WORD_DEFAULT_CELL_MARGIN_TWIP = 216;
   // Fond d'une cellule : celui de son style en ligne, comme le PDF (le fond calculé suivrait le thème sombre de l'éditeur). Pas de fond, ou
   // transparent : pas de <w:shd>.
+  // Un fond à motif (js/cell-pattern.js) : la trame de Word la plus proche (`w:val`), l'encre en `w:color`, le fond de la case (à défaut blanc) en `w:fill`.
   function cellShadingFrom(cell) {
     const fill = cell.style.backgroundColor && cssColorHex(cell.style.backgroundColor);
+    const pattern = CellPattern.parse(cell);
+    const shading = pattern && CellPattern.word(pattern.kind);
+    if (shading) return { type: shading, fill: fill || 'FFFFFF', color: pattern.ink.slice(1).toUpperCase() };
     return fill ? { type: docx.ShadingType.CLEAR, fill, color: 'auto' } : undefined;
   }
   // `keepWithCaption` : une légende suit le tableau (js/caption.js, « Rester ensemble » : jamais seule en haut de la page suivante). Word garde une
