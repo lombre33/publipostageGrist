@@ -504,9 +504,9 @@
     return result(bad);
   });
 
-  add('odpImport_a_link_on_an_object_is_counted_and_the_object_is_kept', 'un objet dans un lien (`draw:a`) ou qui porte une action au clic n\'est plus perdu : l\'objet est repris, le lien ou l\'action comptés ; les pointes d\'une ligne brisée comptées à part', async () => {
+  add('odpImport_a_link_on_an_object_is_counted_and_the_object_is_kept', 'un objet dans un lien (`draw:a`) ou qui porte une action au clic n\'est plus perdu : l\'objet est repris ; l\'adresse devient le lien du cadre, l\'action sans cible lisible (une diapositive absente) est comptée ; les pointes d\'une ligne brisée comptées à part', async () => {
     const { bad, expect } = checker();
-    const { out, frames } = await slideOne(
+    const { out, frames, text } = await slideOne(
       `<draw:a xlink:href="https://exemple.fr" xlink:type="simple">${shape('ooxml-rect', { style: 'gr1', box: { x: 1, y: 1, w: 3, h: 2 } })}</draw:a>`
       + `<draw:custom-shape draw:style-name="gr1" ${freeBox.replace('2cm', '12cm')}><office:event-listeners><presentation:event-listener presentation:action="show" xlink:href="#Diapositive 3"/></office:event-listeners><draw:enhanced-geometry draw:type="ooxml-ellipse"/></draw:custom-shape>`
       + `<draw:custom-shape draw:style-name="gr1" ${freeBox.replace('2cm', '14cm')}><office:event-listeners><presentation:event-listener presentation:action="none"/></office:event-listeners><draw:enhanced-geometry draw:type="ooxml-ellipse"/></draw:custom-shape>`
@@ -514,8 +514,47 @@
       { auto: freeStyle + graphic('gr3', 'draw:stroke="solid" svg:stroke-color="#000000" draw:marker-end="Arrow" draw:fill="none"') },
     );
     expect('les trois objets et la ligne sont repris', frames.length === 4, frames.map(f => f.shape));
-    expect('deux liens ou actions comptés (le lien et l\'action « aller à » ; « aucune » n\'est pas un lien)', countOf(out.report, 'objectLinks') === 2, out.report);
+    expect('une action comptée (« aller à » une diapositive que le fichier n\'a pas ; « aucune » n\'est pas un lien, l\'adresse est reprise)', countOf(out.report, 'objectLinks') === 1, out.report);
+    expect('l\'adresse de `draw:a` est le lien du premier cadre', dom(text).querySelector('.pp-free-frame').getAttribute('data-ff-link') === 'https://exemple.fr', text.slice(0, 300));
     expect('une pointe de ligne brisée comptée', countOf(out.report, 'pathEnds') === 1, out.report);
+    return result(bad);
+  });
+
+  add('odpImport_object_actions_become_the_frame_link_and_the_target_slide_gets_its_anchor', 'l\'écouteur de clic d\'un objet devient son lien : une adresse, un saut du diaporama (suivante, précédente, première, dernière, dernière vue, fin) ou une diapositive du fichier, désignée par son nom, qui reçoit alors son signet ; un programme ou un son est compté', async () => {
+    const { bad, expect } = checker();
+    const listener = attrs => `<office:event-listeners><presentation:event-listener ${attrs}/></office:event-listeners>`;
+    const button = (attrs, x) => `<draw:custom-shape draw:style-name="gr1" svg:x="${x}cm" svg:y="1cm" svg:width="3cm" svg:height="1cm">${listener(attrs)}<draw:enhanced-geometry draw:type="ooxml-rect"/></draw:custom-shape>`;
+    const out = await imported({
+      auto: freeStyle,
+      pages: [
+        page('Diapositive 1', button('presentation:action="show" xlink:href="https://exemple.fr/b" xlink:type="simple"', 1) + button('presentation:action="next-page"', 5) + button('presentation:action="previous-page"', 9) + button('presentation:action="first-page"', 13)
+          + button('presentation:action="last-page"', 17) + button('presentation:action="last-visited-page"', 21) + button('presentation:action="stop"', 25) + button('presentation:action="show" xlink:href="#Diapositive 2" xlink:type="simple"', 29)
+          + button('presentation:action="execute" xlink:href="file:///prog.exe" xlink:type="simple"', 33)),
+        page('Diapositive 2', ''),
+      ],
+    });
+    const links = Array.from(dom(out.slideTexts[0]).querySelectorAll('.pp-free-frame')).map(el => el.getAttribute('data-ff-link') || '');
+    expect('neuf cadres, huit liens (adresse, suivante, précédente, première, dernière, dernière vue, fin, diapositive 2) et le programme sans lien', links.length === 9 && links[8] === '', links);
+    expect('l\'adresse est reprise', links[0] === 'https://exemple.fr/b', links[0]);
+    expect('les sauts du diaporama sont les actions de l\'éditeur', links.slice(1, 7).join(' ') === 'pp:next pp:prev pp:first pp:last pp:back pp:end', links.slice(1, 7));
+    expect('la diapositive visée est désignée par son signet', links[7] === '#slide-2', links[7]);
+    const second = dom(out.slideTexts[1]).querySelector('.pp-slide-props');
+    expect('la diapositive 2 porte son signet, nommé', !!second && second.getAttribute('data-anchor') === 'slide-2' && /2/.test(second.getAttribute('data-anchor-name') || ''), out.slideTexts[1].slice(0, 300));
+    expect('la première, que rien ne vise, n\'a pas de signet', !/data-anchor=/.test(out.slideTexts[0]), out.slideTexts[0].slice(0, 200));
+    expect('le programme est compté, rien d\'autre', countOf(out.report, 'objectLinks') === 1, out.report);
+    return result(bad);
+  });
+
+  add('odpImport_the_exact_transition_duration_comes_before_the_three_speeds', 'la durée du passage : `anim:transitionFilter smil:dur="2.3s"` (celle que LibreOffice et l\'export de l\'éditeur écrivent) l\'emporte sur les trois vitesses du style ; sans elle, la vitesse (lente : 1 s)', async () => {
+    const { bad, expect } = checker();
+    const timing = dur => `<anim:par presentation:node-type="timing-root"><anim:par smil:begin="id1.begin"><anim:transitionFilter smil:dur="${dur}" smil:type="pushWipe" smil:subtype="fromRight"/></anim:par><anim:seq smil:dur="0s" presentation:node-type="main-sequence"/></anim:par>`;
+    const style = '<style:style style:name="dp1" style:family="drawing-page"><style:drawing-page-properties presentation:transition-speed="slow" smil:type="pushWipe" smil:subtype="fromRight"/></style:style>';
+    const exact = await imported({ auto: style, pages: [page('Diapositive 1', timing('2.3s'), { style: 'dp1' })] });
+    expect('2,3 s écrites : 2300 ms', propsOf(exact.slideTexts[0]).dur === 2300 && propsOf(exact.slideTexts[0]).transition === 'push', propsOf(exact.slideTexts[0]));
+    const speed = await imported({ auto: style, pages: [page('Diapositive 1', '', { style: 'dp1' })] });
+    expect('sans durée exacte, la vitesse « lente » : 1000 ms', propsOf(speed.slideTexts[0]).dur === 1000, propsOf(speed.slideTexts[0]));
+    const absurd = await imported({ auto: style, pages: [page('Diapositive 1', timing('9999s'), { style: 'dp1' })] });
+    expect('une durée absurde est ignorée : la vitesse du style', propsOf(absurd.slideTexts[0]).dur === 1000, propsOf(absurd.slideTexts[0]));
     return result(bad);
   });
 

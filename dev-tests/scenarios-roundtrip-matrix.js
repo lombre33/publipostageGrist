@@ -2,7 +2,10 @@
 // thermomètre de l'« interopérabilité parfaite » (consigne d'Antoine, 23/11) : une ligne par fonction (marques, titres, listes, tableaux, images, notes...), une colonne par format (Word, OpenDocument texte), un
 // verdict par case : « ok » (revenu identique), « changé » (le texte est là, la mise en forme a bougé) ou « perdu » (du texte manque).
 //
-// Les deux côtés passent par l'éditeur réel (`Editor.setHTML` puis `getHTML`) avant d'être comparés : ce que l'éditeur ne sait pas garder n'est jamais compté contre le format. La comparaison est faite sur une
+// Deux jeux de fonctions : le TEXTE (Word, OpenDocument texte) et les DIAPOSITIVES (PowerPoint, OpenDocument présentation : formes, traits, liens d'objet, tableaux, images, fond, notes, passage). Les diapositives
+// n'ont pas besoin de l'éditeur : leur balisage est celui que les imports écrivent et que les exports lisent, comparé tel quel.
+//
+// Les deux côtés du texte passent par l'éditeur réel (`Editor.setHTML` puis `getHTML`) avant d'être comparés : ce que l'éditeur ne sait pas garder n'est jamais compté contre le format. La comparaison est faite sur une
 // SIGNATURE du document (blocs, alignement, listes, tableaux, séries de caractères avec leurs marques, images, notes), jamais sur le texte du balisage.
 //
 // KNOWN dit ce qui est ENCORE changé ou perdu aujourd'hui, case par case (`<fonction>@<format>`) : l'essai échoue quand une case est PIRE que ce qu'il dit (un aller-retour qui se dégrade), et signale quand elle
@@ -13,12 +16,15 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const A4_MARGINS = { top: 20, right: 20, bottom: 20, left: 20, orientation: 'portrait', format: 'A4' };
   const FORMATS = ['docx', 'odt'];
+  const SLIDE_FORMATS = ['pptx', 'odp'];
   const RANK = { ok: 0, changed: 1, lost: 2 };
   const WORDS = { ok: 'ok', changed: 'changé', lost: 'perdu' };
 
   // --- Ce qui reste à faire (case par case) ----------------------------------------------------------------------------------------------------------------------------------------------
   // Le fond à motif d'une case : l'OpenDocument texte n'a pas de trame de case, l'export écrit la teinte moyenne (js/cell-pattern.js `averageTone`) et le motif ne peut pas être retrouvé de sa teinte.
-  const KNOWN = { 'table-pattern@odt': 'changed' };
+  // Les formes de l'éditeur (ellipse, bulle...) sortent en OpenDocument avec leur chemin tracé (LibreOffice ne trace pas une forme de la norme sans lui) : elles reviennent en forme libre, au même dessin, sans les poignées
+  // de réglage du modèle. Le fond à motif d'une case de tableau de diapositive : comme dans le texte, la teinte moyenne.
+  const KNOWN = { 'table-pattern@odt': 'changed', 'shape-ellipse-rotated@odp': 'changed', 'shape-callout@odp': 'changed', 'slide-table-pattern@odp': 'changed' };
 
   // --- Les images de l'essai ---------------------------------------------------------------------------------------------------------------------------------------------------------------
   const png = (w, h, color) => {
@@ -70,6 +76,37 @@
     { id: 'mixed-paragraph', label: 'paragraphe très mêlé', html: '<p>Un <strong>gras <em>et italique</em></strong>, un <span style="color: #c80000; font-size: 14pt">rouge grand</span>, un <a href="https://exemple.fr">lien</a>, x<sup>2</sup>.</p>' },
   ];
 
+  // --- Les diapositives : un fragment chacune ---------------------------------------------------------------------------------------------------------------------------------------------------
+  const BREAK = '<div class="page-break-marker" contenteditable="false">Saut de page</div>';
+  const props = attrs => '<div class="pp-slide-props" contenteditable="false" aria-hidden="true" style="display:block;height:0;margin:0;padding:0;border:0"' + attrs + '></div>';
+  const frame = (x, y, w, h, look, body, rot) => '<div class="pp-free-frame" role="group" data-ff-x="' + x + '" data-ff-y="' + y + '" data-ff-w="' + w + '" data-ff-h="' + h + '"' + (rot ? ' data-ff-rot="' + rot + '"' : '') + (look || '')
+    + '><div class="pp-free-frame-box"><div class="pp-free-frame-content">' + body + '</div></div></div>';
+  const stroke = (x, y, w, h, extra) => frame(x, y, w, h, ' data-ff-shape="line" data-ff-line="#2f5597" data-ff-lw="3"' + (extra || ''), '');
+  const RECT = ' data-ff-shape="rect" data-ff-fill="#d9e2f3" data-ff-line="#2f5597" data-ff-lw="1.5"';
+  const ELLIPSE = ' data-ff-shape="ellipse" data-ff-fill="#fde68a" data-ff-line="#b45309" data-ff-lw="2"';
+  const BUBBLE = ' data-ff-shape="wedgeRoundRectCallout" data-ff-fill="#dcfce7" data-ff-line="#15803d" data-ff-lw="1.5"';
+  const linked = target => ' data-ff-shape="rect" data-ff-fill="#e2e8f0" data-ff-link="' + target + '"';
+  const SLIDES = [
+    { id: 'slide-text', label: 'diapo : titre et texte mis en forme', html: '<h1>Titre un</h1><p>Du <strong>gras</strong>, de l\'<em>italique</em>, <a href="https://exemple.fr/a">un lien</a> et <span style="color: #c00000">du rouge</span>.</p>' },
+    { id: 'slide-several', label: 'diapo : plusieurs diapositives', html: '<h1>Un</h1><p>Texte un</p>' + BREAK + '<h2>Deux</h2><p>Texte deux</p>' + BREAK + '<h2>Trois</h2>' },
+    { id: 'slide-bullets', label: 'diapo : puces emboîtées', html: '<h2>Liste</h2><ul><li><p>Un</p><ul><li><p>Un-un</p></li></ul></li><li><p>Deux</p></li></ul>' },
+    { id: 'slide-numbered', label: 'diapo : liste numérotée', html: '<h2>Liste</h2><ol><li><p>Un</p></li><li><p>Deux</p></li></ol>' },
+    { id: 'slide-alignment', label: 'diapo : alignement du texte', html: '<h2>Texte</h2><p style="text-align: center">centré</p><p style="text-align: right">à droite</p>' },
+    { id: 'shape-rect', label: 'forme : rectangle avec texte', html: frame(60, 60, 260, 120, RECT, '<p>Rectangle avec <strong>texte</strong></p>') },
+    { id: 'shape-ellipse-rotated', label: 'forme : ellipse tournée de 30°', html: frame(380, 60, 220, 120, ELLIPSE, '<p style="text-align: center">Ellipse</p>', 30) },
+    { id: 'shape-callout', label: 'forme : bulle', html: frame(640, 50, 240, 120, BUBBLE, '<p>Bulle</p>') },
+    { id: 'line-arrows', label: 'trait : pointes aux deux bouts', html: stroke(60, 260, 300, 0, ' data-ff-head="triangle" data-ff-tail="triangle"') },
+    { id: 'line-flipped-dashed', label: 'trait : retourné, en tirets', html: stroke(420, 240, 200, 80, ' data-ff-flip="v" data-ff-tail="triangle" data-ff-dash="dash"') },
+    { id: 'link-web', label: 'lien d\'objet : adresse web', html: frame(420, 400, 150, 40, linked('https://exemple.fr/b'), '<p>Bouton web</p>') },
+    { id: 'link-next', label: 'lien d\'objet : diapositive suivante', html: frame(590, 400, 150, 40, linked('pp:next'), '<p>Bouton suivant</p>') + BREAK + '<h2>Deux</h2>' },
+    { id: 'slide-table', label: 'diapo : tableau à cases fusionnées', html: '<h2>Tableau</h2>' + tableOf([[cell('Titre', ' colspan="2"'), cell('Côté', ' rowspan="2"')], [cell('A'), cell('B')]]) },
+    { id: 'slide-table-fill', label: 'diapo : tableau, fond de case', html: '<h2>Tableau</h2>' + tableOf([[cell('Bleu', ' style="background-color: #8ad2fe"'), cell('Sans fond')]]) },
+    { id: 'slide-table-pattern', label: 'diapo : tableau, fond à motif', html: '<h2>Tableau</h2>' + tableOf([[cell('Hachures', ' data-fill-pattern="dnDiag" data-fill-ink="#c00000" style="background-color: #ffff00"'), cell('Sans fond')]]) },
+    { id: 'slide-image', label: 'diapo : image avec son texte alternatif', html: '<h2>Image</h2><p><img class="editor-image" src="' + RED + '" alt="Un point rouge" style="width: 60px"></p>' },
+    { id: 'slide-props', label: 'diapo : fond, notes, passage', html: props(' data-bg="#fff7e6" data-notes="Une note" data-trans="push" data-trans-from="l" data-trans-dur="900"') + '<h2>Un</h2>' },
+    { id: 'slide-hidden', label: 'diapo : masquée', html: '<h2>Visible</h2>' + BREAK + props(' data-hidden="1"') + '<h2>Masquée</h2>' },
+  ];
+
   // --- La signature d'un document ---------------------------------------------------------------------------------------------------------------------------------------------------------
   const hexOf = (css) => {
     const text = String(css || '').trim().toLowerCase();
@@ -87,15 +124,46 @@
       const style = el.style || {};
       if (style.color) marks.add('c:' + hexOf(style.color));
       if (style.backgroundColor) marks.add('bg:' + hexOf(style.backgroundColor));
-      if (style.fontSize) marks.add('sz:' + Math.round(parseFloat(style.fontSize) * (/px$/.test(style.fontSize) ? 0.75 : 1) * 2) / 2);
+      // 10,5 pt (14 px) est la taille du texte de l'éditeur : l'import l'écrit explicitement sur le texte d'une forme, c'est la même taille.
+      if (style.fontSize && Math.round(parseFloat(style.fontSize) * (/px$/.test(style.fontSize) ? 0.75 : 1) * 2) / 2 !== 10.5) marks.add('sz:' + Math.round(parseFloat(style.fontSize) * (/px$/.test(style.fontSize) ? 0.75 : 1) * 2) / 2);
       if (style.fontFamily) marks.add('ff:' + style.fontFamily.split(',')[0].replace(/["']/g, '').trim().toLowerCase());
     }
     return Array.from(marks).sort().join('+');
   }
+  // Les attributs `data-` d'un repère ou d'un cadre, triés ; les mesures sont ramenées au pas que le format sait garder (position et taille : 6 px, trait : 0,25 pt, angle : 1°), les couleurs à `#rrggbb`.
+  const STEPS = { 'data-ff-x': 6, 'data-ff-y': 6, 'data-ff-w': 6, 'data-ff-h': 6, 'data-ff-lw': 0.25, 'data-ff-rot': 1 };
+  function dataOf(el) {
+    return Array.from(el.attributes).filter(a => /^data-/.test(a.name)).sort((a, b) => (a.name < b.name ? -1 : 1)).map((a) => {
+      const value = STEPS[a.name] ? String(roundTo(a.value, STEPS[a.name])) : (/^#|^rgb/i.test(a.value) ? hexOf(a.value) : a.value);
+      return a.name.replace('data-', '') + '=' + value;
+    }).join(' ');
+  }
   const BLOCKS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'HR', 'TD', 'TH']);
   const roundTo = (value, step) => Math.round(Number(value) / step) * step;
   // `withLineHeight` : l'interligne compte aussi (sinon il est ignoré : le Word écrit l'interligne de l'éditeur sur chaque paragraphe, ce que la fonction « interligne par défaut » mesure à part).
-  function signature(html, withLineHeight) {
+  // Les titres d'une diapositive : un titre de l'éditeur (`h1` à `h6`) revient d'un fichier en paragraphe gras de la taille du titre, dans son cadre. Pour une diapositive les deux sont le même titre : le bloc devient
+  // un paragraphe, sans gras ni taille. (Un paragraphe tout en gras et de 18 pt ou plus compte comme titre ; le gras d'un mot dans un texte ordinaire reste compté.)
+  function titlesAsParagraphs(lines) {
+    const out = [];
+    let block = [];
+    const close = () => {
+      if (!block.length) return;
+      const head = block[0];
+      const runs = block.slice(1);
+      const big = runs.length && runs.every(line => /^T:/.test(line) && /\|(?:.*\+)?b(?:\+|$)/.test(line) && /sz:(?:1[89]|[2-9]\d)/.test(line));
+      if (/^B:h[1-6]/.test(head) || big) { out.push(head.replace(/^B:h[1-6]/, 'B:p')); runs.forEach(line => out.push(line.replace(/\|.*$/, m => { const marks = m.slice(1).split('+').filter(mark => mark !== 'b' && !/^sz:/.test(mark)); return marks.length ? '|' + marks.join('+') : ''; }))); } else { out.push(head); runs.forEach(line => out.push(line)); }
+      block = [];
+    };
+    lines.forEach((line) => {
+      if (/^B:/.test(line)) { close(); block = [line]; return; }
+      if (block.length && /^T:/.test(line)) { block.push(line); return; }
+      close();
+      out.push(line);
+    });
+    close();
+    return out;
+  }
+  function signature(html, withLineHeight, slides) {
     const root = new DOMParser().parseFromString('<body>' + html, 'text/html').body;
     const out = [];
     let runs = [];
@@ -158,8 +226,24 @@
       }
       if (node.classList && node.classList.contains('footnote-ref-marker')) { runs.push({ text: '', marks: '' }); flush(); out.push('FN:' + JSON.stringify(node.getAttribute('data-note-text') || '')); return; }
       if (node.classList && node.classList.contains('page-break-marker')) { flush(); out.push('PAGEBREAK'); return; }
+      // Le repère d'une diapositive (fond, notes, passage, masquée) : tous ses attributs `data-`, dans l'ordre alphabétique.
+      if (node.classList && node.classList.contains('pp-slide-props')) { flush(); out.push('SLIDE ' + dataOf(node)); return; }
+      // Un cadre libre (forme, trait, zone de texte) : sa géométrie et son aspect, puis ce qu'il contient.
+      // Une zone de texte sans forme n'est que son texte : l'import en fait un cadre (position et taille de la zone du fichier), l'éditeur écrit le même texte sans cadre, et c'est le même texte à lire.
+      if (node.classList && node.classList.contains('pp-free-frame')) {
+        flush();
+        if (node.hasAttribute('data-ff-shape')) out.push('FRAME ' + dataOf(node));
+        const from = out.length;
+        Array.from(node.querySelectorAll('.pp-free-frame-content')).slice(0, 1).forEach(box => { Array.from(box.childNodes).forEach(child => walk(child, depth)); flush(); });
+        // Le lien d'une forme est aussi celui de son texte (PowerPoint l'écrit sur la forme, le texte le porte) : le même lien, pas une marque de plus.
+        const target = node.getAttribute('data-ff-link');
+        if (target && /^https?:/.test(target)) for (let i = from; i < out.length; i++) out[i] = out[i].replace('a:' + target + '+', '').replace('+a:' + target, '').replace('|a:' + target, '');
+        return;
+      }
       if (BLOCKS.has(tag)) {
         flush();
+        // Un paragraphe vide au fond d'un cadre (le trait n'a rien à dire) : l'import en pose un, l'éditeur n'en demande pas.
+        if (tag === 'P' && !node.textContent.trim() && !node.querySelector('img') && (slides || node.closest('.pp-free-frame'))) return;
         out.push(blockLine(node));
         if (tag === 'HR') return;
         Array.from(node.childNodes).forEach(child => walk(child, depth));
@@ -170,7 +254,7 @@
     };
     Array.from(root.childNodes).forEach(child => walk(child, 0));
     flush();
-    return out;
+    return slides ? titlesAsParagraphs(out) : out;
   }
   const textOf = lines => lines.filter(line => /^(T:|FN:)/.test(line)).map(line => (/^T:/.test(line) ? JSON.parse(line.slice(2).replace(/\|[^"]*$/, '')) : line)).join(' ').replace(/\s+/g, ' ').trim();
 
@@ -179,6 +263,20 @@
     Editor.setHTML(html);
     await sleep(120);
     return Editor.getHTML();
+  }
+  async function viaSlideFormat(format, html) {
+    const margins = Object.assign({}, PageLayout.getMarginsPt(), { orientation: 'landscape', format: PageLayout.SLIDE_FORMAT });
+    let back;
+    if (format === 'pptx') {
+      await ExportEngines.ensure(['pptx', 'pptxImport']);
+      const blob = await PptxExport.fromHtml(html, { marginsPt: margins, title: 'essai' });
+      back = await PptxImport.fromBuffer(await blob.arrayBuffer());
+    } else {
+      await ExportEngines.ensure(['pptx', 'odpExport', 'odpImport', 'odtImport']);
+      const made = await OdpExport.fromHtml(html, { marginsPt: margins, title: 'essai' });
+      back = await OdpImport.fromBuffer(await made.blob.arrayBuffer());
+    }
+    return back.slideTexts.join(BREAK);
   }
   async function viaFormat(format, html) {
     if (format === 'docx') {
@@ -194,10 +292,11 @@
   }
   // Le verdict d'une case : ok, changed (le texte est là, la forme a bougé) ou lost (du texte manque) ; `diff` dit la première ligne qui diffère.
   async function verdictOf(feature, format) {
-    const before = signature(await canon(feature.html), feature.lineHeight);
+    const slides = SLIDE_FORMATS.indexOf(format) >= 0;
+    const before = signature(slides ? feature.html : await canon(feature.html), feature.lineHeight, slides);
     let back;
     try {
-      back = signature(await canon(await viaFormat(format, feature.html)), feature.lineHeight);
+      back = signature(slides ? await viaSlideFormat(format, feature.html) : await canon(await viaFormat(format, feature.html)), feature.lineHeight, slides);
     } catch (e) {
       return { state: 'lost', diff: 'erreur : ' + (e && e.message ? e.message : e) };
     }
@@ -214,8 +313,9 @@
     return results[key];
   }
 
-  FEATURES.forEach((feature) => {
-    FORMATS.forEach((format) => {
+  const COLUMNS = [{ list: FEATURES, formats: FORMATS }, { list: SLIDES, formats: SLIDE_FORMATS }];
+  COLUMNS.forEach(column => column.list.forEach((feature) => {
+    column.formats.forEach((format) => {
       add('roundTripMatrix_' + feature.id.replace(/-/g, '_') + '_' + format, 'aller-retour ' + format.toUpperCase() + ' : ' + feature.label + ' (' + (KNOWN[feature.id + '@' + format] ? 'reste à faire : ' + WORDS[KNOWN[feature.id + '@' + format]] : 'doit revenir identique') + ')', async () => {
         const verdict = await resultOf(feature, format);
         const allowed = KNOWN[feature.id + '@' + format] || 'ok';
@@ -224,15 +324,15 @@
         return { pass: true, notes: verdict.state === 'ok' ? 'ok' : WORDS[verdict.state] + ' (connu) : ' + verdict.diff };
       });
     });
-  });
+  }));
 
   add('roundTripMatrix_the_matrix', 'la matrice entière, une ligne par fonction et une colonne par format, avec le compte des cases revenues identiques', async () => {
     const lines = [];
     let ok = 0;
     let total = 0;
-    for (const feature of FEATURES) {
+    for (const feature of FEATURES.concat(SLIDES)) {
       const cells = [];
-      for (const format of FORMATS) {
+      for (const format of (SLIDES.indexOf(feature) >= 0 ? SLIDE_FORMATS : FORMATS)) {
         const verdict = await resultOf(feature, format);
         total += 1;
         if (verdict.state === 'ok') ok += 1;

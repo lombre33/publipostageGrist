@@ -461,7 +461,7 @@ const OdpImport = (function () {
     const frame = {
       x: box.x, y: box.y, w: box.w, h: box.h, shape: rectLike ? (hasText && (anchor === 't' || (plain && !box.rot)) ? '' : 'rect') : shape.kind,
       fill: fill.hex ? '#' + fill.hex : '', line: stroke.hex ? '#' + stroke.hex : '', lw: edge, fillTr: fill.tr, lineTr: stroke.tr, dash: edge ? stroke.dash : '', cap: edge ? stroke.cap : '', rot: box.rot,
-      layer: env.layer || '', alt: altOf(el),
+      layer: env.layer || '', alt: altOf(el), link: objectLink(el, env),
     };
     Object.assign(frame, ShapeGeometry.frameOfShape(frame.shape, box, edge, shape.adj, frame.cap));
     if (plain) {
@@ -492,7 +492,7 @@ const OdpImport = (function () {
     const flip = (start[0] > end[0] ? 'h' : '') + (start[1] > end[1] ? 'v' : '');
     env.frames.push(FreeFrame.html({
       x: Math.min(start[0], end[0]), y: Math.min(start[1], end[1]), w: Math.abs(end[0] - start[0]), h: Math.abs(end[1] - start[1]), shape: ShapeGeometry.LINE, flip,
-      line: '#' + stroke.hex, lw: stroke.width, lineTr: stroke.tr, dash: stroke.dash, cap: stroke.cap, head: endOf(graphic['draw:marker-start']), tail: endOf(graphic['draw:marker-end']), layer: env.layer || '', alt: altOf(el),
+      line: '#' + stroke.hex, lw: stroke.width, lineTr: stroke.tr, dash: stroke.dash, cap: stroke.cap, head: endOf(graphic['draw:marker-start']), tail: endOf(graphic['draw:marker-end']), layer: env.layer || '', alt: altOf(el), link: objectLink(el, env),
     }, ''));
     ctx.objects += 1;
   }
@@ -509,7 +509,7 @@ const OdpImport = (function () {
     const opacity = percentOf(graphic['draw:image-opacity'], 100) / 100;
     const alt = altOf(el);
     const img = '<img class="editor-image" src="' + escAttr(image.src) + '" alt="' + escAttr(alt) + '" style="width: ' + fixed(box.w * PX_PER_PT) + 'px' + (opacity < 1 ? '; opacity: ' + fixed(opacity) : '') + '">';
-    env.frames.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: box.h + 2 * FRAME_PAD_Y_PT, rot: box.rot, layer: env.layer || '', alt }, '<p>' + img + '</p>'));
+    env.frames.push(FreeFrame.html({ x: box.x - FRAME_PAD_X_PT, y: box.y - FRAME_PAD_Y_PT, w: box.w + 2 * FRAME_PAD_X_PT, h: box.h + 2 * FRAME_PAD_Y_PT, rot: box.rot, layer: env.layer || '', alt, link: objectLink(el, env) }, '<p>' + img + '</p>'));
     ctx.objects += 1;
   }
 
@@ -556,6 +556,35 @@ const OdpImport = (function () {
     const listeners = child(el, 'office:event-listeners');
     return !!listeners && children(listeners, 'presentation:event-listener').some(listener => (attr(listener, 'presentation:action') || 'none') !== 'none');
   }
+  // Le lien d'un objet tel que le cadre de l'éditeur le porte (`data-ff-link`, js/frame-link.js), d'après son écouteur de clic (`presentation:action` : adresse, diapositive visée, saut du diaporama) ou la balise `draw:a`
+  // qui l'entoure. Une diapositive visée est notée (`ctx.linkedSlides`) : elle reçoit son signet. Une action sans équivalent (ouvrir un programme, un son...) n'est pas un lien : elle est comptée.
+  const SHOW_ACTIONS = { 'next-page': 'next', 'previous-page': 'prev', 'first-page': 'first', 'last-page': 'last', 'last-visited-page': 'back', stop: 'end' };
+  function linkTarget(ctx, href) {
+    let text = String(href || '').trim();
+    if (text.charAt(0) === '#') {
+      try { text = decodeURIComponent(text); } catch (e) { /* le texte tel quel */ }
+      const n = ctx.pageNumbers.get(text.slice(1));
+      if (!n) return '';
+      ctx.linkedSlides.add(n);
+      return '#' + SLIDE_ANCHOR + n;
+    }
+    return /^(https?:|mailto:|tel:)/i.test(text) ? FrameLink.text(text) : '';
+  }
+  const SLIDE_ANCHOR = 'slide-';
+  function objectLink(el, env) {
+    if (env.layer) return '';
+    const listeners = child(el, 'office:event-listeners');
+    const listener = listeners ? children(listeners, 'presentation:event-listener').find(node => (attr(node, 'presentation:action') || 'none') !== 'none') : null;
+    let link = '';
+    if (listener) {
+      const action = attr(listener, 'presentation:action');
+      link = SHOW_ACTIONS[action] ? FrameLink.hrefOfAction(SHOW_ACTIONS[action]) : (action === 'show' ? linkTarget(env.ctx, attr(listener, 'xlink:href')) : '');
+    } else if (env.href) {
+      link = linkTarget(env.ctx, env.href);
+    }
+    if (link) { env.ctx.carried.add(el); env.ctx.carriedN += 1; }
+    return link;
+  }
   // Un tracé libre (`draw:path`, `draw:polygon`, `draw:polyline`) : la forme libre de l'éditeur avec le fond, le trait et le texte du fichier ; illisible ou trop détaillé, il est compté. Un polygone est fermé, une ligne
   // brisée n'a pas de fond ; les pointes d'un tracé ouvert (`draw:marker-start`, `draw:marker-end`) ne sont pas reprises (comptées).
   async function freeObject(el, env) {
@@ -577,7 +606,6 @@ const OdpImport = (function () {
       if (env.seen >= MAX_OBJECTS) { count(env.ctx, 'unreadable'); return; }
       env.seen += 1;
       const tag = name(el);
-      if (!env.layer && hasClickAction(el)) count(env.ctx, 'objectLinks');
       try {
         switch (tag) {
           case 'draw:frame': await frameObject(el, env); break;
@@ -585,7 +613,16 @@ const OdpImport = (function () {
           case 'draw:line': case 'draw:connector': lineObject(el, env); break;
           case 'draw:g': await objectsOf(el, env); break;
           case 'draw:polyline': case 'draw:polygon': case 'draw:path': await freeObject(el, env); break;
-          case 'draw:a': if (!env.layer) count(env.ctx, 'objectLinks'); await objectsOf(el, env); break;
+          case 'draw:a': {
+            // Les objets d'une balise `draw:a` partent avec son adresse ; si aucun ne peut la porter, elle est comptée.
+            const before = env.ctx.carriedN;
+            const outer = env.href;
+            env.href = attr(el, 'xlink:href');
+            await objectsOf(el, env);
+            env.href = outer;
+            if (!env.layer && attr(el, 'xlink:href') && env.ctx.carriedN === before) count(env.ctx, 'objectLinks');
+            break;
+          }
           case 'draw:regular-polygon': case 'draw:measure': case 'draw:control': count(env.ctx, 'freeDrawings'); break;
           default:
             if (/^dr3d:/.test(tag)) count(env.ctx, 'shapes');
@@ -594,6 +631,7 @@ const OdpImport = (function () {
       } catch (e) {
         count(env.ctx, 'unreadable');
       }
+      if (!env.layer && hasClickAction(el) && !env.ctx.carried.has(el)) count(env.ctx, 'objectLinks');
     }
   }
 
@@ -650,6 +688,13 @@ const OdpImport = (function () {
     out.dur = SPEED_MS[props['presentation:transition-speed']] || SPEED_MS.medium;
     return out;
   }
+  // La durée exacte du passage (`anim:transitionFilter smil:dur="0.9s"`, que LibreOffice et l'export de l'éditeur écrivent dans la page) : elle l'emporte sur les trois vitesses du style.
+  function exactDuration(pageEl) {
+    const filter = ExportCommon.Odf.descendants(pageEl, 'transitionFilter').find(node => name(node) === 'anim:transitionFilter' && attr(node, 'smil:dur'));
+    const found = filter ? /^(\d+(?:\.\d+)?)s$/.exec(attr(filter, 'smil:dur')) : null;
+    const ms = found ? Math.round(Number(found[1]) * 1000) : 0;
+    return ms >= 100 && ms <= 30000 ? ms : 0;
+  }
   // Le décor d'une page maîtresse : ses objets sans emplacement (un logo, un bandeau, un filet), posés DERRIÈRE le texte de la diapositive. Le balisage d'une maîtresse est fait une fois puis recopié sur chaque diapositive qui la montre.
   async function decorOf(ctx, master) {
     const key = attr(master, 'style:name');
@@ -684,6 +729,7 @@ const OdpImport = (function () {
     const animations = ExportCommon.Odf.descendants(pageEl, 'par').filter(node => name(node) === 'anim:par' && /^(on-click|with-previous|after-previous)$/.test(attr(node, 'presentation:node-type') || '')).length;
     if (animations) count(ctx, 'animations', animations);
     const props = Object.assign({ bg: backgroundHex && backgroundHex !== 'ffffff' ? '#' + backgroundHex : '', notes: notesOf(pageEl), hidden: pageProps['presentation:visibility'] === 'hidden', section: '' }, transitionOf(ctx, pageProps));
+    if (props.transition && exactDuration(pageEl)) props.dur = exactDuration(pageEl);
     return { props, frames: env.frames.join(''), tail: '<p></p>' };
   }
 
@@ -714,15 +760,17 @@ const OdpImport = (function () {
     const dashes = new Map();
     odf.sections('office:styles').forEach((holder) => { children(holder, 'draw:stroke-dash').forEach((dash) => { dashes.set(attr(dash, 'draw:name'), dash); }); });
     const ctx = {
-      odf, reader, styles: reader.styles, masters, firstMaster, k: page.k, report: new Map(), objects: 0, decor: new Map(), decorBytes: 0, gradients: gradientsOf(odf), dashes, host: null,
+      odf, reader, styles: reader.styles, masters, firstMaster, k: page.k, report: new Map(), objects: 0, pageNumbers: new Map(), linkedSlides: new Set(), carried: new WeakSet(), carriedN: 0, decor: new Map(), decorBytes: 0, gradients: gradientsOf(odf), dashes, host: null,
     };
     if (pages.length > MAX_SLIDES) { count(ctx, 'slidesCut', pages.length - MAX_SLIDES); pages.length = MAX_SLIDES; }
+    pages.forEach((pageEl, i) => { const pageName = attr(pageEl, 'draw:name'); if (pageName && !ctx.pageNumbers.has(pageName)) ctx.pageNumbers.set(pageName, i + 1); });
     const onProgress = options && typeof options.onProgress === 'function' ? options.onProgress : null;
     const shouldStop = options && typeof options.shouldStop === 'function' ? options.shouldStop : null;
     // Les polices de l'éditeur sont prêtes avant qu'un texte soit mesuré : Roboto ne se charge qu'au premier texte qui s'en sert (css/roboto-fonts.css).
     if (document.fonts && document.fonts.load) await Promise.all(ROBOTO_FACES.map(face => document.fonts.load(face).catch(() => null)));
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const texts = [];
+    const heads = [];   // le repère de chaque diapositive : ses mesures, pour lui poser un signet une fois toutes lues
     try {
       for (let i = 0; i < pages.length; i++) {
         if (shouldStop && shouldStop()) throw fail('cancelled', 'Import annulé.');
@@ -733,7 +781,9 @@ const OdpImport = (function () {
           count(ctx, 'unreadable');
           slide = { props: {}, frames: '', tail: '<p></p>' };
         }
-        texts.push(SlideProps.html(slide.props) + slide.frames + slide.tail);
+        const head = SlideProps.html(slide.props);
+        heads.push({ props: slide.props, length: head.length });
+        texts.push(head + slide.frames + slide.tail);
         if (onProgress) { try { onProgress({ done: i + 1, total: pages.length }); } catch (e) { /* l'affichage de l'avancement ne fait jamais échouer l'import */ } }
         // La page reprend la main entre deux diapositives (une présentation de plusieurs centaines ne fige rien).
         if (i % 10 === 9) await new Promise((resolve) => { setTimeout(resolve, 0); });
@@ -741,6 +791,11 @@ const OdpImport = (function () {
     } finally {
       if (ctx.host) ctx.host.remove();
     }
+    // Le signet d'une diapositive que vise un lien d'une autre (ou d'elle-même), dans son repère.
+    ctx.linkedSlides.forEach((n) => {
+      const head = heads[n - 1];
+      if (head) texts[n - 1] = SlideProps.html(Object.assign({}, head.props, { anchorId: SLIDE_ANCHOR + n, anchorName: I18n.t('pptx.import.slideAnchor', { n }) })) + texts[n - 1].slice(head.length);
+    });
     const images = Array.from(reader.ctx.images.values()).filter(image => image && image.src);
     const stats = { fileBytes: buffer.byteLength, slides: texts.length, objects: ctx.objects, heavy: buffer.byteLength >= HEAVY_FILE_BYTES, images: images.length, imageBytes: reader.ctx.imageBytes, holders: [], ms: Math.round(performance.now() - startedAt) };
     const own = REPORT_KEYS.filter(key => ctx.report.get(key) > 0).map(key => ({ key, n: ctx.report.get(key), scope: 'odp' }));
