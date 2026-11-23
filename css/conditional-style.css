@@ -2,7 +2,7 @@
    échantillon du style) et, pour la carte ouverte seule, la condition puis les contrôles du style. Les lignes de condition viennent de css/variable-actions.css, les pastilles
    (.cp-swatch, leur coche) de css/color-palette.css : ici, seulement la mise en page des cartes. Des jetons seulement. À 700 × 400 une seule carte est ouverte à la fois ; le
    contenu défile, le titre et les boutons restent visibles (css/modal-base.css). */
-.cond-style-order { margin: 10px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
+.cond-style-order { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
 .cond-style-list { display: flex; flex-direction: column; gap: 6px; }
 .cond-style-card { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
 .cond-style-card.is-open { border-color: var(--border-strong); }

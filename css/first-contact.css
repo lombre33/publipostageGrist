@@ -28,3 +28,23 @@
 }
 @keyframes pp-opening-pulse { 0%, 100% { opacity: .72; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pp-opening #editor-container::after { animation: none; } }
+
+/* L'APERÇU DE LECTURE (23/11, js/early-preview.js) : la feuille du document que GFS ouvre, posée en lecture seule par-dessus l'écran d'attente tant que la table des modèles se lit (4 à 5 s chez une personne qui a de lourdes
+   présentations). Elle recouvre le plan de travail (même gouttière que l'éditeur) et n'est jamais cliquable : la feuille est `inert`, ses liens et ses images ne répondent à rien ; seule la molette fait défiler. Sa typographie
+   est celle de l'éditeur (css/editor-v2.css, `.tiptap`) sans en prendre le sélecteur : un code qui cherche `.tiptap` ne doit jamais tomber sur l'aperçu. La page reste blanche dans les deux thèmes, comme celle de l'éditeur. */
+.pp-early-preview { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 4; box-sizing: border-box; padding: 14px; overflow: auto; background: var(--pp-page-gutter, #eef1f5); }
+.pp-early-sheet {
+  box-sizing: border-box; width: var(--pp-early-width, 793.71px); min-height: min(1123px, 100%); margin: 0 auto; padding: var(--pp-early-top, 37.33px) var(--pp-early-right, 37.33px) var(--pp-early-bottom, 37.33px) var(--pp-early-left, 37.33px);
+  background: var(--pp-paper-sheet, #fff); color: var(--pp-paper-ink, #1b2430); box-shadow: var(--shadow-card); font: 14px/1.42 'Roboto', Helvetica, Arial, sans-serif; overflow-wrap: anywhere; pointer-events: none;
+}
+.pp-early-sheet p { margin: 0; }
+.pp-early-sheet h1, .pp-early-sheet h2, .pp-early-sheet h3, .pp-early-sheet h4, .pp-early-sheet h5, .pp-early-sheet h6 { margin: 0; font-weight: 700; }
+.pp-early-sheet h1 { font-size: 24pt; } .pp-early-sheet h2 { font-size: 20pt; } .pp-early-sheet h3 { font-size: 16pt; } .pp-early-sheet h4 { font-size: 14pt; } .pp-early-sheet h5 { font-size: 13pt; } .pp-early-sheet h6 { font-size: 12pt; }
+.pp-early-sheet ul, .pp-early-sheet ol { margin: 0; padding-left: 1.4em; }
+.pp-early-sheet blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid var(--pp-paper-rule, #d0d7de); font-style: italic; }
+.pp-early-sheet a { color: inherit; text-decoration: underline; }
+.pp-early-sheet table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
+.pp-early-sheet td, .pp-early-sheet th { border: 1px solid var(--pp-paper-rule, #b8c0c9); padding: 4px 6px; vertical-align: top; text-align: left; font-weight: normal; }
+.pp-early-sheet img { max-width: 100%; height: auto; vertical-align: bottom; }
+.pp-early-sheet img:not([src^="data:"]):not([src^="http"]) { visibility: hidden; }
+.pp-early-sheet hr { height: 1px; margin: 10px 0; border: none; background: var(--pp-paper-rule, #b8c0c9); }

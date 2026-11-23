@@ -15,6 +15,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { reveal as revealInWindow } from './reveal-in-window.mjs'; // un champ sous le résultat collé ou dans un repli fermé : la souris le découvre comme la personne
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -163,6 +164,7 @@ async function seedReferences() {
 
 // Centre d'un élément et ce qui s'y trouve réellement au premier plan (un champ recouvert par autre chose ne recevrait pas le clic).
 async function hitTest(selector) {
+  await revealInWindow(page, selector);
   return page.evaluate(sel => {
     const el = document.querySelector(sel);
     if (!el) return { found: false };
@@ -1050,7 +1052,7 @@ const SECTIONS = {
               connector: box(row.querySelector('.macro-rule-connector')), column: box(row.querySelector('.macro-rule-column-wrap .ss-trigger')), operator: box(row.querySelector(':scope > select')),
               button: box(row.querySelector('.macro-rule-compare')), field: box(field), remove: box(row.querySelector('.macro-rule-remove')),
             },
-            hint: box(row.querySelector('.macro-rule-column-type')), overflowX: content.scrollWidth - content.clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
+            hint: box(row.querySelector('.macro-rule-column-type')), columnTitle: (row.querySelector('.macro-rule-column-wrap') || {}).title || '', overflowX: content.scrollWidth - content.clientWidth, docOverflowX: document.documentElement.scrollWidth - innerWidth,
           };
         });
       };
@@ -1060,8 +1062,9 @@ const SECTIONS = {
       const nb = narrow.boxes;
       check('autre colonne (360 px) : ni la fenêtre ni la page ne débordent, rien n’en recouvre un autre, tout reçoit le clic ; le champ Valeur (la liste de Paye) est sur une seconde ligne, sous la colonne, le bouton à son retrait',
         reachable(narrow, 360) && nb.field.t >= nb.column.b - 1 && Math.abs(nb.button.l - nb.column.l) <= 2 && nb.field.w >= 90, narrow);
-      check('autre colonne (360 px) : la croix reste en bout de la première ligne, après l’opérateur, et l’indication de type vient sous la seconde ligne',
-        nb.remove.l >= nb.operator.r - 0.5 && Math.abs(nb.remove.cy - nb.column.cy) <= 3 && !!narrow.hint && narrow.hint.t >= nb.field.b - 1, narrow);
+      // Le type de la colonne n'est plus écrit sous la règle (gabarit commun des fenêtres de bulle, 23/11) : il est dans l'info-bulle du champ, la ligne n'est plus qu'une partie de la règle.
+      check('autre colonne (360 px) : la croix reste en bout de la première ligne, après l’opérateur, et le type de la colonne n’occupe plus de ligne (il est dans l’info-bulle du champ)',
+        nb.remove.l >= nb.operator.r - 0.5 && Math.abs(nb.remove.cy - nb.column.cy) <= 3 && (!narrow.hint || narrow.hint.w === 0) && narrow.columnTitle.length > 0, narrow);
       await clickCenter(cond + ' .macro-rule-compare');
       const narrowValue = await narrowRule(360);
       check('autre colonne (360 px) : mode valeur : le champ de la valeur est aussi sur la seconde ligne, sans recouvrement, entier dans le panneau',

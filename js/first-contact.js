@@ -177,7 +177,11 @@ const FirstContact = (function () {
   }
 
   // L'écran d'attente de css/first-contact.css (la classe `pp-opening` d'<html>, posée par index.html) : retiré dès que le démarrage a abouti ou échoué, jamais gardé par une erreur qui le recouvrirait.
-  function endOpeningScreen() { document.documentElement.classList.remove('pp-opening'); }
+  // L'aperçu de lecture (js/early-preview.js) s'efface avec l'écran d'attente : un démarrage fini (ou échoué, ou trop long) ne laisse jamais sa feuille sur le plan de travail.
+  function endOpeningScreen() {
+    document.documentElement.classList.remove('pp-opening');
+    if (typeof EarlyPreview !== 'undefined') EarlyPreview.opened('démarrage fini');
+  }
   const OPENING_SCREEN_MAX_MS = 60000;
 
   function ready() {

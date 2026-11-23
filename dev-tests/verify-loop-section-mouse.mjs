@@ -189,7 +189,10 @@ async function wheelIntoView(page, selector, scope) {
       if (!el || !body) return null;
       const r = el.getBoundingClientRect();
       const v = body.getBoundingClientRect();
-      return { fully: r.top >= v.top - 0.5 && r.bottom <= v.bottom + 0.5, below: r.bottom > v.bottom, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
+      // Le résultat est collé au bas de la zone qui défile : ce qu'il recouvre n'est pas encore sous les yeux (le bas utile s'arrête à son bord haut).
+      const res = body.querySelector(':scope > .var-result');
+      const floor = res ? Math.min(v.bottom, res.getBoundingClientRect().top) : v.bottom;
+      return { fully: r.top >= v.top - 0.5 && r.bottom <= floor + 0.5, below: r.bottom > floor, x: v.left + v.width / 2, y: v.top + v.height / 2, scrollTop: body.scrollTop, maxScroll: body.scrollHeight - body.clientHeight };
     }, { sel: selector, scope: scope || '#var-loop-modal' });
     if (!last || last.fully) return last;
     await page.mouse.move(last.x, last.y);

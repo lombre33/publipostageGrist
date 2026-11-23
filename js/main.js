@@ -346,6 +346,8 @@
   // les autres chemins (restauration d'une version, retours, conflit d'enregistrement) chargent le texte d'un bloc, comme avant.
   function loadTemplateIntoEditor(tpl, forcedTypeModele, options) {
     const openedAt = performance.now();
+    // L'aperçu de lecture du démarrage (js/early-preview.js) : une feuille qui n'est pas encore posée ne se posera plus ; celle qui l'est s'efface à la fin de cette ouverture.
+    EarlyPreview.opening();
     // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
     // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
     if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
@@ -417,6 +419,7 @@
     resetAutosaveState(tpl);
     // Après la remise à zéro : ce que la synchro dit sur la ligne d'état n'est pas effacé par elle, et son tableau remplacé ne rend pas le document « à enregistrer ».
     followLinkedModels(true);
+    EarlyPreview.opened('document ouvert');
     traceOpened(tpl, currentTypeModele, openedAt);
     if (openPlan) fillOpenedPresentation(tpl, openPlan);
   }

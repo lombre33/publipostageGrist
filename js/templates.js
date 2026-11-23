@@ -330,6 +330,18 @@ const Templates = (function () {
     };
   }
 
+  // Une ligne lue par l'interface REST de Grist (`{ id, fields }`, js/grist-api.js:lightRecords), au format du cache : de quoi montrer un document avant la fin de la lecture de toute la table (js/early-preview.js). Les colonnes
+  // sont celles que Grist donne, donc sous leurs noms anglais seulement quand le document les porte (un ancien document n'a ni `Content` ni `TemplateType` : le texte est alors vide, et l'aperçu ne se pose pas). null : la ligne
+  // des réglages du document, qui n'est pas un modèle.
+  function templateFromRecord(record) {
+    const columns = { id: [record && record.id] };
+    const fields = (record && record.fields) || {};
+    Object.keys(fields).forEach((column) => { columns[column] = [fields[column]]; });
+    return isSettingsRow(columns, 0) ? null : templateFromRow(columns, 0);
+  }
+  // Vrai dès que la table des modèles entière est dans le cache : à partir de là, l'ouverture se fait depuis lui.
+  function hasLoaded() { return cacheArrivedAt > 0; }
+
   // Le cache après une écriture de ce widget. La liste charge le modèle choisi depuis le cache (js/main.js:onTemplateSelectChange) et le cache ne se relit qu'au début d'un passage de
   // l'enregistrement automatique qui a quelque chose à écrire et à la lecture au repos (15 s à 3 min), jamais après l'écriture : sans la mise à jour ci-dessous, un modèle quitté puis
   // rouvert aussitôt montrait son état d'AVANT la modification, et l'enregistrement suivant l'écrasait dans Grist sans bandeau (la date de la ligne est celle que ce widget a lui-même écrite).
@@ -1155,7 +1167,7 @@ const Templates = (function () {
     loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail, saveNotice,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, verifyStored, getLoadedChars, getLoadWeights, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
+    sameDateModif, verifyStored, getLoadedChars, getLoadWeights, templateFromRecord, hasLoaded, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();

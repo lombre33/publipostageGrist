@@ -1272,14 +1272,29 @@ const GristAPI = (function () {
   // Jeton d'accès court terme (quelques minutes) réutilisé pour télécharger des pièces jointes, avec une marge de sécurité avant expiration. En
   // lecture seule : ce jeton ne sert qu'à LIRE des pièces jointes, et un jeton capable d'écrire serait un risque inutile s'il sortait du widget. L'envoi
   // d'un PDF en pièce jointe a son propre jeton, demandé à chaque export et jamais gardé (getWriteAccess).
+  // Une seule demande de jeton à la fois : celui qui la demande pendant qu'une autre est en route (l'aperçu du démarrage, js/early-preview.js, la lance avant la lecture de la table des modèles) attend la même réponse
+  // au lieu d'en poser une seconde, que Grist ne traiterait qu'APRÈS cette lecture de plusieurs secondes.
+  let _tokenPending = null;
   async function getAccessTokenCached() {
     const now = Date.now();
     if (_tokenCache && _tokenCache.expiresAt - now > 15000) return _tokenCache;
-    const info = await grist.docApi.getAccessToken({ readOnly: true });
-    const baseUrl = fixBaseUrl(info.baseUrl);
-    if (baseUrl !== info.baseUrl) console.warn('[GristAPI] baseUrl corrigé:', info.baseUrl, '->', baseUrl);
-    _tokenCache = { token: info.token, baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
-    return _tokenCache;
+    if (!_tokenPending) {
+      _tokenPending = (async () => {
+        const info = await grist.docApi.getAccessToken({ readOnly: true });
+        const baseUrl = fixBaseUrl(info.baseUrl);
+        if (baseUrl !== info.baseUrl) console.warn('[GristAPI] baseUrl corrigé:', info.baseUrl, '->', baseUrl);
+        _tokenCache = { token: info.token, baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
+        return _tokenCache;
+      })();
+      const forget = () => { _tokenPending = null; };
+      _tokenPending.then(forget, forget);
+    }
+    return _tokenPending;
+  }
+  // Le jeton en lecture seule demandé tout de suite, pour qu'il parte AVANT une grosse lecture (Grist traite ses appels dans l'ordre : un appel posé pendant la lecture de la table des modèles attend sa fin). Ne lève jamais : null
+  // quand Grist n'en donne pas.
+  function prefetchAccessToken() {
+    try { return getAccessTokenCached().catch(() => null); } catch (e) { return Promise.resolve(null); }
   }
 
   // Une lecture SQL « légère » du document, par l'adresse de son interface de programmation : de quoi lire les noms, les dates et les longueurs des modèles sans leur texte (le rapport de fluidité la sonde,
@@ -1320,9 +1335,10 @@ const GristAPI = (function () {
   // Les lignes d'une table par l'interface REST (`/tables/<table>/records`), au jeton en lecture seule, sans passer par la lecture complète du module de Grist : `ids` les restreint à ces numéros de ligne (le filtre de Grist). Rend
   // { records: [{ id, fields }], bytes }. Lecture seule, une seule demande ; refusée ou illisible : la même erreur que lightQuery (reason, status, detail).
   // `ids` absent (null) : TOUTES les lignes de la table, sans limite (le rapport de fluidité mesure ce que coûterait lire la table des modèles par là plutôt que par fetchTable) ; `parseMs` : ce que le décodage du texte a pris à la page.
-  async function lightRecords(table, ids, timeoutMs) {
+  // `only` : d'autres colonnes que le filtre de Grist impose en plus du numéro de ligne (`{ TemplateType: ['document', ''] }` : la ligne n'est rendue que si elle est de ce type, sans que son texte soit envoyé sinon).
+  async function lightRecords(table, ids, timeoutMs, only) {
     const some = Array.isArray(ids);
-    const filter = some ? '&filter=' + encodeURIComponent(JSON.stringify({ id: ids })) : '';
+    const filter = some ? '&filter=' + encodeURIComponent(JSON.stringify(Object.assign({ id: ids }, only || {}))) : '';
     const { body, bytes, parseMs } = await lightGet('/tables/' + encodeURIComponent(table) + '/records' + (some ? '?limit=' + ids.length + filter : ''), timeoutMs);
     if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightRecords : forme'), { reason: 'forme' });
     return { records: body.records, bytes, parseMs };
@@ -1507,5 +1523,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, lightRecords, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

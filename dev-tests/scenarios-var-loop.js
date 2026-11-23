@@ -1203,14 +1203,68 @@
         await cancel();
       } finally { I18n.setLang('fr'); await h.sleep(100); }
       const pass = out.freshRepeat === 'row' && !out.fresh.shown
-        && out.cell.shown && out.cell.text === rowText(3, true) && out.cell.text.startsWith('3 autres variables de la ligne ne suivront pas la boucle : seule cette case est répétée.') && out.cell.text.endsWith('choisissez « La ligne du tableau ».')
+        && out.cell.shown && out.cell.text === rowText(3, true) && out.cell.text.startsWith('3 autres variables de la ligne ne sont pas répétées.') && out.cell.text.endsWith('choisissez « La ligne du tableau ».')
         && !out.backToRow.shown
         && !!saved && saved.repeat === 'inline' && out.reopened.shown && out.reopened.text === rowText(3, true) && out.reopenedRepeat === 'inline'
         && out.otherRow.shown && out.otherRow.text === rowText(1, true)
-        && out.singular.shown && out.singular.text === rowText(1, true) && out.singular.text.startsWith('1 autre variable de la ligne ne suivra pas la boucle')
+        && out.singular.shown && out.singular.text === rowText(1, true) && out.singular.text.startsWith('1 autre variable de la ligne n’est pas répétée.')
         && !out.alone.shown && out.sentenceNote === false
         && out.mergedRepeat === 'inline' && out.merged.shown && out.merged.text === rowText(1, false) && !out.merged.text.includes(I18n.t('varLoop.repeat.row'))
-        && out.en.shown && out.en.text === '2 other variables in the row will not follow the loop: only this cell is repeated. To repeat the whole row, choose “The table row”.';
+        && out.en.shown && out.en.text === '2 other variables in the row are not repeated. To repeat the whole row, choose “The table row”.';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // La capture d'Antoine du 23/11 (« Boucle sur « Projets » ») : la ligne est déjà répétée par une autre bulle, « La ligne du tableau » n'est pas proposée - et la note citait pourtant
+  // « Pour répéter toute la ligne, choisissez « La ligne du tableau » » (js/variable-loop.js:renderRepeatNote).
+  cases.push({
+    id: 'loop_window_note_does_not_offer_the_table_row_when_another_bubble_already_repeats_it',
+    description: 'Fenêtre Boucle sur une variable d\u2019une ligne de tableau que répète déjà une autre bulle : seul « La variable, dans sa case » est proposé (écrit comme du texte, pas comme un interrupteur à un seul bouton) et la note dit combien d\u2019autres variables ne sont pas répétées SANS renvoyer vers « La ligne du tableau » ; sur une ligne que rien ne répète, la note garde le renvoi ; en anglais aussi.',
+    run: async (h) => {
+      await seedNested(h);
+      const note = () => modal().querySelector('.var-loop-row-note');
+      const state = () => ({
+        choices: Array.from(modal().querySelectorAll('.var-loop-seg button')).map(b => b.dataset.repeat).join(),
+        single: modal().querySelector('.var-loop-seg').classList.contains('is-single'),
+        shown: visible(note()), text: note().textContent,
+      });
+      const openOn = async key => { await selectBadge(h, key); pressToolbarButton('var-loop'); await h.sleep(500); };
+      const cancel = async () => { actionButton(I18n.t('common.cancel')).click(); await h.sleep(100); };
+      const rowText = (count, withHow) => I18n.t('varLoop.repeat.rowOthers', { count }) + (withHow ? ' ' + I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') }) : '');
+      const out = {};
+      // La ligne des lignes de facture est répétée par « Désignation » ; « Libellé » (détails de la ligne) s'y range, avec « Heures ».
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Désignation', 'th')}${cell('Libellé', 'th')}${cell('Heures', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}${cell(badgeHtml('LpDetails', 'Libelle'))}${cell(badgeHtml('LpDetails', 'Heures'))}</tr>`
+        + '</tbody></table>');
+      await openOn('LpDetails.Libelle');
+      out.taken = state();
+      await cancel();
+      // Une ligne que rien ne répète : « La ligne du tableau » est proposée, la note la cite.
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Désignation', 'th')}${cell('Qté', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation'))}${cell(badgeHtml('LpLignes', 'Qte'))}</tr>`
+        + '</tbody></table>');
+      await openOn('LpLignes.Designation');
+      Array.from(modal().querySelectorAll('.var-loop-seg button')).find(b => b.dataset.repeat === 'inline').click();
+      await h.sleep(60);
+      out.free = state();
+      await cancel();
+      // En anglais.
+      Editor.setHTML('<table><tbody>'
+        + `<tr>${cell('Désignation', 'th')}${cell('Libellé', 'th')}${cell('Heures', 'th')}</tr>`
+        + `<tr>${cell(badgeHtml('LpLignes', 'Designation', ROW_LOOP))}${cell(badgeHtml('LpDetails', 'Libelle'))}${cell(badgeHtml('LpDetails', 'Heures'))}</tr>`
+        + '</tbody></table>');
+      try {
+        I18n.setLang('en');
+        await h.sleep(100);
+        await openOn('LpDetails.Libelle');
+        out.en = state();
+        await cancel();
+      } finally { I18n.setLang('fr'); await h.sleep(100); }
+      const pass = out.taken.choices === 'inline' && out.taken.single && out.taken.shown && out.taken.text === rowText(2, false) && !out.taken.text.includes(I18n.t('varLoop.repeat.row'))
+        && out.free.choices === 'row,inline' && !out.free.single && out.free.shown && out.free.text === rowText(1, true) && out.free.text.endsWith('choisissez « La ligne du tableau ».')
+        && out.en.choices === 'inline' && out.en.shown && out.en.text === '2 other variables in the row are not repeated.';
       return { pass, notes: JSON.stringify(out) };
     },
   });

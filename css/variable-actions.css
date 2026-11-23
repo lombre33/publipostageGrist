@@ -113,7 +113,58 @@
 /* Fenêtres : le voile, le cadre, le titre, la zone qui défile et la ligne de boutons viennent de la base commune (js/modal-base.js,
    css/modal-base.css), si bien que dans un panneau bas le titre et les boutons restent visibles et que seul le contenu défile. Ici : l'aspect du
    contenu et des boutons. */
-.var-modal-intro { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 12px; overflow-wrap: anywhere; }
+.var-modal-intro { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 10px; overflow-wrap: anywhere; }
+/* === Gabarit commun des fenêtres de bulle (js/variable-modal.js) : une phrase d'introduction, les réglages en lignes « étiquette à gauche, champ à droite », ce qu'on règle rarement
+   dans un repli « Plus d'options », le résultat collé en bas de la zone qui défile. Un cadre gris n'entoure que ce qu'on édite en groupe (les lignes d'une condition) ; le reste est
+   à plat. Jetons de la charte seulement, ni couleur ni police de plus. === */
+/* Un champ qui prend le focus ou qu'on ramène à l'écran ne finit pas sous le résultat collé en bas. */
+.pp-modal-body:has(> .var-result) { scroll-padding-bottom: 96px; }
+/* « i » après la première phrase : montre la suite (`.var-intro-more`), cachée à l'ouverture. Le « i » vient du CSS : le bouton n'a pas de texte, son nom est son aria-label. */
+.var-info { display: inline-grid; place-items: center; width: 15px; height: 15px; margin: 0 0 0 5px; padding: 0; vertical-align: -2px; border: 1px solid var(--text-muted); border-radius: 50%; background: none; font: 700 10px/1 var(--font-ui); color: var(--text-muted); cursor: pointer; }
+.var-info::before { content: "i"; }
+.var-info:hover, .var-info[aria-expanded="true"] { color: var(--accent-ink); border-color: var(--accent-ink); }
+.var-info:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.var-intro-more { display: block; margin-top: 4px; }
+.var-intro-more[hidden] { display: none; }
+/* Les réglages : l'étiquette (une ligne de 26 px, comme un champ) à gauche, le champ ou le texte à droite ; sous 480 px de large, l'étiquette passe au-dessus. `.var-form-row`
+   n'est là que pour cacher une ligne entière (l'étiquette et son champ) d'un coup : il ne compte pas dans la grille. */
+.var-form { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 10px; align-items: start; }
+/* Une ligne = une enveloppe (elle a sa boîte : on la masque, on la mesure) qui reprend les deux colonnes de la grille (subgrid). */
+.var-form-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: start; row-gap: 0; }
+.var-form-row[hidden] { display: none; }
+.var-form-l { margin: 0; font-size: 12px; font-weight: 700; line-height: 26px; color: var(--text); }
+.var-form-v { min-width: 0; padding-top: 4px; font-size: 12px; line-height: 1.45; color: var(--text); }
+.var-form-v.is-control { padding-top: 0; }
+/* « Lignes de X : » + la liste « Comme la vue … liée au widget » : la liste prend toute la largeur de la fenêtre (un nom de vue long s'y lit en entier, jamais coupé), l'étiquette passe au-dessus. */
+.var-form-row:has(.var-loop-scope:not([hidden])) > .var-form-l { grid-column: 1 / -1; line-height: 18px; }
+.var-form-row:has(.var-loop-scope:not([hidden])) > .var-form-v { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .var-form { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .var-form-l { line-height: 22px; margin-top: 6px; }
+}
+.var-form.is-stacked { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.var-form.is-stacked .var-form-l { line-height: 22px; margin-top: 6px; }
+.var-form.is-stacked .var-form-l:first-child, .var-form.is-stacked > .var-form-row:first-child > .var-form-l { margin-top: 0; }
+/* « Plus d'options » : un <details> à fine bordure (pas de fond gris), son chevron et ce qu'il contient à côté du titre ; ouvert d'office quand un réglage caché n'est pas celui d'origine. */
+.var-fold { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius-md, 7px); }
+.var-fold > summary { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius-md, 7px); font: 700 12px var(--font-ui); color: var(--text); cursor: pointer; list-style: none; }
+.var-fold > summary::-webkit-details-marker { display: none; }
+.var-fold > summary::before { content: ""; flex: none; width: 6px; height: 6px; margin: 0 2px 0 1px; border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(-45deg); }
+.var-fold[open] > summary::before { transform: rotate(45deg); }
+.var-fold > summary:hover { background: var(--surface-sunken); }
+.var-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.var-fold > summary em { flex: 1; min-width: 0; overflow: hidden; font-style: normal; font-weight: 500; font-size: 11.5px; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.var-fold-body { padding: 8px 10px 10px; border-top: 1px solid var(--border); }
+.var-fold-body > * + * { margin-top: 6px; }
+/* Le résultat : collé au bas de la zone qui défile (la base de js/modal-base.js ne change pas), il reste sous les yeux pendant qu'on règle ; un filet le sépare de ce qui défile
+   dessous. « Détail » montre la ligne de chiffres (`.is-detail`) ; un avertissement (`.is-important`) se montre sans. */
+.pp-modal-body > .var-result { position: sticky; bottom: 0; z-index: 0; margin: 8px -20px 0; padding: 6px 20px 8px; background: var(--surface); box-shadow: 0 -1px 0 var(--border); }
+.var-result.has-detail:not(.is-detail) > .var-condition-debug-line.is-detail-line:not(.is-important) { display: none; }
+.var-result-more { margin-left: auto; align-self: flex-start; flex: none; padding: 0; border: 0; background: none; font: 700 11.5px var(--font-ui); color: var(--text-muted); text-decoration: underline; white-space: nowrap; cursor: pointer; }
+.var-result-more::before { content: attr(data-label); }
+.var-result-more[hidden] { display: none; }
+.var-result-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.var-condition-debug-line.is-good .var-result-more { color: inherit; }
 .var-modal-intro .var-badge { border-style: dashed; border-color: #5b7fc0; font-size: 11.5px; }
 .var-modal-actions .var-modal-spacer { flex: 1; }
 .var-modal-actions button { font-family: var(--font-ui); font-weight: 600; font-size: 13px; height: 30px; padding: 0 12px; border-radius: var(--radius-btn, var(--radius-sm)); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
@@ -144,7 +195,10 @@
 .var-condition-mode select, .cond-group-head select { height: 26px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-size: 12px; padding: 0 4px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }
 .var-condition-rules { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-md, 8px); }
 .var-condition-rules .macro-rule-column-type { padding-left: 39px; box-sizing: border-box; }
-.var-condition-link-hint { flex: 1 0 100%; padding-left: 39px; box-sizing: border-box; font-size: 10.5px; font-weight: 600; color: var(--text-muted); white-space: normal; }
+/* Le type de la colonne (« Choix », « Texte ») se lit dans l'info-bulle de la colonne (js/condition-fields.js:typeAsTitle) : sous chaque règle il redisait ce que le champ Valeur montre déjà.
+   L'avertissement « colonne absente de la ligne » (.is-warning) reste écrit. */
+.var-condition-rules .macro-rule-column-type:not(.is-warning) { display: none; }
+.var-condition-link-hint { flex: 1 0 100%; padding-left: 39px; box-sizing: border-box; font-size: 11.5px; font-weight: 500; color: var(--text-muted); white-space: normal; }
 .var-condition-link-hint[hidden] { display: none; }
 .var-condition-link-hint button { font: inherit; font-weight: 700; color: var(--accent-ink); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
 .var-condition-add { align-self: flex-start; margin-top: 4px; height: 26px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; }
@@ -154,12 +208,13 @@
    possible. .var-condition-clip-status ne sert qu'aux lecteurs d'écran. */
 .var-condition-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .var-condition-foot .var-condition-add { align-self: center; margin-top: 0; }
-.var-condition-clip { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
-.var-condition-clip-btn { min-width: 62px; height: 26px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn, var(--radius-sm)); background: var(--surface); font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-muted); cursor: pointer; }
-.var-condition-clip-btn:hover { color: var(--accent); border-color: var(--accent); }
-.var-condition-clip-btn.is-disabled { opacity: .45; cursor: default; }
-.var-condition-clip-btn.is-disabled:hover { color: var(--text-muted); border-color: var(--border-strong); }
-.var-condition-clip-btn.is-done, .var-condition-clip-btn.is-done:hover { color: var(--good, #146c48); border-color: var(--good-soft-border, #bfe6d3); background: var(--good-soft, #e5f6ee); }
+.var-condition-clip { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; }
+.var-condition-clip-btn { min-width: 0; height: 26px; padding: 0 2px; border: 0; background: none; font-family: var(--font-ui); font-size: 12px; font-weight: 600; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.var-condition-clip-btn:hover { color: var(--accent); }
+.var-condition-clip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--radius-xs, 4px); }
+.var-condition-clip-btn.is-disabled { color: var(--text-muted); text-decoration: none; cursor: default; }
+.var-condition-clip-btn.is-disabled:hover { color: var(--text-muted); }
+.var-condition-clip-btn.is-done, .var-condition-clip-btn.is-done:hover { color: var(--good, #146c48); text-decoration: none; }
 .var-condition-clip-status { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* Groupe de conditions (js/condition-fields.js:buildGroupRow) : les « parenthèses » de « A et (B ou C) ». À gauche, le connecteur du niveau (« Si » ou le bouton
    « Et » / « Ou », aligné sur la liste de l'en-tête) ; puis un encadré clair, qui se détache de la boîte des règles autour : sa propre liste « toutes ces conditions / au
@@ -184,6 +239,7 @@
    des champs garde ses espaces. */
 .var-condition-affix { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-condition-affix[hidden] { display: none; }
+.var-fold-body .var-condition-affix { margin-top: 0; }
 .var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-condition-affix .var-loop-hint { grid-column: 2; }
 /* « Sinon afficher » (js/variable-otherwise.js) : une seconde grille de même classe, sous l'aperçu - un champ à variables (js/field-editor.js, celui de l'objet d'un e-mail) à la
@@ -261,7 +317,7 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
    condition ici). */
 .var-loop-modal-content .var-modal-intro .var-badge { border-style: solid; border-color: #b7cdf2; }
 .var-loop-label { display: block; margin: 12px 0 5px; font-size: 11px; font-weight: 700; color: var(--text-muted); }
-.var-loop-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; background: var(--surface-sunken); border: 1px solid var(--border); border-radius: var(--radius-md, 8px); font-size: 12px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.var-loop-source { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; font-weight: 400; color: var(--text); overflow-wrap: anywhere; }
 .var-loop-link { padding: 0; border: none; background: transparent; font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
 .var-loop-link[hidden] { display: none; }
 .var-loop-by { display: flex; flex: 1 1 180px; min-width: 140px; max-width: 320px; }
@@ -283,8 +339,13 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
    info-bulle dit pourquoi. */
 .var-loop-seg button[aria-disabled="true"] { opacity: .45; cursor: default; }
 .var-loop-seg button[aria-disabled="true"]:hover { background: var(--surface); }
+/* Un seul choix : du texte, pas un interrupteur (js/variable-loop.js:renderRepeat). Le bouton reste, pour le clavier et les lecteurs d'écran. */
+.var-loop-seg.is-single { border-color: transparent; }
+.var-loop-seg.is-single button { height: 26px; padding: 0; background: none; font-weight: 400; cursor: default; }
+.var-loop-seg.is-single button:hover { background: none; }
+.var-loop-seg.is-single button.is-on { background: none; color: var(--text); }
 /* Sous « Ce qui se répète » : « La variable, dans sa cellule » laisse les autres variables de la ligne en place (même aspect que les lignes d'aperçu). */
-.var-loop-row-note { margin-top: 8px; padding: 7px 10px; border-radius: var(--radius-md, 6px); font-size: 12px; line-height: 1.45; background: var(--surface-sunken); border: 1px solid var(--border); color: var(--text-muted); overflow-wrap: anywhere; }
+.var-loop-row-note { margin-top: 4px; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); overflow-wrap: anywhere; }
 .var-loop-row-note[hidden] { display: none; }
 .var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-seps[hidden] { display: none; }
@@ -296,20 +357,19 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-filter-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .var-loop-filter-empty .var-condition-add { margin-top: 0; }
 /* « Seulement les lignes sans parent » : un lien sous le filtre (des sous-points rangés avec leurs points), ou à côté de « + Ajouter une condition ». */
-.var-loop-no-parent { display: inline-block; margin-top: 6px; }
+.var-loop-no-parent { display: inline-block; margin-top: 6px; text-align: left; }
 .var-condition-foot .var-loop-no-parent { margin-top: 0; }
-.var-loop-two { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 12px; }
 .var-loop-sort-row { display: flex; gap: 6px; }
-.var-loop-two select, .var-loop-pick select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+/* Les listes du repli « Plus d'options » (tri, lignes affichées, « si aucune ligne ») : la largeur de leur case. */
+.var-fold-body .var-form-v select { height: 26px; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-fold-body .var-form-v > select { width: 100%; }
 .var-loop-sort-row select:first-child { flex: 1; }
-.var-loop-two .var-loop-empty-select { width: 100%; }
-.var-loop-pick select { width: 100%; }
-.var-loop-empty-text { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+/* « Texte affiché » : la ligne n'existe que pour « Afficher un texte » ; elle suit les autres lignes de la grille, cachée d'un coup avec son étiquette (l'enveloppe .var-form-row). */
 .var-loop-empty-text[hidden] { display: none; }
 /* Le texte « Si aucune ligne » est un champ à variables (js/field-editor.js, celui du « Sinon afficher » d'une valeur : mêmes bordure, police et fond que les champs d'une ligne
    de cette fenêtre) ; `scroll-margin` : un champ ramené dans la fenêtre garde un peu d'air sous lui. */
 .var-loop-empty-text .var-loop-empty-field {
-  flex: 1; box-sizing: border-box; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;
+  display: block; box-sizing: border-box; width: 100%; min-width: 0; min-height: 26px; padding: 0 6px; scroll-margin: 6px;
   border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 12px; font-weight: 400;
 }
 .var-loop-empty-text .var-loop-empty-field .pp-field-text { line-height: 24px; }

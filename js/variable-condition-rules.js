@@ -7,6 +7,7 @@ const VariableConditionRules = (function () {
     // « ligne d'Annuaire trouvée via Dossiers.Responsable · Modifier le lien » sous une règle portant sur une autre table déjà liée.
     function updateLinkHint(hint, table) {
       hint.replaceChildren();
+      delete hint.dataset.said;
       const currentTableId = GristAPI.getCurrentTableId();
       const rule = (table && table !== currentTableId) ? GristAPI.getLinkRule(table) : null;
       hint.hidden = !rule;
@@ -19,6 +20,20 @@ const VariableConditionRules = (function () {
         if (await Variables.editLinkRule(table)) redraw();
       });
       hint.append(document.createTextNode(text + ' · '), editBtn);
+      hint.dataset.said = text;
+      dedupeLinkHints();
+    }
+    // Le lien d'une table se dit une fois : sous la première règle qui la lit, pas sous chacune. Les suivantes restent dans le tracé, cachées - elles reparaissent si la première
+    // change de colonne (la fonction repasse sur toutes les indications à chaque changement).
+    function dedupeLinkHints() {
+      if (!ctx.refs) return;
+      const said = new Set();
+      ctx.refs.rulesBox.querySelectorAll('.var-condition-link-hint').forEach(hint => {
+        const text = hint.dataset.said;
+        if (!text) return;
+        hint.hidden = said.has(text);
+        said.add(text);
+      });
     }
 
     function redraw() {
@@ -41,6 +56,7 @@ const VariableConditionRules = (function () {
           allTables: true,
           compareColumn: true,
           attributesWindow: true,
+          typeAsTitle: true,
           onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw, ctx.state ? VariableLoop.loopTablesAt(ctx.state.editor.state, ctx.state.pos) : null),
           onColumnResolved: table => updateLinkHint(linkHint, table),
           onValueColumnResolved: table => updateLinkHint(valueLinkHint, table),
@@ -81,6 +97,8 @@ const VariableConditionRules = (function () {
       rulesBox.appendChild(foot);
       if (clipFocus) clipFocus.focus();
       ctx.syncClipboardButtons();
+      // Les indications de lien se sont dites pendant le tracé, avant que les lignes ne soient toutes en place : on les repasse, une par table.
+      dedupeLinkHints();
     }
 
     return { redraw, renderRules };
