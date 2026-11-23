@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 const JSZip = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'jszip.min.js'));
 const ExcelJS = require(join(ROOT, 'dev-tests', '.offline-cache', 'umd', 'exceljs.min.js'));
 
-// Les dix-neuf moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
+// Les vingt moteurs : leur nom dans index.html (data-engine), leur fichier, leur variable globale.
 const ENGINES = {
   pdf: { file: 'pdf-export', global: 'PdfExport' },
   sheets: { file: 'sheet-layout', global: 'SheetLayout' },
@@ -29,6 +29,7 @@ const ENGINES = {
   docx: { file: 'docx-export', global: 'DocxExport' },
   pptx: { file: 'pptx-export', global: 'PptxExport' },
   pptxImport: { file: 'pptx-import', global: 'PptxImport' },
+  metafile: { file: 'metafile-render', global: 'MetafileRender' },
   docxImport: { file: 'docx-import', global: 'DocxImport' },
   odtImport: { file: 'odt-import', global: 'OdtImport' },
   odsImport: { file: 'ods-import', global: 'OdsImport' },
@@ -79,7 +80,7 @@ async function scenario(title, fn) {
 // Les scripts de moteur demandés, exactement ceux que le scénario attend : ni plus (rien ne charge ce qu'il n'utilise pas), ni moins, chacun une fois.
 function expectEngines(label, requests, loadedNow, expected) {
   check(`${label} : le réseau ne reçoit que ${expected.map(name => ENGINES[name].file + '.js').join(' et ')}, une seule fois chacun`, same(requests, expected), requests);
-  check(`${label} : parmi les dix-neuf moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
+  check(`${label} : parmi les vingt moteurs, seuls existent ${expected.map(name => ENGINES[name].global).join(', ')}`, same(loadedNow, expected), loadedNow);
 }
 
 const bytesOf = file => readFile(file);
@@ -106,11 +107,11 @@ const exportBatch = (page, kind, name) => saved(exportBatchOf(page, kind, `lazy-
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 await scenario('Ouverture : aucun moteur n\'est chargé', async ({ w, page, requests, loaded }) => {
   await sleep(1500);
-  check('ouverture : aucun des dix-neuf scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
-  check('ouverture : aucun des dix-neuf moteurs n\'existe (PdfExport, PdfMerge, PdfArchive, SheetLayout, DocxExport, PptxExport, PptxImport, DocxImport, OdtImport, OdsImport, OdpImport, OdtExport, OdsExport, OdpExport, XlsxExport, XlsxNumberFormat, XlsxPivot, MarkdownExport, HtmlExport)', (await loaded()).length === 0, await loaded());
+  check('ouverture : aucun des vingt scripts de moteur n\'est demandé au réseau', requests.length === 0, requests);
+  check('ouverture : aucun des vingt moteurs n\'existe (PdfExport, PdfMerge, PdfArchive, SheetLayout, DocxExport, PptxExport, PptxImport, DocxImport, OdtImport, OdsImport, OdpImport, OdtExport, OdsExport, OdpExport, XlsxExport, XlsxNumberFormat, XlsxPivot, MarkdownExport, HtmlExport)', (await loaded()).length === 0, await loaded());
   check('ouverture : ExportEngines existe, avec ensure et loadAll', await page.evaluate(() => typeof ExportEngines === 'object' && typeof ExportEngines.ensure === 'function' && typeof ExportEngines.loadAll === 'function'));
   const tags = await page.evaluate(() => Array.from(document.querySelectorAll('script[type="text/x-lazy-engine"]'), tag => [tag.dataset.engine, tag.getAttribute('src')]));
-  check('index.html : dix-neuf balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
+  check('index.html : vingt balises inertes, une par moteur, chacune vers son fichier et avec une version de cache (?v=)',
     tags.length === NAMES.length && NAMES.every(name => tags.filter(([engine, src]) => engine === name && new RegExp('^js/' + ENGINES[name].file + '\\.js\\?v=\\d+(\\.\\d+)*$').test(src)).length === 1), tags);
   check('ouverture : les boutons d\'export existent et sont prêts (le clic ne dépend d\'aucun moteur chargé)', await page.evaluate(() => ['btn-export-pdf', 'v2-export-lines-one', 'v2-export-lines-zip', 'v2-export-lines-merged'].every(id => !!document.getElementById(id))));
   check('ouverture : aucune erreur de page', w.errors.length === 0, w.errors);
@@ -131,7 +132,7 @@ await scenario('ExportEngines : une demande, deux demandes, une liste, tout', as
   check('une liste de noms charge chacun d\'eux (fusion, feuilles)', same(await loaded(), ['pdf', 'merge', 'sheets']) && same(requests, ['pdf', 'merge', 'sheets']), { loaded: await loaded(), requests });
   check('ensure() sans nom se résout sans rien charger', (await page.evaluate(() => ExportEngines.ensure().then(() => 'ok', e => e.message))) === 'ok' && requests.length === 3, requests);
   await page.evaluate(() => ExportEngines.loadAll());
-  check('loadAll charge les quinze qui manquaient (PDF/A, Word, PowerPoint, import PowerPoint, import Word, import OpenDocument texte, import OpenDocument tableur, import OpenDocument présentation, export OpenDocument texte, tableur et présentation, Excel, format des nombres, tableau croisé Excel, Markdown, HTML), les dix-neuf ne sont demandés qu\'une fois chacun', same(await loaded(), NAMES) && same(requests, NAMES), { loaded: await loaded(), requests });
+  check('loadAll charge les seize qui manquaient (PDF/A, Word, PowerPoint, import PowerPoint, dessins Windows, import Word, import OpenDocument texte, import OpenDocument tableur, import OpenDocument présentation, export OpenDocument texte, tableur et présentation, Excel, format des nombres, tableau croisé Excel, Markdown, HTML), les vingt ne sont demandés qu\'une fois chacun', same(await loaded(), NAMES) && same(requests, NAMES), { loaded: await loaded(), requests });
   await page.evaluate(() => ExportEngines.loadAll());
   check('un second loadAll ne fait aucune requête', requests.length === NAMES.length, requests);
   check('aucune erreur de page', w.errors.length === 0, w.errors);

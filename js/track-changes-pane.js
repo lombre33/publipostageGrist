@@ -53,7 +53,7 @@ const TrackChangesPane = (function () {
   // Ce que fait une modification, en mots : « Ajout », « Suppression », « Remplacement », « Colonne ajoutée »... ; pour un réglage, son nom quand on le connaît (l'alignement, l'interligne...).
   const SETTING_KEYS = {
     textAlign: 'align', lineHeight: 'lineHeight', spaceBefore: 'spacing', spaceAfter: 'spacing', indentLeft: 'indent', indentFirst: 'indent', keepNext: 'keepNext',
-    backgroundColor: 'cellBackground', colwidth: 'columnWidth', colspan: 'merged', rowspan: 'merged',
+    backgroundColor: 'cellBackground', fillPattern: 'cellPattern', colwidth: 'columnWidth', colspan: 'merged', rowspan: 'merged',
   };
   function whatOf(entry) {
     const { action, subject } = entry;

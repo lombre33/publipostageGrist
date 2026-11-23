@@ -20,3 +20,24 @@
 /* L'indication du champ vide : l'attribut `placeholder` de l'élément, lu à l'affichage - la langue de l'interface la change sans transaction. Le gris des
    textes secondaires (4,6:1 au moins, css/style.css), comme l'indication des <input> en thème sombre. */
 .pp-field-editor.is-empty::before { content: attr(placeholder); position: absolute; left: 8px; right: 8px; top: 50%; transform: translateY(-50%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; color: var(--text-muted); }
+
+/* Le champ qui s'ouvre (classe `pp-field-opens` : Objet, À, Cc, Cci et PJ du mode email ; js/field-editor.js : `unfold` pose `is-open`, `data-preview` et les mesures `--pp-open-*`). À 700 px de large chaque champ ne montre qu'une
+   vingtaine de caractères sur une ligne : un objet de cent signes ou quatre adresses ne se relisaient pas. Fermé, la ligne finit par « … » (on voit qu'il y a une suite). Avec le curseur - ou, en Lecture, après un clic sur la
+   valeur résolue - et quand le texte ne tient plus, la zone de saisie se pose juste SOUS la ligne des champs, sur toute la largeur du bandeau et sur plusieurs lignes (cinq au plus, puis elle défile), par-dessus la barre d'outils.
+   Le champ garde sa place dans la ligne, de la même taille, avec le liseré du focus et le début de son texte : les champs voisins restent sous la souris (un clic sur À pendant qu'Objet est ouvert donne le curseur à À),
+   la barre et le document ne se décalent pas d'un pixel, et un clic qui referme le champ ne tombe pas sur autre chose que ce qu'on visait. Ce que le champ porte reste UNE ligne : seul l'affichage passe à la ligne.
+   Les bulles, leurs barres et les listes « # » et « @ » se posent comme avant (leur niveau, --z-floating-toolbar et --z-menu, est au-dessus de la zone ouverte, --z-open-field). */
+/* `text-overflow` ne change jamais d'un état à l'autre (la zone ouverte n'y fait que passer `overflow` à `visible`, où il ne joue plus) : Chromium ne redessine pas le « … » d'une ligne refermée quand `text-overflow` change avec la classe `is-open`, le texte restait coupé net (mesuré à 700 x 400). */
+.pp-field-opens > .pp-field-text > p { overflow: hidden; text-overflow: ellipsis; }
+#toolbar-top .pp-field-opens.is-open { overflow: visible; z-index: var(--z-open-field); border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* La zone de saisie ouverte est tirée sous la ligne : ses bords, son liseré d'accent et son ombre sont les siens. `top` : le bas du champ plus l'écart que js/field-editor.js (`GAP`) retire de la hauteur permise. */
+.pp-field-opens.is-open > .pp-field-text {
+  position: absolute; top: calc(100% + 4px); left: var(--pp-open-left, 0px); width: var(--pp-open-width, 100%); box-sizing: border-box; min-height: 38px; max-height: var(--pp-open-max, 126px); overflow-x: hidden; overflow-y: auto;
+  padding: 7px 10px; background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius-input, var(--radius-sm));
+  box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-float); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 22px;
+}
+.pp-field-opens.is-open > .pp-field-text > p { overflow: visible; }
+/* Le début du texte, dans le champ de la ligne dont la zone de saisie est sous lui (le texte est lu dans `data-preview`, posé à l'ouverture et à chaque frappe). */
+.pp-field-opens.is-open::after {
+  content: attr(data-preview); position: absolute; left: 8px; right: 8px; top: 50%; transform: translateY(-50%); overflow: hidden; text-overflow: ellipsis; white-space: pre; pointer-events: none; color: var(--text);
+}

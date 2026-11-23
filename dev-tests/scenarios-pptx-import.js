@@ -3274,6 +3274,114 @@
       return result(bad);
     });
 
+  // Des dessins Windows (EMF, WMF) écrits à la main, octet par octet : un en-tête, des enregistrements, la fin.
+  const U32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+  const U16 = v => [v & 255, (v >>> 8) & 255];
+  const emfRec = (type, ...words) => { const body = words.flat(Infinity); return [...U32(type), ...U32(8 + body.length), ...body]; };
+  const emfOf = (w, h, records) => {
+    const body = records.concat([emfRec(14, U32(0), U32(16), U32(20))]).flat(Infinity);
+    const header = [...U32(1), ...U32(88), ...U32(0), ...U32(0), ...U32(w - 1), ...U32(h - 1), ...U32(0), ...U32(0), ...U32(w * 25), ...U32(h * 25), ...U32(0x464d4520), ...U32(0x10000), ...U32(88 + body.length), ...U32(records.length + 1),
+      ...U16(3), ...U16(0), ...U32(0), ...U32(0), ...U32(0), ...U32(w), ...U32(h), ...U32(w / 4), ...U32(h / 4)];
+    return Uint8Array.from(header.concat(body));
+  };
+  const b64 = bytes => { let t = ''; bytes.forEach(b => { t += String.fromCharCode(b); }); return btoa(t); };
+  const RED = 0x0000ff;
+  const BLUE = 0xff0000;
+  const brushRec = (n, color) => emfRec(39, U32(n), U32(0), U32(color), U32(0));
+  const pick = n => emfRec(37, U32(n));
+  const NULL_PEN = 0x80000008;
+  const emfRect = (l, t, r, b) => emfRec(43, U32(l), U32(t), U32(r), U32(b));
+  const polyPolygon32 = (contours) => {
+    const count = contours.reduce((a, c) => a + c.length, 0);
+    return emfRec(8, U32(0), U32(0), U32(0), U32(0), U32(contours.length), U32(count), contours.map(c => U32(c.length)), contours.map(c => c.map(([x, y]) => [...U32(x), ...U32(y)])));
+  };
+  const wmfRec = (fn, ...words) => { const body = words.flat(Infinity); return [...U32((6 + body.length) / 2), ...U16(fn), ...body]; };
+  const wmfOf = (w, h, records) => {
+    const body = records.concat([wmfRec(0)]).flat(Infinity);
+    const placeable = [...U32(0x9ac6cdd7), ...U16(0), ...U16(0), ...U16(0), ...U16(w), ...U16(h), ...U16(96), ...U32(0), ...U16(0)];
+    const header = [...U16(1), ...U16(9), ...U16(0x300), ...U32((18 + body.length) / 2), ...U16(4), ...U32(6), ...U16(0)];
+    return Uint8Array.from(placeable.concat(header, body));
+  };
+  // Un texte : la police (Arial 40 points d'écran, gras), puis EMR_EXTTEXTOUTW à (40 ; 60) aligné sur la ligne de base.
+  const emfText = (text) => {
+    const name = [...'Arial'].map(ch => U16(ch.charCodeAt(0))).flat();
+    while (name.length < 64) name.push(0);
+    const font = emfRec(82, U32(3), U32((-40) >>> 0), U32(0), U32(0), U32(0), U32(700), [0, 0, 0, 0, 0, 0, 0, 0], name);
+    const letters = [...text].map(ch => U16(ch.charCodeAt(0))).flat();
+    while (letters.length % 4) letters.push(0);
+    const draw = emfRec(84, U32(0), U32(0), U32(0), U32(0), U32(1), U32(1), U32(1), U32(40), U32(60), U32(text.length), U32(76), U32(0), U32(0), U32(0), U32(0), U32(0), U32(0), letters);
+    return [font, pick(3), emfRec(24, U32(0)), emfRec(22, U32(24)), draw];
+  };
+  const gzip = async (bytes) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+
+  add('pptx_import_windows_drawings_emf_wmf_are_drawn_as_pictures_instead_of_being_lost',
+    'Les dessins vectoriels de Windows (EMF, WMF, et leurs formes compressées EMZ, WMZ), que le navigateur ne lit pas, sont dessinés en image à l\'import : rectangle et ellipse pleins, contours avec trou, mode de coordonnées étiré, table d\'objets du WMF ; un fichier illisible ou sans dessin reste compté non repris (retour d\'Antoine du 20/11 : les 3 images .emf du compte rendu)',
+    async () => {
+      await ready();
+      const { bad, expect } = checker();
+      const square = (x, y, n) => [[x, y], [x + n, y], [x + n, y + n], [x, y + n]];
+      const twoShapes = emfOf(800, 400, [brushRec(1, RED), pick(1), pick(NULL_PEN), emfRect(0, 0, 400, 400), brushRec(2, BLUE), pick(2), emfRec(42, U32(400), U32(0), U32(800), U32(400))]);
+      const holed = emfOf(800, 400, [brushRec(1, RED), pick(1), pick(NULL_PEN), polyPolygon32([square(0, 0, 400), square(100, 100, 200)])]);
+      // Le mode « étiré » : la fenêtre est de 100 x 50 unités, la fenêtre d'affichage de 800 x 400 points : un rectangle de la moitié gauche (0 -> 50) couvre 400 points.
+      const stretched = emfOf(800, 400, [emfRec(17, U32(8)), emfRec(9, U32(100), U32(50)), emfRec(11, U32(800), U32(400)), brushRec(1, RED), pick(1), pick(NULL_PEN), emfRect(0, 0, 50, 50)]);
+      const wmf = wmfOf(400, 200, [wmfRec(0x02fc, U16(0), U32(RED), U16(0)), wmfRec(0x02fc, U16(0), U32(BLUE), U16(0)), wmfRec(0x012d, U16(1)), wmfRec(0x02fa, U16(5), U16(1), U16(1), U32(0)), wmfRec(0x012d, U16(2)), wmfRec(0x041b, U16(190), U16(190), U16(10), U16(10))]);
+      const compressed = await gzip(twoShapes);
+      const blank = emfOf(800, 400, [pick(NULL_PEN)]);
+      const lettered = emfOf(800, 400, emfText('Planification 2027'));
+      const media = { 'a.emf': b64(twoShapes), 'b.emf': b64(holed), 'c.emf': b64(stretched), 'd.wmf': b64(wmf), 'e.emz': b64(compressed), 'h.emf': b64(lettered), 'f.emf': b64(blank), 'g.emf': btoa('EMF-not-an-image') };
+      const names = Object.keys(media);
+      const r = await run1({
+        media,
+        slides: [{ rels: names.map((n, i) => IMAGE_REL('rId' + (i + 2), n)), shapes: names.map((n, i) => pic({ id: 10 + i, x: 20 + (i % 4) * 230, y: 20 + Math.floor(i / 4) * 150, w: 200, h: n === 'd.wmf' ? 100 : 100, rid: 'rId' + (i + 2) })).join('') }],
+      });
+      const frames = slidesOf(r.html)[0].frames;
+      expect('six dessins repris (a, b, c, d, e, h), les deux autres non (sans dessin, illisible)', frames.length === 6, { n: frames.length, report: r.report });
+      const [a, b, c, d, e, h] = frames;
+      const png = f => f && /^data:image\/png;base64,/.test(dataOf(f) || '');
+      expect('chacun est une image PNG', [a, b, c, d, e, h].every(png), [a, b, c, d, e, h].map(f => f && (dataOf(f) || '').slice(0, 30)));
+      const size = await imageSize(dataOf(a));
+      expect('l\'EMF de 800 x 400 points est rendu en 1 600 x 800 (deux fois plus de points), le rapport 2 : 1', size.w === 1600 && size.h === 800, size);
+      expect('a : le rectangle rouge à gauche, le rond bleu à droite, le coin du rond transparent', sameColor(await pixel(dataOf(a), 300, 400), [255, 0, 0]) && sameColor(await pixel(dataOf(a), 1200, 400), [0, 0, 255]) && (await pixel(dataOf(a), 1580, 10))[3] === 0, [await pixel(dataOf(a), 300, 400), await pixel(dataOf(a), 1200, 400), await pixel(dataOf(a), 1580, 10)]);
+      expect('b : deux contours dans un remplissage, le trou reste un trou (rouge sur le bord, transparent au centre)', sameColor(await pixel(dataOf(b), 100, 400), [255, 0, 0]) && (await pixel(dataOf(b), 400, 400))[3] === 0, [await pixel(dataOf(b), 100, 400), await pixel(dataOf(b), 400, 400)]);
+      expect('c : le mode de coordonnées étiré met le rectangle sur la moitié gauche (rouge à 200, transparent à 1 000)', sameColor(await pixel(dataOf(c), 300, 400), [255, 0, 0]) && (await pixel(dataOf(c), 1000, 400))[3] === 0, [await pixel(dataOf(c), 300, 400), await pixel(dataOf(c), 1000, 400)]);
+      expect('d : le WMF prend le pinceau BLEU choisi dans sa table d\'objets (le deuxième) et laisse le rouge', sameColor(await pixel(dataOf(d), 400, 200), [0, 0, 255]), await pixel(dataOf(d), 400, 200));
+      expect('e : l\'EMZ (EMF compressé) donne la même image que l\'EMF', sameColor(await pixel(dataOf(e), 300, 400), [255, 0, 0]) && sameColor(await pixel(dataOf(e), 1200, 400), [0, 0, 255]));
+      // Le texte : « Planification 2027 » posé à (40 ; 60) sur la ligne de base, 40 points de haut ; l'image est deux fois plus grande : des pixels noirs entre 80 et 120 de haut, rien dessous.
+      const lettersImage = await ImageIo.load(dataOf(h));
+      const lettersCanvas = document.createElement('canvas');
+      lettersCanvas.width = lettersImage.naturalWidth;
+      lettersCanvas.height = lettersImage.naturalHeight;
+      lettersCanvas.getContext('2d').drawImage(lettersImage, 0, 0);
+      const inked = (top, bottom) => { const dots = lettersCanvas.getContext('2d').getImageData(80, top, 1100, bottom - top).data; let n = 0; for (let i = 3; i < dots.length; i += 4) if (dots[i] > 128) n++; return n; };
+      expect('h : le texte est écrit (de quoi remplir des centaines de pixels sur la ligne de base), rien en dessous', inked(40, 130) > 400 && inked(300, 780) === 0, { on: inked(40, 130), under: inked(300, 780) });
+      expect('le rapport ne compte que les deux fichiers sans image : un dessin vide et un fichier illisible', reportOf(r).images === 2, r.report);
+      return result(bad);
+    });
+
+  add('pptx_import_table_cell_patterns_are_real_pattern_fills_with_their_two_colors',
+    'Retour d\'Antoine (20/11, « Projets innovation » / « Acculturation étudiants » du tableau RH - UB) : le fond à motif d\'une case de tableau (`a:pattFill`) est un vrai fond à motif de l\'éditeur (js/cell-pattern.js) : la couleur d\'arrière-plan du motif est le fond de la case, celle d\'avant-plan la couleur du motif ; les motifs de PowerPoint que l\'éditeur n\'a pas sont rapprochés du plus proche et comptés au rapport ; sans couleur d\'avant-plan, le fond seul',
+    async (h) => {
+      const patt = (prst, fg, bg) => `<a:pattFill prst="${prst}">${fg ? `<a:fgClr><a:srgbClr val="${fg}"/></a:fgClr>` : ''}${bg ? `<a:bgClr><a:srgbClr val="${bg}"/></a:bgClr>` : ''}</a:pattFill>`;
+      const rowOf = fills => ({ h: 40, cells: fills.map((fillXml, i) => ({ text: 'C' + i, fillXml })) });
+      const exact = await run1({ slides: [{ shapes: table({ x: 40, y: 40, cols: [100, 100, 100], rows: [rowOf([patt('dnDiag', 'FF0000', 'FFFF00'), patt('pct50', '0000FF'), patt('smCheck', '000000', 'FFFFFF')])] }) }] });
+      const cells = Array.from(slidesOf(exact.html)[0].tables[0].querySelectorAll('td'));
+      const { bad, expect } = checker();
+      const marks = cell => ({ kind: cell.getAttribute('data-fill-pattern'), ink: cell.getAttribute('data-fill-ink'), back: cell.style.backgroundColor });
+      expect('un motif de la norme : son nom, l\'avant-plan en couleur de motif, l\'arrière-plan en fond de case', JSON.stringify(marks(cells[0])) === JSON.stringify({ kind: 'dnDiag', ink: '#ff0000', back: 'rgb(255, 255, 0)' }), marks(cells[0]));
+      expect('sans couleur d\'arrière-plan : pas de fond de case, le motif seul', marks(cells[1]).kind === 'pct50' && marks(cells[1]).ink === '#0000ff' && marks(cells[1]).back === '', marks(cells[1]));
+      expect('la peinture est écrite en ligne : un dégradé', /gradient/.test(cells[0].getAttribute('style')) && !/url\(/.test(cells[0].getAttribute('style')), cells[0].getAttribute('style'));
+      expect('les motifs exacts ne coûtent rien au rapport', !reportOf(exact).cellFills, exact.report);
+      const near = await run1({ slides: [{ shapes: table({ x: 40, y: 40, cols: [100, 100, 100], rows: [rowOf([patt('zigZag', '00FF00', 'FFFFFF'), patt('pct5', '123456', 'ABCDEF'), patt('wdUpDiag', null, 'FFCC00')])] }) }] });
+      const nearCells = Array.from(slidesOf(near.html)[0].tables[0].querySelectorAll('td'));
+      expect('un motif qu\'on n\'a pas est rapproché du plus proche (zigZag -> diagonales descendantes, 5 % -> points espacés) et compté une fois au rapport', marks(nearCells[0]).kind === 'dnDiag' && marks(nearCells[1]).kind === 'pct10' && reportOf(near).cellFills === 1, { a: marks(nearCells[0]), b: marks(nearCells[1]), report: near.report });
+      expect('sans couleur d\'avant-plan : le fond d\'arrière-plan seul, sans motif', marks(nearCells[2]).kind === null && marks(nearCells[2]).back === 'rgb(255, 204, 0)', marks(nearCells[2]));
+      await inEditor(h, exact);
+      const shown = Array.from(document.querySelectorAll('.tiptap td[data-fill-pattern]'));
+      expect('dans l\'éditeur les trois cases gardent leur motif et le peignent', shown.length === 3 && shown.every(td => /gradient/.test(getComputedStyle(td).backgroundImage)), shown.length);
+      expect('et enregistrées, elles se relisent telles quelles', (Editor.getHTML().match(/data-fill-pattern="(dnDiag|pct50|smCheck)"/g) || []).length === 3, Editor.getHTML().slice(0, 300));
+      return result(bad);
+    });
+
   add('pptx_import_report_detail_of_a_heavy_decor_gives_the_concrete_debug_file_slides_groups_colors_points_and_a_map_of_the_page',
     'DÉBOGAGE TEMPORAIRE : le décor d\'un masque dit son fichier, les diapositives qui le montrent, la boîte de son groupe (en % de la page), les couleurs de ses formes, ses points de tracé et une carte de la page en 10 lignes de 48 cases (à retirer avec le débogage)',
     async () => {

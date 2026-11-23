@@ -569,11 +569,19 @@ const EditorNodes = (function () {
     // Les cellules et les tableaux : fond, largeur de colonne, vue, zone à deux colonnes autour
 
     // Fond de cellule - augmente TableCell/TableHeader du même backgroundColor que le surlignage de texte (lu par pdf-export.js:tableFrom, pas
-    // inheritedStyle).
+    // inheritedStyle), et d'un motif par-dessus (`fillPattern` : { kind, ink }, js/cell-pattern.js ; `data-fill-pattern` et `data-fill-ink` dans le HTML enregistré,
+    // nul pour toute case que personne n'a réglée : aucun changement de rendu ni de HTML).
     function withCellBackground(CellExtension) {
       return CellExtension.extend({
         addAttributes() {
-          return Object.assign({}, this.parent(), { backgroundColor: inlineStyleAttribute('backgroundColor') });
+          return Object.assign({}, this.parent(), {
+            backgroundColor: inlineStyleAttribute('backgroundColor'),
+            fillPattern: {
+              default: null,
+              parseHTML: el => CellPattern.parse(el),
+              renderHTML: attrs => CellPattern.attributes(attrs.fillPattern),
+            },
+          });
         },
       });
     }

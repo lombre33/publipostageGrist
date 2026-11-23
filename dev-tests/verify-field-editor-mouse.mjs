@@ -181,8 +181,9 @@ async function badgePoint(selector) {
     const el = document.querySelector(sel);
     if (!el) return { found: false };
     const host = el.closest('.pp-field-editor');
-    const hr = host.getBoundingClientRect(); const r = el.getBoundingClientRect();
-    const left = Math.max(r.left, hr.left + 9), right = Math.min(r.right, hr.right - 9);
+    // La zone de saisie : la ligne du champ, ou - champ ouvert, texte trop long pour la ligne - son cadre sous la ligne (js/field-editor.js : `unfold`).
+    const hr = (host.querySelector('.pp-field-text') || host).getBoundingClientRect(); const r = el.getBoundingClientRect();
+    const left = Math.max(r.left, hr.left + 1), right = Math.min(r.right, hr.right - 1);
     const x = (left + right) / 2, y = r.top + r.height / 2;
     const top = document.elementFromPoint(x, y);
     return { found: true, x, y, left, right, onTop: right > left && !!top && (top === el || el.contains(top)) };
@@ -349,7 +350,8 @@ async function run() {
   check('la condition et le texte autour ne changent pas ce que le champ affiche', subject.text === textBeforeCondition, { before: textBeforeCondition, after: subject.text });
 
   // ===== 4) « Autres attributs » sur la seconde bulle : le téléphone du responsable s'ajoute à la suite =====
-  await realClick('#' + SUBJECT, 150);
+  // Le clic est donné dans la zone de saisie : l'objet est assez long pour que le champ s'ouvre (son cadre est sous la ligne), et la barre de la première bulle, encore posée au-dessus de celle-ci, recouvre le milieu de la ligne du champ.
+  await realClick('#' + SUBJECT + ' .pp-field-text', 150);
   await page.keyboard.press('End');
   await page.waitForTimeout(150);
   const second = await badgePoint('#' + SUBJECT + ' .var-badge[data-column="NomPrenom"]');
@@ -419,8 +421,10 @@ async function run() {
   const caret = await page.evaluate(id => {
     const host = document.getElementById(id); const sel = getSelection();
     const range = sel.rangeCount ? sel.getRangeAt(0) : null; const rects = range ? range.getClientRects() : [];
-    const box = host.getBoundingClientRect(); const c = rects.length ? rects[0] : (range ? range.startContainer.parentElement.getBoundingClientRect() : null);
-    return { text: host.querySelector('[role="textbox"]').scrollWidth > host.clientWidth, inside: !!c && c.right <= box.right + 1 && c.left >= box.left - 1 };
+    // La zone de saisie : la ligne du champ, ou - le texte ne tient plus, le champ s'ouvre - son cadre sous la ligne (js/field-editor.js : `unfold`).
+    const textbox = host.querySelector('[role="textbox"]');
+    const box = textbox.getBoundingClientRect(); const c = rects.length ? rects[0] : (range ? range.startContainer.parentElement.getBoundingClientRect() : null);
+    return { text: host.classList.contains('is-open') || textbox.scrollWidth > host.clientWidth, open: host.classList.contains('is-open'), inside: !!c && c.right <= box.right + 1 && c.left >= box.left - 1 && c.bottom <= box.bottom + 1 };
   }, CC);
   check('l’adresse tapée est plus large que le champ et le curseur reste dans le champ (le texte défile)', caret.text && caret.inside, caret);
   await page.keyboard.press('Enter');
@@ -613,7 +617,7 @@ async function run() {
   check('Entrée pose la seconde puce : l’Objet en a deux, la valeur enregistrée est en HTML', JSON.stringify(chipSubject.chips) === '["date","time"]' && chipSubject.outside === 'Rapport du  à ' && isRichField(chipSubject.value), chipSubject);
   const chipLook = await page.evaluate(() => {
     const chip = document.querySelector('#v2-email-subject .smart-chip');
-    const style = getComputedStyle(chip); const r = chip.getBoundingClientRect(); const host = chip.closest('.pp-field-editor').getBoundingClientRect();
+    const style = getComputedStyle(chip); const r = chip.getBoundingClientRect(); const host = (chip.closest('.pp-field-editor').querySelector('.pp-field-text') || chip.closest('.pp-field-editor')).getBoundingClientRect();
     return { background: style.backgroundColor, color: style.color, inside: r.left >= host.left && r.right <= host.right + 0.5 && r.top >= host.top && r.bottom <= host.bottom + 0.5, label: chip.textContent };
   });
   check('la puce a le vert de celles du document et tient dans le champ', chipLook.background === 'rgb(231, 247, 238)' && chipLook.color === 'rgb(20, 108, 67)' && chipLook.inside && chipLook.label === 'Date du jour', chipLook);

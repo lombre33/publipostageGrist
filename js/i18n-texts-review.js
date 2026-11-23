@@ -230,6 +230,7 @@ const I18nTextsReview = {
   'trackList.setting.indent': { fr: 'Retrait', en: 'Indent' },
   'trackList.setting.keepNext': { fr: 'Garder avec le suivant', en: 'Keep with next' },
   'trackList.setting.cellBackground': { fr: 'Fond de case', en: 'Cell background' },
+  'trackList.setting.cellPattern': { fr: 'Motif de fond de case', en: 'Cell background pattern' },
   'trackList.setting.columnWidth': { fr: 'Largeur de colonne', en: 'Column width' },
   'trackList.setting.merged': { fr: 'Cases fusionnées', en: 'Merged cells' },
   // Barre flottante d'une modification (js/floating-toolbars.js:wireSuggestionFloatingToolbar) : le libellé du bouton, et son info-bulle, qui dit
