@@ -2048,6 +2048,7 @@ const PptxImport = (function () {
   // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Un tableau de PowerPoint devient un tableau de l'éditeur dans un cadre libre, à sa place exacte : ses colonnes et ses hauteurs de ligne, ses cases fusionnées, leur fond, leurs bords, leur alignement vertical et leur texte.
   const PAGE_FIT_TOLERANCE_PT = 0.3;                // le bas d'un tableau qui dépasse la page de moins que cela y est tenu (arrondis de la mesure)
+  const PAGE_FIT_MARGIN_SHARE = 0.04;              // ... ou 4 % de sa hauteur dans le fichier si c'est plus : le texte d'un grand tableau se replie autrement dans l'éditeur (autre largeur de lettres, interligne) et l'écart s'additionne sur ses lignes
   const PAGE_FIT_MARGIN_PT = 8;                    // le tableau finit au moins à cela du bas de la page : l'éditeur le dessine un peu plus haut que la mesure (bords, arrondis), et un tableau au ras était coupé
   const MIN_ROW_SQUEEZE = 0.5;                     // les lignes d'un tableau se resserrent jusqu'à la moitié de leur hauteur dans le fichier, pour tenir dans la page
   const SPLIT_INSET_PT = 8;                        // un rectangle à fond dont une marge du texte s'écarte de celle de l'éditeur de plus que cela est posé en deux cadres : la forme, puis le texte
@@ -2238,7 +2239,7 @@ const PptxImport = (function () {
     }
     // Jamais plus bas que la page (comme un texte, fitText) : la tolérance de 3 % ne fait pas sortir de la diapositive un tableau qui, dans le fichier, finit au ras de son bord. Les hauteurs de lignes du fichier se
     // resserrent d'abord (un tableau de la hauteur de la page n'a pas de marge : ses lignes sont celles de PowerPoint, à un point près), puis, si le texte seul les garde trop hautes, le texte se réduit encore.
-    const room = Math.max(env.page.h - box.y - PAGE_FIT_MARGIN_PT, 12);
+    const room = Math.max(env.page.h - box.y - Math.max(PAGE_FIT_MARGIN_PT, box.h * PAGE_FIT_MARGIN_SHARE), 12);
     let squeeze = 1;
     if (natural > room + PAGE_FIT_TOLERANCE_PT) {
       for (let i = 0; i < 4 && natural > room + PAGE_FIT_TOLERANCE_PT && squeeze > MIN_ROW_SQUEEZE; i++) {
