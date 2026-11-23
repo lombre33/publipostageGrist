@@ -314,7 +314,7 @@ const I18nTextsVariables = {
   // --- Fenêtre « Boucle » d'une variable (js/variable-loop.js ; moteur js/loop-rules.js) ---
   'varLoop.title': { fr: 'Boucle sur « {table} »', en: 'Loop over “{table}”' },
   'varLoop.intro.zone': { fr: 'et les autres variables de « {table} » situées dans ce qui se répète prennent la valeur de chaque ligne choisie : le tout est écrit une fois par ligne. En édition, il n’apparaît qu’une fois, avec l’icône ⇄.', en: 'and the other “{table}” variables inside what repeats take the value of each chosen row: the whole is written once per row. While editing, it appears only once, with the ⇄ icon.' },
-  'varLoop.intro.inline': { fr: 'est écrite une fois par ligne choisie. En édition, elle n’apparaît qu’une fois, avec l’icône ⇄.', en: 'is written once for each chosen row. While editing, it appears only once, with the ⇄ icon.' },
+  'varLoop.intro.inline': { fr: 'est remplacée par la valeur de chaque ligne choisie, l’une après l’autre. En édition, elle n’apparaît qu’une fois, avec l’icône ⇄.', en: 'is replaced by the value of each chosen row, one after the other. While editing, it appears only once, with the ⇄ icon.' },
   'varLoop.intro.inlineImage': { fr: 'est copiée pour chaque ligne choisie, les images côte à côte. En édition, elle n’apparaît qu’une fois, avec une ligne qui indique la boucle.', en: 'is copied for each chosen row, the images side by side. While editing, it appears only once, with a line that tells about the loop.' },
   'varLoop.section.source': { fr: 'Lignes utilisées', en: 'Rows used' },
   'varLoop.source.pickLinked': { fr: 'Liées à la ligne sélectionnée', en: 'Linked to the selected row' },
