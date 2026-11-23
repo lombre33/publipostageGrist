@@ -1254,6 +1254,30 @@ const GristAPI = (function () {
     return _tokenCache;
   }
 
+  // Une lecture SQL « légère » du document, par l'adresse de son interface de programmation : de quoi lire les noms, les dates et les longueurs des modèles sans leur texte (le rapport de fluidité la sonde,
+  // js/perf-trace.js:probeLight, 23/11 ; la table des modèles se lit sinon en entier par fetchTable, contenus compris). Le jeton est celui de lecture seule des pièces jointes (getAccessTokenCached) ; la demande
+  // est un GET simple (ni corps ni en-tête particulier : pas de pré-requête CORS) ; elle ne peut rien écrire. Rend les lignes, des objets { colonne: valeur } aux valeurs brutes de SQLite (un booléen y est 0 ou 1,
+  // une date des secondes). Lève une erreur dont `reason` dit pourquoi : 'jeton' (Grist n'en donne pas), 'réseau' (hors ligne, CORS, politique de GFS), 'http' (avec `status` : droits, instance sans cette
+  // interface), 'délai', 'forme' (réponse sans `records`). Rien ne dépend d'elle : celui qui l'appelle sait toujours lire autrement.
+  async function lightQuery(sql, timeoutMs) {
+    const fail = (reason, extra) => Object.assign(new Error('lightQuery : ' + reason), { reason }, extra);
+    let info;
+    try { info = await getAccessTokenCached(); } catch (e) { throw fail('jeton'); }
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs || 8000) : 0;
+    try {
+      let response;
+      try {
+        response = await fetch(info.baseUrl + '/sql?q=' + encodeURIComponent(sql) + '&auth=' + encodeURIComponent(info.token), { method: 'GET', credentials: 'omit', signal: controller ? controller.signal : undefined });
+      } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'réseau'); }
+      if (!response.ok) throw fail('http', { status: response.status });
+      let body;
+      try { body = await response.json(); } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'forme'); }
+      if (!body || !Array.isArray(body.records)) throw fail('forme');
+      return body.records.map(record => (record && record.fields) || {});
+    } finally { clearTimeout(timer); }
+  }
+
   // L'hôte de l'instance de Grist qui sert le document (`grist.numerique.gouv.fr`, `docs.getgrist.com`...), en minuscules : celui de l'adresse de l'interface de programmation que donne le jeton d'accès. '' quand Grist ne
   // donne pas d'adresse lisible (jeton refusé, adresse sans hôte) ; ne lève jamais. Un constat, pas une preuve : js/state-mode.js s'en sert pour avertir, jamais pour autoriser.
   async function getInstanceHost() {
@@ -1433,5 +1457,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

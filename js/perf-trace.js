@@ -269,6 +269,51 @@ const PerfTrace = (function () {
     return ['Appels à Grist : ' + total.n + ' en tout, ' + span(total.ms) + ' cumulées (les plus longs d’abord ; un « signes » = ce que l’appel lit ou envoie)']
       .concat(rows.map(([label, item]) => '   ' + label + ' : ' + item.n + ' fois, ' + span(item.ms) + ' en tout, le plus long ' + span(item.max) + (item.chars ? ', ' + megabytes(item.chars) + ' de signes' : '')));
   }
+  // --- La lecture légère (SQL) : répond-elle chez cette personne, et en combien de temps, à côté de la lecture complète du démarrage ---
+  // La table des modèles se lit EN ENTIER (contenus compris) au démarrage. Lire seulement ses noms, ses dates et ses longueurs par l'interface SQL du document (js/grist-api.js:lightQuery) coûterait bien moins
+  // si elle répond ; ce que le rapport dit ici le décide (23/11). Une seule lecture, faite quand on enregistre le rapport (Ctrl + Alt + Maj + L) : rien ne part sur le réseau tant que personne ne le demande.
+  // Les valeurs de SQL sont comparées à celles du cache (des dates qui s'égalent, des longueurs qui s'égalent) : ce que la lecture légère saurait dire d'un modèle changé, sans le relire.
+  const PROBE_TIMEOUT_MS = 4000;
+  let lightProbeResult = null;
+  const codePoints = text => { let count = text.length; for (let i = 0; i < text.length; i++) { const unit = text.charCodeAt(i); if (unit >= 0xD800 && unit <= 0xDBFF) count--; } return count; };
+  async function probeLight() {
+    const start = performance.now();
+    const done = result => { lightProbeResult = Object.assign({ ms: Math.round(performance.now() - start) }, result); return lightProbeResult; };
+    if (typeof GristAPI === 'undefined' || typeof GristAPI.lightQuery !== 'function' || typeof Templates === 'undefined' || typeof SchemaColumns === 'undefined') return done({ state: 'absent' });
+    try {
+      // Les noms que le document PORTE (les anciens, français, d'une bêta : SchemaColumns.whereIs), pas ceux du code.
+      const quote = name => '"' + String(name).replace(/"/g, '""') + '"';
+      const dateAt = SchemaColumns.whereIs(Templates.TABLE_NAME, 'ModifiedAt');
+      const contentAt = SchemaColumns.whereIs(Templates.TABLE_NAME, 'Content');
+      const rows = await GristAPI.lightQuery('SELECT id, ' + quote(dateAt.column) + ' AS ModifiedAt, length(' + quote(contentAt.column) + ') AS taille FROM ' + quote(dateAt.table), PROBE_TIMEOUT_MS);
+      const cached = Templates.getCached();
+      const byId = new Map(cached.map(template => [String(template.id), template]));
+      let seen = 0, sameDates = 0, sameLengths = 0;
+      rows.forEach((row) => {
+        const template = byId.get(String(row.id));
+        if (!template) return;
+        seen += 1;
+        if (Templates.sameDateModif(row.ModifiedAt, template.dateModif)) sameDates += 1;
+        if (typeof template.contenu === 'string' && Number(row.taille) === codePoints(template.contenu)) sameLengths += 1;
+      });
+      return done({ state: 'ok', rows: rows.length, cached: cached.length, seen, sameDates, sameLengths, chars: charsOf(rows, 0) });
+    } catch (error) {
+      return done({ state: 'refused', reason: (error && error.reason) || 'erreur', status: error && error.status });
+    }
+  }
+  const REASONS = { jeton: 'Grist ne donne pas de jeton', 'réseau': 'la demande n’a pas abouti (hors ligne, politique du site ou de GFS)', http: 'Grist a refusé', 'délai': 'pas de réponse à temps', forme: 'réponse que je ne sais pas lire', erreur: 'erreur' };
+  function lightFacts() {
+    const probe = lightProbeResult;
+    if (!probe) return ['Lecture légère (SQL) : pas encore sondée (elle se fait quand on enregistre ce rapport par Ctrl + Alt + Maj + L)'];
+    if (probe.state === 'absent') return ['Lecture légère (SQL) : indisponible dans cette page'];
+    const full = typeof Templates !== 'undefined' && typeof SchemaColumns !== 'undefined' ? gristCalls.get('fetchTable ' + SchemaColumns.actualTable(Templates.TABLE_NAME)) : null;
+    const against = full && full.n ? ' ; la lecture complète de la table des modèles : ' + span(full.max) + ' au plus long, ' + megabytes(full.chars / full.n) + ' par lecture' : '';
+    if (probe.state === 'refused') return ['Lecture légère (SQL) : refusée après ' + span(probe.ms) + ' - ' + (REASONS[probe.reason] || probe.reason) + (probe.status ? ' (HTTP ' + probe.status + ')' : '') + against];
+    return [
+      'Lecture légère (SQL) : répond en ' + span(probe.ms) + ' (' + probe.rows + ' lignes, ' + megabytes(probe.chars) + ')' + against,
+      '   dates qui s’égalent à celles du cache : ' + probe.sameDates + ' sur ' + probe.seen + ' ; longueurs qui s’égalent : ' + probe.sameLengths + ' sur ' + probe.seen + (probe.rows !== probe.cached ? ' ; ATTENTION : ' + probe.rows + ' lignes en SQL, ' + probe.cached + ' modèles en cache' : ''),
+    ];
+  }
   // Les fichiers du chargement : les plus lents, ceux servis sans transfert (le cache du navigateur : seulement pour ceux de la page, un autre site ne donne pas sa taille), et pour chaque site le dernier fichier reçu
   // (l'éditeur vient de esm.sh : s'il arrive longtemps après les scripts, la page l'attend).
   function fileFacts() {
@@ -307,6 +352,7 @@ const PerfTrace = (function () {
       'Chargement de la page : ' + loadFacts(),
       ...fileFacts(),
       ...gristFacts(),
+      ...lightFacts(),
       'Document : ' + documentFacts(),
       'Arrêts de la page (retard de ' + GAP_MS + ' ms ou plus) : ' + totals.gaps + ', ' + seconds(totals.blockedMs) + ' au total, le plus long ' + seconds(totals.maxGapMs) + ' ; longues tâches ' + totals.longTasks + ' ; fonctions lentes ' + totals.slowCalls,
     ];
@@ -329,6 +375,7 @@ const PerfTrace = (function () {
   }
   // Enregistre le rapport dans un fichier et le copie ; rend { name, copied }.
   async function download() {
+    await probeLight();
     const text = report();
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
     const name = 'rapport-fluidite-' + stamp + '.txt';
@@ -347,5 +394,5 @@ const PerfTrace = (function () {
   }, true);
 
   mark('page ouverte');
-  return { mark, watch, watchGrist, opened, report, summary, download, events: () => events.slice(), totals: () => Object.assign({}, totals), gristCalls: () => Array.from(gristCalls.entries()).map(([label, item]) => Object.assign({ label }, item)) };
+  return { mark, watch, watchGrist, opened, report, summary, download, probeLight, events: () => events.slice(), totals: () => Object.assign({}, totals), gristCalls: () => Array.from(gristCalls.entries()).map(([label, item]) => Object.assign({ label }, item)) };
 })();
