@@ -90,10 +90,13 @@ const VariableCondition = (function () {
         input.addEventListener('input', () => ctx.previewRun.schedule());
       }
       affixRow.append(beforeField.label, beforeField.input, afterField.label, afterField.input, affixHint);
-      // « Sinon afficher » : une seconde grille, la même, tout en bas. L'aperçu garde sa place, entre les deux : à 700 × 400 ce qui se voyait dès l'ouverture - les règles,
-      // « Avant » / « Après », la première ligne de l'aperçu - reste où c'était, la ligne nouvelle vient en dessous. Une fenêtre ne montre que la ligne du nœud qu'elle règle.
+      // « Plus d'options » : le texte avant et après la valeur se règle rarement, il est replié (ouvert d'office quand l'un des deux est rempli, cf. openAt).
+      const moreFold = VariableModal.fold('', '');
+      moreFold.body.append(affixRow);
+      // « Sinon afficher » : une seconde grille, la même, juste sous les règles - c'est la suite de la condition (« sinon, écrire… »), pas un détail après l'aperçu. Une fenêtre ne
+      // montre que la ligne du nœud qu'elle règle. L'aperçu est le dernier, collé au bas de la fenêtre : il reste sous les yeux pendant qu'on règle (gabarit commun, js/variable-modal.js).
       const textOtherwise = Object.fromEntries(Object.entries(TEXT_OTHERWISE).map(([type, kind]) => [type, buildOtherwiseTextFields(kind)]));
-      const { box: previewArea, lines: [currentLine, countLine] } = VariableModal.previewBox(2);
+      const { box: previewArea, lines: [currentLine, countLine] } = VariableModal.previewBox(2, { detail: true });
       // « Défaire le bloc » / « Défaire la valeur » vient juste après « Retirer la condition » : le premier `.var-modal-danger` reste celui-ci (les
       // tests et les autres fenêtres trouvent « Annuler » par `button:not(.var-modal-primary):not(.var-modal-danger)`) ; son texte garde la couleur du
       // texte (css/variable-actions.css).
@@ -115,11 +118,11 @@ const VariableCondition = (function () {
       clipStatus.setAttribute('role', 'status');
       const clip = el('span', 'var-condition-clip');
       clip.append(copyBtn, pasteBtn, clipStatus);
-      ctx.win.body.append(intro, modeRow, rulesBox, affixRow, previewArea, ...Object.values(textOtherwise).map(free => free.row));
+      ctx.win.body.append(intro, modeRow, rulesBox, ...Object.values(textOtherwise).map(free => free.row), moreFold.box, previewArea);
       ctx.refs = {
         title: ctx.win.title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, currentLine, countLine,
         removeBtn, unwrapBtn, cancelBtn, saveBtn,
-        affixRow, beforeLabel: beforeField.label, beforeInput: beforeField.input, afterLabel: afterField.label, afterInput: afterField.input, affixHint,
+        affixRow, moreFold, beforeLabel: beforeField.label, beforeInput: beforeField.input, afterLabel: afterField.label, afterInput: afterField.input, affixHint,
         textOtherwise,
       };
 
@@ -205,8 +208,7 @@ const VariableCondition = (function () {
       const t = texts();
       const r = ctx.refs;
       r.title.textContent = I18n.t(t.title);
-      if (showsValue()) r.intro.replaceChildren(el('span', 'var-badge', VariableModal.badgeText(node)), document.createTextNode(' ' + I18n.t(t.intro)));
-      else r.intro.textContent = I18n.t(t.intro);
+      VariableModal.setIntro(r.intro, showsValue() ? el('span', 'var-badge', VariableModal.badgeText(node)) : null, I18n.t(t.intro));
       r.modeBefore.textContent = I18n.t(t.modeBefore);
       r.modeAfter.textContent = I18n.t('varCond.modeAfter');
       r.modeSelect.setAttribute('aria-label', I18n.t('varCond.modeAria'));
@@ -221,6 +223,8 @@ const VariableCondition = (function () {
       r.cancelBtn.textContent = I18n.t('common.cancel');
       r.saveBtn.textContent = I18n.t('common.save');
       r.affixRow.hidden = !showsValue();
+      r.moreFold.box.hidden = !showsValue();
+      r.moreFold.setTitle(I18n.t('varModal.more'), I18n.t('varCond.more.affix'));
       for (const [type, free] of Object.entries(r.textOtherwise)) free.row.hidden = type !== node.type.name;
       r.beforeLabel.textContent = I18n.t('varCond.affixBefore');
       r.afterLabel.textContent = I18n.t('varCond.affixAfter');
@@ -229,6 +233,8 @@ const VariableCondition = (function () {
       r.affixHint.textContent = I18n.t('varCond.affixHint');
       r.beforeInput.value = VariableFormat.affix(node.attrs.before) || '';
       r.afterInput.value = VariableFormat.affix(node.attrs.after) || '';
+      // Un texte avant ou après déjà écrit : le repli s'ouvre, la valeur ne reste pas cachée.
+      r.moreFold.setOpen(showsValue() && !!(r.beforeInput.value || r.afterInput.value));
       const free = textField();
       if (free) {
         free.label.textContent = I18n.t('varCond.otherwiseLabel');

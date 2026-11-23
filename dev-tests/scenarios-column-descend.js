@@ -981,7 +981,7 @@
 
   cases.push({
     id: 'coldesc_window_leaves_other_attributes_of_a_bubble_as_it_was',
-    description: 'Après un choix de colonne (annulé), « Autres attributs » d’une bulle #CdProjets.Accompagnateur retrouve tout ce que le choix de colonne cache ou change : sous-titre, cases à cocher, « Remplacer », « Insérer 0 attribut » ; cocher Email puis « Insérer » pose toujours #CdProjets.Accompagnateur.Email juste après la bulle',
+    description: 'Après un choix de colonne (annulé), « Autres attributs » d’une bulle #CdProjets.Accompagnateur retrouve tout ce que le choix de colonne cache ou change : sous-titre, cases à cocher, « Remplacer », le bouton « Insérer » sans « 0 colonne » (grisé tant que rien n’est coché) ; cocher Email puis « Insérer » pose toujours #CdProjets.Accompagnateur.Email juste après la bulle',
     run: (h) => withSeed(h, async () => {
       Editor.setHTML('<p>' + badgeHtml('CdProjets', 'Accompagnateur') + '</p>');
       await h.sleep(150);
@@ -1012,7 +1012,7 @@
       ed.state.doc.firstChild.forEach(n => { if (n.type.name === 'varBadge') keys.push(n.attrs.key); });
       const pass = during.shown && same(during.inputs, ['radio']) && during.replaceHidden && during.primary === 'Choisir' && answer === null
         && bubble.shown && bubble.title === 'Autres colonnes de « CdAnnuaire »' && bubble.intro.length > 0 && !bubble.introHidden && same(bubble.inputs, ['checkbox']) && !bubble.replaceHidden
-        && bubble.replace === 'Remplacer' && bubble.primary === 'Insérer 0 colonne' && bubble.note.indexOf('« Insérer » ajoute les colonnes cochées') !== -1 && same(bubble.crumbs, ['CdProjets', 'Accompagnateur'])
+        && bubble.replace === 'Remplacer' && bubble.primary === 'Insérer' && bubble.note.indexOf('« Insérer » ajoute les colonnes cochées') !== -1 && same(bubble.crumbs, ['CdProjets', 'Accompagnateur'])
         && ticked === 'Insérer 1 colonne' && same(keys, ['CdProjets.Accompagnateur', 'CdProjets.Accompagnateur.Email']) && !pickShown();
       return { pass, notes: JSON.stringify({ during, answer, bubble, ticked, keys }) };
     }),

@@ -110,9 +110,16 @@ const VariableCalc = (function () {
     const status = el('p', 'pp-calc-status');
     status.id = 'pp-calc-status';
     status.setAttribute('role', 'status');
-    win.body.append(label, input, hint, functions, functionsHint, status);
+    // Gabarit commun (js/variable-modal.js) : le geste - « Tapez # pour choisir une colonne » - et les fonctions restent sous les yeux ; ce qui s'apprend une fois (les opérations, ce que
+    // fait une fonction sur plusieurs lignes) est dans « Aide », et le résultat est collé en bas.
+    const opsHint = el('p', 'pp-link-note');
+    const help = VariableModal.fold('', '');
+    help.body.append(opsHint, functionsHint);
+    const result = el('div', 'var-result');
+    result.appendChild(status);
+    win.body.append(label, input, hint, functions, help.box, result);
     const { cancel, ok } = win.addButtons();
-    refs = { label, input, hint, functionsLabel, functionButtons, functionsHint, status, cancel, ok };
+    refs = { label, input, hint, opsHint, help, functionsLabel, functionButtons, functionsHint, status, cancel, ok };
 
     // La liste des colonnes s'ouvre sous le champ après la touche de déclenchement, comme dans le nom du PDF ; Entrée y choisit une colonne avant de
     // valider la fenêtre (son écouteur passe le premier et prend l'évènement : `defaultPrevented`).
@@ -159,6 +166,9 @@ const VariableCalc = (function () {
     input.value = opts.formula ? typedFormula(opts.formula) : '';
     input.removeAttribute('aria-invalid');
     hint.textContent = I18n.t('calc.formula.hint', { trigger: trigger() });
+    refs.opsHint.textContent = I18n.t('calc.help.operations');
+    refs.help.setTitle(I18n.t('varModal.help'), I18n.t('calc.help.what'));
+    refs.help.setOpen(false);
     functionsLabel.textContent = I18n.t('calc.functions.label');
     const names = Formula.functionNames(lang());
     functionButtons.forEach((fn, i) => {

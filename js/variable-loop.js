@@ -394,29 +394,21 @@ const VariableLoop = (function () {
     const filterBox = el('div', 'var-loop-filter');
 
     // « Lignes affichées » : réservé à l'image (toutes les lignes, ou une seule - la première ou la dernière - après le filtre et le tri), cf. renderPick.
-    const pickLabel = el('label', 'var-loop-label');
+    const pickLabel = el('label');
     pickLabel.htmlFor = 'var-loop-pick';
     const pickSelect = el('select');
     pickSelect.id = 'var-loop-pick';
-    const pickRow = el('div', 'var-loop-pick');
-    pickRow.append(pickLabel, pickSelect);
-    const sortLabel = el('label', 'var-loop-label');
+    const sortLabel = el('label');
     sortLabel.htmlFor = 'var-loop-sort';
     const sortColumn = el('select');
     sortColumn.id = 'var-loop-sort';
     const sortDirection = el('select');
     const sortRow = el('div', 'var-loop-sort-row');
     sortRow.append(sortColumn, sortDirection);
-    const sortCol = el('div');
-    sortCol.append(sortLabel, sortRow);
-    const emptyLabelEl = el('label', 'var-loop-label');
+    const emptyLabelEl = el('label');
     emptyLabelEl.htmlFor = 'var-loop-empty';
     const emptySelect = el('select', 'var-loop-empty-select');
     emptySelect.id = 'var-loop-empty';
-    const emptyCol = el('div');
-    emptyCol.append(emptyLabelEl, emptySelect);
-    const two = el('div', 'var-loop-two');
-    two.append(sortCol, emptyCol);
     // Le texte « Si aucune ligne » : un champ à variables, le même que le « Sinon afficher » d'une valeur (js/field-editor.js, monté par mountEmptyField). L'élément `input` n'est
     // qu'un <div> qui en reprend l'interface (`value`, `placeholder`, évènement `input`) : le reste de la fenêtre le traite comme le champ de texte d'avant.
     const emptyText = { label: el('label'), input: el('div', 'var-loop-empty-field') };
@@ -425,16 +417,30 @@ const VariableLoop = (function () {
     emptyText.input.id = 'var-loop-empty-text';
     emptyText.input.setAttribute('aria-labelledby', emptyText.label.id);
     emptyText.input.spellcheck = false;
-    const emptyTextRow = el('div', 'var-loop-empty-text');
-    emptyTextRow.append(emptyText.label, emptyText.input);
 
-    const { box: previewArea, lines: [currentLine, statsLine] } = VariableModal.previewBox(2);
+    const { box: previewArea, lines: [currentLine, statsLine] } = VariableModal.previewBox(2, { detail: true });
     const { first: removeBtn, cancel: cancelBtn, ok: saveBtn } = win.addButtons('var-modal-danger');
 
-    win.body.append(intro, sourceLabel, sourceMode, sourceBox, repeatLabelEl, repeatSeg, repeatNote, separators.row, filterLabel, filterBox, two, emptyTextRow, pickRow, previewArea);
+    // Le gabarit commun (js/variable-modal.js) : trois décisions en lignes « étiquette, réglage » - les lignes utilisées, ce qui se répète, le filtre -, le reste (séparateurs, lignes
+    // affichées, tri, « si aucune ligne ») replié dans « Plus d'options », le résultat collé en bas. Les mêmes éléments qu'avant, sous d'autres parents : les identifiants ne changent pas.
+    const decisions = VariableModal.form();
+    decisions.row(sourceLabel, [sourceMode, sourceBox]);
+    decisions.row(repeatLabelEl, [repeatSeg, repeatNote]);
+    decisions.row(filterLabel, [filterBox]);
+    const more = VariableModal.fold('', '');
+    const rare = VariableModal.form();
+    const pickFormRow = rare.row(pickLabel, [pickSelect]);
+    pickFormRow.classList.add('var-loop-pick');
+    rare.row(sortLabel, [sortRow]);
+    rare.row(emptyLabelEl, [emptySelect]);
+    const emptyTextFormRow = rare.row(emptyText.label, [emptyText.input]);
+    emptyTextFormRow.classList.add('var-loop-empty-text');
+    more.body.append(separators.row, rare.box);
+
+    win.body.append(intro, decisions.box, more.box, previewArea);
     refs = {
-      title: win.title, intro, sourceLabel, sourceMode, sourceText, sourceEdit, sourceBy, sourceByBox, scopeSelect, scopeBox, repeatLabelEl, repeatSeg, repeatNote, separators, filterLabel, filterBox, pickRow, pickLabel, pickSelect, sortLabel,
-      sortColumn, sortDirection, emptyLabelEl, emptySelect, emptyTextRow, emptyText, currentLine, statsLine, removeBtn, cancelBtn, saveBtn,
+      title: win.title, intro, sourceLabel, sourceMode, sourceText, sourceEdit, sourceBy, sourceByBox, scopeSelect, scopeBox, repeatLabelEl, repeatSeg, repeatNote, separators, filterLabel, filterBox, pickRow: pickFormRow, pickLabel, pickSelect, sortLabel,
+      sortColumn, sortDirection, emptyLabelEl, emptySelect, emptyTextRow: emptyTextFormRow, emptyText, currentLine, statsLine, removeBtn, cancelBtn, saveBtn, more,
     };
 
     wireModal();
@@ -495,7 +501,7 @@ const VariableLoop = (function () {
     const inline = state.working.repeat === 'inline';
     if (inline) badge.setAttribute('data-loop-repeat', 'inline');
     const introKey = inline ? (isImageNode(state.node) ? 'varLoop.intro.inlineImage' : 'varLoop.intro.inline') : 'varLoop.intro.zone';
-    refs.intro.replaceChildren(badge, document.createTextNode(' ' + I18n.t(introKey, { table: state.source.table })));
+    VariableModal.setIntro(refs.intro, badge, I18n.t(introKey, { table: state.source.table }));
   }
   // « Lignes de « Lignes » trouvées via Lignes.Facture · Modifier le lien » : le lien de la table (un par table et par document, js/variables.js), ou
   // la colonne Liste de références qui fournit les lignes (rien à modifier : c'est la cellule de la page, ou celle de la ligne de la zone englobante),
@@ -641,9 +647,30 @@ const VariableLoop = (function () {
       btn.addEventListener('click', () => setRepeat(repeat));
       repeatSeg.appendChild(btn);
     });
+    // Un seul choix : ce n'est pas un choix, la ligne le dit en clair (le bouton reste, pour les lecteurs d'écran et le clavier, sans l'apparence d'un interrupteur).
+    repeatSeg.classList.toggle('is-single', state.place.repeats.length === 1);
     // Les copies d'une image « dans la phrase » sont côte à côte : pas de séparateur à régler.
     separators.row.hidden = state.working.repeat !== 'inline' || isImageNode(state.node);
     renderRepeatNote();
+    renderMore();
+  }
+  // Le repli « Plus d'options » : son titre dit ce qu'il contient - seulement ce que la bulle propose (le séparateur d'une phrase, les lignes affichées d'une image).
+  function renderMore() {
+    const parts = [];
+    if (!refs.separators.row.hidden) parts.push(I18n.t('varLoop.more.separator'));
+    if (!refs.pickRow.hidden) parts.push(I18n.t('varLoop.more.pick'));
+    parts.push(I18n.t('varLoop.more.sort'), I18n.t('varLoop.more.empty'));
+    refs.more.setTitle(I18n.t('varModal.more'), parts.join(', '));
+  }
+  // Un réglage du repli qui n'est pas celui d'origine : il s'ouvre d'office, pour qu'aucune valeur ne reste cachée.
+  function moreIsSet() {
+    const w = state.working;
+    const base = workingCopy(null, w.repeat, state.place, state.source);
+    if (w.repeat === 'inline' && !isImageNode(state.node) && (w.separator !== base.separator || w.lastSeparator !== base.lastSeparator)) return true;
+    if (isImageNode(state.node) && w.pick !== 'all') return true;
+    // « Si aucune ligne » : le choix d'origine est celui d'une boucle neuve ET celui qu'une boucle enregistrée sans ce réglage reprend (`normalizeLoop` : « Laisser vide » pour une phrase).
+    const originals = [base.empty, LoopRules.defaultEmpty(w.repeat, w.repeat === 'inline')];
+    return !!w.sortColumn || w.sortDirection !== 'asc' || originals.indexOf(w.empty) === -1;
   }
   // « La variable, dans sa cellule » dans une ligne de tableau qui porte d'autres variables : elles ne suivent pas, seule cette cellule est répétée. La note le dit
   // et montre le choix qui les fait suivre, sauf quand une case fusionnée interdit « La ligne du tableau ».
@@ -658,7 +685,9 @@ const VariableLoop = (function () {
     const others = state.working.repeat === 'inline' && state.place.kind === 'table' ? state.place.rowOthers : 0;
     repeatNote.hidden = !others;
     if (!others) { repeatNote.textContent = ''; return; }
-    const how = state.place.rowMerged ? '' : ' ' + I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') });
+    // Le choix qui ferait suivre les autres variables n'est cité que s'il est proposé : une autre bulle qui répète déjà la ligne le ferme, une case fusionnée l'interdit.
+    const offered = state.place.repeats.indexOf('row') !== -1 && !state.place.rowMerged;
+    const how = offered ? ' ' + I18n.t('varLoop.repeat.rowOthersHow', { row: I18n.t('varLoop.repeat.row') }) : '';
     repeatNote.textContent = I18n.t('varLoop.repeat.rowOthers', { count: others }) + how;
   }
   function setRepeat(repeat) {
@@ -707,7 +736,7 @@ const VariableLoop = (function () {
       // « Et » / « Ou » devant une ligne : un clic relie toutes les lignes du niveau par l'autre mot, la liste « toutes / au moins une » du haut suit pour le filtre
       // entier ; le focus revient au bouton retracé (`root` : `filterBox` reste en place quand `rulesBox` est remplacée).
       setMode: next => { state.working.filterMode = next; },
-      buildRow: (rule, row) => ConditionFields.buildRuleRow(rule, row.index, Object.assign({}, row, { options: { table: state.source.table } })),
+      buildRow: (rule, row) => ConditionFields.buildRuleRow(rule, row.index, Object.assign({}, row, { options: { table: state.source.table, typeAsTitle: true } })),
       removeItem: index => { rules.splice(index, 1); redraw(); },
       redraw,
       root: filterBox,
@@ -938,7 +967,7 @@ const VariableLoop = (function () {
       if (stale()) return;
       setLine(currentLine, current.text, current.good);
       // Toutes les lignes : la même liste pour chaque ligne de la page, rien à compter ligne par ligne - seulement prévenir quand elle est très longue.
-      if (loop.all) { setLine(statsLine, result.items.length > MANY_ROWS ? I18n.t('varLoop.stats.many', { count: result.items.length }) : '', false); return; }
+      if (loop.all) { setLine(statsLine, result.items.length > MANY_ROWS ? I18n.t('varLoop.stats.many', { count: result.items.length }) : '', false, true); return; }
       const stats = await statsSummary(shown, tableId, ctx, stale);
       if (stale() || !stats) return;
       setLine(statsLine, stats, false);
@@ -1047,10 +1076,13 @@ const VariableLoop = (function () {
     renderPick();
     renderSort();
     renderEmpty();
+    renderMore();
+    r.more.setOpen(moreIsSet());
     // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar,
     // css/style.css).
     EditorCore.hideFloatingContextToolbars();
-    win.show(() => r.repeatSeg.querySelector('button[aria-pressed="true"]'));
+    // Le focus arrive sur le choix en cours ; quand il n'y a qu'un choix (écrit comme du texte), sur le premier réglage à faire.
+    win.show(() => (state.place.repeats.length === 1 ? r.filterBox.querySelector('button, select, input') : null) || r.repeatSeg.querySelector('button[aria-pressed="true"]'));
     updatePreview();
     if (probing) probeLinkedView(state);
     // Une colonne ajoutée ou retypée dans Grist depuis le chargement : relue à l'ouverture, les listes de colonnes (la colonne qui rattache, le filtre, le tri) se retracent si quelque chose a changé (consigne 093).

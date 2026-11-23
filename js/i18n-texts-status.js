@@ -388,6 +388,7 @@ const I18nTextsStatus = {
   'condStyle.addRuleMax': { fr: 'Au plus {max} règles par élément', en: 'At most {max} rules per element' },
   'condStyle.removeRule': { fr: 'Supprimer cette règle', en: 'Remove this rule' },
   'condStyle.remove': { fr: 'Retirer la mise en forme', en: 'Remove formatting' },
+  'condStyle.help.what': { fr: 'ordre des règles', en: 'order of the rules' },
   'condStyle.ignored': { fr: 'Une règle sans condition complète, ou sans couleur ni trait, n’est pas enregistrée.', en: 'A rule without a complete condition, or without a color or style, is not saved.' },
   'condStyle.saveLost': { fr: 'Cet élément a bougé ou disparu depuis l’ouverture de la fenêtre : rien n’est enregistré.', en: 'This element moved or disappeared since the window was opened: nothing is saved.' },
   'condStyle.debug.chooseCondition': { fr: 'Complétez la condition d’une règle et choisissez une couleur ou un trait pour voir l’aperçu.', en: 'Complete a rule’s condition and choose a color or style to see a preview.' },

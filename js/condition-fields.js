@@ -229,6 +229,8 @@ const ConditionFields = (function () {
       const label = facts.type && !opts.warningOnly ? friendlyTypeLabel(facts.type) : '';
       typeHint.textContent = facts.missingFromRecord ? I18n.t('macro.modal.columnMissingFromRecord') : label;
       typeHint.classList.toggle('is-warning', facts.missingFromRecord);
+      // `typeAsTitle` (les fenêtres de bulle) : le type se lit dans l'info-bulle de la colonne, pas sous chaque règle ; seul l'avertissement « colonne absente » reste écrit.
+      if (opts.typeAsTitle) wrap.title = label;
       // Une ligne d'indication confiée par l'appelant n'occupe de place sous la règle que quand elle dit quelque chose.
       if (opts.typeHint) typeHint.hidden = !typeHint.textContent;
       if (onTypeChange) onTypeChange(facts.type, facts.col, facts.table, facts.linkTable);

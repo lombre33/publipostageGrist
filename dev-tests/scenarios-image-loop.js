@@ -405,9 +405,15 @@
       await selectImage(h, 0);
       pressLoop();
       await h.sleep(400);
+      // Le champ est dans le repli « Plus d'options » (gabarit commun des fenêtres de bulle) : fermé d'office tant que toutes les lignes sont montrées, ouvert pour le voir.
+      const fold = document.querySelector('#var-loop-modal details.var-fold');
+      const foldClosedByDefault = !!fold && !fold.open;
+      if (fold) fold.open = true;
+      await h.sleep(30);
       const row = document.querySelector('#var-loop-modal .var-loop-pick');
       const select = document.getElementById('var-loop-pick');
-      const shown = windowShown() && !!row && !row.hidden && row.getClientRects().length > 0;
+      // Le champ du repli doit se voir (l'enveloppe de la ligne se masque avec lui).
+      const shown = windowShown() && !!row && !row.hidden && !!select && select.getClientRects().length > 0;
       const choices = select ? Array.from(select.options).map(o => o.value) : [];
       const before = select ? select.value : null;
       if (select) { select.value = 'first'; select.dispatchEvent(new Event('change', { bubbles: true })); }
@@ -434,14 +440,14 @@
       const badgeRow = document.querySelector('#var-loop-modal .var-loop-pick');
       const badgeHidden = !badgeRow || badgeRow.hidden || badgeRow.getClientRects().length === 0;
       const checks = {
-        shown, threeChoices: same(choices, ['all', 'first', 'last']), allByDefault: before === 'all',
+        shown, foldClosedByDefault, threeChoices: same(choices, ['all', 'first', 'last']), allByDefault: before === 'all',
         previewOneImage: preview.some(l => /1 image/.test(l)),
         savedFirst: !!saved && !!saved.loop && saved.loop.pick === 'first' && saved.loop.repeat === 'inline',
         frameFr: notes.fr === 'Seulement la première ligne de « ' + LINKED + ' »', frameEn: notes.en === 'Only the first “' + LINKED + '” row',
         existingPickIsOffered: kept === 'last', badgeWindowHasNoPickField: badgeHidden,
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, choices, before, preview, saved: saved && saved.loop, notes }) : 'ok' };
+      return { pass: failed.length === 0, notes: failed.length ? JSON.stringify({ failed, choices, before, preview, saved: saved && saved.loop, notes, fold: !!fold }) : 'ok' };
     },
   });
 

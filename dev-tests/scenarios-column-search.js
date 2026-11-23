@@ -385,6 +385,9 @@
       pressToolbarButton('var-loop');
       await h.sleep(700);
       const loop = loopModal();
+      // Le tri est dans le repli « Plus d'options » (gabarit commun des fenêtres de bulle) : fermé d'office, ouvert ici pour mesurer et cliquer.
+      loop.querySelector('details.var-fold').open = true;
+      await h.sleep(30);
       const trigger = triggerIn(sortRowOf(loop));
       const select = selectOf(trigger);
       const direction = sortRowOf(loop).lastElementChild;

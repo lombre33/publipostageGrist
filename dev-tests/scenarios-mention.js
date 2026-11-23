@@ -823,7 +823,7 @@
           && got.rows === wanted && got.current === '· cette pastille' && got.currentCol === 'NomComplet' && got.arrows === 0 && got.inheritHidden
           && got.note.indexOf('Valeurs de cette fiche.') === 0 && got.note.indexOf('« Insérer » ajoute les colonnes cochées juste après la pastille, séparées par une espace ; « Remplacer » les met à sa place.') !== -1
           && got.replace.text === 'Remplacer' && got.replace.title === 'Remplace @Marie Martin par les colonnes cochées, au lieu de les insérer après elle.' && got.replace.off
-          && got.insert.text === 'Insérer 0 colonne' && got.insert.off
+          && got.insert.text === 'Insérer' && got.insert.off
           && got.emptyTitle === 'Vide pour cette fiche : la pastille n’écrirait rien.' && got.attachmentTitle === 'Une pièce jointe ne se cite pas en texte.'
           && got.barHidden && got.pageRow === 1 && got.untouched;
         return { pass, notes: JSON.stringify(got) };

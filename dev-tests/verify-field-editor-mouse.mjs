@@ -19,6 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { reveal } from './reveal-in-window.mjs'; // un champ sous le résultat collé ou dans un repli fermé : la souris le découvre comme la personne
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -157,6 +158,7 @@ async function realHover(selector) {
 async function leaveToolbar() { await page.mouse.move(350, 390, { steps: 3 }); await page.waitForTimeout(150); }
 // Un élément : où il est, s'il est entièrement dans le panneau, et si rien ne le recouvre en son centre.
 async function hitTest(selector) {
+  await reveal(page, selector);
   return page.evaluate(sel => {
     const el = document.querySelector(sel);
     if (!el) return { found: false };
