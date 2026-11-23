@@ -15,7 +15,7 @@
 //   TableDoubles.merge(pairs) -> Promise<[résumé]>                résumé : { table, kept, extra, extraRows, added, filled, matched, conflicts, dropped, columnsAdded, pending }
 //   TableDoubles.verify(pairs) -> Promise<[résumé]>               la même passe sans rien écrire : `pending` dit ce qui resterait à reprendre
 //   TableDoubles.removeExtra(pair) -> Promise<void>               supprime l'ancienne table ; refuse si la réunion n'est pas complète
-//   TableDoubles.checkAfterOpen(hooks) -> Promise<{ pairs, action }>   la question posée à l'ouverture (js/main.js)
+//   TableDoubles.checkAfterOpen(hooks) -> Promise<{ pairs, action }>   la question posée à l'ouverture (js/main.js) ; une réponse ne revient pas tant que l'ancienne table n'a rien de nouveau à donner
 const TableDoubles = (function () {
   const SEP = '\u0000';
   const BATCH = 25; // lignes ajoutées par appel : une table lourde (le contenu des modèles) ne part pas en un seul envoi
@@ -274,12 +274,20 @@ const TableDoubles = (function () {
     try { await SchemaColumns.docApi.listTables(); } catch (e) { /* la prochaine lecture le fera */ }
   }
 
-  // --- Ce que la personne a répondu : « La garder » ------------------------------------------------------------------------------------------------------------------------
-  // Retenu par personne (PersonStore : `pp_doubles_kept`, une courte liste « document + ancienne table » en JSON, jamais une donnée du document ; chez GFS, l'espace de l'app), par document et par ancienne
-  // table : la réponse ne vaut que pour cet endroit-ci. Absent, illisible ou refusé par le stockage : la question est reposée, jamais l'inverse.
+  // --- Ce que la personne a répondu ----------------------------------------------------------------------------------------------------------------------------------------
+  // Une réponse - « La garder », la suppression faite, ou refusée par le document - clôt la question pour cette ancienne table, dans ce document : elle ne revient pas à chaque ouverture, seulement quand l'ancienne
+  // table a de nouveau quelque chose à donner (la réunion se repropose alors, puis la suppression). Trois mémoires, lues ensemble, parce qu'aucune ne tient partout (un widget intégré dans un autre document ou
+  // hébergé par GFS n'a ni le stockage du navigateur, ni toujours l'adresse de son document) :
+  //  - le DOCUMENT : le réglage `doublesKept` (la liste des anciennes tables closes), dans la ligne réservée aux réglages du document (Templates.updateDocumentSettings). Valable pour toute l'équipe et dans tous les cadres
+  //    qui portent le widget ; c'est celle qui tient quand les deux autres échouent. Jamais écrit pour une suppression qui a échoué (cela ne vaut que pour la personne qui n'a pas eu le droit) ;
+  //  - la PERSONNE (PersonStore : `pp_doubles_kept`, une courte liste « document + ancienne table » en JSON ; chez GFS, l'espace de l'app) : le document lui-même peut ne pas être inscriptible ;
+  //  - la PAGE (en mémoire) : jusqu'à son rechargement, quoi qu'il arrive du reste.
+  // Aucune des trois lisible ou inscriptible : la question est reposée, jamais l'inverse (une suppression ne part que d'un « Supprimer » cliqué).
   const KEPT_KEY = 'pp_doubles_kept';
   const KEPT_MAX = 40;
-  // Le document, tel que Grist le nomme dans l'adresse de son interface de programmation (même clé que js/schema-renames.js) ; null : pas de réponse retenue.
+  const DOCUMENT_SETTING = 'doublesKept';
+  const answeredInPage = new Set();
+  // Le document, tel que Grist le nomme dans l'adresse de son interface de programmation (même clé que js/schema-renames.js) ; null : pas de réponse retenue pour la personne.
   async function documentKey() {
     try {
       const info = await grist.docApi.getAccessToken({ readOnly: true });
@@ -301,6 +309,33 @@ const TableDoubles = (function () {
     const list = readKept();
     const entry = docKey + SEP + extra;
     if (list.indexOf(entry) === -1) PersonStore.set(KEPT_KEY, JSON.stringify(list.concat(entry).slice(-KEPT_MAX)));
+  }
+  // Les anciennes tables closes d'après le document (des noms du registre, rien d'autre).
+  function documentAnswers() {
+    if (typeof Templates === 'undefined' || !Templates || typeof Templates.getDocumentSetting !== 'function') return [];
+    try {
+      const list = Templates.getDocumentSetting(DOCUMENT_SETTING);
+      const names = registryNames();
+      return Array.isArray(list) ? list.filter(name => typeof name === 'string' && names.has(name)) : [];
+    } catch (e) { return []; }
+  }
+  // Les anciennes tables dont la question est close, d'où que vienne la réponse.
+  function answeredTables(docKey) {
+    const answered = keptAnswers(docKey);
+    documentAnswers().forEach(name => answered.add(name));
+    const prefix = (docKey || '') + SEP;
+    answeredInPage.forEach(entry => { if (entry.indexOf(prefix) === 0) answered.add(entry.slice(prefix.length)); });
+    return answered;
+  }
+  // `inDocument` faux : la réponse ne vaut que pour cette personne et cette page (une suppression que le document a refusée).
+  async function rememberAnswer(docKey, extra, inDocument) {
+    answeredInPage.add((docKey || '') + SEP + extra);
+    try { rememberKept(docKey, extra); } catch (e) { /* stockage refusé : les autres mémoires restent */ }
+    if (!inDocument || typeof Templates === 'undefined' || !Templates || typeof Templates.updateDocumentSettings !== 'function') return;
+    try {
+      const list = documentAnswers();
+      if (list.indexOf(extra) === -1) await Templates.updateDocumentSettings({ [DOCUMENT_SETTING]: list.concat(extra) });
+    } catch (e) { console.warn('[TableDoubles] réponse non gardée dans le document', e); }
   }
 
   // --- La question posée à l'ouverture ----------------------------------------------------------------------------------------------------------------------------------------
@@ -335,10 +370,11 @@ const TableDoubles = (function () {
     try { planned = await verify(pairs); } catch (e) { return { pairs, action: 'unknown' }; }
     const pendingBefore = new Map(planned.map(item => [item.table, item.pending]));
     const needsMerge = planned.some(item => item.pending > 0);
-    // « La garder » est une réponse : tant que l'ancienne table n'a rien de nouveau à donner, on ne la repose pas à chaque ouverture.
+    // Une réponse déjà donnée (« La garder », la suppression faite ou refusée par le document) en est une : tant que l'ancienne table n'a rien de nouveau à donner, on ne la repose pas à chaque ouverture, d'où que le
+    // widget soit ouvert (answeredTables). Une table qui a de quoi être reprise repose la question, et sa suppression ensuite ; les autres tables de la paire déjà tranchées ne sont pas reposées avec elle.
     const docKey = await documentKey();
-    const keptBefore = keptAnswers(docKey);
-    const askedRemoval = item => needsMerge || !keptBefore.has(item.extra);
+    const answered = answeredTables(docKey);
+    const askedRemoval = item => (pendingBefore.get(item.table) > 0) || !answered.has(item.extra);
     if (!needsMerge && !planned.some(askedRemoval)) return { pairs, action: 'kept' };
 
     let results = planned;
@@ -376,7 +412,7 @@ const TableDoubles = (function () {
     for (const result of results.slice().reverse()) {
       const pair = pairs.find(item => item.table === result.table);
       if (result.table === 'Publipostage_Templates' && keptBack.length) continue;
-      if (!needsMerge && !askedRemoval(pair)) continue;
+      if (!askedRemoval(pair)) continue;
       const left = result.conflicts + result.dropped;
       const wants = await dialogs.confirm({
         title: I18n.t('doubles.remove.title', { extra: pair.extra }),
@@ -385,13 +421,18 @@ const TableDoubles = (function () {
         cancelLabel: I18n.t('doubles.remove.keep'),
         danger: true,
       });
-      if (!wants) { rememberKept(docKey, pair.extra); if (SPECS[result.table].remapColumn) keptBack.push(pair.extra); continue; }
-      try { await removeExtra(pair); removed.push(pair.extra); }
+      if (!wants) { await rememberAnswer(docKey, pair.extra, true); if (SPECS[result.table].remapColumn) keptBack.push(pair.extra); continue; }
+      let gone = false;
+      try { await removeExtra(pair); gone = true; }
       catch (e) {
         console.warn('[TableDoubles] suppression impossible', e);
         if (SPECS[result.table].remapColumn) keptBack.push(pair.extra);
+        // Le document l'a refusée (droits, une règle d'accès) : la personne l'a lu, la même question à chaque ouverture n'y changerait rien.
+        await rememberAnswer(docKey, pair.extra, false);
         await dialogs.notice({ title: I18n.t('doubles.remove.failedTitle'), message: I18n.t('doubles.remove.failed', { extra: pair.extra }) });
       }
+      // Supprimée : si une copie plus ancienne du widget la recrée, vide, à sa prochaine ouverture, elle n'est pas proposée de nouveau (elle le serait à chaque fois).
+      if (gone) { removed.push(pair.extra); await rememberAnswer(docKey, pair.extra, true); }
     }
     if (hook.notify) hook.notify(removed.length ? I18n.t('doubles.status.removed') : I18n.t('doubles.status.merged', { summary: summaryText(results) }), false);
     return { pairs, action: removed.length ? 'removed' : 'merged', results, removed };

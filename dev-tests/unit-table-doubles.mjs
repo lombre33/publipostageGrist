@@ -82,6 +82,7 @@ function freshModule(doc) {
   return { run: expr => evalIn(ctx, expr), ctx };
 }
 const json = value => JSON.parse(JSON.stringify(value));
+const storageOf = () => { const map = new Map(); return { get: key => (map.has(key) ? map.get(key) : null), set: (key, value) => { map.set(key, String(value)); return true; }, remove: key => { map.delete(key); return true; }, map }; };
 const folderOf = (rows, userCol = 'User', folderCol = 'Folder', idCol = 'TemplateId') => rows.map(row => `${row[idCol]}:${row[folderCol] || ''}`).sort();
 
 async function main() {
@@ -315,6 +316,150 @@ async function main() {
       const dialogs = stubAsk({ choose: 'merge', confirm: true });
       const outcome = await open(doc, ctx, dialogs);
       check('rien à reprendre : pas de fenêtre « Réunir », seule la suppression est demandée', outcome.action === 'removed' && dialogs.calls.join() === 'confirm' && doc.removed.join() === 'Publipostage_PreferencesModeles' && doc.journal.length === 1, JSON.stringify([outcome.action, dialogs.calls, doc.journal]));
+    }
+  }
+
+  // 7. La fenêtre « Supprimer l'ancienne table ? » ne revient pas à chaque ouverture (23/11 : widget intégré dans un autre document, la même question « Supprimer « Publipostage_Modeles » ? », 0 ligne reprise, à
+  //    chaque chargement). Une réponse (« La garder », la suppression faite, la suppression refusée par le document) clôt la question même quand le navigateur refuse son stockage, que l'adresse du document est
+  //    illisible ou que le widget est rouvert dans un autre cadre : le document la garde (réglage `doublesKept`), puis la personne, puis la page.
+  {
+    const build = () => new GenericDoc()
+      .addTable('Publipostage_TemplatePreferences', PREF_EN, [{ User: ME, TemplateId: 0, Folder: 'A' }])
+      .addTable('Publipostage_PreferencesModeles', PREF_FR, [{ Utilisateur: ME, ModeleId: 0, Dossier: 'B' }]);
+    const stubAsk = (answers) => {
+      const calls = [];
+      return { calls, ask: {
+        choose: async options => { calls.push('choose'); return answers.choose; },
+        confirm: async options => { calls.push('confirm'); return answers.confirm; },
+        notice: async options => { calls.push('notice'); },
+      } };
+    };
+    // Les réglages du document, tels que Templates les rend : ce qui est écrit reste pour les chargements suivants (`bag`) ; `refuse` : le document n'accepte plus l'écriture.
+    const documentSettings = () => {
+      const bag = {};
+      const api = { bag, refuse: false,
+        getDocumentSetting: key => (bag[key] === undefined ? undefined : JSON.parse(JSON.stringify(bag[key]))),
+        updateDocumentSettings: async patch => {
+          if (api.refuse) return false;
+          Object.keys(patch).forEach(key => { if (patch[key] == null) delete bag[key]; else bag[key] = JSON.parse(JSON.stringify(patch[key])); });
+          return true;
+        } };
+      return api;
+    };
+    // Un navigateur qui refuse son stockage (cadre isolé, stockage tiers coupé) : rien ne s'y lit ni ne s'y écrit.
+    const refusingStorage = () => ({ get: () => null, set: () => false, remove: () => false });
+    // Un chargement du widget : un contexte neuf (la page repart de zéro) sur le même document, avec ce que le navigateur et le document ont gardé.
+    const load = (doc, { person, settings, noKey }) => {
+      if (noKey) doc.getAccessToken = async () => { throw new Error('getAccessToken refusé'); };
+      const { ctx } = freshModule(doc);
+      if (person) ctx.PersonStore = person;
+      if (settings) ctx.Templates = settings;
+      return ctx;
+    };
+    const open = async (ctx, dialogs) => {
+      ctx.__hooks = { ask: dialogs.ask, notify: () => {}, isUntouched: () => true, isReadOnly: () => false };
+      return json(await evalIn(ctx, 'TableDoubles.checkAfterOpen(__hooks)'));
+    };
+
+    {
+      // Le cas du retour d'Antoine : le stockage du navigateur est refusé, « La garder » n'était retenu nulle part et la question revenait.
+      const doc = build();
+      const settings = documentSettings();
+      const first = stubAsk({ choose: 'merge', confirm: false });
+      const outcome = await open(load(doc, { person: refusingStorage(), settings }), first);
+      check('stockage du navigateur refusé : « La garder » est retenue dans le document', outcome.action === 'merged' && JSON.stringify(settings.bag.doublesKept) === '["Publipostage_PreferencesModeles"]', JSON.stringify(settings.bag));
+      const second = stubAsk({ choose: 'merge', confirm: true });
+      const again = await open(load(doc, { person: refusingStorage(), settings }), second);
+      check('stockage refusé, widget rechargé : plus aucune question, rien de supprimé', again.action === 'kept' && second.calls.length === 0 && doc.removed.length === 0, JSON.stringify([again.action, second.calls]));
+      const third = stubAsk({ choose: 'merge', confirm: true });
+      const elsewhere = await open(load(doc, { person: storageOf(), settings }), third);
+      check('une autre personne, un autre navigateur : la réponse du document vaut aussi pour elle', elsewhere.action === 'kept' && third.calls.length === 0, JSON.stringify([elsewhere.action, third.calls]));
+    }
+    {
+      // L'adresse du document illisible (getAccessToken refuse) : la mémoire de la personne n'a pas de clé, celle du document tient.
+      const doc = build();
+      const settings = documentSettings();
+      const person = storageOf();
+      await open(load(doc, { person, settings, noKey: true }), stubAsk({ choose: 'merge', confirm: false }));
+      const next = stubAsk({ choose: 'merge', confirm: true });
+      const again = await open(load(doc, { person, settings, noKey: true }), next);
+      check('adresse du document illisible : « La garder » tient quand même (mémoire du document)', again.action === 'kept' && next.calls.length === 0 && person.map.size === 0, JSON.stringify([again.action, next.calls, person.map.size]));
+    }
+    {
+      // Aucune mémoire durable (ni navigateur, ni document : réglages absents) : la page retient au moins sa propre réponse.
+      const doc = build();
+      const ctx = load(doc, { person: refusingStorage(), noKey: true });
+      await open(ctx, stubAsk({ choose: 'merge', confirm: false }));
+      const next = stubAsk({ choose: 'merge', confirm: true });
+      const again = await open(ctx, next);
+      check('aucune mémoire durable : la page ne repose pas la question pendant qu\'elle vit', again.action === 'kept' && next.calls.length === 0, JSON.stringify([again.action, next.calls]));
+    }
+    {
+      // Le document refuse d'écrire le réglage : la mémoire de la personne prend le relais.
+      const doc = build();
+      const settings = documentSettings();
+      settings.refuse = true;
+      const person = storageOf();
+      await open(load(doc, { person, settings }), stubAsk({ choose: 'merge', confirm: false }));
+      const next = stubAsk({ choose: 'merge', confirm: true });
+      const again = await open(load(doc, { person, settings }), next);
+      check('réglage du document refusé : la mémoire de la personne garde la réponse', again.action === 'kept' && next.calls.length === 0 && Object.keys(settings.bag).length === 0, JSON.stringify([again.action, next.calls]));
+    }
+    {
+      // Un AUTRE document n'hérite pas de la réponse du premier.
+      const settings = documentSettings();
+      await open(load(build(), { person: refusingStorage(), settings }), stubAsk({ choose: 'merge', confirm: false }));
+      const fresh = stubAsk({ choose: 'merge', confirm: false });
+      const other = await open(load(build(), { person: refusingStorage(), settings: documentSettings() }), fresh);
+      check('un autre document, ses propres réglages : il est interrogé', other.action === 'merged' && fresh.calls.join() === 'choose,confirm', JSON.stringify([other.action, fresh.calls]));
+    }
+    {
+      // Supprimée, puis recréée VIDE par une copie plus ancienne du widget à chaque ouverture : elle n'est pas proposée de nouveau.
+      const doc = build();
+      const settings = documentSettings();
+      const first = stubAsk({ choose: 'merge', confirm: true });
+      const outcome = await open(load(doc, { person: refusingStorage(), settings }), first);
+      check('suppression faite : l\'ancienne table est partie et la réponse est retenue dans le document', outcome.action === 'removed' && doc.removed.join() === 'Publipostage_PreferencesModeles' && JSON.stringify(settings.bag.doublesKept) === '["Publipostage_PreferencesModeles"]', JSON.stringify([outcome.action, settings.bag]));
+      doc.addTable('Publipostage_PreferencesModeles', PREF_FR, []);
+      const second = stubAsk({ choose: 'merge', confirm: true });
+      const back = await open(load(doc, { person: refusingStorage(), settings }), second);
+      check('l\'ancienne table recréée vide par une copie plus ancienne : aucune question, elle n\'est pas supprimée d\'office', back.action === 'kept' && second.calls.length === 0 && doc.removed.length === 1, JSON.stringify([back.action, second.calls, doc.removed]));
+      doc.rowsOf('Publipostage_PreferencesModeles').push({ id: 5, Utilisateur: ME, ModeleId: 0, Dossier: 'Z' });
+      const third = stubAsk({ choose: 'merge', confirm: true });
+      const news = await open(load(doc, { person: refusingStorage(), settings }), third);
+      check('recréée AVEC une ligne à reprendre : la réunion est reproposée, puis la suppression', news.action === 'removed' && third.calls.join() === 'choose,confirm' && doc.rowsOf('Publipostage_TemplatePreferences').some(row => row.Folder === 'Z'), JSON.stringify([news.action, third.calls]));
+    }
+    {
+      // La suppression est refusée par le document (droits) : la personne l'a lu, la question ne revient pas à chaque ouverture ; ce n'est pas une réponse pour l'équipe.
+      const doc = build();
+      const settings = documentSettings();
+      const person = storageOf();
+      doc.applyUserActionsBase = doc.applyUserActions.bind(doc);
+      doc.applyUserActions = async actions => { if (actions.some(action => action[0] === 'RemoveTable')) throw new Error('Droits insuffisants'); return doc.applyUserActionsBase(actions); };
+      const first = stubAsk({ choose: 'merge', confirm: true });
+      const outcome = await open(load(doc, { person, settings }), first);
+      check('suppression refusée par le document : la personne en est prévenue une fois', outcome.action === 'merged' && first.calls.join() === 'choose,confirm,notice' && doc.removed.length === 0, JSON.stringify([outcome.action, first.calls]));
+      const second = stubAsk({ choose: 'merge', confirm: true });
+      const again = await open(load(doc, { person, settings }), second);
+      check('suppression refusée : rouvert, plus de fenêtre pour cette personne', again.action === 'kept' && second.calls.length === 0, JSON.stringify([again.action, second.calls]));
+      check('suppression refusée : rien n\'en est écrit dans le document (une autre personne, qui a le droit, sera interrogée)', Object.keys(settings.bag).length === 0, JSON.stringify(settings.bag));
+    }
+    {
+      // Deux paires : seule celle dont l'ancienne table a de nouvelles lignes revient avec la réunion ; l'autre, déjà tranchée, n'est pas reposée.
+      const build2 = () => new GenericDoc()
+        .addTable('Publipostage_PageFormats', { Name: 'Text', Width: 'Numeric', Height: 'Numeric' }, [{ Name: 'A4', Width: 210, Height: 297 }])
+        .addTable('Publipostage_FormatsPage', { Nom: 'Text', Largeur: 'Numeric', Hauteur: 'Numeric' }, [{ Nom: 'A4', Largeur: 210, Hauteur: 297 }])
+        .addTable('Publipostage_TableLinks', { TargetTable: 'Text', TargetColumn: 'Text', SourceColumn: 'Text', SourceTable: 'Text' }, [])
+        .addTable('Publipostage_LiensTables', { TableCible: 'Text', ColonneCible: 'Text', ColonneSource: 'Text', TableSource: 'Text' }, []);
+      const doc = build2();
+      const settings = documentSettings();
+      const first = stubAsk({ choose: 'merge', confirm: false });
+      await open(load(doc, { person: refusingStorage(), settings }), first);
+      check('deux paires sans rien à reprendre : la suppression de chacune est demandée une fois (« La garder » deux fois)', first.calls.join() === 'confirm,confirm' && settings.bag.doublesKept.length === 2, JSON.stringify([first.calls, settings.bag]));
+      doc.rowsOf('Publipostage_LiensTables').push({ id: 3, TableCible: 'T', ColonneCible: 'c', ColonneSource: 's', TableSource: 'S' });
+      const second = stubAsk({ choose: 'merge', confirm: false });
+      const news = await open(load(doc, { person: refusingStorage(), settings }), second);
+      check('une ligne arrivée dans UNE ancienne table : la réunion et la suppression de celle-là seulement', second.calls.join() === 'choose,confirm' && doc.rowsOf('Publipostage_TableLinks').length === 1, JSON.stringify([news.action, second.calls]));
     }
   }
 
