@@ -57,6 +57,22 @@
 .v2-color-dropdown-footer button:hover { background: var(--surface-sunken, #f2f4f7); }
 .v2-color-dropdown-footer button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* Le motif de fond d'une case (js/cell-pattern.js) : le bouton « Motif… » sous le pied du menu de fond, puis le menu des motifs (js/floating-toolbars.js:tablePatternMenu) - huit pastilles par rangée
+   qui montrent leur dessin sur du blanc, huit couleurs de motif, « Sans motif ». */
+.v2-pattern-open { margin-top: 5px; }
+.v2-pattern-open button { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 5px); background: var(--surface, #fff); cursor: pointer; font: 12px var(--font-ui); color: var(--text, #3a4452); }
+.v2-pattern-open button:hover { background: var(--surface-sunken, #f2f4f7); }
+.v2-pattern-open button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.v2-pattern-title { margin: 0 0 4px; font: 600 11px/1.1 var(--font-ui); color: var(--text-muted); }
+.v2-pattern-title:not(:first-child) { margin-top: 8px; }
+.v2-pattern-grid { display: grid; grid-template-columns: repeat(8, 26px); gap: 4px; }
+.v2-pattern-kind { box-sizing: border-box; width: 26px; height: 26px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: var(--radius-xs, 5px); cursor: pointer; }
+.v2-pattern-kind:hover { transform: scale(1.1); }
+.v2-pattern-kind:focus-visible, .v2-pattern-ink:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.v2-pattern-inks { display: flex; gap: 4px; }
+.v2-pattern-ink { box-sizing: border-box; width: 20px; height: 20px; padding: 0; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); border-radius: var(--radius-xs, 5px); background: var(--swatch); cursor: pointer; }
+.v2-pattern-dropdown .v2-color-dropdown-footer { margin-top: 8px; }
+
 /* La fenêtre « Couleur personnalisée » : à gauche le carré et le curseur de teinte, à droite l'aperçu, le code et les trois champs, dessous les cases
    « garder ». Tout tient dans les 376 px du panneau de 700x400, sans défiler. */
 .pp-color-picker { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: 20px; align-items: start; }

@@ -42,29 +42,56 @@ const FloatingToolbars = (function () {
   }
 
   // Applique à toutes les cellules touchées par la sélection (CellSelection reconnue par duck-typing sur `forEachCell`, pas un instanceof).
-  function setCellsBackground(nodeEditor, color) {
+  function setCellsBackground(nodeEditor, color, extra) {
     const { state, view } = nodeEditor;
     const { selection } = state;
+    const set = Object.assign({ backgroundColor: color }, extra);
     if (typeof selection.forEachCell === 'function') {
       const tr = state.tr;
       selection.forEachCell((cell, pos) => {
-        tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { backgroundColor: color }));
+        tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, set));
       });
       view.dispatch(tr);
       return;
     }
-    nodeEditor.chain().updateAttributes('tableCell', { backgroundColor: color }).updateAttributes('tableHeader', { backgroundColor: color }).run();
+    nodeEditor.chain().updateAttributes('tableCell', set).updateAttributes('tableHeader', set).run();
+  }
+
+  // Le motif de fond (js/cell-pattern.js) des cases touchées : `spec` = { kind, ink } (`ink` nul : la couleur qui se lit sur le fond de CHAQUE case, `CellPattern.autoInk`), ou null pour le retirer.
+  // Une seule transaction, un seul Annuler ; la couleur de fond de la case ne bouge pas (le motif se pose par-dessus).
+  function setCellsPattern(nodeEditor, spec) {
+    const { state, view } = nodeEditor;
+    const { selection } = state;
+    const patternFor = attrs => (spec ? { kind: spec.kind, ink: spec.ink || CellPattern.autoInk(ColorMath.parseCss(attrs.backgroundColor)) } : null);
+    if (typeof selection.forEachCell === 'function') {
+      const tr = state.tr;
+      selection.forEachCell((cell, pos) => {
+        tr.setNodeMarkup(pos, undefined, Object.assign({}, cell.attrs, { fillPattern: patternFor(cell.attrs) }));
+      });
+      view.dispatch(tr);
+      return;
+    }
+    ['tableCell', 'tableHeader'].forEach((name) => {
+      const attrs = nodeEditor.getAttributes(name);
+      nodeEditor.chain().updateAttributes(name, { fillPattern: patternFor(attrs) }).run();
+    });
+  }
+  // Le motif de la case du curseur (ou de la première case choisie), ou null.
+  function currentCellPattern(nodeEditor) {
+    return nodeEditor.getAttributes('tableCell').fillPattern || nodeEditor.getAttributes('tableHeader').fillPattern || null;
   }
 
   // Menu de couleur partagé entre police, surlignage et fond de cellule (la palette, les couleurs gardées et le pied « Personnalisé… » / « aucune »
   // sont à js/color-palette.js). `onPick`/`onNone` reçoivent une chaîne déjà focus+sélection restaurée et ne doivent jamais appeler .run() eux-mêmes ;
   // `current` rend la couleur du moment, marquée dans la palette.
-  function createColorDropdown({ noneKey, onPick, onNone, withSavedSelection, current }) {
+  function createColorDropdown({ noneKey, onPick, onNone, withSavedSelection, current, tail, onAction }) {
     const apply = fn => { withSavedSelection(fn); EditorCore.closeDropdownPanel(); };
     return ColorPalette.createMenu({
       className: 'v2-color-dropdown',
       noneKey,
       current,
+      tail,
+      onAction,
       onPick: color => apply(chain => onPick(chain, color)),
       onNone: () => apply(chain => onNone(chain)),
     });
@@ -238,18 +265,66 @@ const FloatingToolbars = (function () {
     return { tableToolbarSpec, tableToolbarHtml };
   })();
 
-  const { tableFillMenu, tableBordersMenu, tableLinkedMenu, openFillMenu, openBordersMenu, openLinkedMenu } = (function () {
+  const { tableFillMenu, tablePatternMenu, tableBordersMenu, tableLinkedMenu, openFillMenu, openPatternMenu, openBordersMenu, openLinkedMenu } = (function () {
     // Les trois menus de la barre d'un tableau : le fond des cases, les bordures et, pour un tableau lié à un modèle Grille, le lien
 
-    function tableFillMenu() {
+    // `onPatternOpen` : ouvre le menu des motifs (« Motif… », sous le pied du menu de couleur : la couleur du menu est le FOND de la case, le motif se pose par-dessus).
+    function tableFillMenu(onPatternOpen) {
       // Pas de sélection à restaurer ici : setCellsBackground lit editor.state.selection directement (persiste indépendamment du focus DOM).
       return createColorDropdown({
         noneKey: 'colorDropdown.none',
         withSavedSelection: fn => fn(null),
         current: () => editor.getAttributes('tableCell').backgroundColor || editor.getAttributes('tableHeader').backgroundColor || null,
         onPick: (chain, color) => { setCellsBackground(editor, color); EditorCore.setColorBar('v2-table-fill-bar', color); },
-        onNone: () => { setCellsBackground(editor, null); EditorCore.setColorBar('v2-table-fill-bar', null); },
+        // « Aucun » : plus aucun fond, motif compris.
+        onNone: () => { setCellsBackground(editor, null, { fillPattern: null }); EditorCore.setColorBar('v2-table-fill-bar', null); },
+        tail: `<div class="v2-pattern-open"><button type="button" data-action="pattern-open" title="${I18n.t('table.patternOpenTip')}">${I18n.t('table.patternOpen')}</button></div>`,
+        onAction: (action) => { if (action === 'pattern-open' && onPatternOpen) onPatternOpen(); },
       });
+    }
+
+    // Le menu « Motif » : les motifs (js/cell-pattern.js) en pastilles qui montrent leur dessin, la couleur du motif, « Sans motif ». Un motif choisi sans couleur prend celle qui se lit sur le fond de la
+    // case ; une couleur choisie change celle des cases qui ont un motif, et reste pour le motif suivant. Le menu reste ouvert : on essaie un motif, puis un autre.
+    function tablePatternMenu() {
+      let ink = null;
+      const preview = kind => 'background-color: #ffffff; ' + CellPattern.paint(kind, '#404040');
+      const kinds = CellPattern.KINDS.map(kind => `<button type="button" class="v2-pattern-kind" data-action="pattern:${kind}" aria-pressed="false" title="${I18n.t('table.pattern.' + kind)}" aria-label="${I18n.t('table.pattern.' + kind)}" style="${preview(kind)}"></button>`).join('');
+      const inks = CellPattern.INKS.map(color => `<button type="button" class="v2-pattern-ink" data-action="ink:${color}" aria-pressed="false" title="${color}" aria-label="${I18n.t('table.patternInk')} ${color}" style="--swatch: ${color}"></button>`).join('');
+      const markup = () => `<p class="v2-pattern-title">${I18n.t('table.patternTitle')}</p><div class="v2-pattern-grid" role="group">${kinds}</div>`
+        + `<p class="v2-pattern-title">${I18n.t('table.patternInk')}</p><div class="v2-pattern-inks" role="group">${inks}</div>`
+        + `<div class="v2-color-dropdown-footer"><button type="button" data-action="pattern:none">${I18n.t('table.patternNone')}</button></div>`;
+      const mark = (panel) => {
+        const now = currentCellPattern(editor);
+        panel.el.querySelectorAll('.v2-pattern-kind').forEach((button) => {
+          const on = !!now && button.dataset.action === 'pattern:' + now.kind;
+          button.classList.toggle('is-active', on);
+          button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        const shown = (now && now.ink) || ink;
+        panel.el.querySelectorAll('.v2-pattern-ink').forEach((button) => {
+          const on = !!shown && button.dataset.action === 'ink:' + shown;
+          button.classList.toggle('is-active', on);
+          button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      };
+      const panel = EditorCore.createFloatingPanel('v2-color-dropdown v2-pattern-dropdown', markup(), (action) => {
+        if (action === 'pattern:none') setCellsPattern(editor, null);
+        else if (action.indexOf('pattern:') === 0) setCellsPattern(editor, { kind: action.slice('pattern:'.length), ink });
+        else if (action.indexOf('ink:') === 0) {
+          ink = action.slice('ink:'.length);
+          const now = currentCellPattern(editor);
+          if (now) setCellsPattern(editor, { kind: now.kind, ink });
+        }
+        mark(panel);
+      });
+      const show = panel.show;
+      panel.show = (referenceEl, options) => {
+        ink = null;
+        Dom.setMarkup(panel.el, markup());
+        mark(panel);
+        show(referenceEl, options);
+      };
+      return panel;
     }
 
     function tableBordersMenu(presets) {
@@ -342,6 +417,13 @@ const FloatingToolbars = (function () {
       menus.fill.show(btn, tableMenuPlacement());
       EditorCore.setOpenDropdownPanel(menus.fill);
     }
+    // Le menu des motifs s'ouvre à la place de celui du fond, sur le même bouton.
+    function openPatternMenu(menus) {
+      const btn = document.getElementById('v2-table-fill-btn');
+      EditorCore.closeDropdownPanel();
+      menus.pattern.show(btn, tableMenuPlacement());
+      EditorCore.setOpenDropdownPanel(menus.pattern, btn);
+    }
 
     function openLinkedMenu(menus) {
       const btn = document.getElementById('v2-table-linked-btn');
@@ -354,7 +436,7 @@ const FloatingToolbars = (function () {
       EditorCore.setOpenDropdownPanel(menus.linked, btn);
     }
 
-    return { tableFillMenu, tableBordersMenu, tableLinkedMenu, openFillMenu, openBordersMenu, openLinkedMenu };
+    return { tableFillMenu, tablePatternMenu, tableBordersMenu, tableLinkedMenu, openFillMenu, openPatternMenu, openBordersMenu, openLinkedMenu };
   })();
 
   const { tableCommands } = (function () {
@@ -597,7 +679,8 @@ const FloatingToolbars = (function () {
       const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-table-toolbar', tableToolbarHtml(spec), (action) => {
         (tableCommands(menus)[action] || (() => {}))();
       });
-      menus.fill = tableFillMenu();
+      menus.fill = tableFillMenu(() => openPatternMenu(menus));
+      menus.pattern = tablePatternMenu();
       menus.borders = tableBordersMenu(spec.borders);
       menus.linked = tableLinkedMenu();
       EditorCore.registerFloatingPanel(panel);

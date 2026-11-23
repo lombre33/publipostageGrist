@@ -306,7 +306,8 @@ const PptxImport = (function () {
 
   // --- Les fonds et les traits ----------------------------------------------------------------------------------------------------------------------------------------------------------
   const FILL_NODES = ['noFill', 'solidFill', 'gradFill', 'blipFill', 'pattFill', 'grpFill'];
-  // Un remplissage lu sur l'élément lui-même : { kind: 'none' } | { kind: 'solid', color } | { kind: 'grad', color } | { kind: 'blip', el } | { kind: 'patt', color } | { kind: 'group' }.
+  // Un remplissage lu sur l'élément lui-même : { kind: 'none' } | { kind: 'solid', color } | { kind: 'grad', color } | { kind: 'blip', el } | { kind: 'patt', color, ink, back, preset } | { kind: 'group' }.
+  // Un motif (`a:pattFill`) : `color` est sa couleur d'avant-plan (à défaut celle de fond), `ink` et `back` les deux couleurs lues (nulles si elles manquent), `preset` son nom (`prst`).
   function fillOfElement(el, env, phColor) {
     if (!el) return undefined;
     switch (el.localName) {
@@ -331,8 +332,10 @@ const PptxImport = (function () {
       }
       case 'blipFill': return { kind: 'blip', el };
       case 'pattFill': {
-        const color = colorIn(kid(el, 'fgClr'), env, phColor) || colorIn(kid(el, 'bgClr'), env, phColor);
-        return color ? { kind: 'patt', color } : { kind: 'none' };
+        const ink = colorIn(kid(el, 'fgClr'), env, phColor);
+        const back = colorIn(kid(el, 'bgClr'), env, phColor);
+        const color = ink || back;
+        return color ? { kind: 'patt', color, ink, back, preset: attr(el, 'prst') || '' } : { kind: 'none' };
       }
       case 'grpFill': return { kind: 'group' };
       default: return undefined;
@@ -1203,6 +1206,12 @@ const PptxImport = (function () {
         deco.kinds.graphic = (deco.kinds.graphic || 0) + 1;
       }
     });
+  }
+
+  // Les attributs d'une case à fond de motif : le fond (`backHex`, sans dièse, peut être vide), les deux marques du motif et sa peinture (js/cell-pattern.js), dans l'ordre où l'éditeur les écrit.
+  function cellPatternAttrs(pattern, backHex) {
+    const marks = CellPattern.attributes(pattern);
+    return ' data-fill-pattern="' + marks['data-fill-pattern'] + '" data-fill-ink="' + marks['data-fill-ink'] + '" style="' + (backHex ? 'background-color: #' + backHex + '; ' : '') + escAttr(marks.style) + '"';
   }
 
   // Une image qui n'est pas reprise, comptée et nommée : son fichier dans le paquet et pourquoi (format que le navigateur ne lit pas, partie absente, trop lourde, plafond du total des images).
@@ -2084,8 +2093,23 @@ const PptxImport = (function () {
         // Le fond : celui de la case, sinon celui du style (la partie la plus prioritaire qui en dit un).
         let fill = tcPr ? fillIn(tcPr, env) : undefined;
         if (fill === undefined) parts.forEach((part) => { const f = fillIn(at(part, 'tcStyle/fill') || at(part, 'tcStyle'), env); if (f !== undefined && f.kind !== 'group') fill = f; });
-        const fillHex = fill && fill.color && fill.kind !== 'none' ? flatten(fill.color, env.bgRgb) : '';
-        if (fill && (fill.kind === 'grad' || fill.kind === 'patt')) losses.add('cellFills');
+        let fillHex = fill && fill.color && fill.kind !== 'none' ? flatten(fill.color, env.bgRgb) : '';
+        // Un motif de PowerPoint est un vrai fond à motif (js/cell-pattern.js) : la couleur d'arrière-plan du motif est le fond de la case, celle d'avant-plan la couleur du motif. Un motif qu'on n'a pas est
+        // rapproché du plus proche (compté dans « fonds de cases remplacés » : il n'est pas exact) ; sans couleur d'avant-plan il n'y a rien à tracer : le fond seul.
+        let pattern = null;
+        let approximate = false;
+        if (fill && fill.kind === 'patt') {
+          const mapped = fill.ink ? CellPattern.fromPowerPoint(fill.preset) : null;
+          if (mapped) {
+            const backHex = fill.back ? flatten(fill.back, env.bgRgb) : '';
+            fillHex = backHex;
+            pattern = { kind: mapped.kind, ink: '#' + flatten(fill.ink, (backHex && hexRgb(backHex)) || env.bgRgb) };
+            approximate = !mapped.exact;
+          } else {
+            approximate = true;
+          }
+        }
+        if (fill && (fill.kind === 'grad' || approximate)) losses.add('cellFills');
         // Le texte : le gras et la couleur du style, puis ceux du texte lui-même.
         let bold = false;
         let textColor = null;
@@ -2121,7 +2145,7 @@ const PptxImport = (function () {
         if (VERTICAL_TEXT.test(attr(tcPr, 'vert') || '') && kids(kid(tc, 'txBody'), 'p').some(p => paragraphText(p).trim())) losses.add('vertical');
         rowData.cells.push({
           open: '<td' + (span > 1 ? ' colspan="' + span + '"' : '') + (down > 1 ? ' rowspan="' + down + '"' : '') + ' colwidth="' + widths.join(',') + '"'
-            + (fillHex ? ' style="background-color: #' + fillHex + '"' : '') + (valign ? ' data-valign="' + valign + '"' : '') + borderAttrs + '>',
+            + (pattern ? cellPatternAttrs(pattern, fillHex) : (fillHex ? ' style="background-color: #' + fillHex + '"' : '')) + (valign ? ' data-valign="' + valign + '"' : '') + borderAttrs + '>',
           txBody: kid(tc, 'txBody'), shape,
         });
       }

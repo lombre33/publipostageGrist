@@ -3358,6 +3358,30 @@
       return result(bad);
     });
 
+  add('pptx_import_table_cell_patterns_are_real_pattern_fills_with_their_two_colors',
+    'Retour d\'Antoine (20/11, « Projets innovation » / « Acculturation étudiants » du tableau RH - UB) : le fond à motif d\'une case de tableau (`a:pattFill`) est un vrai fond à motif de l\'éditeur (js/cell-pattern.js) : la couleur d\'arrière-plan du motif est le fond de la case, celle d\'avant-plan la couleur du motif ; les motifs de PowerPoint que l\'éditeur n\'a pas sont rapprochés du plus proche et comptés au rapport ; sans couleur d\'avant-plan, le fond seul',
+    async (h) => {
+      const patt = (prst, fg, bg) => `<a:pattFill prst="${prst}">${fg ? `<a:fgClr><a:srgbClr val="${fg}"/></a:fgClr>` : ''}${bg ? `<a:bgClr><a:srgbClr val="${bg}"/></a:bgClr>` : ''}</a:pattFill>`;
+      const rowOf = fills => ({ h: 40, cells: fills.map((fillXml, i) => ({ text: 'C' + i, fillXml })) });
+      const exact = await run1({ slides: [{ shapes: table({ x: 40, y: 40, cols: [100, 100, 100], rows: [rowOf([patt('dnDiag', 'FF0000', 'FFFF00'), patt('pct50', '0000FF'), patt('smCheck', '000000', 'FFFFFF')])] }) }] });
+      const cells = Array.from(slidesOf(exact.html)[0].tables[0].querySelectorAll('td'));
+      const { bad, expect } = checker();
+      const marks = cell => ({ kind: cell.getAttribute('data-fill-pattern'), ink: cell.getAttribute('data-fill-ink'), back: cell.style.backgroundColor });
+      expect('un motif de la norme : son nom, l\'avant-plan en couleur de motif, l\'arrière-plan en fond de case', JSON.stringify(marks(cells[0])) === JSON.stringify({ kind: 'dnDiag', ink: '#ff0000', back: 'rgb(255, 255, 0)' }), marks(cells[0]));
+      expect('sans couleur d\'arrière-plan : pas de fond de case, le motif seul', marks(cells[1]).kind === 'pct50' && marks(cells[1]).ink === '#0000ff' && marks(cells[1]).back === '', marks(cells[1]));
+      expect('la peinture est écrite en ligne : un dégradé', /gradient/.test(cells[0].getAttribute('style')) && !/url\(/.test(cells[0].getAttribute('style')), cells[0].getAttribute('style'));
+      expect('les motifs exacts ne coûtent rien au rapport', !reportOf(exact).cellFills, exact.report);
+      const near = await run1({ slides: [{ shapes: table({ x: 40, y: 40, cols: [100, 100, 100], rows: [rowOf([patt('zigZag', '00FF00', 'FFFFFF'), patt('pct5', '123456', 'ABCDEF'), patt('wdUpDiag', null, 'FFCC00')])] }) }] });
+      const nearCells = Array.from(slidesOf(near.html)[0].tables[0].querySelectorAll('td'));
+      expect('un motif qu\'on n\'a pas est rapproché du plus proche (zigZag -> diagonales descendantes, 5 % -> points espacés) et compté une fois au rapport', marks(nearCells[0]).kind === 'dnDiag' && marks(nearCells[1]).kind === 'pct10' && reportOf(near).cellFills === 1, { a: marks(nearCells[0]), b: marks(nearCells[1]), report: near.report });
+      expect('sans couleur d\'avant-plan : le fond d\'arrière-plan seul, sans motif', marks(nearCells[2]).kind === null && marks(nearCells[2]).back === 'rgb(255, 204, 0)', marks(nearCells[2]));
+      await inEditor(h, exact);
+      const shown = Array.from(document.querySelectorAll('.tiptap td[data-fill-pattern]'));
+      expect('dans l\'éditeur les trois cases gardent leur motif et le peignent', shown.length === 3 && shown.every(td => /gradient/.test(getComputedStyle(td).backgroundImage)), shown.length);
+      expect('et enregistrées, elles se relisent telles quelles', (Editor.getHTML().match(/data-fill-pattern="(dnDiag|pct50|smCheck)"/g) || []).length === 3, Editor.getHTML().slice(0, 300));
+      return result(bad);
+    });
+
   add('pptx_import_report_detail_of_a_heavy_decor_gives_the_concrete_debug_file_slides_groups_colors_points_and_a_map_of_the_page',
     'DÉBOGAGE TEMPORAIRE : le décor d\'un masque dit son fichier, les diapositives qui le montrent, la boîte de son groupe (en % de la page), les couleurs de ses formes, ses points de tracé et une carte de la page en 10 lignes de 48 cases (à retirer avec le débogage)',
     async () => {

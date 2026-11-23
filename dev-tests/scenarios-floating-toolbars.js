@@ -257,6 +257,65 @@
   });
 
   cases.push({
+    id: 'ft_table_fill_pattern_menu_puts_hatching_over_the_background_and_none_removes_both',
+    description: 'Demande d\'Antoine (20/11) : « remplir le fond d\'une cellule » avec un MOTIF (hachures, points, damier) comme dans PowerPoint : « Motif… » sous le menu de fond ouvre le menu des motifs ; un motif se pose par-dessus le fond de la case (couleur de motif automatique, lisible sur le fond), une couleur de motif change celle de la case, « Sans motif » le retire en gardant le fond, « Aucun » du menu de fond retire fond et motif, un seul Annuler défait chaque geste ; le motif est écrit dans le HTML (`data-fill-pattern`, `data-fill-ink`) et peint par un dégradé',
+    run: async (h) => {
+      const bar = await tableWithCursor(h);
+      const out = {};
+      const cellHtml = () => /<td[^>]*>/.exec(Editor.getHTML());
+      const firstCell = () => document.querySelector('.tiptap td, .tiptap th');
+      // Le fond, puis « Motif… ».
+      await press_(h, bar, 'fill-open');
+      out.patternButton = !!openMenus()[0] && !!openMenus()[0].querySelector('button[data-action="pattern-open"]');
+      press(openMenus()[0].querySelector('button[data-action="pick:#c8f7c5"]'));
+      await h.sleep(GAP);
+      await press_(h, bar, 'fill-open');
+      press(openMenus()[0].querySelector('button[data-action="pattern-open"]'));
+      await h.sleep(150);
+      const menu = openMenus()[0];
+      out.menuOfPatterns = openMenus().length === 1 && !!menu && menu.classList.contains('v2-pattern-dropdown') && menu.querySelectorAll('button[data-action^="pattern:"]').length === CellPattern.KINDS.length + 1;
+      out.eachPatternDrawsItself = !!menu && [...menu.querySelectorAll('.v2-pattern-kind')].every(button => /gradient/.test(button.getAttribute('style')));
+      // Un motif sans couleur : celle qui se lit sur le fond clair.
+      press(menu.querySelector('button[data-action="pattern:dnDiag"]'));
+      await h.sleep(GAP);
+      const html = Editor.getHTML();
+      out.pattern = /data-fill-pattern="dnDiag"/.test(html) && /data-fill-ink="#595959"/.test(html) && /background-color: rgb\(200, 247, 197\)/.test(html);
+      out.paints = !!firstCell() && /gradient/.test(getComputedStyle(firstCell()).backgroundImage) && getComputedStyle(firstCell()).backgroundColor === 'rgb(200, 247, 197)';
+      out.menuStaysOpen = openMenus().length === 1 && menu.querySelector('button[data-action="pattern:dnDiag"]').getAttribute('aria-pressed') === 'true';
+      // Une couleur de motif change celle de la case, le motif reste.
+      press(menu.querySelector('button[data-action="ink:#c00000"]'));
+      await h.sleep(GAP);
+      out.ink = /data-fill-pattern="dnDiag"/.test(Editor.getHTML()) && /data-fill-ink="#c00000"/.test(Editor.getHTML());
+      // Un autre motif garde la couleur choisie.
+      press(menu.querySelector('button[data-action="pattern:lgCheck"]'));
+      await h.sleep(GAP);
+      out.inkKept = /data-fill-pattern="lgCheck"/.test(Editor.getHTML()) && /data-fill-ink="#c00000"/.test(Editor.getHTML());
+      // Un seul Annuler défait le dernier geste.
+      ed().commands.undo();
+      await h.sleep(150);
+      out.undo = /data-fill-pattern="dnDiag"/.test(Editor.getHTML());
+      // « Sans motif » : le fond reste.
+      press(menu.querySelector('button[data-action="pattern:none"]'));
+      await h.sleep(GAP);
+      out.noPattern = !/data-fill-pattern/.test(Editor.getHTML()) && !/data-fill-ink/.test(Editor.getHTML()) && /background-color: rgb\(200, 247, 197\)/.test(Editor.getHTML());
+      // « Aucun » du menu de fond : plus de fond ni de motif.
+      press(menu.querySelector('button[data-action="pattern:wdUpDiag"]'));
+      await h.sleep(GAP);
+      await press_(h, bar, 'fill-open');
+      press(openMenus()[0].querySelector('button[data-action="none"]'));
+      await h.sleep(GAP);
+      out.none = !/data-fill-pattern|background-color/.test(Editor.getHTML()) && !!cellHtml();
+      // Un motif écrit dans le HTML se relit (enregistrement puis ouverture).
+      Editor.setHTML('<table><tbody><tr><td data-fill-pattern="smGrid" data-fill-ink="#1f4e79" style="background-color: #ffff00"><p>A</p></td><td data-fill-pattern="inconnu" data-fill-ink="#1f4e79"><p>B</p></td><td data-fill-pattern="horz" data-fill-ink="rouge"><p>C</p></td></tr></tbody></table>', null);
+      await h.sleep(300);
+      const saved = Editor.getHTML();
+      out.reloaded = /<td[^>]*data-fill-pattern="smGrid"[^>]*data-fill-ink="#1f4e79"/.test(saved) || /<td[^>]*data-fill-ink="#1f4e79"[^>]*data-fill-pattern="smGrid"/.test(saved);
+      out.unknownDropped = (saved.match(/data-fill-pattern/g) || []).length === 1;
+      return { pass: Object.values(out).every(Boolean), notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
     id: 'ft_table_bar_in_a_grid_docks_in_the_grid_band_greys_what_has_no_sense_and_sets_the_vertical_alignment',
     description: 'Dans une grille, la barre du tableau est fixée dans la bande de la grille : « Supprimer le tableau » grisé, « Fusionner » et « Scinder » grisés tant qu\'ils n\'ont pas de sens, « Légende » grisé ; l\'alignement vertical posé (haut, milieu, bas) allume son seul bouton ; la barre d\'un tableau du document, ensuite, n\'a aucun grisé de grille et montre aussi « Bordures » et l\'alignement vertical',
     run: async (h) => {
