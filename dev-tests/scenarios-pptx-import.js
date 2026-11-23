@@ -3263,20 +3263,26 @@
       const frame = (id, name, x, y, w, h) => `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${name}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${xfrm(x, y, w, h, '', 'p:xfrm')}`
         + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram"><dgm:relIds xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" r:dm="rId5" r:lo="rId7" r:qs="rId8" r:cs="rId9"/></a:graphicData></a:graphic></p:graphicFrame>';
       const rels = [{ id: 'rId5', type: 'diagramData', target: '../diagrams/data1.xml' }, { id: 'rId6', type: 'diagramDrawing', target: '../diagrams/drawing1.xml' }];
-      const shapes = dspShape(0, 0, 200, 200, 'ellipse', solid('ED7D31'), 'Revue', 30) + dspShape(200, 100, 200, 200, 'ellipse', solid('F4B183'), 'Bilan', 0) + dspShape(150, 250, 100, 50, 'downArrow', solid('F8CBAD'), '', 0);
+      const shapes = dspShape(0, 0, 200, 200, 'ellipse', solid('ED7D31'), 'Revue', 30) + dspShape(200, 100, 200, 200, 'ellipse', solid('F4B183'), 'Bilan', 0) + dspShape(150, 250, 100, 50, 'downArrow', solid('F8CBAD'), '', 0)
+        + dspShape(0, 320, 150, 60, 'roundRect', solid('FFFFFF') + ln(1, solid('2F5597')), 'Contour', 0);
       const r = await run1({ slides: [{ rels, shapes: frame(20, 'Diagramme 19', 100, 50, 400, 300) }], parts: { 'ppt/diagrams/data1.xml': dataModel, 'ppt/diagrams/drawing1.xml': drawing(shapes) } });
       const frames = slidesOf(r.html)[0].frames;
       const named = text => frames.find(f => f.text === text);
-      expect('trois formes ordinaires (deux ronds à texte et la flèche), le schéma n\'est plus compté non repris', frames.length === 3 && !reportOf(r).diagrams, { n: frames.length, report: r.report });
+      expect('quatre formes ordinaires (deux ronds à texte, la flèche et la case à contour), le schéma n\'est plus compté non repris', frames.length === 4 && !reportOf(r).diagrams, { n: frames.length, report: r.report });
       const one = named('Revue');
       const two = named('Bilan');
       expect('« Revue » est posée à l\'angle du cadre (100 ; 50) : 200 x 200 pt (le trait du style la déborde de 1 pt)', !!one && near(one.x, 100, 1.5) && near(one.y, 50, 1.5) && near(one.w, 200, 3) && near(one.h, 200, 3), one && [one.x, one.y, one.w, one.h]);
       expect('« Bilan » à (200 ; 100) depuis l\'angle du cadre, soit (300 ; 150)', !!two && near(two.x, 300, 1.5) && near(two.y, 150, 1.5), two && [two.x, two.y]);
       expect('le texte reste un texte (taille 18 pt), centré, modifiable', !!one && /font-size: 18pt/.test(one.inner) && /text-align: center/.test(one.inner), one && one.inner);
       expect('la forme garde sa couleur et sa forme : rond orange', !!one && /ED7D31/i.test(one.fill || '') && /ellipse|ovale|circle/i.test(one.shape || ''), one && [one.fill, one.shape]);
+      // Une case à fond blanc dont le style dit « texte blanc » (diapo 26 de CTO#29, schéma « contour ») : blanc sur blanc. Le texte prend la couleur du trait (bleu 2F5597), comme PowerPoint la montre ; les ronds orange (contraste
+      // suffisant avec le blanc) gardent leur texte blanc.
+      const outlined = named('Contour');
+      expect('la case à fond blanc : son texte est de la couleur du trait (#2f5597), pas blanc sur blanc', !!outlined && /2f5597/i.test(outlined.inner) && !/color:\s*(#fff(fff)?|rgb\(255, 255, 255\))/i.test(outlined.inner), outlined && outlined.inner);
+      expect('les ronds orange gardent leur texte blanc', !!one && !/2f5597/i.test(one.inner), one && one.inner);
       // DÉBOGAGE TEMPORAIRE (23/11, à retirer avec `probe`) : le compte rendu dit, pour chaque forme à texte du schéma, son fond et la couleur de son texte (de quoi trouver un texte invisible).
       const probes = (r.stats && r.stats.probes) || [];
-      expect('DÉBOGAGE : la ligne du schéma compte ses deux formes à texte, et chaque forme dit son fond et la couleur de son texte (blanc : celle de la police du style)', probes.some(line => /^diagram "Diagramme 19" slide 1 : 2 shapes with text$/.test(line)) && probes.some(line => /fill=#ED7D31 .*colors=\S*#?(ffffff|rgb\(255, 255, 255\)) text="Revue"$/i.test(line)), probes);
+      expect('DÉBOGAGE : la ligne du schéma compte ses deux formes à texte, et chaque forme dit son fond et la couleur de son texte (blanc : celle de la police du style)', probes.some(line => /^diagram "Diagramme 19" slide 1 : 3 shapes with text$/.test(line)) && probes.some(line => /fill=#ED7D31 .*colors=\S*#?(ffffff|rgb\(255, 255, 255\)) text="Revue"$/i.test(line)), probes);
       // Sans dessin enregistré : compté, avec sa raison.
       const bare = await run1({ slides: [{ rels: [], shapes: frame(20, 'Diagramme 19', 100, 50, 400, 300) }] });
       const item = detailOf(bare, 'diagrams');
@@ -3532,7 +3538,7 @@
   // Retour du fichier du 23/11 (diapositive 8) : un tableau de la hauteur de la page entière (de 8,4 à 405,5 pt sur 405,1) dont les lignes du fichier font toutes leur hauteur ; l'éditeur y ajoute la bordure de chaque ligne et
   // le tableau finit un point trop bas. Le texte réduit à 60 % n'y change rien (les lignes sont des hauteurs minimales) : ce sont les lignes qui se resserrent, le texte garde sa taille.
   add('pptx_import_table_as_tall_as_the_page_squeezes_its_rows_not_its_text',
-    'Un tableau de 8 lignes de 50 pt qui finit au ras du bas de la page (y = 140, 540 pt) mesure 401 pt dans l\'éditeur (la bordure de chaque ligne) : ses lignes se resserrent de moins d\'un pour cent pour qu\'il tienne dans la page, son texte garde ses 12 pt (rien n\'est « réduit »)',
+    'Un tableau de 8 lignes de 50 pt qui finit au ras du bas de la page (y = 140, 540 pt) mesure 401 pt dans l\'éditeur (la bordure de chaque ligne) : ses lignes se resserrent de quelques pour cent pour qu\'il finisse 8 pt avant le bas de la page, son texte garde ses 12 pt (rien n\'est « réduit »)',
     async (h) => {
       const rows = Array.from({ length: 8 }, (_, i) => ({ h: 50, cells: [{ text: 'Ligne ' + (i + 1) }, { text: String(i) }] }));
       const r = await run1({ slides: [{ shapes: table({ x: 40, y: 140, cols: [300, 200], rows }) }] });
@@ -3542,9 +3548,9 @@
       const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
       const tbl = document.querySelector('.tiptap .pp-free-frame table');
       const bottom = frame.y + 3.6 + tbl.getBoundingClientRect().height / zoom * 0.75;
-      expect('le bas du tableau, dans l\'éditeur, est à 540 pt au plus (0,5 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 540.5, { y: frame.y, bottom });
+      expect('le bas du tableau, dans l\'éditeur, est à 8 pt au moins du bas de la page, soit 532 pt au plus (0,5 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 532.5, { y: frame.y, bottom });
       expect('le texte garde ses 12 pt : rien n\'est réduit', !r.report.some(item => item.key === 'shrunk') && !/font-size: ([0-9]|1[01])(\.\d+)?pt/.test(frame.el.innerHTML), r.report.map(item => item.key));
-      expect('chaque ligne a une hauteur de 50 pt moins un pour cent au plus', Array.from(tbl.querySelectorAll('tr')).every(tr => { const hpx = parseFloat(tr.getAttribute('data-row-height')); return hpx >= 66 && hpx <= 66.7; }), Array.from(tbl.querySelectorAll('tr')).map(tr => tr.getAttribute('data-row-height')));
+      expect('chaque ligne a une hauteur de 50 pt moins quelques pour cent au plus (de 62 à 66,7 px)', Array.from(tbl.querySelectorAll('tr')).every(tr => { const hpx = parseFloat(tr.getAttribute('data-row-height')); return hpx >= 62 && hpx <= 66.7; }), Array.from(tbl.querySelectorAll('tr')).map(tr => tr.getAttribute('data-row-height')));
       return result(bad);
     });
 

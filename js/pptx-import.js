@@ -2047,6 +2047,7 @@ const PptxImport = (function () {
   // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Un tableau de PowerPoint devient un tableau de l'éditeur dans un cadre libre, à sa place exacte : ses colonnes et ses hauteurs de ligne, ses cases fusionnées, leur fond, leurs bords, leur alignement vertical et leur texte.
   const PAGE_FIT_TOLERANCE_PT = 0.3;                // le bas d'un tableau qui dépasse la page de moins que cela y est tenu (arrondis de la mesure)
+  const PAGE_FIT_MARGIN_PT = 8;                    // le tableau finit au moins à cela du bas de la page : l'éditeur le dessine un peu plus haut que la mesure (bords, arrondis), et un tableau au ras était coupé
   const MIN_ROW_SQUEEZE = 0.5;                     // les lignes d'un tableau se resserrent jusqu'à la moitié de leur hauteur dans le fichier, pour tenir dans la page
   const SPLIT_INSET_PT = 8;                        // un rectangle à fond dont une marge du texte s'écarte de celle de l'éditeur de plus que cela est posé en deux cadres : la forme, puis le texte
   const TABLE_FIT_SLACK = 0.03;                    // un tableau jusqu'à 3 % plus haut que dans le fichier y reste tel quel
@@ -2236,7 +2237,7 @@ const PptxImport = (function () {
     }
     // Jamais plus bas que la page (comme un texte, fitText) : la tolérance de 3 % ne fait pas sortir de la diapositive un tableau qui, dans le fichier, finit au ras de son bord. Les hauteurs de lignes du fichier se
     // resserrent d'abord (un tableau de la hauteur de la page n'a pas de marge : ses lignes sont celles de PowerPoint, à un point près), puis, si le texte seul les garde trop hautes, le texte se réduit encore.
-    const room = Math.max(env.page.h - box.y, 12);
+    const room = Math.max(env.page.h - box.y - PAGE_FIT_MARGIN_PT, 12);
     let squeeze = 1;
     if (natural > room + PAGE_FIT_TOLERANCE_PT) {
       for (let i = 0; i < 4 && natural > room + PAGE_FIT_TOLERANCE_PT && squeeze > MIN_ROW_SQUEEZE; i++) {
@@ -2332,6 +2333,31 @@ const PptxImport = (function () {
     set('rIns', 91440, outer.x + outer.w - inner.x - inner.w);
     set('bIns', 45720, outer.y + outer.h - inner.y - inner.h);
   }
+  // Le texte d'une forme du dessin prend sa couleur de la référence de police du style (`dsp:style/fontRef`) : celle d'une case à fond blanc dont le style dit « blanc » (`lt1`) serait blanc sur blanc, alors que
+  // PowerPoint montre le texte de la couleur du trait (cas d'un schéma « contour »). Quand le texte (sans couleur à lui) a moins de CONTRAST_MIN de contraste avec le fond plein de sa forme, il prend la couleur du
+  // trait si elle contraste mieux, sinon le noir ou le blanc.
+  const CONTRAST_MIN = 2;
+  const luminanceOf = ([r, g, b]) => [r, g, b].map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrastOf = (a, b) => { const la = luminanceOf(a); const lb = luminanceOf(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+  function diagramTextColor(shape, env) {
+    const fontRef = kid(kid(shape, 'style'), 'fontRef');
+    const spPr = kid(shape, 'spPr');
+    const txBody = kid(shape, 'txBody');
+    if (!fontRef || !spPr || !txBody || descendants(txBody, 'rPr').some(rPr => kid(rPr, 'solidFill'))) return;
+    const textNode = kid(fontRef, COLOR_NODES);
+    const back = fillIn(spPr, env);
+    if (!textNode || !back || !back.color || back.kind === 'none' || back.kind === 'group') return;
+    const backRgb = hexRgb(flatten(back.color, env.bgRgb));
+    const textRgb = hexRgb(flatten(colorOf(textNode, env), backRgb || env.bgRgb));
+    if (!backRgb || !textRgb || contrastOf(backRgb, textRgb) >= CONTRAST_MIN) return;
+    const outline = fillIn(kid(spPr, 'ln'), env);
+    const outlineHex = outline && outline.color && outline.kind !== 'none' && outline.kind !== 'group' ? flatten(outline.color, backRgb) : '';
+    const outlineRgb = hexRgb(outlineHex);
+    const hex = outlineRgb && contrastOf(backRgb, outlineRgb) >= CONTRAST_MIN ? outlineHex : (luminanceOf(backRgb) > 0.4 ? '000000' : 'FFFFFF');
+    const replacement = textNode.ownerDocument.createElementNS(A_NS, 'a:srgbClr');
+    replacement.setAttribute('val', hex);
+    fontRef.replaceChild(replacement, textNode);
+  }
   async function diagramObject(node, data, env, groups, out) {
     const ctx = env.ctx;
     const report = ctx.report;
@@ -2342,7 +2368,7 @@ const PptxImport = (function () {
     const refuse = (why, extra) => { report.diagrams += 1; noteTo(report, 'diagrams', placeOf(ctx), 1, I18n.t('importReport.diagramWhy.' + why, extra)); };
     if (!tree || !shapes.length) { refuse(drawing ? 'empty' : 'noDrawing'); return; }
     if (shapes.length > MAX_DIAGRAM_SHAPES) { refuse('tooMany', { n: shapes.length, max: MAX_DIAGRAM_SHAPES }); return; }
-    shapes.forEach((shape) => { if (shape.localName === 'sp') diagramTextInsets(shape); });
+    shapes.forEach((shape) => { if (shape.localName === 'sp') { diagramTextInsets(shape); diagramTextColor(shape, env); } });
     const frame = Object.assign({}, xf, { chOff: { x: 0, y: 0 }, chExt: { w: xf.w, h: xf.h } });
     if (PROBE_SLIDES.includes(ctx.slideNumber)) probeDiagramXml(ctx, shapes);   // DÉBOGAGE TEMPORAIRE
     const from = out.length;
