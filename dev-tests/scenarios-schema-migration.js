@@ -8,7 +8,7 @@
   const cases = [];
 
   const LEGACY_TABLES = ['Publipostage_Modeles', 'Publipostage_Commentaires', 'Publipostage_LiensTables', 'Publipostage_PreferencesModeles', 'Publipostage_Abreviations', 'Publipostage_FormatsPage'];
-  const LEGACY_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf',
+  const LEGACY_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf', 'EmailLie',
     'ModeleId', 'Auteur', 'Texte', 'CreeLe', 'TableCible', 'ColonneCible', 'ColonneSource'];
   const widgetTables = () => stub().state.tables.filter(t => /^Publipostage_/.test(t));
   const columnsOf = table => Object.keys((stub().state.rows[table]) || {}).filter(k => k !== 'id');

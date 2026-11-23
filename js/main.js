@@ -108,6 +108,8 @@
   async function refreshTemplateList(preloaded) {
     renderTemplateOptions(await (preloaded || Templates.loadAll()));
     adoptTableName();
+    // Un lien d'email posé par une autre personne arrive avec la lecture de la table : le bouton « email lié » le suit (js/main-email-link.js).
+    syncLinkedEmailButton();
   }
   function renderTemplateOptions(templates) {
     templateSelect.innerHTML = '';
@@ -148,6 +150,8 @@
     // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic).
     const defaultKey = currentId == null ? 'lock.defaultNone' : 'lock.defaultType';
     LockReasons.set(btn, 'state', btn.disabled ? I18n.t(defaultKey) : '', defaultKey);
+    // Le bouton « email lié » qui le suit dans la rangée du nom se règle sur le même modèle ouvert, aux mêmes moments (js/main-email-link.js).
+    syncLinkedEmailButton();
   }
 
   // Le ★ du document, posé sur le modèle `id` ou retiré s'il le porte déjà. Trois endroits y mènent : le bouton de la barre (le modèle ouvert), une ligne de
@@ -353,6 +357,7 @@
     LiveEntry.releaseEditor();
     forgetMacroOriginUnless(tpl);
     forgetLinkedOriginUnless(tpl);
+    forgetEmailLinkOriginUnless(tpl);
     // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
     PageZoom.useTemplate(tpl);
     // Les réglages d'export gardés pour ce modèle (type d'export, qualité du PDF, lignes exportées) : les menus se redessinent plus bas, avec son type
@@ -776,6 +781,8 @@
     hasEditsToConfirmBeforeLeaving: (...args) => hasEditsToConfirmBeforeLeaving(...args), isReadOnly, linkedReturnBar, loadTemplateIntoEditor, macroReturnBar,
     onTemplateSelectChange, persist, refreshTemplateList, setStatus, templateSelect,
   });
+  // Le bouton « email lié » de la rangée du nom du document (js/main-email-link.js) : un clic mène à l'email lié, ou au document d'où l'on vient. Il ouvre l'autre modèle par la liste des modèles (onTemplateSelectChange), comme tout choix.
+  const { forgetOriginUnless: forgetEmailLinkOriginUnless, sync: syncLinkedEmailButton, wire: wireLinkedEmailButton } = MainEmailLink.create({ onTemplateSelectChange, refreshTemplateList, setStatus, templateSelect });
 
   // Les exports (le verrou, l'export d'une ligne, les menus d'export, les exports en lot) sont dans js/main-export.js ; ce qu'il tire d'ici lui est donné, le type du modèle et la table à l'écran en lecture.
   const { isExportRunning, onCreateEmail, onCreateEmails, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, selectedExportType, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
@@ -1189,11 +1196,13 @@
     wireTemplateGalleryModal();
     wireTemplateRename();
     wireDefaultTemplateButton();
+    wireLinkedEmailButton();
     wirePdfFilenameToggle();
     wireExportMenus();
     Settings.wireSettingsModal({ hasEditsToConfirmBeforeLeaving, askBeforeLeaving }); // changer de langue recharge la page : la question « Enregistrer / Abandonner / Annuler » d'abord
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();
+    EmailLinkPanel.wire({ setStatus });
     ExportDate.wirePanel();
     RowAttachment.wirePanel();
     wirePageModals();
