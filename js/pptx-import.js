@@ -1927,6 +1927,7 @@ const PptxImport = (function () {
       const room = turned ? (auto ? Math.max(frame.w, env.page.w - frame.x - 1) : frame.w) : (auto ? Math.max(frame.h, env.page.h - frame.y - 1) : frame.h);
       const cap = frame.rot ? Infinity : (turned ? Math.max(env.page.w - frame.x, 12) : Math.max(env.page.h - frame.y, 12));
       const fitted = fitText(ctx, frame, txBody, shape, room, cap, items, turned ? measuredThickness : measuredHeight);
+      ctx.lastFit = { natural: fitted.natural, scale: fitted.scale, room, cap };   // DÉBOGAGE TEMPORAIRE
       items = fitted.items;
       if (fitted.scale < shape.scale - 0.001) { ctx.report.shrunk += 1; noteTo(ctx.report, 'shrunk', placeOf(ctx), 1, shrunkLabel(fitted.scale)); }
       if (turned && lone && !box.rot && fitted.natural < frame.w - 1) {
@@ -2923,7 +2924,7 @@ const PptxImport = (function () {
   // À RETIRER avec le reste du débogage : ce bloc, les appels `probe(` (tableObject, diagramObject, shapeObject), `ctx.probes`, `stats.probes` et les lignes « probes » de js/main-import.js `pptxReportText`. Ce que l'import
   // a mesuré et décidé pour un tableau (sa boîte du fichier, sa hauteur dans l'éditeur, la page), pour le texte de chaque forme d'un schéma (la couleur du texte et celle du fond, pour trouver un texte invisible) et
   // pour les textes des diapositives de PROBE_SLIDES (la boîte du fichier, celle du cadre, l'ancrage, l'ajustement, les marges, la première ligne).
-  const PROBE_SLIDES = [8, 9, 24, 26, 27, 28];
+  const PROBE_SLIDES = [8, 26, 28, 34, 41, 42, 63];
   const MAX_PROBES = 160;
   function probe(ctx, line) { if (ctx.probes && ctx.probes.length < MAX_PROBES) ctx.probes.push(line); }
   const probeRound = value => Math.round(value * 10) / 10;
@@ -2955,7 +2956,8 @@ const PptxImport = (function () {
     probe(ctx, 'text "' + objectNameOf(sp) + '" slide ' + ctx.slideNumber + (ph ? ' ph=' + ph.type + '/' + ph.idx : '') + ' file=(' + [box.x, box.y, box.w, box.h].map(probeRound).join(',') + ') frame=(' + [frame.x, frame.y, frame.w, frame.h].map(probeRound).join(',')
       + ') anchor=' + anchor + ' wrap=' + (bodyAttr(bodies, 'wrap') || '-') + ' fit=' + (fit ? fit.localName + (attr(fit, 'fontScale') ? ' fontScale=' + attr(fit, 'fontScale') : '') + (attr(fit, 'lnSpcReduction') ? ' lnSpcReduction=' + attr(fit, 'lnSpcReduction') : '') : '-')
       + ' ins=' + [inset('lIns', 91440), inset('tIns', 45720), inset('rIns', 91440), inset('bIns', 45720)].join('/') + ' scale=' + probeRound(shape.scale) + ' vert=' + (frame.vert || '-') + ' first="' + (first ? paragraphText(first).slice(0, 30) : '') + '"'
-      + (pPr ? ' lvl=' + (attr(pPr, 'lvl') || 0) + ' marL=' + (attr(pPr, 'marL') || '-') + ' indent=' + (attr(pPr, 'indent') || '-') : ''));
+      + (pPr ? ' lvl=' + (attr(pPr, 'lvl') || 0) + ' marL=' + (attr(pPr, 'marL') || '-') + ' indent=' + (attr(pPr, 'indent') || '-') : '')
+      + (ctx.lastFit ? ' measured=' + probeRound(ctx.lastFit.natural) + ' room=' + probeRound(ctx.lastFit.room) + ' cap=' + probeRound(ctx.lastFit.cap) + ' fitScale=' + probeRound(ctx.lastFit.scale) : '') + ' chars=' + kids(txBody, 'p').map(paragraphText).join('').length + ' paras=' + kids(txBody, 'p').length);
   }
   // --- DÉBOGAGE TEMPORAIRE (11/11 : « améliore le code pour avoir plus de debug, on fera sauter au moment de le sortir ») ------------------------------------------------------------------------------
   // À RETIRER avant la sortie : ce bloc, `decorDebug` dans `decorStats`, `holderUse[].slides`, `ctx.pageEmu`, les lignes « DÉBOGAGE » du texte copié (js/main-import.js `pptxReportText`) et `importReport.debug`.

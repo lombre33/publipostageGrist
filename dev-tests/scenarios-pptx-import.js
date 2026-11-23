@@ -3530,7 +3530,7 @@
       const tableLine = probes.find(line => /^table "Tableau" slide 1 /.test(line)) || '';
       const textLine = probes.find(line => /^text "Zone vue" slide 8 /.test(line)) || '';
       expect('la ligne du tableau dit sa boîte du fichier, la page, sa hauteur naturelle et son bas', /file=\(40,100,400,30\) page=960(\.\d)?x540 natural=\d/.test(tableLine) && /bottom=\d/.test(tableLine) && / rows=1 cols=2$/.test(tableLine), tableLine);
-      expect('la ligne du texte de la diapositive 8 dit l\'ancrage, l\'ajustement avec son fontScale, les marges (7,2 et 3,6), le niveau et le retrait', /anchor=ctr /.test(textLine) && /fit=normAutofit fontScale=92500 lnSpcReduction=10000 /.test(textLine) && / ins=7.2\/3.6\/7.2\/3.6 /.test(textLine) && /lvl=1 marL=342900 indent=-342900$/.test(textLine) && /first="Bonjour le monde"/.test(textLine), textLine);
+      expect('la ligne du texte de la diapositive 8 dit l\'ancrage, l\'ajustement avec son fontScale, les marges (7,2 et 3,6), le niveau et le retrait', /anchor=ctr /.test(textLine) && /fit=normAutofit fontScale=92500 lnSpcReduction=10000 /.test(textLine) && / ins=7.2\/3.6\/7.2\/3.6 /.test(textLine) && /lvl=1 marL=342900 indent=-342900 measured=[\d.]+ room=[\d.]+ cap=[\d.]+ fitScale=[\d.]+ chars=\d+ paras=\d+$/.test(textLine) && /first="Bonjour le monde"/.test(textLine), textLine);
       expect('le texte de la diapositive 1 (non suivie) n\'a pas de ligne', !probes.some(line => /Zone ignorée/.test(line)), probes);
       return result(bad);
     });
