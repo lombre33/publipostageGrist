@@ -517,20 +517,20 @@ const Templates = (function () {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const tableData = first && migrationRuns === runsBefore ? first : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
       const weights = { columns: {}, rows: 0, heaviest: [] };
-      const weighStart = performance.now();
+      const weighStart = Date.now();
       loadedChars = charsOf(tableData, weights);
-      loadWeights = Object.assign(weights, { weighMs: Math.round(performance.now() - weighStart) });
+      loadWeights = Object.assign(weights, { weighMs: Date.now() - weighStart });
       traceStep('modèles : table reçue', { lignes: weights.rows, signesMo: Math.round(loadedChars / 104857.6) / 10 });
       confirmPredictedDates(tableData, writtenAtStart);
       // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
       const templates = [];
       let settingsAt = -1;
-      const rowsStart = performance.now();
+      const rowsStart = Date.now();
       tableData.id.forEach((id, i) => {
         if (!isSettingsRow(tableData, i)) templates.push(templateFromRow(tableData, i));
         else if (settingsAt === -1) settingsAt = i;
       });
-      loadWeights.rowsMs = Math.round(performance.now() - rowsStart);
+      loadWeights.rowsMs = Date.now() - rowsStart;
       templatesCache = keepWrittenSince(templates, writtenAtStart);
       cacheReadAt = readStartedAt;
       cacheArrivedAt = Date.now();
