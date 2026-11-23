@@ -1097,9 +1097,22 @@ const PptxImport = (function () {
       host.className = 'tiptap';
       host.setAttribute('aria-hidden', 'true');
       host.style.cssText = 'position: fixed; left: -100000px; top: 0; width: ' + HOST_WIDTH_PX + 'px; min-height: 0; visibility: hidden; pointer-events: none; zoom: 1';
-      document.body.appendChild(host);
+      // Sous le conteneur de l'éditeur, à l'échelle 1 de la page (EditorCore.pageScale, comme toute mesure de l'éditeur) : une partie des règles du texte et des tableaux (interligne, colonnes, réserve des lignes) ne
+      // s'applique qu'à ce qu'il contient. Hors de lui, le texte mesuré était plus bas que celui que l'éditeur dessine (de 2 pt par ligne repliée d'un tableau : un tableau de la hauteur de la page sortait de la page).
+      const container = document.getElementById('editor-container');
+      (container || document.body).appendChild(host);
       ctx.host = host;
+      try {
+        const editor = container && typeof EditorCore !== 'undefined' && EditorCore.getEditor ? EditorCore.getEditor() : null;
+        ctx.pageScale = editor && EditorCore.pageScale ? EditorCore.pageScale(editor) : null;
+        if (ctx.pageScale) ctx.pageScale.measure(() => 0);
+      } catch (e) {
+        ctx.pageScale = null;
+      }
     }
+    // Le thème du fichier devient celui de la présentation : l'éditeur y écrit le texte dans la police du corps du thème (css/slide-theme.css, `html.pp-themed .tiptap`). Cette police est celle de la ligne autour de chaque
+    // série de caractères d'une autre police : leurs écarts de hauteur font la ligne plus haute (près de 2 pt par ligne d'un tableau en Arial sous un thème en Calibri). L'hôte la prend aussi, pour mesurer ce que l'éditeur dessinera.
+    if (ctx.theme && typeof SlideTheme !== 'undefined' && SlideTheme.fontCss) ctx.host.style.fontFamily = SlideTheme.fontCss(ctx.theme.fonts.body);
     return ctx.host;
   }
   // La hauteur, en points, d'un cadre qui porte ces paragraphes : celle que son texte lui donne, marges comprises. Un paragraphe vide garde sa ligne dans l'éditeur (ProseMirror y pose un retour à la ligne final) : la mesure
@@ -2048,8 +2061,6 @@ const PptxImport = (function () {
   // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Un tableau de PowerPoint devient un tableau de l'éditeur dans un cadre libre, à sa place exacte : ses colonnes et ses hauteurs de ligne, ses cases fusionnées, leur fond, leurs bords, leur alignement vertical et leur texte.
   const PAGE_FIT_TOLERANCE_PT = 0.3;                // le bas d'un tableau qui dépasse la page de moins que cela y est tenu (arrondis de la mesure)
-  const PAGE_FIT_MARGIN_SHARE = 0.04;              // ... ou 4 % de sa hauteur dans le fichier si c'est plus : le texte d'un grand tableau se replie autrement dans l'éditeur (autre largeur de lettres, interligne) et l'écart s'additionne sur ses lignes
-  const PAGE_FIT_MARGIN_PT = 8;                    // le tableau finit au moins à cela du bas de la page : l'éditeur le dessine un peu plus haut que la mesure (bords, arrondis), et un tableau au ras était coupé
   const MIN_ROW_SQUEEZE = 0.5;                     // les lignes d'un tableau se resserrent jusqu'à la moitié de leur hauteur dans le fichier, pour tenir dans la page
   const SPLIT_INSET_PT = 8;                        // un rectangle à fond dont une marge du texte s'écarte de celle de l'éditeur de plus que cela est posé en deux cadres : la forme, puis le texte
   const TABLE_FIT_SLACK = 0.03;                    // un tableau jusqu'à 3 % plus haut que dans le fichier y reste tel quel
@@ -2239,7 +2250,7 @@ const PptxImport = (function () {
     }
     // Jamais plus bas que la page (comme un texte, fitText) : la tolérance de 3 % ne fait pas sortir de la diapositive un tableau qui, dans le fichier, finit au ras de son bord. Les hauteurs de lignes du fichier se
     // resserrent d'abord (un tableau de la hauteur de la page n'a pas de marge : ses lignes sont celles de PowerPoint, à un point près), puis, si le texte seul les garde trop hautes, le texte se réduit encore.
-    const room = Math.max(env.page.h - box.y - Math.max(PAGE_FIT_MARGIN_PT, box.h * PAGE_FIT_MARGIN_SHARE), 12);
+    const room = Math.max(env.page.h - box.y, 12);
     let squeeze = 1;
     if (natural > room + PAGE_FIT_TOLERANCE_PT) {
       for (let i = 0; i < 4 && natural > room + PAGE_FIT_TOLERANCE_PT && squeeze > MIN_ROW_SQUEEZE; i++) {
@@ -3199,6 +3210,7 @@ const PptxImport = (function () {
       }
     } finally {
       if (ctx.host) ctx.host.remove();
+      if (ctx.pageScale) ctx.pageScale.close();
     }
     // Une diapositive après l'autre, et sa version « morceaux » libérée aussitôt : les textes de tout un gros fichier ne coexistent pas deux fois en mémoire.
     const texts = new Array(slides.length);

@@ -3538,7 +3538,7 @@
   // Retour du fichier du 23/11 (diapositive 8) : un tableau de la hauteur de la page entière (de 8,4 à 405,5 pt sur 405,1) dont les lignes du fichier font toutes leur hauteur ; l'éditeur y ajoute la bordure de chaque ligne et
   // le tableau finit un point trop bas. Le texte réduit à 60 % n'y change rien (les lignes sont des hauteurs minimales) : ce sont les lignes qui se resserrent, le texte garde sa taille.
   add('pptx_import_table_as_tall_as_the_page_squeezes_its_rows_not_its_text',
-    'Un tableau de 8 lignes de 50 pt qui finit au ras du bas de la page (y = 140, 540 pt) mesure 401 pt dans l\'éditeur (la bordure de chaque ligne) : ses lignes se resserrent de quelques pour cent pour qu\'il finisse 8 pt avant le bas de la page, son texte garde ses 12 pt (rien n\'est « réduit »)',
+    'Un tableau de 8 lignes de 50 pt qui finit au ras du bas de la page (y = 140, 540 pt) mesure 401 pt dans l\'éditeur (la bordure de chaque ligne) : ses lignes se resserrent de moins d\'un pour cent pour qu\'il tienne dans la page, son texte garde ses 12 pt (rien n\'est « réduit »)',
     async (h) => {
       const rows = Array.from({ length: 8 }, (_, i) => ({ h: 50, cells: [{ text: 'Ligne ' + (i + 1) }, { text: String(i) }] }));
       const r = await run1({ slides: [{ shapes: table({ x: 40, y: 140, cols: [300, 200], rows }) }] });
@@ -3548,9 +3548,9 @@
       const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
       const tbl = document.querySelector('.tiptap .pp-free-frame table');
       const bottom = frame.y + 3.6 + tbl.getBoundingClientRect().height / zoom * 0.75;
-      expect('le bas du tableau, dans l\'éditeur, est à 8 pt au moins du bas de la page, soit 532 pt au plus (0,5 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 532.5, { y: frame.y, bottom });
+      expect('le bas du tableau, dans l\'éditeur, est à 540 pt au plus (0,5 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 540.5, { y: frame.y, bottom });
       expect('le texte garde ses 12 pt : rien n\'est réduit', !r.report.some(item => item.key === 'shrunk') && !/font-size: ([0-9]|1[01])(\.\d+)?pt/.test(frame.el.innerHTML), r.report.map(item => item.key));
-      expect('chaque ligne a une hauteur de 50 pt moins quelques pour cent au plus (de 62 à 66,7 px)', Array.from(tbl.querySelectorAll('tr')).every(tr => { const hpx = parseFloat(tr.getAttribute('data-row-height')); return hpx >= 62 && hpx <= 66.7; }), Array.from(tbl.querySelectorAll('tr')).map(tr => tr.getAttribute('data-row-height')));
+      expect('chaque ligne a une hauteur de 50 pt moins un pour cent au plus', Array.from(tbl.querySelectorAll('tr')).every(tr => { const hpx = parseFloat(tr.getAttribute('data-row-height')); return hpx >= 66 && hpx <= 66.7; }), Array.from(tbl.querySelectorAll('tr')).map(tr => tr.getAttribute('data-row-height')));
       return result(bad);
     });
 
@@ -3641,6 +3641,25 @@
       expect('l\'éditeur garde le cadre : le titre, le tableau de 4 lignes et les chiffres', written.frames.length === 1 && /Résultats/.test(written.frames[0].text) && written.frames[0].el.querySelectorAll('tr').length === 4 && /18,5/.test(written.frames[0].text), written.frames.map(f => f.text));
       const keys = r.report.map(entry => entry.key);
       expect('le rapport : un graphique remplacé, un graphique non repris (partie manquante)', keys.includes('chartTables') && keys.includes('charts') && r.report.find(entry => entry.key === 'chartTables').n === 1 && r.report.find(entry => entry.key === 'charts').n === 1, keys);
+      return result(bad);
+    });
+
+  // Retour du fichier du 23/11 (diapositive 8) : un tableau en Arial sous un thème en Calibri était mesuré 2 pt trop bas par ligne repliée : l'éditeur écrit le texte dans la police du corps du thème (la police de la ligne autour
+  // des séries de caractères d'une autre police), que l'hôte de mesure de l'import n'avait pas. Un tableau de la hauteur de la page sortait alors de la page. La hauteur mesurée est celle que l'éditeur dessine.
+  add('pptx_import_table_height_measured_by_the_import_is_the_one_the_editor_draws',
+    'Un tableau de lignes repliées (Arial gras 14 pt) sous le thème Calibri du fichier : la hauteur que l\'import lui donne (celle de son cadre moins les marges) est celle du tableau dessiné par l\'éditeur, à un demi-point près',
+    async (h) => {
+      const bold = t => para(run(t, 'sz="1400" b="1"', '<a:latin typeface="Arial"/>'), 'algn="ctr"');
+      const longs = ['Boîte à outils « Innovation & Partenariats Industriels » pour les chercheurs', 'Besoin de clarifier les besoins par les publics cibles. Préalable : structurer l\'offre des UR à partir des PTI et identifier les compétences', 'Séminaire Personnel Administratif', 'Nécessité de clarifier le public cible afin d\'adapter le format des rencontres.'];
+      const rows = Array.from({ length: 6 }, (_, i) => ({ h: 40, cells: [{ paras: bold('UB') }, { paras: bold(longs[i % 4]) }, { paras: bold(longs[(i + 1) % 4]) }, { paras: bold('oui') }] }));
+      await h.resetEditor();
+      const r = await run1({ size: [960, 540], slides: [{ shapes: table({ x: 40, y: 20, cols: [80, 260, 360, 100], rows }) }] });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].tableFrames[0];
+      await inEditor(h, r);
+      const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+      const real = document.querySelector('.tiptap .pp-free-frame table').getBoundingClientRect().height / zoom * 0.75;
+      expect('la hauteur du tableau mesurée par l\'import (' + (frame.h - 7.2).toFixed(2) + ' pt) est celle de l\'éditeur (' + real.toFixed(2) + ' pt), à 0,5 pt près', Math.abs(frame.h - 7.2 - real) <= 0.5, { frame: frame.h - 7.2, real });
       return result(bad);
     });
 
