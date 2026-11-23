@@ -330,7 +330,7 @@ const MainAutosave = (function () {
         // redemande. Un modèle chargé pendant l'écriture (autosaveEpoch) n'est pas celui qui a été refusé : ni arrêt ni message pour lui.
         if (GristAPI.isAccessRefusal(e)) {
           console.warn('[main] auto-save : Grist refuse l’écriture (règle d’accès)', e);
-          if (epoch === persist.autosaveEpoch) { persist.autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
+          if (epoch === persist.autosaveEpoch) { persist.autosaveRefusedEpoch = epoch; setStatus(I18n.t(GristAPI.refusalKind(e) === 'structure' ? 'status.saveRefusedStructure' : 'status.saveRefused'), true); }
           return;
         }
         console.error('[main] auto-save : échec d’enregistrement', e);
@@ -358,6 +358,7 @@ const MainAutosave = (function () {
       if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
       persist.autosaveLastCheckAt = checkStartedAt;
       adoptTableName(); // un nom donné ailleurs depuis l'ouverture (GFS) : le titre le prend avant que ce passage n'écrive
+      TemplateNotice.sync(); // et une notice changée ailleurs : son bandeau reparaît (js/template-notice.js)
       const remoteTpl = remote.remoteTpl;
       if (changedElsewhere(remoteTpl)) {
         // Une personne du direct vient d'enregistrer : sa date est annoncée dans la seconde (adoptLiveSave), le conflit n'est dit qu'au passage d'après, une fois par date inconnue. Le passage suivant relit.

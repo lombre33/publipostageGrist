@@ -108,6 +108,9 @@
   async function refreshTemplateList(preloaded) {
     renderTemplateOptions(await (preloaded || Templates.loadAll()));
     adoptTableName();
+    TemplateNotice.sync(); // une notice changée par une autre personne depuis l'ouverture
+    // Un lien d'email posé par une autre personne arrive avec la lecture de la table : le bouton « email lié » le suit (js/main-email-link.js).
+    syncLinkedEmailButton();
   }
   function renderTemplateOptions(templates) {
     templateSelect.innerHTML = '';
@@ -148,6 +151,8 @@
     // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic).
     const defaultKey = currentId == null ? 'lock.defaultNone' : 'lock.defaultType';
     LockReasons.set(btn, 'state', btn.disabled ? I18n.t(defaultKey) : '', defaultKey);
+    // Le bouton « email lié » qui le suit dans la rangée du nom se règle sur le même modèle ouvert, aux mêmes moments (js/main-email-link.js).
+    syncLinkedEmailButton();
   }
 
   // Le ★ du document, posé sur le modèle `id` ou retiré s'il le porte déjà. Trois endroits y mènent : le bouton de la barre (le modèle ouvert), une ligne de
@@ -234,6 +239,7 @@
     Editor.setHTML('');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     showTemplateNames(tpl);
+    TemplateNotice.show(tpl); // un macro-modèle n'a pas de notice : la ligne du menu du crayon se grise
     currentTypeModele = 'macro';
     if (emailFieldsRow) emailFieldsRow.hidden = true;
     emailFieldsRawCache = null;
@@ -330,10 +336,16 @@
     }
   }
 
+  // Le journal d'ouverture (js/perf-trace.js:opened) : quel document, de quel type et de quel poids, et le temps que loadTemplateIntoEditor a tenu la page (la suite d'une présentation qui se pose par morceaux a ses propres repères).
+  function traceOpened(tpl, type, startedAt) {
+    PerfTrace.opened({ id: tpl ? tpl.id : null, type, Ko: Math.round(String(tpl && tpl.contenu || '').length / 1024), fonctionMs: Math.round(performance.now() - startedAt) });
+  }
+
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
   // réécrit ici. options.progressive : le choix d'un modèle dans la liste (onTemplateSelectChange) - un gros modèle de présentation enregistré s'ouvre alors par morceaux sous un voile (fillOpenedPresentation) ;
   // les autres chemins (restauration d'une version, retours, conflit d'enregistrement) chargent le texte d'un bloc, comme avant.
   function loadTemplateIntoEditor(tpl, forcedTypeModele, options) {
+    const openedAt = performance.now();
     // Le point de passage de toute ouverture (liste, modèle de la vue, règle de ligne, retours, restauration...) : un modèle d'un type que le widget ne sait pas ouvrir n'entre jamais
     // dans l'éditeur, quel que soit le chemin (garde « type inconnu », js/templates.js:isOpenableType). Avant tout le reste : rien de l'écran ne change.
     if (tpl && !Templates.isOpenableType(tpl.typeModele)) { keepOpenTemplate(tpl); return; }
@@ -347,12 +359,13 @@
     LiveEntry.releaseEditor();
     forgetMacroOriginUnless(tpl);
     forgetLinkedOriginUnless(tpl);
+    forgetEmailLinkOriginUnless(tpl);
     // Le niveau de zoom gardé pour ce modèle (macro-modèle compris), avant tout calcul du facteur d'ajustement de la page (js/page-zoom.js).
     PageZoom.useTemplate(tpl);
     // Les réglages d'export gardés pour ce modèle (type d'export, qualité du PDF, lignes exportées) : les menus se redessinent plus bas, avec son type
     // (syncExportRowsForModelType).
     ExportChoices.useTemplate(tpl);
-    if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); return; }
+    if (tpl && tpl.typeModele === 'macro') { loadMacroIntoEditor(tpl); traceOpened(tpl, 'macro', openedAt); return; }
     closeTemplateRenameEditor();
     // Sans cette sortie, changer de modèle pendant l'édition d'un en-tête ou d'un pied de page laisserait leur contenu à la place du document
     // principal qu'on s'apprête à écraser (même garde que l'enregistrement, les exports et la Lecture).
@@ -365,6 +378,7 @@
     const openPlan = options && options.progressive && typeModele === SlidesEntry.TYPE ? ImportPlacing.planOpen(tpl) : null;
     loadContentIntoEditor(tpl, typeModele, openPlan);
     showTemplateNames(tpl);
+    TemplateNotice.show(tpl); // la notice du document qui s'ouvre : son bandeau et la ligne « Notice du document… » du menu du crayon
     currentTypeModele = typeModele;
     loadEmailFields(tpl);
     syncEmailEditorMode();
@@ -403,6 +417,7 @@
     resetAutosaveState(tpl);
     // Après la remise à zéro : ce que la synchro dit sur la ligne d'état n'est pas effacé par elle, et son tableau remplacé ne rend pas le document « à enregistrer ».
     followLinkedModels(true);
+    traceOpened(tpl, currentTypeModele, openedAt);
     if (openPlan) fillOpenedPresentation(tpl, openPlan);
   }
 
@@ -769,6 +784,8 @@
     hasEditsToConfirmBeforeLeaving: (...args) => hasEditsToConfirmBeforeLeaving(...args), isReadOnly, linkedReturnBar, loadTemplateIntoEditor, macroReturnBar,
     onTemplateSelectChange, persist, refreshTemplateList, setStatus, templateSelect,
   });
+  // Le bouton « email lié » de la rangée du nom du document (js/main-email-link.js) : un clic mène à l'email lié, ou au document d'où l'on vient. Il ouvre l'autre modèle par la liste des modèles (onTemplateSelectChange), comme tout choix.
+  const { forgetOriginUnless: forgetEmailLinkOriginUnless, sync: syncLinkedEmailButton, wire: wireLinkedEmailButton } = MainEmailLink.create({ onTemplateSelectChange, refreshTemplateList, setStatus, templateSelect });
 
   // Les exports (le verrou, l'export d'une ligne, les menus d'export, les exports en lot) sont dans js/main-export.js ; ce qu'il tire d'ici lui est donné, le type du modèle et la table à l'écran en lecture.
   const { isExportRunning, onCreateEmail, onCreateEmails, onExport, onExportBatch, onExportDocx, onExportPdf, onExportXlsx, selectedExportType, syncExportMenus, syncExportRowsForModelType, withExportLock } = MainExport.create({
@@ -1181,12 +1198,15 @@
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();
+    TemplateNotice.wire({ status: setStatus }); // la notice du document : le bandeau, la fenêtre et la ligne du menu du crayon (js/template-notice.js)
     wireDefaultTemplateButton();
+    wireLinkedEmailButton();
     wirePdfFilenameToggle();
     wireExportMenus();
     Settings.wireSettingsModal({ hasEditsToConfirmBeforeLeaving, askBeforeLeaving }); // changer de langue recharge la page : la question « Enregistrer / Abandonner / Annuler » d'abord
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();
+    EmailLinkPanel.wire({ setStatus });
     ExportDate.wirePanel();
     RowAttachment.wirePanel();
     wirePageModals();
@@ -1245,6 +1265,7 @@
     const editorReady = Editor.init();
     editorReady.catch(() => {}); // l'échec se lit plus bas, à l'attente ; ici seulement pas d'« unhandled rejection » le temps que Grist réponde
     try { await gristInit; } catch (e) { setStatus(I18n.t('status.gristApiError'), true); }
+    PerfTrace.mark('démarrage : Grist prêt');
     // Lancé dès que les options du widget sont connues (GristAPI.init), attendu seulement avant le premier affichage, en fin d'init().
     const accessReady = AccessRights.init();
     // Au plus ACCESS_STARTUP_WAIT_MS : le widget démarre verrouillé (lecture seule) tant que les droits ne sont pas connus. Une seule attente, quel que soit le nombre de fois qu'on la demande.
@@ -1275,6 +1296,7 @@
     PdfReading.onChange(onPdfReadingChange);
     PdfReading.onLocksChanged(applyPdfLocks);
     await editorReady;
+    PerfTrace.mark('démarrage : éditeur prêt');
     attachFieldEditors(await Editor.loadLibraries());
     Comments.setReaderHooks({ save: saveReaderCommentAnchors, refresh: () => renderReader() });
     Comments.wireReader(readerContainer);
@@ -1284,6 +1306,7 @@
     GristAPI.onRecord(onRecordChange);
     BatchScope.onViewChange(onViewRowsChanged);
     await refreshTemplateList(templatesLoaded);
+    PerfTrace.mark('démarrage : liste des documents prête');
     // Enveloppe #template-select avant l'écriture de templateSelect.value ci-dessous (modèle par défaut) : TemplateTreeSelect intercepte cet
     // accesseur pour se synchroniser (js/template-tree-select.js), donc l'ordre importe ; attaché après, le premier affichage du modèle par défaut
     // serait manqué.
@@ -1319,6 +1342,7 @@
     // la vue et le ★. Son identifiant vient du fragment de l'adresse du cadre, effacé aussitôt, jamais du stockage du navigateur (le cadre isolé de GFS le refuse). Les extensions viennent du contexte de GFS
     // (une présentation ne s'ouvre que si « diapositives » est active) : on l'attend d'abord, comme js/gfs-open.js. Modèle supprimé entre-temps ou que ce widget ne sait pas ouvrir : l'ordre habituel, sans message.
     await GfsLink.ready;
+    PerfTrace.mark('démarrage : GFS prête');
     const reopenId = Settings.takeReopenId();
     const reopenedTemplate = reopenId == null ? undefined : Templates.openableById(reopenId);
     const reopenTemplateId = reopenedTemplate ? reopenedTemplate.id : null;
@@ -1360,6 +1384,7 @@
     // `importing` : un fichier ou un modèle de départ que GFS donne va s'ouvrir juste après (« Nouveau > Importer », « Nouveau > Depuis un modèle ») : il se pose dans l'éditeur, le départ est en Édition.
     await switchMode(startMode({ blank: gfsBlankOpened || gfsBlankType !== null, importing: !!opening && (opening.raison === 'importer' || opening.raison === 'modele'), hasTemplate: startupTemplateId !== undefined }));
     FirstContact.ready();
+    PerfTrace.mark('démarrage : widget prêt');
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et l'import que GFS demande (« Nouveau > Importer ») puis les appels `ouvrir` reçus pendant le démarrage sont traités à la fin de ce tour.
     GfsOpen.startupDone();

@@ -31,14 +31,16 @@ const MarkdownImport = (function () {
   const escapeAttr = text => String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   // --- Le lecteur -------------------------------------------------------------------------------------------------------------------------------
-  // Un lecteur à nous : les réglages de marked ne changent pas pour le reste de la page. Les notes de bas de page « [^1] » n'existent pas dans marked : une extension
+  // Un lecteur à nous : les réglages de marked ne changent pas pour le reste de la page. `breaks: true` : un retour à la ligne seul, au milieu d'un paragraphe, reste un retour à la ligne
+  // (CommonMark, lui, le fond en un blanc : deux lignes écrites l'une sous l'autre n'en feraient qu'une - relevé du 23/11 sur un .md ouvert dans Notepad++ ; Notepad++, Obsidian, Typora et
+  // GitHub le montrent à la ligne). La ligne vide sépare toujours deux paragraphes, et « \ » ou deux espaces en fin de ligne ne font qu'un retour, pas deux. Les notes de bas de page « [^1] » n'existent pas dans marked : une extension
   // en ligne les lit, après les échappements et le code (« \[^1] » et « `[^1]` » restent du texte), pour celles dont une définition existe (`notes`, étiquette en
   // minuscules -> texte brut) et que rien d'autre ne réclame.
   const state = { notes: new Map(), counter: 0 };
   let parser = null;
   function markdownParser() {
     if (parser) return parser;
-    parser = new window.marked.Marked({ gfm: true, breaks: false });
+    parser = new window.marked.Marked({ gfm: true, breaks: true });
     parser.use({
       extensions: [{
         name: 'footnoteRef',

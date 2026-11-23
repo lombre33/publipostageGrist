@@ -113,8 +113,8 @@ class Doc {
   writes() { return this.journal.slice(); }
 }
 
-const LEGACY_COLS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf'];
-const ENGLISH_COLS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', 'PdfPassword'];
+const LEGACY_COLS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'HeaderFooter', 'Margins', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf', 'EmailLie'];
+const ENGLISH_COLS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', 'PdfPassword', 'LinkedEmail'];
 
 function fresh(doc, { englishOnDisk = false, migrate = false, globals = {} } = {}) {
   // Un journal muet : le traducteur avertit (console.warn) quand un lot de renommage est refusé, ce que plusieurs cas jouent exprès.
@@ -486,7 +486,8 @@ async function main() {
     check('dans une table : un nom anglais par colonne, jamais deux fois le même', tables.every((t) => new Set(t.columns.map((c) => c[0])).size === t.columns.length), ids);
     check('dans une table : un nom d\'avant par colonne, jamais deux fois le même', tables.every((t) => new Set(t.columns.map((c) => c[1])).size === t.columns.length), legacies);
     check('les sept tables du widget qui avaient un nom français : une entrée chacune, sous des noms anglais distincts', tables.length === 7 && new Set(tables.map((t) => t.id)).size === 7, tables.map((t) => t.id));
-    check('la table des modèles porte ses 17 colonnes', tables[0].columns.length === 17 && same(tables[0].columns.map((c) => c[0]), ENGLISH_COLS) && same(tables[0].columns.map((c) => c[1]), LEGACY_COLS), tables[0].columns.length);
+    // La 19e colonne, « Notice » (js/template-notice.js), est née en anglais : rien d'avant à renommer, son nom d'avant est le même ; les documents d'avant (LEGACY_COLS) ne l'ont pas.
+    check('la table des modèles porte ses 19 colonnes', tables[0].columns.length === 19 && same(tables[0].columns.map((c) => c[0]), [...ENGLISH_COLS, 'Notice']) && same(tables[0].columns.map((c) => c[1]), [...LEGACY_COLS, 'Notice']), tables[0].columns.length);
     check('aucun nom anglais ne porte un accent ni une lettre française', ids.every((id) => /^[A-Za-z]+$/.test(id)), ids);
   });
 }

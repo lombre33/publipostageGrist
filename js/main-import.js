@@ -508,6 +508,10 @@ const MainImport = (function () {
           pptxDebugLines(holder, mapsSeen).forEach(line => footer.push(line));
         });
       }
+      if (stats && stats.probes && stats.probes.length) {   // DÉBOGAGE TEMPORAIRE (23/11, voir js/pptx-import.js `probe`)
+        footer.push(I18n.t('importReport.debug') + ' : probes');
+        stats.probes.forEach(line => footer.push('  ' + line));
+      }
       return ImportReport.plainText({ header, intro: I18n.t('importReport.text.lost'), entries, footer });
     }
 

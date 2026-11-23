@@ -314,14 +314,12 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
   const problems = problemsOf(ref, now, bar.zone);
   for (const key of ['zone', 'hidden', 'order', 'left', 'single', 'separators']) check(`700 × 400, barre en haut : ${SMALL[key]}`, problems[key].length === 0, problems[key]);
   check('700 × 400 : pas de ligne de plus et pas de bande (même nombre de lignes, même hauteur de barre d’outils que sans barre)', linesOf(now.units) === linesOf(ref.units) && Math.abs(now.height - ref.height) < 0.5, { refHeight: ref.height, nowHeight: now.height, refLines: linesOf(ref.units), nowLines: linesOf(now.units) });
-  check('le vide est utile : sans lui, Enregistrer, Supprimer et Tables liées seraient sous la barre (la référence les y met), et il les a poussés à son bord droit (416) à la suite', ['v2-save-group#0', 'btn-delete#0', 'btn-link-rules#0'].every(key => ref.units.find(u => u.key === key) && hits(ref.units.find(u => u.key === key), { left: 284, top: 0, right: 416, bottom: 42 })) && Math.abs(now.units.find(u => u.key === 'v2-save-group#0').left - 416) < 0.5, { saved: now.units.find(u => u.key === 'v2-save-group#0') });
+  // Depuis l'email lié (23/11) le regroupement du modèle compte trois boutons : « + » finit 5 px dans la zone et c'est lui, le premier, que la barre pousse à son bord droit ; Enregistrer, Supprimer et Tables liées le suivent.
+  check('le vide est utile : sans lui, « + », Enregistrer, Supprimer et Tables liées seraient sous la barre (la référence les y met), et il les a poussés à son bord droit (416) à la suite', ['v2-new-template-group#0', 'v2-save-group#0', 'btn-delete#0', 'btn-link-rules#0'].every(key => ref.units.find(u => u.key === key) && hits(ref.units.find(u => u.key === key), { left: 284, top: 0, right: 416, bottom: 42 })) && Math.abs(now.units.find(u => u.key === 'v2-new-template-group#0').left - 416) < 0.5, { pushed: now.units.find(u => u.key === 'v2-new-template-group#0') });
   const alone = edgeSeparators(now);
-  check('700 × 400 : la coupure de la ligne laisse « Page | Type d’export » seul au début de la deuxième ligne (un trait à cacher), et son trait est caché alors que celui de l’autre séparateur se voit', alone.length === 1 && alone[0].hidden && now.units.filter(u => u.sep && !u.hidden).length >= 1, { alone, separators: now.units.filter(u => u.sep) });
-  await app.evaluate(() => document.querySelectorAll('.pp-sep-alone').forEach(el => el.classList.remove('pp-sep-alone')));
-  const ticksShown = await measure(app);
-  await app.evaluate(() => ToolbarGap.refresh());
-  const ticksHidden = await measure(app);
-  check('cacher le trait ne bouge rien : trait montré, tous les éléments sont à la même place (le séparateur garde sa largeur, sa place est la sienne) ; la mise en page le recache aussitôt', now.units.some(u => u.hidden) && same(unitsAt(ticksShown), unitsAt(now)) && ticksShown.units.every(u => !u.hidden) && same(ticksHidden.units.map(u => [u.key, u.hidden]), now.units.map(u => [u.key, u.hidden])), { shown: unitsAt(ticksShown), hidden: ticksHidden.units.filter(u => u.hidden).map(u => u.key) });
+  // Avant l'email lié, la coupure laissait à 700 px « Page | Type d'export » seul au début de la deuxième ligne. Avec ses 26 px de plus dans la rangée, « Page » passe à la ligne avec son trait, qui sépare alors deux éléments : il se voit.
+  // Le trait seul se prouve au balayage des largeurs (plus bas), là où la coupure en laisse un.
+  check('700 × 400 : tout séparateur que la coupure laisse seul au bord d’une ligne a son trait caché, celui qui sépare deux éléments se voit (« Page | Type d’export » tient ensemble au début de la deuxième ligne : ses deux traits se voient)', alone.every(u => u.hidden) && now.units.filter(u => u.sep && !u.hidden).length >= 2, { alone, separators: now.units.filter(u => u.sep) });
   const keys = now.units.map(u => u.key);
   check('même nombre d’éléments et mêmes noms dans le même ordre que sans barre (rien de caché, rien d’ajouté, l’ordre de tabulation est celui du document)', same(keys, ref.units.map(u => u.key)) && keys.length >= 12, { keys });
   await sleep(500);
@@ -499,6 +497,15 @@ console.log('\n1) 700 × 400, la barre en haut dès le contexte : un vide sous l
     separatorProblems(bare).forEach(text => swept.problems.push(width + ' px, sans barre : ' + text));
     if (edgeSeparators(barred).length) swept.withBar += 1;
     if (edgeSeparators(bare).length) swept.without += 1;
+    // Le premier cadre où la barre en haut laisse un trait seul (à 700 px avant l'email lié) : cacher le trait ne bouge rien, la mise en page le recache aussitôt. `barred` vient d'être mesuré, la barre est encore là.
+    if (!swept.shownAt && edgeSeparators(barred).length) {
+      swept.shownAt = width;
+      await app.evaluate(() => document.querySelectorAll('.pp-sep-alone').forEach(el => el.classList.remove('pp-sep-alone')));
+      const ticksShown = await measure(app);
+      await app.evaluate(() => ToolbarGap.refresh());
+      const ticksHidden = await measure(app);
+      check(`${width} × 400 : cacher le trait ne bouge rien : trait montré, tous les éléments sont à la même place (le séparateur garde sa largeur, sa place est la sienne) ; la mise en page le recache aussitôt`, barred.units.some(u => u.hidden) && same(unitsAt(ticksShown), unitsAt(barred)) && ticksShown.units.every(u => !u.hidden) && same(ticksHidden.units.map(u => [u.key, u.hidden]), barred.units.map(u => [u.key, u.hidden])), { shown: unitsAt(ticksShown), hidden: ticksHidden.units.filter(u => u.hidden).map(u => u.key) });
+    }
   }
   check('de 400 à 800 px de large, avec la barre en haut puis sans : ' + SMALL.separators, swept.problems.length === 0, swept.problems.slice(0, 6));
   check('et le balayage est sérieux (' + swept.widths + ' largeurs) : la coupure a laissé un séparateur seul à ' + swept.withBar + ' largeurs avec la barre et ' + swept.without + ' sans', swept.widths === 21 && swept.withBar >= 5 && swept.without >= 3, swept);

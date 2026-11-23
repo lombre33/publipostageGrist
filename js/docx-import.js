@@ -152,6 +152,8 @@ const DocxImport = (function () {
   }
 
   // --- La numérotation -----------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Le retrait gauche (en vingtièmes de point) que le niveau d'une numérotation donne à ses points : `w:ind` de `w:pPr`, ou null.
+  const indentOf = pPr => numAttr(kid(pPr, 'ind'), 'left', numAttr(kid(pPr, 'ind'), 'start', null));
   function readNumbering(doc) {
     const out = { abstracts: new Map(), nums: new Map() };
     if (!doc) return out;
@@ -163,7 +165,7 @@ const DocxImport = (function () {
         levels.set(level, {
           start: numAttr(kid(lvl, 'start'), 'val', 1), fmt: attr(kid(lvl, 'numFmt'), 'val') || 'decimal', text: attr(kid(lvl, 'lvlText'), 'val') || '',
           font: attr(kid(kid(lvl, 'rPr'), 'rFonts'), 'ascii') || attr(kid(kid(lvl, 'rPr'), 'rFonts'), 'hAnsi') || '', pStyle: attr(kid(lvl, 'pStyle'), 'val'),
-          legal: !!kid(lvl, 'isLgl'),
+          legal: !!kid(lvl, 'isLgl'), left: indentOf(kid(lvl, 'pPr')),
         });
       });
       out.abstracts.set(attr(el, 'abstractNumId'), levels);
@@ -308,6 +310,8 @@ const DocxImport = (function () {
     if (look.hidden) { count(st.ctx, 'hidden'); return; }
     // Un titre de l'éditeur est déjà en gras : le gras du style « Titre » de Word n'ajoute pas de balise.
     if (st.heading) look.b = false;
+    // Une citation de l'éditeur est déjà en italique et grise (#444) : l'italique et le gris du style « Citation » n'ajoutent pas de balise.
+    if (st.quote) { look.i = false; look.style = look.style.filter(rule => rule !== 'color: #444444'); }
     const last = st.items[st.items.length - 1];
     const comments = openComments(st.ctx);
     st.items.push({ key: lookKey(look, st.link, st.track, comments) + (look.caps ? '|C' : ''), look, link: st.link, caps: look.caps, text, track: st.track, comments });
@@ -818,6 +822,13 @@ const DocxImport = (function () {
     const fill = p.shd && p.shd.fill && !/^auto$/i.test(p.shd.fill) && String(p.shd.val || '') !== 'clear' ? true : (p.shd && p.shd.fill && !/^auto$/i.test(p.shd.fill));
     return lines || !!fill;
   }
+  // Le paragraphe n'a qu'un filet au bas et rien d'autre (ni autre côté, ni fond).
+  function isRuleParagraph(p) {
+    const box = p.pBdr && p.pBdr.el;
+    if (!box || (p.shd && p.shd.fill && !/^auto$/i.test(p.shd.fill))) return false;
+    const shown = side => { const el = kid(box, side); return !!el && !NO_BORDER.test(attr(el, 'val') || 'none'); };
+    return shown('bottom') && !shown('top') && !shown('left') && !shown('right');
+  }
   function hasCustomTabs(p) {
     const box = p.tabs && p.tabs.el;
     return box ? kids(box, 'tab').some(t => attr(t, 'val') !== 'clear') : false;
@@ -856,7 +867,7 @@ const DocxImport = (function () {
       else if (/^[o○◦]$/.test(sign)) style = 'circle';
       else if (/^[▪■◾◼§▫□◻]$/.test(sign)) style = 'square';
       else char = BulletFormat.normalized(sign) || '';
-      return { tag: 'ul', style, char, start: 1, level: ilvl, id: numId };
+      return { tag: 'ul', style, char, start: 1, level: ilvl, id: numId, indent: lvl.left };
     }
     const numberFormats = { decimal: 'decimal', lowerLetter: 'alpha', upperLetter: 'alpha', lowerRoman: 'roman', upperRoman: 'roman' };
     const style = numberFormats[lvl.fmt] || 'decimal';
@@ -864,7 +875,7 @@ const DocxImport = (function () {
     const simple = /^%\d[.)]?$/.test(lvl.text) || /^\(%\d\)$/.test(lvl.text);
     const noted = 'num:' + numId + ':' + ilvl;
     if ((!numberFormats[lvl.fmt] || /^upper/.test(lvl.fmt) || !simple) && !ctx.fontsSeen.has(noted)) { ctx.fontsSeen.add(noted); count(ctx, 'numbering'); }
-    return { tag: 'ol', style, char: '', start: ordinal, level: ilvl, id: numId };
+    return { tag: 'ol', style, char: '', start: ordinal, level: ilvl, id: numId, indent: lvl.left };
   }
 
   // Un paragraphe de la table des matières de Word (styles « TM 1 » à « TM 9 », « En-tête TM », ou leurs noms d'origine « TOC 1 », « TOC Heading ») : l'éditeur refait son sommaire lui-même à partir des titres.
@@ -884,6 +895,7 @@ const DocxImport = (function () {
     const baseSize = level ? EDITOR_HEADING_PT['H' + level] : EDITOR_BODY_PT;
     const st = newState(ctx, part, resolved, baseSize, depth);
     st.heading = !!level;
+    st.quote = !level && isQuote(resolved);
     readInline(st, p, 0);
     const sectPr = kid(pPr, 'sectPr');
     if (sectPr) ctx.sections.push(sectPr);
@@ -895,11 +907,15 @@ const DocxImport = (function () {
     const markRun = resolveRun(ctx, resolved.r, kid(pPr, 'rPr'));
     const sizePt = markRun.sz ? Number(markRun.sz.val) / 2 : EDITOR_BODY_PT;
     const format = formatOf(props, sizePt, !!list, st);
+    // Le retrait d'une citation (celui de l'export de l'éditeur, 20 pt) est celui de `blockquote` : il n'est pas posé en plus.
+    if (st.quote) delete format.indentLeft;
     // Les tabulations ne comptent que dans un paragraphe qui en contient une : un style qui en déclare sans qu'on s'en serve ne change rien à ce qu'on voit.
     const hasTab = st.items.some(item => item.text && item.text.indexOf('\t') >= 0);
     if (ctx.tabStop && hasTab) format.tabSize = ctx.tabStop;
     if (hasTab && hasCustomTabs(props)) lose(st, 'tabs');
-    if (hasBorders(props)) lose(st, 'paragraphBorders');
+    // Un paragraphe vide qui n'est qu'un filet en dessous (ce que l'export de l'éditeur écrit pour un trait horizontal) : le trait horizontal de l'éditeur.
+    const rule = !level && !list && !st.items.some(item => item.text) && isRuleParagraph(props);
+    if (hasBorders(props) && !rule) lose(st, 'paragraphBorders');
     const align = alignOf(props, rtl);
     const direction = TextDirection.markup(rtl);
     const keep = isOn(props.keepNext) && !level ? ' data-keep-next="true"' : '';
@@ -913,7 +929,9 @@ const DocxImport = (function () {
       const empty = !html;
       if (empty && segments.length > 1) return;
       let block;
-      if (level) {
+      if (rule) {
+        block = '<hr>';
+      } else if (level) {
         block = '<h' + level + direction + (align ? ' style="text-align: ' + align + '"' : '') + '>' + html + '</h' + level + '>';
       } else {
         const attrs = direction + ParagraphFormat.markup(format, align, rtl) + keep;
@@ -930,19 +948,35 @@ const DocxImport = (function () {
     if (sectPr && !(attr(kid(sectPr, 'type'), 'val') === 'continuous')) out.push({ raw: '<div class="page-break-marker"></div>' });
     return out;
   }
+  const NESTED_MIN_TWIP = 200;   // l'écart de retrait à partir duquel une liste d'une autre numérotation est une sous-liste
   // Les blocs en balisage : les listes sont emboîtées selon leur niveau (jamais de saut de niveau), une liste change quand sa sorte ou son style change (js/pptx-import.js:assemble).
   function assemble(items) {
     let out = '';
     const stack = [];
     const closeTo = (depth) => { while (stack.length > depth) out += '</li></' + (stack.pop().tag === 'ol' ? 'ol' : 'ul') + '>'; };
+    // Des paragraphes consécutifs qui commencent par une case (☐ ☑ ☒) ou dont tout le texte est à chasse fixe (le bloc de code d'un export) : la liste de cases et le bloc de code de l'éditeur.
+    let plain = [];
+    const flushPlain = () => { if (plain.length) { out += ExportCommon.groupedBlocks(plain); plain = []; } };
     items.forEach((item) => {
       if (!item.list) {
         closeTo(0);
-        out += item.quote ? '<blockquote>' + item.html + '</blockquote>' : (item.raw !== undefined ? item.raw : item.html);
+        if (item.quote || item.raw !== undefined) { flushPlain(); out += item.quote ? '<blockquote>' + item.html + '</blockquote>' : item.raw; } else plain.push(item.html);
         return;
       }
+      flushPlain();
       const l = item.list;
-      const level = Math.min(l.level, stack.length);
+      let level = Math.min(l.level, stack.length);
+      // Une sous-liste que d'autres programmes (et l'export Word de l'éditeur) écrivent comme une AUTRE numérotation de niveau 0 plus en retrait que la liste qui la précède : elle s'emboîte dans celle-ci.
+      if (l.level === 0 && stack.length && Number.isFinite(l.indent)) {
+        const open = stack.findIndex(entry => entry.id === l.id);
+        if (open >= 0) {
+          level = open;
+        } else {
+          let parent = -1;
+          stack.forEach((entry, at) => { if (Number.isFinite(entry.indent) && entry.indent + NESTED_MIN_TWIP <= l.indent) parent = at; });
+          level = parent + 1;
+        }
+      }
       closeTo(level + 1);
       const key = l.tag + ':' + l.style + ':' + l.char + ':' + l.id + ':' + (item.rtl ? 'rtl' : '');
       const top = stack[level];
@@ -953,12 +987,13 @@ const DocxImport = (function () {
         const way = TextDirection.markup(item.rtl);
         if (l.tag === 'ol') out += '<ol' + way + (l.style !== 'decimal' ? ' data-number-style="' + l.style + '"' : '') + (l.start > 1 ? ' start="' + l.start + '"' : '') + '>';
         else out += '<ul' + way + (l.style !== 'disc' ? ' data-bullet-style="' + l.style + '"' : '') + BulletFormat.markup(l.char) + '>';
-        stack[level] = { tag: l.tag, key };
+        stack[level] = { tag: l.tag, key, id: l.id, indent: l.indent };
         stack.length = level + 1;
       }
       out += '<li>' + item.html;
     });
     closeTo(0);
+    flushPlain();
     return out;
   }
   // Les blocs d'un conteneur (le corps, une case de tableau, un en-tête) : paragraphes, tableaux, contrôles de contenu.
@@ -1118,6 +1153,15 @@ const DocxImport = (function () {
         let fill = fillOf(own);
         for (let i = conds.length - 1; i >= 0 && !fill; i--) fill = fillOf(conds[i].tc);
         if (!fill) fill = fillOf(whole.tc);
+        // Une trame de Word (`w:shd w:val` autre que « clear » et « solid ») : le motif de l'éditeur (js/cell-pattern.js), l'encre en `w:color`, le fond de la case en `w:fill`.
+        const patternOf = () => {
+          const layers = [own].concat(conds.map(k => k.tc), [whole.tc]);
+          const found = layers.find(props => props.shd && props.shd.val !== undefined && !/^(?:clear|nil|solid)$/i.test(props.shd.val));
+          const kind = found && CellPattern.fromWord(found.shd.val);
+          const ink = found && /^[0-9a-f]{6}$/i.test(found.shd.color || '') ? '#' + found.shd.color.toLowerCase() : null;
+          return kind && ink ? { kind, ink } : null;
+        };
+        const pattern = patternOf();
         // Les traits : la case, les régions, le tableau, le style ; la face intérieure ou extérieure selon la place de la case.
         const ownBorders = bordersOf(own, 'tcBorders');
         const edges = { top: r === 0, bottom: r + cell.down - 1 >= lastRow, left: c === 0, right: c + cell.span >= columns };
@@ -1140,7 +1184,8 @@ const DocxImport = (function () {
         const span = widthsPx.slice(c, c + cell.span);
         const content = assemble(blocksOf(ctx, part, cell.tc, textLayers, depth + 1));
         html += '<td' + (cell.span > 1 ? ' colspan="' + cell.span + '"' : '') + (cell.down > 1 ? ' rowspan="' + cell.down + '"' : '') + ' colwidth="' + span.join(',') + '"'
-          + (fill ? ' style="background-color: #' + fill + '"' : '') + (valign === 'center' ? ' data-valign="middle"' : (valign === 'bottom' ? ' data-valign="bottom"' : '')) + borderAttrs + '>'
+          + (pattern ? ' data-fill-pattern="' + pattern.kind + '" data-fill-ink="' + pattern.ink + '" style="' + (fill ? 'background-color: #' + fill + '; ' : '') + escAttr(CellPattern.attributes(pattern).style) + '"'
+            : (fill ? ' style="background-color: #' + fill + '"' : '')) + (valign === 'center' ? ' data-valign="middle"' : (valign === 'bottom' ? ' data-valign="bottom"' : '')) + borderAttrs + '>'
           + (content || '<p></p>') + '</td>';
       });
       html += '</tr>';

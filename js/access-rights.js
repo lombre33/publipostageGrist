@@ -19,6 +19,10 @@
 // pas pour lui. C'est connu dès l'adresse du cadre : aucune attente (état « viewer », jamais « pending »), et rien de ce qui est réglé dans l'onglet ne
 // le change.
 //
+// D'où viennent les droits (23/11, « un max d'éléments de débug et d'explication ») : `diagnose` rend l'état, le réglage (noms de la table et des colonnes), les droits en vigueur et pourquoi la dernière lecture de la table a échoué
+// (`readFailure` : refus d'une règle d'accès avec sa phrase, table introuvable, autre panne) ; `lockCauseKey` rend la cause du verrou en une clé de phrase, que js/main-access.js met entre parenthèses derrière l'info-bulle d'un grisé de
+// droits, et que le constat de l'icône grisée (js/lock-diagnostic.js) détaille. Jamais l'email de la personne : seulement s'il a été trouvé.
+//
 // Case « Ouvrir les personnes en lecture seule sur la Lecture épurée » : clé cleanReading du même réglage, décochée au départ, grisée tant qu'aucune
 // colonne « Lecture seule » n'est choisie (sans elle, personne n'est en lecture seule). js/main.js la lit à la première réponse des droits
 // (CleanReading.openForReadOnly) : la personne dont la ligne dit « lecture seule » ouvre alors le widget sur le document seul, sans barre d'outils.
@@ -53,6 +57,9 @@ const AccessRights = (function () {
   // L'identification (GristAPI.getCurrentUserEmail) écrit une ligne dans une table interne : un lecteur Grist ne le peut pas. Un seul essai par
   // session, pas un toutes les REFRESH_INTERVAL_MS.
   let emailLookupFailed = false;
+  // Pourquoi la dernière lecture de la table des droits a échoué (null quand elle a réussi, ou n'a pas eu lieu) : { refused, phrase, kind, missing } - la phrase de la règle d'accès que Grist cite, jamais un nom ni un email. Pour le constat
+  // d'une icône grisée (js/lock-diagnostic.js) et pour l'info-bulle : l'état « error » seul ne dit pas si Grist a refusé, si la table a disparu ou si la lecture a simplement échoué.
+  let readFailure = null;
   let refreshTimer = null;
   // Cases de la table des droits à la dernière lecture : elles règlent l'attente de la suivante (refreshDelayMs).
   let lastReadCells = 0;
@@ -95,6 +102,28 @@ const AccessRights = (function () {
   function baseStatus() { return isViewer() ? VIEWER_STATUS : { state: 'off' }; }
 
   function get() { return pending ? LOCKED_RIGHTS : rights; }
+  // Tout ce que le widget sait de l'origine des droits, pour le constat d'une icône grisée : l'état, le réglage (noms de la table et des colonnes), les droits en vigueur, pourquoi la lecture de la table a échoué. Jamais l'email de la personne :
+  // seulement s'il a été trouvé.
+  function diagnose() {
+    return {
+      state: pending ? 'pending' : status.state,
+      tableGone: status.tableGone === true,
+      viewer: isViewer(),
+      emailFound: !!status.email,
+      config: config ? { table: config.table, emailColumn: config.emailColumn, readOnlyColumn: config.readOnlyColumn, exportColumn: config.exportColumn, commentsColumn: config.commentsColumn } : null,
+      rights: get(),
+      failure: readFailure,
+    };
+  }
+  // La cause du verrou en une clé de phrase (« lock.cause.* »), pour l'info-bulle d'un grisé de droits : la table des droits illisible ou disparue, un compte Lecteur, la lecture en cours, ou la ligne de la personne dans la table. Vide quand
+  // les droits ne viennent d'aucun de ces cas (pas de réglage, personne absente de la table, email introuvable : tous les droits, rien à expliquer).
+  function lockCauseKey() {
+    if (pending || status.state === 'pending') return 'lock.cause.pending';
+    if (status.state === 'viewer') return 'lock.cause.viewer';
+    if (status.state === 'error') return status.tableGone ? 'lock.cause.tableGone' : 'lock.cause.unreadable';
+    if (status.state === 'found') return 'lock.cause.found';
+    return '';
+  }
   function getStatus() { return status; }
   function getConfig() { return config; }
   function onChange(cb) { listeners.push(cb); }
@@ -110,8 +139,15 @@ const AccessRights = (function () {
     catch (e) { return false; }
   }
 
+  // Ce que dit l'erreur de la lecture de la table des droits, sans rien de personnel : refus d'une règle d'accès (sa phrase et son genre, GristAPI.refusalPhrase), table introuvable, ou autre panne.
+  function failureOf(error) {
+    const kind = GristAPI.refusalKind(error);
+    return { refused: kind !== '', phrase: GristAPI.refusalPhrase(error), kind, missing: /not found|no such table|unknown table|invalid table/i.test(String((error && error.message) || error || '')) };
+  }
+
   async function compute(cfg) {
     // Un Lecteur n'est pas identifié, réglage ou pas : ni sonde, ni lecture de la table.
+    readFailure = null;
     if (isViewer()) return { rights: VIEWER_RIGHTS, status: VIEWER_STATUS };
     if (!cfg) return { rights: FULL_RIGHTS, status: { state: 'off' } };
     let email = null;
@@ -124,6 +160,7 @@ const AccessRights = (function () {
     try { rows = await GristAPI.fetchTableRows(cfg.table); }
     catch (e) {
       lastReadCells = 0;
+      readFailure = failureOf(e);
       console.warn('[AccessRights] table des droits illisible : ' + cfg.table, e);
       // `tableGone` seulement quand c'est vrai : les autres états « error » gardent leur forme d'avant.
       const gone = await tableIsGone(cfg.table);
@@ -405,5 +442,5 @@ const AccessRights = (function () {
     if (typeof SaveReminder !== 'undefined') SaveReminder.onRevert(() => { draft = null; renderSettingsPanel(); });
   }
 
-  return { init, get, getStatus, getConfig, onChange, refresh };
+  return { init, get, getStatus, getConfig, onChange, refresh, diagnose, lockCauseKey };
 })();

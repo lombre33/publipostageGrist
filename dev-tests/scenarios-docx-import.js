@@ -835,7 +835,7 @@
     // L'export écrit 1521 et 4521 twips (le tableau mesure 6042 : les traits s'ajoutent) : 101 et 301 px.
     expect('colonnes de 100 et 300 px à 2 px près', near(Number(cells[0].getAttribute('colwidth')), 100, 2) && near(Number(cells[1].getAttribute('colwidth')), 300, 2), cells.map(c => c.getAttribute('colwidth')));
     expect('les traits noirs de l\'export sont repris', ['top', 'right', 'bottom', 'left'].every(side => cells[0].getAttribute('data-border-' + side) === '#000000'), cells[0].outerHTML.slice(0, 260));
-    expect('l\'interligne par défaut de l\'export (341/240) n\'est pas perdu', /data-line-height="1\.66/.test(out.html), out.html.slice(0, 300));
+    expect('l\'interligne par défaut de l\'export (291/240, soit 1,42 fois le corps) est celui de l\'éditeur : aucun interligne réglé n\'est posé', !/data-line-height/.test(out.html), out.html.slice(0, 300));
     const note = root.querySelector('sup.footnote-ref-marker');
     expect('la note de bas de page', note && note.getAttribute('data-note-text') === 'Texte de la note', out.html.slice(-400));
     expect('rien d\'important perdu : la note et la mise en page ne figurent pas au rapport', !countOf(out.report, 'columns') && !countOf(out.report, 'images') && !countOf(out.report, 'fonts'), out.report);

@@ -226,6 +226,151 @@
     },
   });
 
+  // --- Dire d'où viennent les droits (23/11, « un max d'éléments de débug et d'explication ») : l'info-bulle d'un grisé de droits dit sa cause, le constat de l'icône dit ce que le widget a lu (la table, les colonnes, ce que chaque colonne
+  // donne, le refus de Grist), le geste pour dégriser, et rien de personnel (jamais l'email) ; le texte copié masque les noms.
+  const resolved = text => LockDiagnostic.resolve(text == null ? '' : text, false);
+  const findingsOf = (el, kindOverride) => {
+    const detail = kindOverride ? { cause: 'access', kind: kindOverride, reason: '' } : LockReasons.detailOf(el);
+    const found = LockDiagnostic.forLock(el, detail);
+    return {
+      found,
+      checks: found.checks.map(c => c.s + ' ' + resolved(c.t) + (c.d ? ' : ' + resolved(c.d) : '')),
+      fix: resolved(found.fix),
+      rows: Object.fromEntries(found.context.map(([k, v]) => [k, resolved(v)])),
+    };
+  };
+
+  cases.push({
+    id: 'access_unreadable_table_says_why_in_the_tooltip_the_findings_and_the_fix',
+    description: 'Table des droits illisible pour la personne (Grist : « Blocked by table read access rules ») : l’info-bulle de l’export grisé dit « la table des droits n’est pas lisible pour votre compte », le constat a une ligne ✕ avec la table et la phrase du refus, le geste (règle d’accès « rec.Email == user.Email »), le contexte (table, colonnes, lecture, compte, email lu sans son adresse), et le texte copié ne contient jamais l’email, les noms remplacés par « Table 1 » quand on les masque',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits illisibles dits');
+      await applyRights({ readOnly: false, export: true, comments: true });
+      const origFetch = grist.docApi.fetchTable;
+      grist.docApi.fetchTable = async (tableId) => {
+        if (tableId === RIGHTS_TABLE) throw new Error('Blocked by table read access rules');
+        return origFetch(tableId);
+      };
+      let out;
+      try {
+        await AccessRights.refresh();
+        await sleep(500);
+        const exportGroup = document.getElementById('v2-export-pdf-group');
+        const diag = AccessRights.diagnose();
+        const f = findingsOf(exportGroup);
+        const why = LockReasons.reasonOf(exportGroup);
+        const clear = LockDiagnostic.report(f.found, { name: 'Exporter', why, mask: false });
+        const masked = LockDiagnostic.report(f.found, { name: 'Exporter', why, mask: true });
+        out = {
+          tip: exportGroup.getAttribute('title') || '',
+          why,
+          diag: { state: diag.state, tableGone: diag.tableGone, refused: diag.failure && diag.failure.refused, phrase: diag.failure && diag.failure.phrase, kind: diag.failure && diag.failure.kind, json: JSON.stringify(diag) },
+          f, clear, masked,
+          editTip: (document.getElementById('btn-mode-edit').getAttribute('title') || ''),
+        };
+      } finally {
+        grist.docApi.fetchTable = origFetch;
+      }
+      await cleanup();
+      const checkNo = out.f.checks.some(c => /^no /.test(c) && c.includes('n’est pas lisible pour vous') && c.includes(RIGHTS_TABLE) && c.includes('Blocked by table read access rules'));
+      const checks = {
+        stateIsError: out.diag.state === 'error' && out.diag.tableGone === false,
+        refusalRead: out.diag.refused === true && out.diag.phrase === 'Blocked by table read access rules' && out.diag.kind === 'read',
+        noEmailInDiagnosis: !out.diag.json.includes(EMAIL),
+        tooltipHasTheRightAndTheCause: out.tip.includes(I18n.t('lock.noExport')) && out.tip.includes(I18n.t('lock.cause.unreadable')),
+        reasonIsTheTooltip: out.why === out.tip,
+        editTooltipHasTheCause: out.editTip.includes(I18n.t('lock.readOnly')) && out.editTip.includes(I18n.t('lock.cause.unreadable')),
+        findingNamesTableAndRefusal: checkNo,
+        findingSaysLocked: out.f.checks.some(c => c.includes('verrouille par précaution')),
+        fixSaysTheRule: out.f.fix.includes('rec.Email == user.Email') && out.f.fix.includes(RIGHTS_TABLE),
+        contextTable: out.f.rows['Table des droits'] === RIGHTS_TABLE,
+        contextColumns: (out.f.rows['Colonnes des droits'] || '').includes('email Email') && (out.f.rows['Colonnes des droits'] || '').includes('export Export'),
+        contextState: (out.f.rows['Lecture des droits'] || '').includes('Blocked by table read access rules'),
+        contextAccount: (out.f.rows['Compte Grist'] || '').startsWith('peut modifier'),
+        contextEmailReadNotWritten: (out.f.rows['Email Grist'] || '').startsWith('lu') && !JSON.stringify(out.f.rows).includes(EMAIL),
+        contextRights: out.f.rows['Vos droits'] === 'lecture seule, sans export, sans commentaires',
+        reportNoEmail: !out.clear.includes(EMAIL) && !out.masked.includes(EMAIL),
+        reportClearHasTable: out.clear.includes(RIGHTS_TABLE),
+        reportMaskedHidesTable: !out.masked.includes(RIGHTS_TABLE) && /Table 1/.test(out.masked),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' ' + JSON.stringify({ tip: out.tip, checks: out.f.checks, fix: out.f.fix, rows: out.f.rows }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'access_found_row_names_the_column_that_gave_each_right_and_the_default_of_the_others',
+    description: 'Personne trouvée dans la table : le constat dit, droit par droit, la colonne choisie et ce qu’elle donne (« Lecture seule : colonne « LectureSeule » cochée »), et pour un droit sans colonne (« — Aucune — ») qu’il est AUTORISÉ par défaut ; le geste nomme la case de sa ligne (« décocher » / « cocher »), l’info-bulle dit « selon votre ligne de la table des droits »',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits trouvés dits');
+      // Lecture seule seule : ni colonne Export ni colonne Commentaires.
+      await applyRights({ readOnly: true });
+      stub().setWidgetOptions({ droitsAcces: { table: RIGHTS_TABLE, emailColumn: 'Email', readOnlyColumn: 'LectureSeule' } });
+      await waitFor(() => { const c = AccessRights.getConfig(); return !!c && !c.exportColumn; });
+      await AccessRights.refresh();
+      await sleep(400);
+      const editBtn = document.getElementById('btn-mode-edit');
+      const one = findingsOf(editBtn);
+      const oneTip = editBtn.getAttribute('title') || '';
+      const oneRights = AccessRights.get();
+      // Export refusé par sa colonne.
+      await applyRights({ readOnly: false, export: false });
+      const exportGroup = document.getElementById('v2-export-pdf-group');
+      const two = findingsOf(exportGroup);
+      const twoTip = exportGroup.getAttribute('title') || '';
+      await cleanup();
+      const line = list => list.find(c => c.includes('Votre ligne de la table des droits')) || '';
+      const checks = {
+        readOnlyColumnOnly: oneRights.readOnly && oneRights.canExport && oneRights.canComment,
+        foundLineIsACause: /^no /.test(line(one.checks)),
+        readOnlyColumnNamed: line(one.checks).includes('« Lecture seule » : colonne « LectureSeule » cochée (lecture seule)'),
+        exportDefaultsToAllowed: line(one.checks).includes('« Export autorisé » : aucune colonne choisie, autorisé par défaut'),
+        commentsDefaultToAllowed: line(one.checks).includes('« Commentaires autorisés » : aucune colonne choisie, autorisé par défaut'),
+        fixNamesTheBoxToUntick: one.fix.includes('décocher la case « LectureSeule »') && one.fix.includes(RIGHTS_TABLE),
+        tooltipSaysYourRow: oneTip.includes(I18n.t('lock.readOnly')) && oneTip.includes(I18n.t('lock.cause.found')),
+        exportColumnNamed: line(two.checks).includes('« Export autorisé » : colonne « Export » décochée (refusé)'),
+        fixNamesTheBoxToTick: two.fix.includes('cocher la case « Export »') && !two.fix.includes('décocher'),
+        tooltipOfExportSaysYourRow: twoTip.includes(I18n.t('lock.noExport')) && twoTip.includes(I18n.t('lock.cause.found')),
+        rowsSayFound: (two.rows['Lecture des droits'] || '').includes('votre ligne est trouvée'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' ' + JSON.stringify({ one: one.checks, oneFix: one.fix, two: two.checks, twoFix: two.fix, oneTip, twoTip }) : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'access_person_absent_from_the_table_has_all_rights_and_the_findings_say_so',
+    description: 'Personne absente de la table des droits : tous les droits, pas de cause dans l’info-bulle (rien n’est grisé), et le constat (demandé sur une commande de droits) écarte la table avec ✓ « Vous n’êtes pas dans la table des droits » et « tous les droits » ; sans réglage, ✓ « Aucune table des droits n’est réglée » ; état de lecture et compte dits dans le contexte',
+    run: async (h) => {
+      await savedTemplate(h, 'Droits absents dits');
+      await applyRights({ readOnly: true });
+      // La ligne de la personne disparaît de la table : plus que celle d'un autre.
+      stub().setRows(RIGHTS_TABLE, [{ id: 1, Email: 'autre@exemple.fr', LectureSeule: true, Export: false, Commentaires: false }]);
+      await AccessRights.refresh();
+      await waitFor(() => AccessRights.getStatus().state === 'notFound');
+      await sleep(300);
+      const editBtn = document.getElementById('btn-mode-edit');
+      const absent = findingsOf(editBtn, 'lock.noExport');
+      const rights = AccessRights.get();
+      const tip = editBtn.getAttribute('title') || '';
+      stub().setWidgetOptions(null);
+      await waitFor(() => !AccessRights.getConfig());
+      await sleep(200);
+      const none = findingsOf(editBtn, 'lock.noExport');
+      await cleanup();
+      const checks = {
+        allRights: !rights.readOnly && rights.canExport && rights.canComment,
+        nothingGreyedSoNoTooltipCause: !tip.includes(I18n.t('lock.cause.found')) && !tip.includes(I18n.t('lock.cause.unreadable')),
+        absentLineIsRuledOut: absent.checks.some(c => /^ok /.test(c) && c.includes('Vous n’êtes pas dans la table des droits « ' + RIGHTS_TABLE + ' »') && c.includes('tous les droits')),
+        contextStateAbsent: (absent.rows['Lecture des droits'] || '').includes('vous n’êtes pas dans la table'),
+        noTableIsRuledOut: none.checks.some(c => /^ok /.test(c) && c.includes('Aucune table des droits n’est réglée')),
+        noTableContext: none.rows['Table des droits'] === 'aucune' && (none.rows['Lecture des droits'] || '').includes('aucune table des droits réglée') && (none.rows['Email Grist'] || '').startsWith('non demandé'),
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: failed.length ? failed.join(', ') + ' ' + JSON.stringify({ absent: absent.checks, rows: absent.rows, none: none.checks }) : 'ok' };
+    },
+  });
+
   cases.push({
     id: 'access_reader_comment_anchors_selection_and_saves_template',
     description: 'Lecture seule + commentaires : sélectionner du texte en mode Lecture et publier pose la marque sur CE texte, enregistre le modèle et le fil',
@@ -584,7 +729,7 @@
   const RIGHTS_COLUMNS = { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' };
   const OTHER_RIGHTS_TABLE = 'PpDroitsBis';
   const GONE_FR = 'La table des droits n’existe plus : choisissez-en une autre. Lecture seule d’ici là, par précaution.';
-  const UNREADABLE_FR = 'Table des droits illisible pour vous : lecture seule par précaution.';
+  const UNREADABLE_FR = 'Table des droits illisible pour vous : lecture seule par précaution. Une règle d’accès de Grist la cache sans doute à votre compte : demandez à la personne qui gère le document de vous en autoriser la lecture (chacun peut lire sa propre ligne).';
 
   function refuseReads(names) {
     const original = grist.docApi.fetchTable;

@@ -3,6 +3,10 @@ const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Templates';
   // La colonne où le document garde, quand la personne le choisit, le mot de passe commun des PDF protégés (cf. writePdfPassword plus bas).
   const PDF_PASSWORD_COLUMN = 'PdfPassword';
+  // La colonne où chaque modèle garde sa notice (cf. ensureNoticeColumn, saveNotice).
+  const NOTICE_COLUMN = 'Notice';
+  // La colonne où un document ou une grille garde l'email que la personne lui a lié (cf. setLinkedEmail plus bas) : le JETON de cet email, jamais son numéro de ligne.
+  const LINKED_EMAIL_COLUMN = 'LinkedEmail';
   let templatesCache = [];
   // Les mises à jour du cache que les écritures de CE widget font (cf. settleWritten) : un compteur, et pour chaque ligne sa valeur à la dernière mise à jour. loadAll s'en sert pour ne pas
   // remettre dans le cache l'état d'avant d'une ligne que ce widget a écrite pendant sa lecture (cf. keepWrittenSince).
@@ -137,12 +141,22 @@ const Templates = (function () {
     // l'historique dit qui avait écrit chaque version. Écrite dans le même UpdateRecord que Content et ModifiedAt ; créée à l'ouverture comme les colonnes ci-dessus, mais une personne qui n'a pas le droit
     // d'ajouter une colonne enregistre quand même, sans elle (cf. modifiedByColumnReady).
     const ensureModifiedByColumn = ensureColumns([['ModifiedBy', 'Text']]);
+
+    // La notice du modèle (js/template-notice.js : « comment se servir de ce modèle », du HTML court, jamais exporté) : une colonne à part, hors de Content, pour qu'aucun export ne puisse la lire. Comme le jeton, ni loadAll ni
+    // saveRow ne la lancent : un document dont aucun modèle n'a de notice n'a pas de colonne de plus ; elle se crée à la première écriture d'une notice (saveNotice), jamais pour lire.
+    const ensureNoticeColumn = ensureColumns([[NOTICE_COLUMN, 'Text']]);
+    // L'email lié à un document ou à une grille (setLinkedEmail) : le jeton de l'email, dans la ligne du document. Comme le jeton et le mot de passe des PDF, ni loadAll ni saveRow ne la lancent - un document qui ne lie aucun
+    // email n'a pas de colonne de plus ; elle se crée au premier lien posé - et un enregistrement n'écrit jamais cette colonne : un document enregistré garde son lien, et un enregistrement automatique qui part d'un cache
+    // en retard ne défait pas le lien qu'une autre personne vient de poser.
+    const ensureLinkedEmailColumn = ensureColumns([[LINKED_EMAIL_COLUMN, 'Text']]);
     return {
       ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
+      ensureLinkedEmailColumn, ensureNoticeColumn,
     };
   }
   const {
     ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
+    ensureLinkedEmailColumn, ensureNoticeColumn,
   } = defineColumnMigrations();
 
   // La colonne « Modifié par » existe-t-elle (ou vient-elle d'être créée) ? Faux quand la personne n'a pas le droit d'ajouter une colonne : l'enregistrement la laisse alors de côté (un UpdateRecord sur une
@@ -233,6 +247,9 @@ const Templates = (function () {
     }
   }
 
+  // Une étape du démarrage dans le rapport de fluidité (js/perf-trace.js, temporaire) ; sans lui (page de test), rien.
+  const traceStep = (label, extra) => { if (typeof PerfTrace !== 'undefined') PerfTrace.mark(label, extra); };
+
   async function readTable() {
     // Lecture de la table des modèles, null si elle est absente ou illisible (document neuf : les migrations de loadAll la créent).
     try {
@@ -246,16 +263,33 @@ const Templates = (function () {
   // Poids de la dernière lecture de la table, en caractères de texte (contenus et images en base64 compris) : js/main.js en tire l'attente de la
   // relecture au repos, plus longue quand la table est lourde.
   let loadedChars = 0;
-  function charsOf(data) {
+  // `weights` : de quoi se compose cette lecture (par colonne, et les lignes les plus lourdes), pour le rapport de fluidité (js/perf-trace.js, temporaire) : la table pèse 42 Mo chez une personne, et ce qui la remplit décide de ce qu'on peut alléger.
+  let loadWeights = null;
+  const HEAVIEST_ROWS = 6;
+  function charsOf(data, weights) {
     let chars = 0;
+    const rowChars = weights && Array.isArray(data.id) ? new Array(data.id.length).fill(0) : null;
     Object.keys(data).forEach(column => {
       const values = data[column];
       if (!Array.isArray(values)) return;
-      for (let i = 0; i < values.length; i++) if (typeof values[i] === 'string') chars += values[i].length;
+      let columnChars = 0;
+      for (let i = 0; i < values.length; i++) {
+        if (typeof values[i] !== 'string') continue;
+        columnChars += values[i].length;
+        if (rowChars) rowChars[i] += values[i].length;
+      }
+      chars += columnChars;
+      if (weights) weights.columns[column] = columnChars;
     });
+    if (rowChars) {
+      weights.rows = rowChars.length;
+      weights.heaviest = rowChars.map((total, i) => ({ id: data.id[i], chars: total, type: (data.TemplateType && data.TemplateType[i]) || 'document', name: String((data.Name && data.Name[i]) || '').slice(0, 24) }))
+        .sort((a, b) => b.chars - a.chars).slice(0, HEAVIEST_ROWS);
+    }
     return chars;
   }
   function getLoadedChars() { return loadedChars; }
+  function getLoadWeights() { return loadWeights; }
 
   // Une ligne de la table des modèles, au format du cache : `cell` lit la colonne si elle existe (une table migrée à moitié, un accès restreint),
   // sinon la valeur par défaut.
@@ -289,6 +323,10 @@ const Templates = (function () {
       jeton: String(cell('Token', '') || ''),
       // Qui a écrit cet état (cf. ensureModifiedByColumn) : '' quand on ne le sait pas (modèle d'avant la colonne, personne non identifiée).
       modifiePar: String(cell('ModifiedBy', '') || ''),
+      // La notice du modèle (cf. ensureNoticeColumn) : du HTML tel que la table le garde, '' quand il n'y en a pas. Elle n'est lue qu'à travers TemplateNotice.clean, jamais posée telle quelle dans la page.
+      notice: String(cell(NOTICE_COLUMN, '') || ''),
+      // Le jeton de l'email que ce document ou cette grille a pour compagnon (cf. setLinkedEmail) : '' quand aucun n'est lié, ou pour un document d'avant la colonne. Le jeton seul ne désigne rien : EmailLink.emailOf le cherche.
+      emailLie: String(cell(LINKED_EMAIL_COLUMN, '') || ''),
     };
   }
 
@@ -305,7 +343,7 @@ const Templates = (function () {
     cacheWritten(id);
     const cached = byId(id);
     if (!cached) return;
-    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], ModifiedAt: [dateModif] };
+    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], [LINKED_EMAIL_COLUMN]: [cached.emailLie], [NOTICE_COLUMN]: [cached.notice], ModifiedAt: [dateModif] };
     Object.keys(columns).forEach(column => { if (column !== 'ModifiedAt') row[column] = [columns[column]]; });
     Object.assign(cached, templateFromRow(row, 0));
   }
@@ -485,19 +523,26 @@ const Templates = (function () {
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
       const tableData = first && migrationRuns === runsBefore ? first : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
-      loadedChars = charsOf(tableData);
+      const weights = { columns: {}, rows: 0, heaviest: [] };
+      const weighStart = Date.now();
+      loadedChars = charsOf(tableData, weights);
+      loadWeights = Object.assign(weights, { weighMs: Date.now() - weighStart });
+      traceStep('modèles : table reçue', { lignes: weights.rows, signesMo: Math.round(loadedChars / 104857.6) / 10 });
       confirmPredictedDates(tableData, writtenAtStart);
       // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
       const templates = [];
       let settingsAt = -1;
+      const rowsStart = Date.now();
       tableData.id.forEach((id, i) => {
         if (!isSettingsRow(tableData, i)) templates.push(templateFromRow(tableData, i));
         else if (settingsAt === -1) settingsAt = i;
       });
+      loadWeights.rowsMs = Date.now() - rowsStart;
       templatesCache = keepWrittenSince(templates, writtenAtStart);
       cacheReadAt = readStartedAt;
       cacheArrivedAt = Date.now();
       adoptDocumentSettings(tableData, settingsAt, settingsEpochAtStart);
+      traceStep('modèles : en cache', { rowsMs: loadWeights.rowsMs });
     } catch (e) {
       console.error('Erreur chargement modèles', e);
       templatesCache = [];
@@ -911,6 +956,53 @@ const Templates = (function () {
     return token;
   }
 
+  // La notice d'un modèle (js/template-notice.js), écrite dans la colonne `Notice` SEULE : ni Content ni ModifiedAt, donc aucun conflit avec l'enregistrement automatique du texte (même règle qu'ensureToken). Crée la colonne à la
+  // première notice. Un modèle d'un type inconnu n'est pas écrit (refuseUnwritable) ; une colonne qu'on ne peut pas créer (compte qui n'a pas le droit d'ajouter une colonne, Lecteur) lève : la fenêtre le dit, rien n'est perdu.
+  // Le cache prend la notice tout de suite et la garde contre une lecture de la table partie avant l'écriture (keepWrittenSince). Rend le HTML écrit.
+  function saveNotice(id, html) {
+    return writes.track(async () => {
+      refuseUnwritable(id);
+      const value = typeof html === 'string' ? html : '';
+      await ensureTableExists();
+      if (!(await ensureNoticeColumn())) throw new Error('La colonne des notices ne peut pas être créée : rien n’a été enregistré.');
+      await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, id, { [NOTICE_COLUMN]: value }]]);
+      // Cherché après l'écriture : une relecture de la table a pu remplacer les objets du cache pendant qu'elle durait.
+      const cached = byId(id);
+      if (cached) { cached.notice = value; cacheWritten(id); }
+      return value;
+    });
+  }
+
+  // L'email que le document (ou la grille) `id` a pour compagnon : le jeton de `emailId` dans la colonne LinkedEmail de sa ligne, `null` pour retirer le lien. Le jeton et non le numéro de la ligne, comme le lien d'un tableau (cf.
+  // ensureToken) : un numéro rendu à un autre modèle ne fait pas passer le lien sur un email sans rapport, et un email supprimé puis rendu par Annuler (même jeton) retrouve ses documents. Écrit la colonne seule - ni Content ni
+  // ModifiedAt - et crée la colonne au premier lien posé (jamais pour retirer un lien qui n'existe pas). Le jeton de l'email se crée au besoin. Refuse (erreur) un document ou un email qui n'existe plus, ou qui n'est pas d'un type
+  // qui se lie : rien n'est écrit. Rend le jeton écrit ('' pour un lien retiré).
+  function setLinkedEmail(id, emailId) {
+    return writes.track(async () => {
+      const wantsLink = emailId != null && emailId !== '';
+      const row = byId(id);
+      if (!row) throw new Error('Document introuvable : rien n’a été lié.');
+      if (DEFAULT_TYPES.indexOf(row.typeModele) === -1) throw new Error('Seul un document ou une grille se lie à un email : rien n’a été lié.');
+      if (wantsLink) {
+        const email = byId(emailId);
+        if (!email || email.typeModele !== 'email') throw new Error('Email introuvable : rien n’a été lié.');
+      } else if (!row.emailLie) {
+        return '';
+      }
+      await ensureTableExists();
+      await ensureLinkedEmailColumn();
+      const token = wantsLink ? await ensureToken(emailId) : '';
+      if (wantsLink && !token) throw new Error('Email introuvable : rien n’a été lié.');
+      // Le numéro de la ligne tel que le cache le rend (un nombre) : l'appelant le tient d'une liste de choix, où c'est un texte, que Grist ne prend pas pour un numéro de ligne.
+      await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, row.id, { [LINKED_EMAIL_COLUMN]: token }]]);
+      cacheWritten(row.id);
+      // Cherché après l'écriture : une relecture de la table a pu remplacer les objets du cache pendant qu'elle durait.
+      const cached = byId(row.id);
+      if (cached) cached.emailLie = token;
+      return token;
+    });
+  }
+
   function createWriteTracker() {
     // Les écritures en cours de ce widget et ce qu'elles laissent dans Grist. js/main.js (auto-save, commentaires de la Lecture) compare le ModifiedAt
     // relu dans Grist à celui que ce widget a écrit en dernier pour dire « modifié ailleurs ». Or une écriture n'est pas un instant : Grist
@@ -1000,7 +1092,7 @@ const Templates = (function () {
 
   // Les colonnes qu'une ligne de la table porte pour le widget (celles que templateFromRow lit et que saveRow écrit) : de quoi rendre une ligne supprimée telle qu'elle était. Pas les autres colonnes du document : Grist
   // refuse toute valeur dans une colonne à formule, et tout le lot sur une colonne qu'il ne connaît pas.
-  const ROW_COLUMNS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy'];
+  const ROW_COLUMNS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', LINKED_EMAIL_COLUMN, NOTICE_COLUMN];
 
   // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
   // ligne n'existe plus ou si la table ne se lit pas.
@@ -1060,10 +1152,10 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
+    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail, saveNotice,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, verifyStored, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
+    sameDateModif, verifyStored, getLoadedChars, getLoadWeights, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();

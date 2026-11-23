@@ -11,8 +11,10 @@ const TemplateTreeSelect = (function () {
 
   let realSelect = null;
   let wrap, trigger, triggerIcon, triggerLabel, popup;
-  // En-tête fixe du panneau (titre + « Organiser ») : créé une fois par attachInner(), render() ne redessine que les lignes en dessous.
-  let head, headTitle, organizeBtn, organizeLabel;
+  // En-tête fixe du panneau (champ de recherche + « Organiser ») : créé une fois par attachInner(), render() ne redessine que les lignes en dessous.
+  let head, searchInput, organizeBtn, organizeLabel;
+  // Ce qui est tapé dans le champ de recherche (vidé à chaque ouverture, openPopup) : render() ne garde que les documents dont le nom correspond.
+  let searchTerm = '';
   let onOrganize = null;
   // ★ du document (js/main.js) : `onToggleDefault(id)` le pose sur ce modèle ou le retire, `isLocked()` dit si la lecture seule l'interdit.
   let onToggleDefault = null;
@@ -123,9 +125,16 @@ const TemplateTreeSelect = (function () {
     return node.type === 'dossier' ? makeFolderRow(node, depth) : makeLeafRow(node, depth);
   }
 
+  // Vrai quand la saisie du champ de recherche porte au moins une lettre ou un chiffre (comme partout : js/search-select.js, searchWords) ; sinon rien n'est filtré.
+  function isSearching() {
+    return SearchSelect.searchWords(searchTerm).length > 0;
+  }
+
   function isFolderOpen(chemin) {
     // Un dossier s'ouvre déplié, sauf si cette personne l'a réglé « replié par défaut » (TemplatePreferences.isFolderCollapsed, posé depuis « Organiser
-    // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau.
+    // mes modèles ») ou l'a basculé à la main depuis l'ouverture du panneau. Pendant une recherche, tous les dossiers sont dépliés : un document trouvé
+    // dans un dossier replié resterait caché.
+    if (isSearching()) return true;
     if (folderOverrides.has(chemin)) return folderOverrides.get(chemin);
     return !TemplatePreferences.isFolderCollapsed(chemin);
   }
@@ -156,7 +165,8 @@ const TemplateTreeSelect = (function () {
     const expanded = row.getAttribute('aria-expanded') !== 'false';
     row.setAttribute('aria-expanded', String(!expanded));
     group.classList.toggle('is-collapsed', expanded);
-    if (row.dataset.folderPath) folderOverrides.set(row.dataset.folderPath, !expanded);
+    // Pendant une recherche, le geste vaut pour l'écran en cours seulement : il ne doit pas rester une fois la recherche effacée.
+    if (row.dataset.folderPath && !isSearching()) folderOverrides.set(row.dataset.folderPath, !expanded);
   }
 
   function makeLeafRow(node, depth) {
@@ -207,9 +217,14 @@ const TemplateTreeSelect = (function () {
     // TemplatePreferences.getCached()), pas de ses <option> : elles ne portent ni typeModele ni le statut « par défaut » en donnée structurée,
     // seulement un texte déjà mis en forme par refreshTemplateList (js/main.js).
     // Les dossiers qui n'ont que leur ligne d'état (créés vides dans GFS, ModeleId = 0) figurent dans l'arbre : TemplatePreferences.listStateFolders().
-    const view = TemplateOrganizer.buildView(Templates.getCached(), TemplatePreferences.getCached(), TemplatePreferences.listStateFolders());
+    // Une recherche (le champ de l'en-tête) ne garde que les documents dont le NOM correspond, par la même règle que « Organiser » (SearchSelect.nameMatcher : mots
+    // dans n'importe quel ordre, accents et ponctuation ignorés), avec les dossiers qui les portent ; les dossiers vides n'ont rien à y montrer.
+    const searching = isSearching();
+    const matchesName = SearchSelect.nameMatcher(searchTerm);
+    const templates = searching ? Templates.getCached().filter((t) => matchesName(String(t.nom ?? ''))) : Templates.getCached();
+    const view = TemplateOrganizer.buildView(templates, TemplatePreferences.getCached(), searching ? [] : TemplatePreferences.listStateFolders());
 
-    if (!view.pinned.length && !view.tree.length) popup.appendChild(el('div', 'tts-empty', I18n.t('templateTree.empty')));
+    if (!view.pinned.length && !view.tree.length) popup.appendChild(el('div', 'tts-empty', I18n.t(searching ? 'templateTree.noMatch' : 'templateTree.empty')));
     appendSections(popup, view, p => makeLeafRow(p, 0), n => makeRow(n, 0));
 
     syncTriggerLabel();
@@ -318,6 +333,8 @@ const TemplateTreeSelect = (function () {
   function openPopup() {
     if (popup.classList.contains('is-open')) return;
     folderOverrides.clear();  // chaque ouverture repart de l'état par défaut de la personne (voir folderOverrides)
+    searchTerm = '';          // ... et d'une liste entière : la recherche de la fois d'avant ne reste pas
+    if (searchInput) searchInput.value = '';
     render();
     // GFS range aussi dans la table du rangement : ce que ce widget a chargé au démarrage peut être dépassé. Le panneau s'ouvre tout de suite sur ce qu'on sait ; la
     // table est relue à chaque ouverture et le panneau se redessine seulement si le rangement a changé (js/template-arrangement.js:reread).
@@ -380,7 +397,7 @@ const TemplateTreeSelect = (function () {
     ArrowDown: (e, { rows, idx }) => { e.preventDefault(); setRovingFocus(rows[Math.min(idx + 1, rows.length - 1)]); },
     ArrowUp: (e, { rows, idx }) => {
       e.preventDefault();
-      if (idx <= 0 && organizeBtn) organizeBtn.focus({ preventScroll: true });
+      if (idx <= 0 && searchInput) searchInput.focus({ preventScroll: true });
       else setRovingFocus(rows[Math.max(idx - 1, 0)]);
     },
     Home: (e, { rows }) => { e.preventDefault(); setRovingFocus(rows[0]); },
@@ -403,17 +420,58 @@ const TemplateTreeSelect = (function () {
     Enter: activateRow,
     ' ': activateRow,
   };
-  // « Organiser » (en-tête) est dans le parcours : Flèche haut depuis la première ligne l'atteint, Flèche bas le quitte pour la première ligne, Fin
-  // pour la dernière ; les autres flèches et Début restent à la liste, Entrée et Espace au clic natif du bouton, Échap et Tab comme depuis une ligne.
+  // L'en-tête est dans le parcours, dans l'ordre où il se lit : le champ de recherche, puis « Organiser ». Flèche haut depuis la première ligne atteint le champ ;
+  // du champ, Tab passe à « Organiser » (Maj + Tab en sort) et Flèche bas rejoint la première ligne. Depuis « Organiser » : Flèche gauche et Maj + Tab reviennent au champ,
+  // Flèche bas le quitte pour la première ligne, Fin pour la dernière ; les autres flèches et Début restent à la liste, Entrée et Espace au clic natif du bouton,
+  // Échap et Tab comme depuis une ligne.
   const keepKey = e => e.preventDefault();
   const leaveKey = () => {};
+  const toSearch = e => { e.preventDefault(); searchInput.focus({ preventScroll: true }); };
   const ORGANIZE_KEYS = {
     ArrowDown: ROW_KEYS.Home, End: ROW_KEYS.End,
-    ArrowUp: keepKey, Home: keepKey, ArrowLeft: keepKey, ArrowRight: keepKey,
+    ArrowUp: keepKey, Home: keepKey, ArrowLeft: toSearch, ArrowRight: keepKey,
+    Tab: e => (e.shiftKey ? toSearch(e) : leaveForTrigger()),
     Enter: leaveKey, ' ': leaveKey,
   };
 
+  // Le champ de recherche : il garde les touches d'un champ (flèches gauche et droite, Début, Fin, Espace...) ; ne sont prises que celles-ci. Échap efface la saisie, et
+  // referme le panneau quand il n'y en a plus. Entrée choisit le document quand un seul correspond, sinon passe à la première ligne ; Flèche bas aussi.
+  function setSearch(value) {
+    searchTerm = value;
+    if (searchInput.value !== value) searchInput.value = value;
+    render();
+    popup.scrollTop = 0;
+  }
+  function openedByEnter() {
+    const ids = new Set(Array.from(popup.querySelectorAll('.tts-row-leaf')).map(r => r.dataset.templateId));
+    if (ids.size === 1) { selectValue(ids.values().next().value); return; }
+    const first = visibleRows()[0];
+    if (first) setRovingFocus(first);
+  }
+  const SEARCH_KEYS = {
+    Escape: (e) => { if (searchInput.value) { e.preventDefault(); setSearch(''); } else { ROW_KEYS.Escape(e); } },
+    Tab: (e) => { if (e.shiftKey) leaveForTrigger(); else { e.preventDefault(); organizeBtn.focus({ preventScroll: true }); } },
+    ArrowDown: (e) => { e.preventDefault(); const first = visibleRows()[0]; if (first) setRovingFocus(first); },
+    Enter: (e) => { e.preventDefault(); openedByEnter(); },
+  };
+  // Une lettre tapée alors qu'une ligne a le focus (le panneau s'ouvre sur le document ouvert) part dans le champ : « ouvrir la liste puis taper » suffit. Les touches
+  // de commande, Espace (il choisit la ligne) et les touches qui ne sont pas un caractère (flèches, Entrée...) restent aux lignes.
+  const isTypedCharacter = e => e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey;
+
   function onPopupKeydown(e) {
+    const active = document.activeElement;
+    if (searchInput && active === searchInput) {
+      const searchAction = SEARCH_KEYS[e.key];
+      if (searchAction) searchAction(e);
+      return;
+    }
+    if (searchInput && isTypedCharacter(e) && active && active.classList.contains('tts-row')) {
+      e.preventDefault();
+      setSearch(searchInput.value + e.key);
+      searchInput.focus({ preventScroll: true });
+      searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+      return;
+    }
     const action = (organizeBtn && document.activeElement === organizeBtn && ORGANIZE_KEYS[e.key]) || ROW_KEYS[e.key];
     if (!action) return;
     const rows = visibleRows();
@@ -482,11 +540,15 @@ const TemplateTreeSelect = (function () {
     popup.setAttribute('aria-label', I18n.t('template.select'));
     popup.addEventListener('keydown', onPopupKeydown);
 
-    // En-tête fixe : titre à gauche, « Organiser mes modèles » en haut à droite. tabIndex -1 : on y arrive par Flèche haut depuis la première ligne
-    // (onPopupKeydown), pas par Tab, qui referme le panneau. Le clic referme le panneau et rend le focus au déclencheur avant d'ouvrir la fenêtre :
-    // celle-ci le rendra à la fermeture, et le bouton, masqué avec le panneau, ne peut pas le recevoir.
+    // En-tête fixe : le champ de recherche à gauche (il tient la place du titre « Documents » ; css/template-tree-select.css), « Organiser mes modèles » en haut à
+    // droite. tabIndex -1 sur « Organiser » : on y arrive par le champ (onPopupKeydown), pas par Tab depuis une ligne, qui referme le panneau. Le clic referme le panneau
+    // et rend le focus au déclencheur avant d'ouvrir la fenêtre : celle-ci le rendra à la fermeture, et le bouton, masqué avec le panneau, ne peut pas le recevoir.
     head = el('div', 'tts-head');
-    headTitle = el('span', 'tts-head-title');
+    searchInput = el('input', 'tts-search');
+    searchInput.type = 'search';
+    searchInput.autocomplete = 'off';
+    searchInput.spellcheck = false;
+    searchInput.addEventListener('input', () => setSearch(searchInput.value));
     organizeBtn = button('tts-organize-btn');
     organizeBtn.id = 'btn-organize-templates';
     organizeBtn.tabIndex = -1;
@@ -497,7 +559,7 @@ const TemplateTreeSelect = (function () {
       trigger.focus({ preventScroll: true });
       if (onOrganize) onOrganize();
     });
-    head.append(headTitle, organizeBtn);
+    head.append(searchInput, organizeBtn);
     popup.appendChild(head);
     syncHeadTexts();
 
@@ -533,12 +595,14 @@ const TemplateTreeSelect = (function () {
     realSelect.classList.remove('tts-native-select');
     realSelect.removeAttribute('aria-hidden');
     realSelect.tabIndex = 0;
-    realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = head = headTitle = organizeBtn = organizeLabel = null;
+    realSelect = wrap = trigger = triggerIcon = triggerLabel = popup = head = searchInput = organizeBtn = organizeLabel = null;
+    searchTerm = '';
   }
 
   function syncHeadTexts() {
     if (!head) return;
-    headTitle.textContent = I18n.t('templateTree.title');
+    searchInput.placeholder = I18n.t('templateTree.search');
+    searchInput.setAttribute('aria-label', I18n.t('templateTree.search'));
     organizeLabel.textContent = I18n.t('templateTree.organize');
     organizeBtn.title = I18n.t('toolbar.organizeTemplates');
     organizeBtn.setAttribute('aria-label', I18n.t('toolbar.organizeTemplates'));

@@ -32,13 +32,21 @@ const MainAccess = (function () {
 
     function isReadOnly() { return AccessRights.get().readOnly; }
 
+    // La phrase d'un grisé de DROITS : celle du droit (« Indisponible : l'export n'est pas autorisé pour vous… »), suivie de sa cause quand le widget la connaît (AccessRights.lockCauseKey : table des droits illisible ou disparue, compte
+    // Lecteur, lecture en cours, ligne de la personne dans la table). Le mode Lecture et la carte de l'accès gardent leur phrase seule : ils ne viennent pas des droits.
+    const RIGHTS_REASONS = ['lock.readOnly', 'lock.noExport', 'lock.noComment'];
+    function accessReasonText(reason) {
+      const cause = RIGHTS_REASONS.indexOf(reason) !== -1 ? AccessRights.lockCauseKey() : '';
+      return cause ? I18n.t(reason) + ' (' + I18n.t(cause) + ')' : I18n.t(reason);
+    }
+
     // `reason` : la clé de la phrase qui dit pourquoi (js/i18n.js, « lock.* »), l'info-bulle du contrôle et ce que son clic écrit dans le coin d'état (js/lock-reasons.js, cause « access »).
     function setAccessLocked(el, locked, reason) {
       if (!el) return;
       el.classList.toggle(ACCESS_LOCK_CLASS, locked);
       if (locked) el.setAttribute('aria-disabled', 'true');
       else el.removeAttribute('aria-disabled');
-      LockReasons.set(el, 'access', locked && reason ? I18n.t(reason) : '', reason);
+      LockReasons.set(el, 'access', locked && reason ? accessReasonText(reason) : '', reason);
     }
 
     // Pendant la lecture d'un PDF (js/pdf-reading.js, consigne GFS 040), ce qui ne s'applique pas à lui reste là, GRISÉ avec sa raison - dans l'info-bulle du survol (`title`, comme setExplained de js/main-toolbar.js :
@@ -115,13 +123,14 @@ const MainAccess = (function () {
         const input = document.getElementById(id);
         if (!input) return;
         input.disabled = rights.readOnly;
-        LockReasons.set(input, 'state', rights.readOnly ? I18n.t('lock.readOnly') : '', 'lock.readOnly');
+        LockReasons.set(input, 'state', rights.readOnly ? accessReasonText('lock.readOnly') : '', 'lock.readOnly');
       });
       applyCommentsPermissions();
       applyPdfLocks();
       updateSaveStatus();
       LiveEntry.changed(); // un document en lecture seule ne s'écrit pas en direct : la ligne du menu suit les droits (js/live-entry.js)
       SlidesEntry.changed(); // ni ses diapositives (js/slides-entry.js)
+      TemplateNotice.refresh(); // la ligne « Notice du document… » et la fenêtre de la notice : écrire ou seulement lire (js/template-notice.js)
     }
 
     // Grist rend les options du widget quand son accès change (GristAPI.onAccessLevelChange) : la carte de l'accès arrive ou s'en va tout de suite, et la

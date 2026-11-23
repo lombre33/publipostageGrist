@@ -449,7 +449,7 @@ const RowAttachment = (function () {
       if (!created) notice = { text: I18n.t('settings.rowAttachment.createFailed', { table }), problem: true };
     } catch (e) {
       console.error('[RowAttachment] colonne non créée', e);
-      notice = { text: I18n.t(GristAPI.isAccessRefusal(e) ? 'settings.rowAttachment.createDenied' : 'settings.rowAttachment.createFailed', { table }), problem: true };
+      notice = { text: I18n.t(GristAPI.noteRefusal(e) ? 'settings.rowAttachment.createDenied' : 'settings.rowAttachment.createFailed', { table }), problem: true };
     }
     creating = false;
     if (created) {
