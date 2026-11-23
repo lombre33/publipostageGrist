@@ -15,6 +15,7 @@
 // vue sous les identifiants que la définition cite. `matchColumns` est la moitié « données » du remappage : les colonnes qu'un graphique ou un rapport demande (identifiant, libellé, genre) retrouvées dans une table du document, par leur identifiant puis par
 // leur libellé, sans jamais en choisir une qui ne peut pas porter le genre demandé (un nombre à mesurer dans une colonne de texte) ni deviner entre deux.
 // `moduleSource` met ce que `charger` rend dans la forme que le module reçoit ({ lignes SANS identifiant de ligne, colonnes, reglages } et la table des identifiants) ; `rowsOfRanks` traduit les rangs qu'il rend en retour (clic sur une marque).
+// `definitionFromModel` traduit le modèle d'un graphique que l'on a déjà (celui de chart-office.js : un graphique lu dans un fichier PowerPoint) en définition de Grist BI et en lignes littérales, sans table.
 // Les noms qui franchissent la frontière (tables, charger, colonnes, lignes) sont ceux de la réponse de Grist BI du 18/11 ; le reste est écrit ici, en un seul endroit, et se corrige ici.
 const ChartHostSource = (function () {
   const { pureTypeOf, isoInTimezone } = ViewSource;
@@ -259,5 +260,68 @@ const ChartHostSource = (function () {
     return Array.from(found);
   }
 
-  return { make, reports, matchColumns, planReport, aliasColumns, moduleSource, rowsOfRanks, genreOf, cellOf, columnsOf, linesOf };
+  // Le modèle d'un graphique (celui de chart-office.js : { kind, title?, horizontal?, stacked?, labels?, axes?, categories, series: [{ name, color, type, values }] }, que l'import PowerPoint lit dans un fichier)
+  // traduit en définition de Grist BI et en lignes LITTÉRALES : { ok: true, definition, source } ou { ok: false, raison }. Le graphique n'a pas de table dans Grist : sa source est faite de ses propres chiffres,
+  // une ligne par catégorie, une colonne de catégories et une colonne de nombres par série (le module nomme une série d'après l'identifiant de sa colonne : l'identifiant EST le nom de la série). La définition est
+  // celle de Grist BI (`type`, `dimension`, `measures` avec leur couleur et leur type), écrite avec « aucun » comme agrégat : un point par ligne, dans l'ordre, deux catégories de même nom ne sont jamais additionnées.
+  // Raisons : `invalide` (pas un modèle), `forme` (nuage, radar, cascade : pas ici), `vide` (aucune catégorie ou aucune série), `series` (plus de huit séries : la définition n'en porte pas plus).
+  // Ce qui se perd, dit ici pour que personne ne le cherche : la couleur de chaque part d'un secteur ou d'un anneau (la définition ne connaît que des jeux de couleurs nommés), les axes nommés et la mise en page du fichier.
+  const MODEL_TYPES = { bar: 'bar', line: 'line', area: 'line', pie: 'pie', donut: 'pie' };
+  const MODEL_MAX_SERIES = 8;
+  const MODEL_SERIES_TYPES = { column: 'bar', line: 'line', area: 'line' };
+  const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+  // Un identifiant de colonne qui est aussi le nom affiché : jamais vide, jamais un point (c'est la marque d'une dérivée ou d'une jointure chez le module), jamais deux fois le même.
+  function modelColumnId(name, fallback, taken) {
+    const base = (typeof name === 'string' && name.trim() ? name.trim() : fallback).replace(/\./g, '\u2024').slice(0, 190);
+    let id = base;
+    for (let n = 2; taken.indexOf(id) !== -1; n += 1) id = base + ' (' + n + ')';
+    taken.push(id);
+    return id;
+  }
+  const modelNumber = value => (typeof value === 'number' && isFinite(value) ? value : null);
+  function definitionFromModel(model) {
+    if (!model || typeof model !== 'object') return { ok: false, raison: 'invalide' };
+    const type = MODEL_TYPES[model.kind];
+    if (!type) return { ok: false, raison: 'forme' };
+    const categories = Array.isArray(model.categories) ? model.categories : [];
+    const series = (Array.isArray(model.series) ? model.series : []).filter(serie => serie && Array.isArray(serie.values));
+    if (!categories.length || !series.length) return { ok: false, raison: 'vide' };
+    if (series.length > MODEL_MAX_SERIES) return { ok: false, raison: 'series' };
+    const taken = [];
+    const axisName = model.axes && typeof model.axes.category === 'string' ? model.axes.category : '';
+    const dimension = modelColumnId(axisName, I18n.t('chart.host.category'), taken);
+    const ids = series.map((serie, i) => modelColumnId(serie.name, I18n.t('chart.host.series', { n: i + 1 }), taken));
+    const lignes = categories.map((category, row) => {
+      const line = {};
+      line[dimension] = category == null || category === '' ? '-' : String(category);
+      series.forEach((serie, i) => { line[ids[i]] = modelNumber(serie.values[row]); });
+      return line;
+    });
+    const colonnes = [{ id: dimension, libelle: dimension, type: 'Text', genre: 'text', format: null }]
+      .concat(ids.map(id => ({ id, libelle: id, type: 'Numeric', genre: 'number', format: null })));
+    const definition = { v: 2, type, dimension };
+    if (typeof model.title === 'string' && model.title.trim()) definition.title = model.title.trim().slice(0, 200);
+    if (model.kind === 'donut') definition.donut = true;
+    if (type === 'pie') {
+      definition.measure = ids[0];
+      definition.aggFn = 'none';
+    } else {
+      const kinds = series.map(serie => MODEL_SERIES_TYPES[serie.type] || MODEL_SERIES_TYPES.column);
+      const mixed = kinds.some(kind => kind !== kinds[0]);
+      definition.measures = series.map((serie, i) => {
+        const measure = { column: ids[i], aggFn: 'none' };
+        if (HEX_COLOR.test(String(serie.color))) measure.color = String(serie.color).toLowerCase();
+        if (mixed) measure.type = kinds[i];
+        return measure;
+      });
+      if (mixed) definition.type = 'bar';
+      if (model.kind === 'area') definition.areaFill = true;
+      if (model.horizontal && type === 'bar') definition.horizontal = true;
+      if (model.stacked) definition.stacked = true;
+    }
+    if (model.labels) definition.valueLabels = true;
+    return { ok: true, definition, source: { lignes, colonnes, reglages: {} } };
+  }
+
+  return { make, reports, matchColumns, planReport, aliasColumns, moduleSource, rowsOfRanks, definitionFromModel, genreOf, cellOf, columnsOf, linesOf };
 })();

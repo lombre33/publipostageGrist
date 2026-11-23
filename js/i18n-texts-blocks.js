@@ -109,6 +109,8 @@ const I18nTextsBlocks = {
   'chart.reason.multiseries': { fr: 'Réglage « Split series » de Grist : pas encore pris en charge.', en: 'Grist’s “Split series” setting: not supported yet.' },
   'chart.reason.errorBars': { fr: 'Réglage « Error bars » de Grist : pas encore pris en charge.', en: 'Grist’s “Error bars” setting: not supported yet.' },
   'chart.host.noTable': { fr: 'La table « {table} » n’existe pas dans ce document.', en: 'The table “{table}” doesn’t exist in this document.' },
+  'chart.host.category': { fr: 'Catégorie', en: 'Category' },
+  'chart.host.series': { fr: 'Série {n}', en: 'Series {n}' },
   'chart.report.noBi': { fr: 'Aucun rapport de Grist BI dans ce document : la table « BI_Dashboard_Config » n’existe pas.', en: 'No Grist BI report in this document: the “BI_Dashboard_Config” table doesn’t exist.' },
   'chart.reason.relativeFilter': { fr: 'Filtre sur des dates relatives (« 7 derniers jours ») : pas encore pris en charge.', en: 'Filter on relative dates (“last 7 days”): not supported yet.' },
   'chart.reason.noTable': { fr: 'Table illisible : droits d’accès ou table supprimée.', en: 'Table unreadable: access rights or deleted table.' },
