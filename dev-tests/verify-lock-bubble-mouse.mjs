@@ -308,13 +308,61 @@ async function newTemplate(page, kind) {
   t.check('lecture seule : un vrai clic sur « Mode édition » ouvre la bulle', await bubbleOpen(page));
   await press(page, '.pp-lockbubble-more');
   const rights = await checksOf(page);
-  t.check('lecture seule : « Ce document est en lecture seule pour vous » est la cause ✕ ; pas de bouton (le geste est dans Grist)', rights.some(c => c.no && /lecture seule/.test(c.text)) && /Partager/.test(await textOf(page, '.pp-lockbubble-fix')) && !(await page.$('.pp-lockbubble-act')), rights);
+  const fixText = await textOf(page, '.pp-lockbubble-fix');
+  t.check('lecture seule : « Ce document est en lecture seule pour vous » est la cause ✕ ; pas de bouton (le geste est dans Grist)', rights.some(c => c.no && /lecture seule/.test(c.text)) && !(await page.$('.pp-lockbubble-act')), rights);
+  t.check('lecture seule : d\'où viennent les droits - ✕ « Votre ligne de la table des droits » (la colonne et ce qu\'elle donne), le geste nomme la case à décocher et la table (plus « Partager » : la cause est la table des droits, pas le rôle Grist)', rights.some(c => c.no && /Votre ligne de la table des droits/.test(c.text) && /« Lecture seule » : colonne/.test(c.text)) && /décocher la case/.test(fixText) && /LectureSeule/.test(fixText) && /Droits/.test(fixText), { rights, fixText });
   t.check('lecture seule : la Lecture reste affichée', (await page.evaluate(() => document.getElementById('reader-container').style.display)) === 'block');
   await page.keyboard.press('Escape');
   await press(page, '#btn-export-pdf');
   await press(page, '.pp-lockbubble-more');
   const exportChecks = await checksOf(page);
   t.check('lecture seule : l\'export refusé est une vérification de plus (« L\'export n\'est pas autorisé pour vous »)', exportChecks.some(c => c.no && /L’export n’est pas autorisé/.test(c.text)), exportChecks);
+  await page.context().close();
+}
+
+// ---- 6b) La table des droits est illisible pour la personne (règle d'accès de Grist) : la bulle dit pourquoi, et quoi demander ---------------------------------------------------
+// Le compte « Editor » d'Antoine (23/11) : lecture seule ET export grisé alors que la colonne Export est « — Aucune — » ; le constat disait seulement « droits : lecture seule ». Maintenant il dit que la table des droits
+// n'est pas lisible pour ce compte, avec la phrase que Grist a donnée, et le geste (une règle d'accès qui laisse chacun lire sa ligne).
+{
+  const seed = `
+    stub.setVariables('Clients', { Nom: 'Text' });
+    stub.setRows('Clients', [{ id: 1, Nom: 'Dupont' }]);
+    stub.setVariables('Droits', { Email: 'Text', LectureSeule: 'Bool', Export: 'Bool', Commentaires: 'Bool' });
+    stub.setRows('Droits', [{ id: 1, Email: 'lecteur@exemple.fr', LectureSeule: false, Export: true, Commentaires: true }]);
+    stub.setUserEmail('lecteur@exemple.fr');
+    stub.state.options = { droitsAcces: { table: 'Droits', emailColumn: 'Email', readOnlyColumn: 'LectureSeule' } };
+    const m = stub.state.rows.Publipostage_Modeles;
+    m.id.push(1); m.Nom.push('Contrat');
+    m.Contenu.push('<p>Bonjour <span class="var-badge" data-table="Clients" data-column="Nom" data-key="Clients.Nom"></span>, voici le contrat de location.</p>');
+    m.NomFichierPDF.push(''); m.HeaderFooter.push(''); m.DateModif.push(1790000000); m.Margins.push(''); m.EstParDefaut.push(true);
+    stub.state.nextRowId.Publipostage_Modeles = 2;`;
+  const { page } = await t.openPage({ hosted: false, lang: 'fr', seed });
+  await page.evaluate(() => window.__gristStub.fireRecord({ id: 1, Nom: 'Dupont' }, 'Clients'));
+  await pause(600);
+  // Grist cache maintenant la table des droits à ce compte : la relecture des droits est refusée, comme celle de la minuterie le ferait.
+  await page.evaluate(async () => {
+    const real = grist.docApi.fetchTable;
+    grist.docApi.fetchTable = async function (tableId) {
+      if (tableId === 'Droits') throw new Error('Blocked by table read access rules');
+      return real.apply(this, arguments);
+    };
+    await AccessRights.refresh();
+  });
+  await pause(700);
+  const tooltip = await page.evaluate(() => document.getElementById('btn-export-pdf').getAttribute('title') || document.getElementById('v2-export-pdf-group').getAttribute('title') || '');
+  t.check('table illisible : l\'info-bulle de l\'export grisé dit la cause (« la table des droits n\'est pas lisible pour votre compte »)', /n’est pas autorisé pour vous/.test(tooltip) && /table des droits n’est pas lisible pour votre compte/.test(tooltip), tooltip);
+  await press(page, '#btn-export-pdf');
+  t.check('table illisible : un vrai clic sur « Exporter » grisé ouvre la bulle', await bubbleOpen(page));
+  await press(page, '.pp-lockbubble-more');
+  const found = await checksOf(page);
+  const fix = await textOf(page, '.pp-lockbubble-fix');
+  const context = await textOf(page, '.pp-lockbubble');
+  t.check('table illisible : ✕ « La table des droits « Droits » n\'est pas lisible pour vous », avec la phrase du refus de Grist', found.some(c => c.no && /La table des droits « Droits » n’est pas lisible pour vous/.test(c.text) && /Blocked by table read access rules/.test(c.text)), found);
+  t.check('table illisible : le geste dit la règle d\'accès à écrire (chacun lit sa ligne : rec.Email == user.Email)', /rec\.Email == user\.Email/.test(fix) && /Droits/.test(fix), fix);
+  t.check('table illisible : le contexte dit la table, les colonnes, la lecture refusée, le compte qui peut modifier et l\'email lu (sans son adresse)', /Table des droits[^·]*Droits/.test(context) && /Colonnes des droits.*email Email/.test(context) && /Lecture des droits.*refus de Grist/.test(context) && /Compte Grist.*peut modifier/.test(context) && /Email Grist.*lu/.test(context) && !/lecteur@exemple\.fr/.test(context), context);
+  const bubble = await bubbleBox(page);
+  t.check('table illisible : la bulle dépliée reste entière dans le panneau de 700×400', !!bubble && fits(bubble, page.viewportSize()), bubble);
+  if (process.env.LOCK_BUBBLE_SHOTS) await page.screenshot({ path: process.env.LOCK_BUBBLE_SHOTS + '/table-illisible-700x400.png' });
   await page.context().close();
 }
 

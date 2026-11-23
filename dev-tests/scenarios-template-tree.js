@@ -1082,8 +1082,8 @@
   });
 
   cases.push({
-    id: 'tree_arrow_up_from_first_row_reaches_organize_and_arrow_down_comes_back',
-    description: 'Au clavier : Flèche haut depuis la première ligne atteint « Organiser » (qui n’est plus dans l’ordre de tabulation de la barre), Flèche bas revient à la première ligne, Échap referme',
+    id: 'tree_arrow_up_from_first_row_reaches_search_then_tab_organize_and_arrow_down_comes_back',
+    description: 'Au clavier : Flèche haut depuis la première ligne atteint le champ de recherche de l’en-tête, Tab de là passe à « Organiser » (qui n’est plus dans l’ordre de tabulation de la barre), Flèche bas revient à la première ligne, Échap referme',
     run: async (h) => {
       await createTemplate(h, 'document', 'Clavier - Un');
       await openPopup(h);
@@ -1092,6 +1092,9 @@
       const key = (el, k) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
       key(document.activeElement, 'ArrowUp');
       await h.sleep(20);
+      const onSearch = document.activeElement === searchField();
+      key(document.activeElement, 'Tab');
+      await h.sleep(20);
       const onOrganize = document.activeElement === document.getElementById('btn-organize-templates');
       key(document.activeElement, 'ArrowDown');
       await h.sleep(20);
@@ -1099,8 +1102,8 @@
       key(document.activeElement, 'ArrowUp');
       key(document.activeElement, 'Escape');
       await h.sleep(30);
-      const pass = onOrganize && backOnFirst && !popupOpen() && document.activeElement === trigger();
-      return { pass, notes: JSON.stringify({ onOrganize, backOnFirst, popupOpen: popupOpen(), focusIsTrigger: document.activeElement === trigger() }) };
+      const pass = onSearch && onOrganize && backOnFirst && !popupOpen() && document.activeElement === trigger();
+      return { pass, notes: JSON.stringify({ onSearch, onOrganize, backOnFirst, popupOpen: popupOpen(), focusIsTrigger: document.activeElement === trigger() }) };
     },
   });
 
@@ -1177,9 +1180,10 @@
       const idB = await createTemplate(h, 'document', 'Clavier carte - B');
       await TemplatePreferences.setFolder(idA, 'Clavier-Carte');
       const checks = {};
-      const press = (k) => { const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); document.activeElement.dispatchEvent(ev); return ev.defaultPrevented; };
+      const press = (k, shiftKey) => { const ev = new KeyboardEvent('keydown', { key: k, shiftKey: !!shiftKey, bubbles: true, cancelable: true }); document.activeElement.dispatchEvent(ev); return ev.defaultPrevented; };
       const rowsNow = () => Array.from(popup().querySelectorAll('.tts-row')).filter(r => !r.closest('.tts-group.is-collapsed'));
       const organize = () => document.getElementById('btn-organize-templates');
+      const search = () => popup().querySelector('.tts-head .tts-search');
       const reopen = async () => { await closeTree(h); await openPopup(h); };
       try {
         await openPopup(h);
@@ -1192,13 +1196,21 @@
         checks.end = press('End') === true && document.activeElement === last;
         checks.downOnLast = press('ArrowDown') === true && document.activeElement === last;
         rows[0].focus();
-        checks.upOnFirstReachesOrganize = press('ArrowUp') === true && document.activeElement === organize();
-        // Depuis « Organiser » : le parcours continue dans les lignes, les autres flèches sont gardées sans rien faire, Entrée et Espace restent au clic du bouton.
+        // L'en-tête se parcourt dans l'ordre où il se lit : le champ de recherche (Flèche haut depuis la première ligne ; Flèche bas le quitte pour la première ligne), puis « Organiser » (Tab).
+        checks.upOnFirstReachesSearch = press('ArrowUp') === true && document.activeElement === search();
+        checks.searchDown = press('ArrowDown') === true && document.activeElement === rows[0];
+        search().focus();
+        checks.searchTabGoesToOrganize = press('Tab') === true && document.activeElement === organize() && popupOpen();
+        // Depuis « Organiser » : le parcours continue dans les lignes, Gauche et Maj + Tab reviennent au champ, les autres flèches sont gardées sans rien faire, Entrée et Espace restent au clic du bouton.
         checks.organizeDown = press('ArrowDown') === true && document.activeElement === rows[0];
         organize().focus();
         checks.organizeEnd = press('End') === true && document.activeElement === last;
         organize().focus();
-        checks.organizeKeptKeys = ['ArrowUp', 'Home', 'ArrowLeft', 'ArrowRight'].every(k => press(k) === true && document.activeElement === organize());
+        checks.organizeKeptKeys = ['ArrowUp', 'Home', 'ArrowRight'].every(k => press(k) === true && document.activeElement === organize());
+        checks.organizeLeftGoesToSearch = press('ArrowLeft') === true && document.activeElement === search();
+        organize().focus();
+        checks.organizeShiftTabGoesToSearch = press('Tab', true) === true && document.activeElement === search() && popupOpen();
+        organize().focus();
         checks.organizeNativeKeys = ['Enter', ' '].every(k => press(k) === false && document.activeElement === organize() && popupOpen());
         checks.organizeOtherKey = press('a') === false && document.activeElement === organize();
         checks.organizeEscape = press('Escape') === true && !popupOpen() && document.activeElement === trigger();
@@ -1223,7 +1235,7 @@
         checks.leafLeftGoesUp = press('ArrowLeft') === true && document.activeElement === folder;
         rowFor(idB).focus();
         checks.rootLeafLeftKept = press('ArrowLeft') === true && document.activeElement === rowFor(idB);
-        checks.otherKeyKept = press('a') === false && document.activeElement === rowFor(idB);
+        checks.otherKeyKept = press('Insert') === false && document.activeElement === rowFor(idB);
         // Entrée et Espace choisissent le modèle, referment le panneau et rendent le focus au déclencheur.
         rowFor(idA).focus();
         checks.enterSelects = press('Enter') === true && String(realSelect().value) === String(idA) && !popupOpen() && document.activeElement === trigger();
@@ -1250,7 +1262,7 @@
         await tidyFolders(['Clavier-Carte'], [idA, idB]);
       }
       const failed = Object.keys(checks).filter(k => !checks[k]);
-      return { pass: Object.keys(checks).length === 25 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
+      return { pass: Object.keys(checks).length === 29 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
     },
   });
 
@@ -1379,6 +1391,189 @@
       await tidyFolders([], [id]);
       const pass = before.focusPath === 'Focus-Z' && !before.aRowBefore && sameNode && after.open && after.newFolder && after.redrawn && after.focusPath === 'Focus-Z' && after.notBody;
       return { pass, notes: JSON.stringify({ before, sameNode, after }) };
+    },
+  });
+
+  // --- Recherche par nom dans la liste du haut (23/11, demande d'Antoine : « dans la fenêtre des dossiers en haut j'aimerais pouvoir rechercher par nom », champ « à la place du mot Documents »).
+  // Avant, le mot « Documents » n'était qu'un titre : rien ne se filtrait. Le champ se règle comme celui d'« Organiser mes documents » (SearchSelect.nameMatcher : mots dans n'importe quel
+  // ordre, accents et ponctuation ignorés, le NOM du document seul). « Zorg » : un mot qu'aucun autre scénario n'emploie, pour que la recherche ne retombe que sur ces documents. ---
+  const searchField = () => popup() && popup().querySelector('.tts-head .tts-search');
+  // Ce qu'une personne fait en tapant : la valeur change, le champ émet « input ».
+  function typeInSearch(text) {
+    const input = searchField();
+    input.value = text;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const leafNames = () => Array.from(popup().querySelectorAll('.tts-row-leaf .tts-row-label')).map((l) => l.textContent);
+  const folderNames = () => Array.from(popup().querySelectorAll('.tts-row-folder .tts-row-label')).map((l) => l.textContent);
+  const sectionLabels = () => Array.from(popup().querySelectorAll('.tts-section-label')).map((l) => l.textContent);
+
+  cases.push({
+    id: 'tree_search_field_takes_the_title_place_and_filters_documents_by_name_keeping_their_folders',
+    description: 'Le champ « Rechercher un document… » tient la place du titre « Documents » (même ligne qu’« Organiser ») ; taper des mots du nom ne garde que les documents qui correspondent, avec leur dossier déplié, dans n’importe quel ordre, sans accents ni ponctuation ; « Aucun document ne correspond » quand rien ne va ; une saisie sans lettre ni chiffre ne filtre rien',
+    run: async (h) => {
+      const idVisa = await createTemplate(h, 'document', 'Zorg Demande de visa');
+      const idBudget = await createTemplate(h, 'document', 'Zorg Budget valide');
+      const idRegles = await createTemplate(h, 'document', 'Zorg Règles de publication');
+      await TemplatePreferences.setFolder(idVisa, 'Zorg-Conventions');
+      await TemplatePreferences.setFolder(idRegles, 'Zorg-Notifications');
+      const checks = {};
+      try {
+        await openPopup(h);
+        const input = searchField();
+        const head = popup().querySelector('.tts-head');
+        const organize = document.getElementById('btn-organize-templates');
+        // Le champ est dans l'en-tête, avant « Organiser », sur la même ligne ; le titre « Documents » n'existe plus.
+        const ir = input && input.getBoundingClientRect(), or = organize.getBoundingClientRect();
+        checks.fieldInHeadBeforeOrganize = !!input && input.parentElement === head && input.type === 'search' && !head.querySelector('.tts-head-title') && head.firstElementChild === input
+          && ir.right <= or.left && Math.abs((ir.top + ir.bottom) / 2 - (or.top + or.bottom) / 2) < 3;
+        checks.placeholderAndLabel = !!input && input.placeholder === 'Rechercher un document…' && input.getAttribute('aria-label') === 'Rechercher un document…';
+        checks.noFilterAtStart = input.value === '' && leafNames().includes('Zorg Demande de visa') && leafNames().includes('Zorg Budget valide') && leafNames().includes('Zorg Règles de publication');
+        // Un mot du nom : le document, son dossier déplié ; les autres documents et dossiers disparaissent.
+        typeInSearch('visa');
+        const visaLeaves = leafNames().filter((n) => n.startsWith('Zorg'));
+        const visaRow = rowFor(idVisa);
+        checks.oneWordKeepsMatchAndItsFolder = visaLeaves.length === 1 && visaLeaves[0] === 'Zorg Demande de visa' && folderNames().includes('Zorg-Conventions') && !folderNames().includes('Zorg-Notifications')
+          && !!visaRow && !visaRow.closest('.tts-group.is-collapsed') && !rowFor(idBudget) && !rowFor(idRegles);
+        checks.sectionKept = sectionLabels().includes('Tous les documents');
+        // Des mots dans n'importe quel ordre, sans casse, sans accents, ponctuation ignorée, le mot dans un nom de dossier ne compte pas (le nom du document seul).
+        typeInSearch('VALIDE zorg budget');
+        checks.anyOrderAnyCase = !!rowFor(idBudget) && !rowFor(idVisa) && !rowFor(idRegles);
+        typeInSearch('regles publication');
+        checks.accentsIgnored = !!rowFor(idRegles) && !rowFor(idVisa) && !rowFor(idBudget);
+        typeInSearch('zorg-budget');
+        checks.punctuationIgnored = !!rowFor(idBudget) && !rowFor(idVisa);
+        typeInSearch('conventions');
+        checks.folderNameNotSearched = !rowFor(idVisa) && !folderNames().includes('Zorg-Conventions');
+        // Plusieurs documents : tous restent, chacun sous son dossier.
+        typeInSearch('zorg');
+        checks.severalMatches = !!rowFor(idVisa) && !!rowFor(idBudget) && !!rowFor(idRegles) && folderNames().includes('Zorg-Conventions') && folderNames().includes('Zorg-Notifications');
+        // Rien ne correspond : la phrase, aucune ligne de document.
+        typeInSearch('zorgzorgzorg');
+        const empty = popup().querySelector('.tts-empty');
+        checks.noMatchSentence = !!empty && empty.textContent === 'Aucun document ne correspond à cette recherche.' && !popup().querySelector('.tts-row') && !popup().querySelector('.tts-section-label');
+        // Sans lettre ni chiffre : aucun filtre (comme partout, SearchSelect.searchWords).
+        typeInSearch('  - _ . ');
+        checks.noLetterNoFilter = !!rowFor(idVisa) && !!rowFor(idBudget) && !!rowFor(idRegles) && !popup().querySelector('.tts-empty');
+        // Effacer la saisie rend toute la liste.
+        typeInSearch('visa');
+        typeInSearch('');
+        checks.clearedRestoresAll = !!rowFor(idVisa) && !!rowFor(idBudget) && !!rowFor(idRegles);
+        await closeTree(h);
+      } finally {
+        await closeTree(h);
+        await tidyFolders(['Zorg-Conventions', 'Zorg-Notifications'], [idVisa, idBudget, idRegles]);
+      }
+      const failed = Object.keys(checks).filter((k) => !checks[k]);
+      return { pass: Object.keys(checks).length === 13 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_search_opens_collapsed_folders_pins_and_starts_empty_on_each_opening',
+    description: 'Pendant une recherche, un dossier « replié par défaut » est déplié (le document trouvé ne reste pas caché) et se replie de nouveau une fois la saisie effacée ; un document épinglé qui ne correspond pas quitte « Épinglés », un qui correspond y reste ; replier un dossier à la main pendant la recherche ne laisse rien après elle ; chaque ouverture repart d’un champ vide et de toute la liste',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Zorg Replie A');
+      const idB = await createTemplate(h, 'document', 'Zorg Replie B');
+      await TemplatePreferences.setFolder(idA, 'Zorg-Replie');
+      await TemplatePreferences.setFolderCollapsed('Zorg-Replie', true);
+      await TemplatePreferences.setPinned(idB, true);
+      const checks = {};
+      const pinnedNames = () => {
+        const label = Array.from(popup().querySelectorAll('.tts-section-label')).find((l) => l.textContent === 'Épinglés');
+        const names = [];
+        for (let n = label && label.nextElementSibling; n && !n.classList.contains('tts-section-label'); n = n.nextElementSibling) {
+          if (n.classList.contains('tts-row-leaf')) names.push(n.querySelector('.tts-row-label').textContent);
+        }
+        return names;
+      };
+      try {
+        await openPopup(h);
+        const folder = () => folderRowByPath('Zorg-Replie');
+        checks.collapsedWithoutSearch = folder().getAttribute('aria-expanded') === 'false' && groupOf(folder()).classList.contains('is-collapsed');
+        checks.pinnedWithoutSearch = pinnedNames().includes('Zorg Replie B');
+        typeInSearch('replie a');
+        checks.collapsedFolderOpenedBySearch = folder().getAttribute('aria-expanded') === 'true' && !groupOf(folder()).classList.contains('is-collapsed') && isLaidOut(rowFor(idA));
+        checks.pinnedLeavesWhenNotMatching = !pinnedNames().includes('Zorg Replie B') && !rowFor(idB);
+        typeInSearch('replie b');
+        checks.pinnedStaysWhenMatching = pinnedNames().includes('Zorg Replie B') && !rowFor(idA);
+        // Un geste à la main pendant la recherche : il ne laisse aucune trace une fois la saisie effacée.
+        typeInSearch('replie a');
+        folder().click();
+        typeInSearch('');
+        checks.handToggleDuringSearchLeavesNothing = folder().getAttribute('aria-expanded') === 'false' && groupOf(folder()).classList.contains('is-collapsed');
+        // Chaque ouverture repart d'un champ vide et de toute la liste.
+        typeInSearch('replie b');
+        await closeTree(h);
+        await openPopup(h);
+        checks.reopenStartsEmpty = searchField().value === '' && !!rowFor(idA) && !!rowFor(idB) && folderRowByPath('Zorg-Replie').getAttribute('aria-expanded') === 'false';
+        await closeTree(h);
+      } finally {
+        await closeTree(h);
+        await tidyFolders(['Zorg-Replie'], [idA, idB]);
+      }
+      const failed = Object.keys(checks).filter((k) => !checks[k]);
+      return { pass: Object.keys(checks).length === 7 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
+    },
+  });
+
+  cases.push({
+    id: 'tree_search_keyboard_typeahead_enter_escape_and_clicks',
+    description: 'Au clavier : une lettre tapée sur une ligne part dans le champ (Ctrl + lettre, Espace et les touches qui ne sont pas un caractère restent aux lignes) ; le champ garde ses touches de texte (gauche, droite, Début, Fin) ; Entrée choisit le document quand un seul correspond, sinon passe à la première ligne ; Échap efface la saisie puis, le champ vide, referme la liste ; un clic dans le champ ne referme pas la liste ; un clic sur un résultat l’ouvre',
+    run: async (h) => {
+      const idA = await createTemplate(h, 'document', 'Zorg Clavier A');
+      const idB = await createTemplate(h, 'document', 'Zorg Clavier B');
+      const idC = await createTemplate(h, 'document', 'Zorg Clavier Unique');
+      const checks = {};
+      const press = (k, init) => { const ev = new KeyboardEvent('keydown', Object.assign({ key: k, bubbles: true, cancelable: true }, init || {})); document.activeElement.dispatchEvent(ev); return ev.defaultPrevented; };
+      try {
+        await openPopup(h);
+        // Une lettre sur une ligne : elle arrive dans le champ, qui prend le focus et filtre ; plusieurs lettres de suite se cumulent.
+        rowFor(idA).focus();
+        checks.letterGoesToSearch = press('z') === true && document.activeElement === searchField() && searchField().value === 'z';
+        checks.letterInFieldLeftToBrowser = press('o') === false && searchField().value === 'z';  // le champ a le focus : la lettre est celle du navigateur, pas un second détournement
+        typeInSearch('zorg clavier');
+        // Ce qui n'est pas une lettre reste aux lignes.
+        rowFor(idA).focus();
+        checks.ctrlLetterKept = press('a', { ctrlKey: true }) === false && document.activeElement === rowFor(idA);
+        checks.arrowKept = press('ArrowRight') === false && document.activeElement === rowFor(idA);
+        // Le champ garde ses touches de texte : le navigateur les traite (rien n'est pris).
+        searchField().focus();
+        checks.textKeysLeftToTheField = ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'a'].every((k) => press(k) === false && document.activeElement === searchField());
+        // Entrée avec plusieurs correspondances : le focus passe à la première ligne, rien ne s'ouvre.
+        const before = String(realSelect().value);
+        checks.enterWithSeveralGoesToFirstRow = press('Enter') === true && document.activeElement === Array.from(popup().querySelectorAll('.tts-row')).filter((r) => !r.closest('.tts-group.is-collapsed'))[0] && popupOpen() && String(realSelect().value) === before;
+        // Entrée avec une seule correspondance : ce document s'ouvre, la liste se referme, le focus revient au déclencheur.
+        searchField().focus();
+        typeInSearch('zorg unique');
+        checks.enterWithOneOpensIt = press('Enter') === true && String(realSelect().value) === String(idC) && !popupOpen() && document.activeElement === trigger();
+        await h.sleep(300);
+        // Échap : d'abord la saisie, puis la liste.
+        await openPopup(h);
+        searchField().focus();
+        typeInSearch('zorg clavier a');
+        checks.escapeClearsFirst = press('Escape') === true && popupOpen() && searchField().value === '' && document.activeElement === searchField() && !!rowFor(idB) && !!rowFor(idA);
+        checks.escapeThenCloses = press('Escape') === true && !popupOpen() && document.activeElement === trigger();
+        // Un clic dans le champ ne referme pas la liste (le clic hors du panneau la referme).
+        await openPopup(h);
+        await clickEl(h, searchField());
+        checks.clickInFieldKeepsOpen = popupOpen();
+        // Un clic sur un résultat l'ouvre.
+        typeInSearch('zorg clavier b');
+        await clickEl(h, rowFor(idB));
+        await h.sleep(300);
+        checks.clickOnResultOpensIt = String(realSelect().value) === String(idB) && !popupOpen();
+        await TemplateTreeSelect.refresh();
+        // Tab depuis le champ va à « Organiser » ; Maj + Tab referme (rien ne reste ouvert hors de son déclencheur).
+        await openPopup(h);
+        searchField().focus();
+        checks.shiftTabLeaves = press('Tab', { shiftKey: true }) === false && !popupOpen() && document.activeElement === trigger();
+      } finally {
+        await closeTree(h);
+        await tidyFolders([], [idA, idB, idC]);
+      }
+      const failed = Object.keys(checks).filter((k) => !checks[k]);
+      return { pass: Object.keys(checks).length === 12 && failed.length === 0, notes: JSON.stringify({ failed, count: Object.keys(checks).length }) };
     },
   });
 

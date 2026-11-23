@@ -87,6 +87,12 @@ const I18nTextsReview = {
   'lock.accessGuide': { fr: 'Indisponible tant que le widget n’a pas l’accès complet au document : suivez les étapes affichées', en: 'Unavailable until the widget has full access to the document: follow the steps shown' },
   'lock.noExport': { fr: 'Indisponible : l’export n’est pas autorisé pour vous dans ce document', en: 'Unavailable: export is not allowed for you in this document' },
   'lock.noComment': { fr: 'Indisponible : les commentaires ne sont pas autorisés pour vous dans ce document', en: 'Unavailable: comments are not allowed for you in this document' },
+  // La cause d'un grisé de droits, entre parenthèses derrière sa phrase (js/main-access.js:accessReasonText, AccessRights.lockCauseKey) : le droit dit ce qui est refusé, la cause dit pourquoi.
+  'lock.cause.pending': { fr: 'vos droits sont en cours de lecture', en: 'your rights are being read' },
+  'lock.cause.viewer': { fr: 'votre compte est Lecteur dans Grist', en: 'your account is a Viewer in Grist' },
+  'lock.cause.unreadable': { fr: 'la table des droits n’est pas lisible pour votre compte : tout est verrouillé par précaution', en: 'the rights table is not readable for your account: everything is locked as a precaution' },
+  'lock.cause.tableGone': { fr: 'la table des droits n’existe plus : tout est verrouillé par précaution', en: 'the rights table no longer exists: everything is locked as a precaution' },
+  'lock.cause.found': { fr: 'selon votre ligne de la table des droits', en: 'according to your row in the rights table' },
   'lock.email': { fr: 'Indisponible dans un modèle email : il s’écrit en texte brut (pas de mise en forme, de tableau, d’image ni de page)', en: 'Unavailable in an email template: it is written in plain text (no formatting, tables, images or page)' },
   'lock.macro': { fr: 'Indisponible dans un macro-modèle : il assemble d’autres modèles, il n’a pas de texte à mettre en forme', en: 'Unavailable in a macro-template: it assembles other templates and has no text to format' },
   'lock.hf': { fr: 'Indisponible dans un en-tête ou un pied de page : cet élément n’y a pas sa place', en: 'Unavailable in a header or footer: this element does not belong there' },

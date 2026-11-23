@@ -278,7 +278,7 @@
 
   cases.push({
     id: 'contrast_template_list_header_and_empty_text_reach_4_5_and_organize_focus_ring_3_to_1',
-    description: 'En-tête de la liste des modèles (titre, bouton « Organiser ») et phrase « Aucun modèle enregistré » : 4,5:1 au moins sur le fond du panneau ; anneau de focus du bouton « Organiser » : 3:1 ; en clair et en sombre',
+    description: 'En-tête de la liste des modèles (champ de recherche : son texte d’invite et ce qu’on y tape ; bouton « Organiser ») et phrase « Aucun modèle enregistré » (la même classe porte « Aucun document ne correspond ») : 4,5:1 au moins sur le fond du panneau ; anneau de focus du bouton « Organiser » et du champ : 3:1 ; en clair et en sombre',
     run: async () => {
       const trigger = document.querySelector('.tts-trigger');
       const popup = document.querySelector('.tts-popup');
@@ -286,11 +286,12 @@
       if (!wasOpen) trigger.click();
       await new Promise(r => setTimeout(r, 250));
       try {
-        const title = document.querySelector('.tts-head-title');
+        const search = document.querySelector('.tts-head .tts-search');
         const organize = document.getElementById('btn-organize-templates');
         const byTheme = inBothThemes(() => {
           const out = {
-            'titre de l’en-tête': round2(textRatio(title)),
+            'invite du champ de recherche': round2(textRatio(search, '::placeholder')),
+            'texte tapé dans le champ de recherche': round2(textRatio(search)),
             'bouton Organiser': round2(textRatio(organize.querySelector('.tts-organize-label') || organize)),
             'phrase « aucun modèle »': withProbe('<div class="tts-popup is-open" style="position:static;"><div class="tts-empty">x</div></div>', p => round2(textRatio(p.querySelector('.tts-empty')))),
           };
@@ -299,11 +300,15 @@
           const ringColor = parseColor(cs.outlineColor);
           const bg = backgroundOf(organize);
           out['anneau de focus (3:1)'] = organize.matches(':focus-visible') && ringColor ? round2(ratio(over(ringColor, bg), bg)) : 0;
+          search.focus();
+          const searchRing = parseColor(getComputedStyle(search).outlineColor);
+          const searchBg = backgroundOf(search);
+          out['anneau de focus du champ (3:1)'] = search.matches(':focus-visible') && searchRing ? round2(ratio(over(searchRing, searchBg), searchBg)) : 0;
           return out;
         });
-        const ringLow = Object.keys(byTheme).filter(t => !(byTheme[t]['anneau de focus (3:1)'] >= 3));
+        const ringLow = Object.keys(byTheme).filter(t => !(byTheme[t]['anneau de focus (3:1)'] >= 3 && byTheme[t]['anneau de focus du champ (3:1)'] >= 3));
         const textsBad = [];
-        for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (name !== 'anneau de focus (3:1)' && !(value >= 4.5)) textsBad.push(theme + ' ' + name + ' ' + value);
+        for (const theme of Object.keys(byTheme)) for (const [name, value] of Object.entries(byTheme[theme])) if (!name.startsWith('anneau de focus') && !(value >= 4.5)) textsBad.push(theme + ' ' + name + ' ' + value);
         return { pass: textsBad.length === 0 && ringLow.length === 0, notes: JSON.stringify({ textsBad, ringLow, byTheme }) };
       } finally {
         if (!wasOpen) trigger.click();

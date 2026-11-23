@@ -6,10 +6,12 @@
 //   1) la liste : noms à 12,5 px (taille des menus au survol), modèle en graisse normale, dossier en demi-gras ; plus de ligne « Nouveau modèle » ; « Organiser » dans l'en-tête, en haut
 //      à droite, absent de la barre ; la liste tient dans la fenêtre ;
 //   2) « Organiser » au vrai clic puis Échap : la fenêtre s'ouvre et se ferme, le focus revient au déclencheur de la liste ;
-//   3) au clavier : Entrée ouvre la liste, Flèche haut depuis la première ligne atteint « Organiser » (anneau de focus visible), Entrée l'active ;
+//   3) au clavier : Entrée ouvre la liste, Flèche haut depuis la première ligne atteint le champ de recherche, Tab passe à « Organiser » (anneau de focus visible), Entrée l'active ;
 //   4) 30 modèles : la molette fait défiler la liste, le panneau reste ouvert, l'en-tête reste en haut et « Organiser » reste cliquable ;
 //   5) renommer : le champ prend la place et la largeur du déclencheur (la barre ne change pas de hauteur), Entrée montre le nouveau nom, Enregistrer l'écrit dans Grist ;
-//   6) interface en anglais : « Documents » / « Organize » ;
+//   6) interface en anglais : « Search for a document… » / « Organize » ;
+//   6 bis) la RECHERCHE (23/11, champ à la place du titre « Documents ») : un vrai clic dans le champ, de vraies frappes (une lettre tapée sur une ligne part dans le champ), la liste se réduit aux
+//      documents dont le nom correspond avec leurs dossiers, Retour arrière, Échap qui efface puis ferme, aucun résultat, Entrée sur un seul résultat, tout tient dans 700x400 ;
 //   7) l'étoile du modèle par défaut au démarrage du widget (demande du 2026-10-12), sur chaque ligne de la liste et de « Organiser mes documents » : mention « au démarrage » et étoile appuyée
 //      sur le défaut, étoile des autres lignes au survol, vrai clic qui pose / déplace / retire (la liste reste ouverte, le modèle ouvert ne change pas, la barre suit), email et macro grisés,
 //      légende de la fenêtre dans 700x400 sans recouvrir « Fermer », étoile atteinte et activée au clavier, interface en anglais.
@@ -155,6 +157,14 @@ const extraSeed = `
   stub.state.nextRowId.Publipostage_Modeles = 40;
 `;
 
+// La recherche en anglais : le champ, la phrase « aucun résultat » (une page qui DÉMARRE en anglais, liste déjà ouverte).
+async function page6EnSearch(pageEn) {
+  await pageEn.keyboard.type('zzzz', { delay: 25 }); await pageEn.waitForTimeout(150);
+  const e = await pageEn.evaluate(() => { const n = document.querySelector('.tts-popup .tts-empty'); return { text: n && n.textContent, inField: document.activeElement === document.querySelector('.tts-head .tts-search') }; });
+  check('anglais : une recherche sans résultat dit « No document matches this search. »', e.text === 'No document matches this search.' && e.inField, e);
+  await pageEn.screenshot({ path: SHOTS + '/recherche-aucun-en.png' });
+}
+
 for (const theme of ['light', 'dark']) {
   const T = theme === 'light' ? 'clair' : 'sombre';
   console.log(`\n== Thème ${T} ==`);
@@ -188,8 +198,8 @@ for (const theme of ['light', 'dark']) {
   check(`${T} : la liste tient dans la fenêtre de 700x400 (rien de rogné en bas ni à droite)`, look.bottom <= look.vh && look.right <= look.vw, look);
   const org = await rectOf(page, '#btn-organize-templates'), pop = await rectOf(page, '.tts-popup');
   check(`${T} : « Organiser » est au premier plan, en haut à droite de la liste (en-tête fixe)`, !!org && org.onTop && look.first === 'tts-head' && pop.r - org.r < 16 && org.t - pop.t < 12 && org.h <= 28, { org, pop, first: look.first });
-  const orgText = await page.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { text: b.textContent.trim(), title: b.title, aria: b.getAttribute('aria-label'), head: document.querySelector('.tts-head-title').textContent }; });
-  check(`${T} : « Organiser » porte son texte et son info-bulle « Organiser mes documents »`, orgText.text === 'Organiser' && orgText.title === 'Organiser mes documents' && orgText.aria === 'Organiser mes documents' && orgText.head === 'Documents', orgText);
+  const orgText = await page.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { text: b.textContent.trim(), title: b.title, aria: b.getAttribute('aria-label'), head: document.querySelector('.tts-head .tts-search').placeholder, noTitle: !document.querySelector('.tts-head-title') }; });
+  check(`${T} : « Organiser » porte son texte et son info-bulle « Organiser mes documents », le champ de recherche tient la place du titre « Documents »`, orgText.text === 'Organiser' && orgText.title === 'Organiser mes documents' && orgText.aria === 'Organiser mes documents' && orgText.head === 'Rechercher un document…' && orgText.noTitle, orgText);
   await page.screenshot({ path: SHOTS + `/liste-${theme}.png` });
 
   // 2) Organiser au vrai clic, puis Échap
@@ -205,8 +215,11 @@ for (const theme of ['light', 'dark']) {
   check(`${T} : Entrée sur le déclencheur ouvre la liste`, await popupOpen(page));
   await page.keyboard.press('Home'); await page.waitForTimeout(60);
   await page.keyboard.press('ArrowUp'); await page.waitForTimeout(100);
+  const ringSearch = await page.evaluate(() => { const b = document.querySelector('.tts-head .tts-search'); const cs = getComputedStyle(b); return { active: document.activeElement === b, visible: b.matches(':focus-visible'), outline: cs.outlineWidth }; });
+  check(`${T} : Flèche haut depuis la première ligne atteint le champ de recherche, avec son anneau de focus`, ringSearch.active && ringSearch.visible && ringSearch.outline === '2px', ringSearch);
+  await page.keyboard.press('Tab'); await page.waitForTimeout(100);
   const ring = await page.evaluate(() => { const b = document.getElementById('btn-organize-templates'); const cs = getComputedStyle(b); return { active: document.activeElement === b, visible: b.matches(':focus-visible'), outline: cs.outlineWidth }; });
-  check(`${T} : Flèche haut depuis la première ligne atteint « Organiser », avec son anneau de focus`, ring.active && ring.visible && ring.outline === '2px', ring);
+  check(`${T} : Tab depuis le champ atteint « Organiser », avec son anneau de focus`, ring.active && ring.visible && ring.outline === '2px', ring);
   await page.keyboard.press('Enter'); await page.waitForTimeout(400);
   check(`${T} : Entrée sur « Organiser » ouvre la fenêtre`, (await modalShown(page)) && !(await popupOpen(page)));
   await page.keyboard.press('Escape'); await page.waitForTimeout(300);
@@ -247,12 +260,57 @@ for (const theme of ['light', 'dark']) {
   check(`${T} : Enregistrer écrit le nouveau nom dans Grist`, saved === label0.replace(/ ★$/, '') + ' 2', { saved, label0 });
   await page.screenshot({ path: SHOTS + `/barre-${theme}.png`, clip: { x: 0, y: 0, width: 700, height: 110 } });
 
+  // 6 bis) la recherche, à la vraie souris et au vrai clavier. Les modèles du banc : « Avenant loyer » (Contrats/Avenants), « Bail habitation » (Contrats), « Mise en demeure » (Litiges), « Quittance » (épinglé).
+  await realClick(page, '.tts-trigger');
+  const startSearch = await page.evaluate(() => ({ focusedRow: !!document.activeElement && document.activeElement.classList.contains('tts-row'), value: document.querySelector('.tts-head .tts-search').value }));
+  check(`${T} : la liste s’ouvre sur la ligne du document ouvert (le focus n’est pas pris par le champ), champ vide`, startSearch.focusedRow && startSearch.value === '', startSearch);
+  await page.keyboard.type('avenant', { delay: 25 }); await page.waitForTimeout(150);
+  const typed = await page.evaluate(() => {
+    const p = document.querySelector('.tts-popup'), pr = p.getBoundingClientRect(), input = document.querySelector('.tts-head .tts-search');
+    return { value: input.value, focusInField: document.activeElement === input, leaves: Array.from(p.querySelectorAll('.tts-row-leaf .tts-row-label')).map((l) => l.textContent), folders: Array.from(p.querySelectorAll('.tts-row-folder .tts-row-label')).map((l) => l.textContent),
+      open: p.classList.contains('is-open'), bottom: pr.bottom, vh: innerHeight, right: pr.right, vw: innerWidth, height: Math.round(pr.height) };
+  });
+  check(`${T} : de vraies frappes depuis la liste ouverte arrivent TOUTES dans le champ (« avenant ») et ne gardent que « Avenant loyer », avec ses dossiers Contrats et Avenants`,
+    typed.value === 'avenant' && typed.focusInField && JSON.stringify(typed.leaves) === JSON.stringify(['Avenant loyer']) && JSON.stringify(typed.folders) === JSON.stringify(['Contrats', 'Avenants']) && typed.open, typed);
+  check(`${T} : ... la liste réduite tient dans 700x400`, typed.bottom <= typed.vh && typed.right <= typed.vw, typed);
+  await page.screenshot({ path: SHOTS + `/recherche-resultat-${theme}.png` });
+  // Un vrai clic dans le champ ne referme pas la liste ; une espace et un second mot, dans n'importe quel ordre, puis Retour arrière.
+  await realClick(page, '.tts-head .tts-search', 150);
+  check(`${T} : un vrai clic dans le champ ne referme pas la liste`, await popupOpen(page));
+  await page.keyboard.press('Control+A'); await page.keyboard.type('loyer AVENANT', { delay: 25 }); await page.waitForTimeout(150);
+  const twoWords = await page.evaluate(() => ({ value: document.querySelector('.tts-head .tts-search').value, leaves: Array.from(document.querySelectorAll('.tts-popup .tts-row-leaf .tts-row-label')).map((l) => l.textContent) }));
+  check(`${T} : deux mots dans le désordre, majuscules comprises (« loyer AVENANT »), retrouvent « Avenant loyer »`, twoWords.value === 'loyer AVENANT' && JSON.stringify(twoWords.leaves) === JSON.stringify(['Avenant loyer']), twoWords);
+  await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace');
+  await page.keyboard.press('Backspace'); await page.waitForTimeout(150);
+  const backspaced = await page.evaluate(() => ({ value: document.querySelector('.tts-head .tts-search').value, count: document.querySelectorAll('.tts-popup .tts-row-leaf').length }));
+  check(`${T} : Retour arrière efface la saisie et la liste se remplit (${backspaced.count} lignes)`, backspaced.value === 'loyer' && backspaced.count >= 1, backspaced);
+  await page.keyboard.type('zzzz', { delay: 25 }); await page.waitForTimeout(150);
+  const none = await page.evaluate(() => { const e = document.querySelector('.tts-popup .tts-empty'); return { text: e && e.textContent, rows: document.querySelectorAll('.tts-popup .tts-row').length }; });
+  check(`${T} : sans résultat, « Aucun document ne correspond à cette recherche. » et aucune ligne`, !!none.text && none.text === 'Aucun document ne correspond à cette recherche.' && none.rows === 0, none);
+  await page.screenshot({ path: SHOTS + `/recherche-aucun-${theme}.png` });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  const escOnce = await page.evaluate(() => ({ open: document.querySelector('.tts-popup').classList.contains('is-open'), value: document.querySelector('.tts-head .tts-search').value, rows: document.querySelectorAll('.tts-popup .tts-row-leaf').length, inField: document.activeElement === document.querySelector('.tts-head .tts-search') }));
+  check(`${T} : un premier Échap efface la saisie, la liste reste ouverte et se remplit de nouveau, le focus reste dans le champ`, escOnce.open && escOnce.value === '' && escOnce.rows >= 6 && escOnce.inField, escOnce);
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  check(`${T} : un second Échap, le champ vide, referme la liste et rend le focus au déclencheur`, !(await popupOpen(page)) && (await activeIs(page, '.tts-trigger')));
+  // Entrée sur un seul résultat : le document s'ouvre.
+  await realClick(page, '.tts-trigger');
+  await page.keyboard.type('quittance', { delay: 25 }); await page.waitForTimeout(150);
+  const pinnedOnly = await page.evaluate(() => Array.from(document.querySelectorAll('.tts-popup .tts-row-leaf')).length);
+  await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+  const opened = await page.evaluate(() => ({ open: document.querySelector('.tts-popup').classList.contains('is-open'), label: document.querySelector('.tts-trigger-label').textContent, searchAtReopen: null }));
+  check(`${T} : Entrée sur le seul résultat (« Quittance », épinglé : deux lignes, une par section) ouvre ce document et referme la liste`, pinnedOnly === 2 && !opened.open && /^Quittance/.test(opened.label), { pinnedOnly, opened });
+  await realClick(page, '.tts-trigger');
+  check(`${T} : à la réouverture le champ est vide et toute la liste est revenue`, await page.evaluate(() => document.querySelector('.tts-head .tts-search').value === '' && document.querySelectorAll('.tts-popup .tts-row-leaf').length >= 30));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+
   // 6) interface en anglais
   if (theme === 'light') {
     const pageEn = await openPage(extraSeed, 'en'); // une page qui DÉMARRE en anglais (changer de langue recharge la page)
     await realClick(pageEn, '.tts-trigger');
-    const en = await pageEn.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { head: document.querySelector('.tts-head-title').textContent, label: b.textContent.trim(), title: b.title }; });
-    check('anglais : en-tête « Documents », bouton « Organize », info-bulle « Organize my documents »', en.head === 'Documents' && en.label === 'Organize' && en.title === 'Organize my documents', en);
+    const en = await pageEn.evaluate(() => { const b = document.getElementById('btn-organize-templates'); return { head: document.querySelector('.tts-head .tts-search').placeholder, aria: document.querySelector('.tts-head .tts-search').getAttribute('aria-label'), label: b.textContent.trim(), title: b.title }; });
+    check('anglais : champ « Search for a document… », bouton « Organize », info-bulle « Organize my documents »', en.head === 'Search for a document…' && en.aria === 'Search for a document…' && en.label === 'Organize' && en.title === 'Organize my documents', en);
+    await page6EnSearch(pageEn);
     await pageEn.context().close();
   }
   await page.context().close();

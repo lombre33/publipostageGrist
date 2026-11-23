@@ -132,7 +132,7 @@ const MainSave = (function () {
         // Grist refuse d'écrire dans ce modèle (règle d'accès, par exemple un fichier que GFS partage en lecture, consigne 060) : le coin le dit, et l'enregistrement automatique n'essaie plus pour ce modèle (autosaveRefusedEpoch).
         if (GristAPI.isAccessRefusal(e)) {
           console.warn('[main] enregistrement manuel : Grist refuse l’écriture (règle d’accès)', e);
-          if (epoch === persist.autosaveEpoch) { persist.autosaveRefusedEpoch = epoch; setStatus(I18n.t('status.saveRefused'), true); }
+          if (epoch === persist.autosaveEpoch) { persist.autosaveRefusedEpoch = epoch; setStatus(I18n.t(GristAPI.refusalKind(e) === 'structure' ? 'status.saveRefusedStructure' : 'status.saveRefused'), true); }
           return;
         }
         // Un échec ici (par exemple une colonne Grist manquante) doit se voir : sans ce traitement, la fonction s'interromprait sans message, la liste

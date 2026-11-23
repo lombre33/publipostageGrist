@@ -424,7 +424,13 @@ const SchemaColumns = (function () {
       const learned = [];
       const translated = [];
       for (const action of actions || []) translated.push(await translate(action, learned));
-      const result = await real().applyUserActions(translated, ...rest);
+      let result;
+      try { result = await real().applyUserActions(translated, ...rest); }
+      catch (error) {
+        // Un refus d'une règle d'accès (« Blocked by full structure access rules »…) se garde pour le constat d'une icône grisée (js/lock-diagnostic.js), même quand l'appelant l'avale (une colonne à ajouter qu'on retentera).
+        if (typeof GristAPI !== 'undefined' && typeof GristAPI.noteRefusal === 'function') GristAPI.noteRefusal(error);
+        throw error;
+      }
       learned.forEach(learn => learn());
       return result;
     },

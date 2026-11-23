@@ -12,6 +12,8 @@
 //   (les icônes grisées des barres du tableau et de l'image : js/lock-bar-causes.js, appelé par forLock ; `quote`, `checks` et `tokens` lui sont rendus)
 //   LockDiagnostic.resolve(text, mask)             un texte à jetons, écrit tel quel (mask faux) ou avec les noms remplacés (mask vrai) ; les alias se suivent d'un appel à l'autre avec `LockDiagnostic.aliases()`
 //   LockDiagnostic.report(spec, { name, why, mask })   le texte du forum
+// Les grisés de DROITS (lecture seule, export, commentaires) disent d'où viennent les droits (23/11) : `originChecks` (la table des droits lue, illisible avec la phrase du refus de Grist, disparue, personne absente, compte Lecteur, lecture en cours,
+// et pour la personne trouvée la colonne de chaque droit et son défaut), `accessFix` (le geste d'après l'origine), `rightsRows` (le réglage, la lecture, le compte, l'email lu sans son adresse, le dernier refus de Grist). Source : AccessRights.diagnose.
 // Un constat : { why?, sub?, checks: [{ s: 'ok' | 'no', t, d? }], fix?, action?: { label, run }, context: [[libellé, valeur]] } ; `why` et `sub` écrasent la phrase du grisé quand elle porte des noms (jetons).
 const LockDiagnostic = (function () {
   const t = (key, vars) => I18n.t(key, vars);
@@ -60,6 +62,14 @@ const LockDiagnostic = (function () {
   const linkedTables = page => G().getTables().filter(table => table !== page && !!G().getLinkRule(table, page));
   const joined = names => names.join(', ');
   const rightsNow = () => { try { return AccessRights.get(); } catch (e) { return { readOnly: false, canExport: true, canComment: true }; } };
+  // Les droits en une ligne, comme l'onglet Accès les dit : « lecture seule, sans export, sans commentaires ».
+  const rightsList = rights => [
+    t(rights.readOnly ? 'lockBubble.ctx.rightsRead' : 'lockBubble.ctx.rightsEdit'),
+    t(rights.canExport ? 'settings.access.right.export' : 'settings.access.right.noExport'),
+    t(rights.canComment ? 'settings.access.right.comments' : 'settings.access.right.noComments'),
+  ].join(', ');
+  // D'où viennent les droits (AccessRights.diagnose) ; null si le module manque ou échoue : le constat s'en passe, jamais une exception dans la bulle.
+  const originNow = () => { try { return AccessRights.diagnose(); } catch (e) { return null; } };
   const readModeNow = () => { const read = document.getElementById('btn-mode-read'); return !!read && read.classList.contains('active'); };
   const templateNameNow = () => {
     const select = document.getElementById('template-select');
@@ -83,7 +93,7 @@ const LockDiagnostic = (function () {
     const rows = [
       [t('lockBubble.ctx.version'), PP_VERSION],
       [t('lockBubble.ctx.access'), accessLabel(G().getAccessLevel())],
-      [t('lockBubble.ctx.rights'), t(rights.readOnly ? 'lockBubble.ctx.rightsRead' : 'lockBubble.ctx.rightsEdit')],
+      [t('lockBubble.ctx.rights'), rightsList(rights)],
       [t('lockBubble.ctx.page'), page ? tableName(page) : t('lockBubble.ctx.none')],
     ];
     const linked = page ? linkedTables(page) : [];
@@ -109,6 +119,8 @@ const LockDiagnostic = (function () {
   function accessChecks(kind) {
     const rights = rightsNow();
     const out = [rights.readOnly ? no(t('lockBubble.chk.readOnly'), t('lockBubble.chk.rightsRead')) : ok(t('lockBubble.chk.canEdit'), t('lockBubble.chk.rightsEdit'))];
+    // D'où viennent les droits : la table des droits (lue, illisible, disparue, personne absente), un compte Lecteur de Grist, la lecture en cours. Seulement pour ce que les droits grisent.
+    if (RIGHTS_KINDS.indexOf(kind) !== -1) originChecks().forEach(check => out.push(check));
     if (kind === 'lock.noExport') out.push(rights.canExport ? ok(t('lockBubble.chk.canExport')) : no(t('lockBubble.chk.noExport')));
     if (kind === 'lock.noComment') out.push(rights.canComment ? ok(t('lockBubble.chk.canComment')) : no(t('lockBubble.chk.noComment')));
     const level = G().getAccessLevel();
@@ -120,6 +132,85 @@ const LockDiagnostic = (function () {
       out.push(no(t('lockBubble.chk.readMode'), record && record.id && page ? t('lockBubble.chk.readModeRow', { id: record.id, table: quote(tableName(page)) }) : t('lockBubble.chk.readModePlain')));
     } else out.push(ok(t('lockBubble.chk.editMode')));
     return out;
+  }
+  const RIGHTS_KINDS = ['lock.readOnly', 'lock.noExport', 'lock.noComment'];
+  // Ce que la table des droits dit à la personne, droit par droit : la colonne choisie dans Réglages > Accès et ce qu'elle donne, ou la valeur par défaut d'un droit sans colonne (autorisé : « — Aucune — » n'interdit jamais rien).
+  function rightClauses(origin) {
+    const column = (label, col, on, whenOn, whenOff, byDefault) => (col
+      ? t('lockBubble.chk.rightColumn', { right: label, column: quoted.column(col), state: t(on ? 'lockBubble.chk.ticked' : 'lockBubble.chk.unticked'), result: on ? whenOn : whenOff })
+      : t('lockBubble.chk.rightDefault', { right: label, result: byDefault }));
+    const edit = t('lockBubble.chk.resultEdit');
+    const readOnly = t('lockBubble.chk.resultReadOnly');
+    const allowed = t('lockBubble.chk.resultAllowed');
+    const refused = t('lockBubble.chk.resultRefused');
+    return [
+      column(quote(t('settings.access.readOnly')), origin.config.readOnlyColumn, origin.rights.readOnly, readOnly, edit, edit),
+      column(quote(t('settings.access.export')), origin.config.exportColumn, origin.rights.canExport, allowed, refused, allowed),
+      column(quote(t('settings.access.comments')), origin.config.commentsColumn, origin.rights.canComment, allowed, refused, allowed),
+    ];
+  }
+  // La vérification qui dit origin'où viennent les droits : une ligne de plus dans la liste origin'un grisé de droits (✕ quand c'est elle qui restreint, ✓ quand elle ne restreint rien).
+  function originChecks() {
+    const origin = originNow();
+    if (!origin) return [];
+    const table = origin.config ? quoted.table(origin.config.table) : '';
+    if (origin.state === 'viewer') return [no(t('lockBubble.chk.viewer'), t('lockBubble.chk.viewerNote'))];
+    if (origin.state === 'pending') return [no(t('lockBubble.chk.pending'), t('lockBubble.chk.pendingNote', { table }))];
+    if (origin.state === 'error' && origin.tableGone) return [no(t('lockBubble.chk.tableGone', { table }), t('lockBubble.chk.tableGoneNote'))];
+    if (origin.state === 'error') {
+      const failure = origin.failure;
+      const why = failure && failure.refused ? t('lockBubble.chk.unreadableRefused', { phrase: quote(failure.phrase) })
+        : failure && failure.missing ? t('lockBubble.chk.unreadableMissing')
+          : t('lockBubble.chk.unreadableFailed');
+      return [no(t('lockBubble.chk.unreadable', { table }), why + ' ' + t('lockBubble.chk.unreadableLocked'))];
+    }
+    if (origin.state === 'noEmail') return [ok(t('lockBubble.chk.noEmail'), t('lockBubble.chk.noEmailNote', { table }))];
+    if (origin.state === 'notFound') return [ok(t('lockBubble.chk.notFound', { table }), t('lockBubble.chk.notFoundNote', { column: quoted.column(origin.config.emailColumn) }))];
+    if (origin.state === 'found') {
+      const restricted = origin.rights.readOnly || !origin.rights.canExport || !origin.rights.canComment;
+      return [(restricted ? no : ok)(t('lockBubble.chk.found', { table }), rightClauses(origin).join(' · '))];
+    }
+    return [ok(t('lockBubble.chk.noTable'), t('lockBubble.chk.noTableNote'))];
+  }
+  // Le geste pour dégriser, origin'après l'origine des droits (sinon la phrase générale de FIX_OF_ACCESS) : la table illisible se rend lisible, la case de la ligne se change, une table disparue se remplace.
+  function accessFix(kind) {
+    const generic = FIX_OF_ACCESS[kind] ? t(FIX_OF_ACCESS[kind]) : '';
+    const origin = RIGHTS_KINDS.indexOf(kind) !== -1 ? originNow() : null;
+    if (!origin) return generic;
+    const table = origin.config ? quoted.table(origin.config.table) : '';
+    if (origin.state === 'pending') return t('lockBubble.fix.pending');
+    if (origin.state === 'error') return origin.tableGone ? t('lockBubble.fix.tableGone') : t('lockBubble.fix.unreadable', { table, column: columnName(origin.config.emailColumn) });
+    if (origin.state === 'found') {
+      const column = kind === 'lock.readOnly' ? origin.config.readOnlyColumn : kind === 'lock.noExport' ? origin.config.exportColumn : origin.config.commentsColumn;
+      if (column) return t(kind === 'lock.readOnly' ? 'lockBubble.fix.foundReadOnly' : kind === 'lock.noExport' ? 'lockBubble.fix.foundNoExport' : 'lockBubble.fix.foundNoComment', { table, column: quoted.column(column) });
+    }
+    return generic;
+  }
+  // Ce que le widget lit des droits, ligne par ligne, pour le contexte : le réglage (table et colonnes), la lecture, le compte, l'email (trouvé ou non, jamais son adresse), le dernier refus de Grist.
+  function rightsRows() {
+    const origin = originNow();
+    if (!origin) return [];
+    const none = t('lockBubble.ctx.none');
+    const rows = [];
+    rows.push([t('lockBubble.ctx.rightsTable'), origin.config ? tableName(origin.config.table) : none]);
+    if (origin.config) {
+      const col = name => (name ? columnName(name) : none);
+      rows.push([t('lockBubble.ctx.rightsColumns'), t('lockBubble.ctx.rightsColumnsList', { email: col(origin.config.emailColumn), readOnly: col(origin.config.readOnlyColumn), exportColumn: col(origin.config.exportColumn), comments: col(origin.config.commentsColumn) })]);
+    }
+    const failure = origin.failure;
+    const stateText = origin.state === 'error'
+      ? (origin.tableGone ? t('lockBubble.ctx.stateGone') : failure && failure.refused ? t('lockBubble.ctx.stateRefused', { phrase: quote(failure.phrase) }) : failure && failure.missing ? t('lockBubble.ctx.stateMissing') : t('lockBubble.ctx.stateFailed'))
+      : t('lockBubble.ctx.state.' + origin.state);
+    rows.push([t('lockBubble.ctx.rightsState'), stateText]);
+    const values = (() => { try { return new URLSearchParams(location.search).getAll('readonly'); } catch (e) { return []; } })();
+    const frame = values.length ? 'readonly=' + values[values.length - 1] : t('lockBubble.ctx.noReadonlyParam');
+    rows.push([t('lockBubble.ctx.account'), t(origin.viewer ? 'lockBubble.ctx.accountViewer' : 'lockBubble.ctx.accountEditor', { frame })]);
+    rows.push([t('lockBubble.ctx.emailRead'), t(origin.viewer ? 'lockBubble.ctx.emailViewer' : origin.emailFound ? 'lockBubble.ctx.emailFound' : origin.state === 'noEmail' ? 'lockBubble.ctx.emailMissing' : 'lockBubble.ctx.emailNotAsked')]);
+    const refusal = typeof GristAPI.lastRefusal === 'function' ? GristAPI.lastRefusal() : null;
+    rows.push([t('lockBubble.ctx.lastRefusal'), refusal
+      ? t('lockBubble.ctx.refusal', { phrase: quote(refusal.phrase), what: t('lockBubble.ctx.refusalKind.' + (refusal.kind || 'write')), seconds: Math.max(0, Math.round((Date.now() - refusal.at) / 1000)) })
+      : none]);
+    return rows;
   }
   const FIX_OF_ACCESS = { 'lock.readOnly': 'lockBubble.fix.readOnly', 'lock.readMode': 'lockBubble.fix.readMode', 'lock.accessGuide': 'lockBubble.fix.accessGuide', 'lock.noExport': 'lockBubble.fix.noExport', 'lock.noComment': 'lockBubble.fix.noComment' };
   function switchToEditing() {
@@ -156,17 +247,19 @@ const LockDiagnostic = (function () {
     let checks = [];
     let fix = '';
     let action = null;
+    let rows = [];
     // Les marges de Réglages grisées en lecture seule (cause `state`, genre « lock.readOnly ») disent la même chose que les droits.
     if (cause === 'access' || (cause === 'state' && kind === 'lock.readOnly')) {
       checks = accessChecks(kind);
-      fix = FIX_OF_ACCESS[kind] ? t(FIX_OF_ACCESS[kind]) : '';
+      fix = accessFix(kind);
       if (kind === 'lock.readMode' && !rightsNow().readOnly) action = { label: t('lockBubble.fix.editMode'), run: switchToEditing };
+      if (RIGHTS_KINDS.indexOf(kind) !== -1) rows = rightsRows();
     } else if (cause === 'mode' || cause === 'grid' || cause === 'linked' || cause === 'pdf') {
       const found = modelChecks(cause === 'mode' ? kind : cause);
       checks = found.checks;
       fix = found.fix;
     }
-    return { checks, fix, action, context: context(null, cause === 'mode' ? kind : cause === 'grid' ? 'grid' : '') };
+    return { checks, fix, action, context: context(rows.length ? { rows } : null, cause === 'mode' ? kind : cause === 'grid' ? 'grid' : '') };
   }
 
   // === La Boucle ===

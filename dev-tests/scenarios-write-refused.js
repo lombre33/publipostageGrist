@@ -114,6 +114,70 @@
   });
 
   cases.push({
+    id: 'write_refused_helper_names_the_rule_and_what_it_forbids_and_remembers_the_last_refusal',
+    description: "GristAPI.refusalPhrase / refusalKind : la phrase de la règle (« Blocked by full structure access rules ») et ce qu'elle interdit - structure, lecture, écriture de lignes, propriétaires - sans jamais un nom de table ; une panne n'a ni phrase ni genre ; noteRefusal garde le dernier refus (GristAPI.lastRefusal) et ignore une panne.",
+    run: async () => {
+      const phrase = m => GristAPI.refusalPhrase(new Error(m));
+      const kind = m => GristAPI.refusalKind(new Error(m));
+      const table = {
+        structure: [phrase('Blocked by full structure access rules'), 'Blocked by full structure access rules'],
+        structureKind: [kind('Blocked by full structure access rules'), 'structure'],
+        tableStructureKind: [kind('Blocked by table structure access rules'), 'structure'],
+        readKind: [kind('Blocked by table read access rules'), 'read'],
+        rowUpdateKind: [kind('Blocked by row update access rules'), 'write'],
+        tableUpdateKind: [kind('Blocked by table update access rules'), 'write'],
+        plainRules: [phrase('Blocked by access rules : ce compte ne peut pas modifier le document'), 'Blocked by access rules'],
+        plainRulesKind: [kind('Blocked by access rules : ce compte ne peut pas modifier le document'), 'write'],
+        owners: [phrase('Only owners can modify access rules'), 'Only owners can modify access rules'],
+        ownersKind: [kind('Only owners can modify access rules'), 'owners'],
+        noNameLeaks: [phrase('Blocked by row update access rules [table SecretClients, column Salaire]'), 'Blocked by row update access rules'],
+        failurePhrase: [phrase('Failed to fetch'), ''],
+        failureKind: [kind('Failed to fetch'), ''],
+        nullKind: [GristAPI.refusalKind(null), ''],
+      };
+      const bad = Object.keys(table).filter(k => table[k][0] !== table[k][1]);
+      GristAPI.noteRefusal(new Error('Blocked by full structure access rules'));
+      const first = GristAPI.lastRefusal();
+      const ignored = GristAPI.noteRefusal(new Error('Failed to fetch'));
+      const after = GristAPI.lastRefusal();
+      const pass = bad.length === 0 && !!first && first.kind === 'structure' && first.phrase === 'Blocked by full structure access rules' && typeof first.at === 'number'
+        && ignored === false && after === first;
+      return { pass, notes: JSON.stringify({ bad: bad.map(k => [k, table[k][0]]), first, ignored, same: after === first }) };
+    },
+  });
+
+  cases.push({
+    id: 'write_refused_structure_refusal_says_structure_not_read_only_and_is_kept_for_the_findings',
+    description: "Enregistrer à la main, Grist répond « Blocked by full structure access rules » (le compte ne peut pas créer de table ni de colonne) : le coin d'état dit que la STRUCTURE est refusée (et non « lecture seule pour vous »), en rouge ; le refus est gardé (lastRefusal : genre « structure ») et le constat d'une icône grisée le montre dans « Dernier refus de Grist ».",
+    run: async (h) => {
+      await ensureAutosave(h, false);
+      const id = await saveTemplate(h, 'Refus de structure', '<p>Départ</p>');
+      if (!id) return { pass: false, notes: 'modèle non créé' };
+      const refusing = refuseModelWrites('Blocked by full structure access rules', ['UpdateRecord']);
+      try {
+        await h.focusAtEnd();
+        await h.typeText(' modif');
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+        const status = statusNow();
+        const last = GristAPI.lastRefusal();
+        const exportGroup = document.getElementById('v2-export-pdf-group');
+        const found = LockDiagnostic.forLock(exportGroup, { cause: 'access', kind: 'lock.noExport', reason: '' });
+        const rows = Object.fromEntries(found.context.map(([k, v]) => [k, LockDiagnostic.resolve(v, false)]));
+        const pass = refusing.calls >= 1 && status.text === I18n.t('status.saveRefusedStructure') && status.error && status.text !== I18n.t('status.saveRefused')
+          && !!last && last.kind === 'structure' && last.phrase === 'Blocked by full structure access rules'
+          && /Blocked by full structure access rules/.test(rows['Dernier refus de Grist'] || '') && /structure|colonne|table/.test(rows['Dernier refus de Grist'] || '');
+        return { pass, notes: JSON.stringify({ calls: refusing.calls, status, last, row: rows['Dernier refus de Grist'] }) };
+      } finally {
+        refusing.restore();
+        await ensureAutosave(h, true);
+        await h.clickButton('btn-save');
+        await h.sleep(500);
+      }
+    },
+  });
+
+  cases.push({
     id: 'write_refused_manual_save_says_the_refusal_and_stops_the_automatic_one',
     description: "Enregistrer à la main, refusé par Grist (« Blocked by row update access rules »), dit la phrase du refus dans le coin d'état (en rouge) et non « Échec de l'enregistrement » ; l'enregistrement automatique ne redemande pas ensuite la même écriture (aucun nouvel appel refusé en deux passages).",
     run: async (h) => {

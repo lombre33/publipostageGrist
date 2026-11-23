@@ -341,7 +341,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const I18N_DOCUMENT_KEYS = [
     'template.select', 'template.newOption', 'template.namePlaceholder', 'template.rename.aria', 'template.setDefault.tip', 'template.setDefault.aria', 'templateTree.pin.aria',
     'templateTree.default.aria', 'templateTree.default.setTip', 'templateTree.default.clearTip', 'templateTree.default.unavailableTip', 'templateTree.default.unopenableTip',
-    'templateTree.allSection', 'templateTree.title', 'templateTree.empty', 'organize.modal.title', 'organize.modal.defaultLegend', 'organize.modal.searchPlaceholder',
+    'templateTree.allSection', 'templateTree.search', 'templateTree.noMatch', 'templateTree.empty', 'organize.modal.title', 'organize.modal.defaultLegend', 'organize.modal.searchPlaceholder',
     'organize.modal.noMatch', 'organize.modal.newFolderHint', 'organize.modal.folderDefault.aria', 'toolbar.organizeTemplates', 'toolbar.new', 'toolbar.autosave.aria',
     'status.templateNameRequired', 'status.nameKept', 'status.unsavedTemplateWarning', 'status.saveRefused', 'status.deleteRefused', 'status.deleteError',
     'status.noTemplateSelected', 'status.defaultTemplateSet', 'status.defaultTemplateCleared', 'status.defaultTemplateError', 'status.templateDeleted', 'status.templateRemoved',

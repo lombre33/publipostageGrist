@@ -91,6 +91,34 @@ const GristAPI = (function () {
   function isAccessRefusal(error) {
     return !!error && /\bBlocked by\b|\bOnly owners\b/i.test(String(error.message || error));
   }
+  // Le dernier refus d'une règle d'accès, gardé pour le constat d'une icône grisée (js/lock-diagnostic.js, « Dernier refus de Grist ») : sa phrase et son genre, rien de personnel. `noteRefusal` est appelée par le chemin des écritures
+  // (SchemaColumns.docApi.applyUserActions) et par les écritures directes ; elle rend si c'était un refus.
+  let _lastRefusal = null;
+  function lastRefusal() { return _lastRefusal; }
+  function noteRefusal(error) {
+    const refused = isAccessRefusal(error);
+    if (refused) _lastRefusal = { phrase: refusalPhrase(error), kind: refusalKind(error), at: Date.now() };
+    return refused;
+  }
+  // La phrase de la règle que Grist cite, sans rien d'autre (jamais un nom de table, de colonne ou de document) : « Blocked by full structure access rules », « Blocked by row update access rules », « Only owners can ... ».
+  function refusalPhrase(error) {
+    const text = String((error && error.message) || error || '');
+    const rule = text.match(/Blocked by (?:[A-Za-z ]{1,60}? )?access rules?/i);
+    if (rule) return rule[0];
+    const owners = text.match(/Only owners [A-Za-z ]{1,60}/i);
+    if (owners) return owners[0].trim();
+    return /\bBlocked by\b/i.test(text) ? 'Blocked by' : '';
+  }
+  // Ce que le refus interdit : 'structure' (créer ou modifier une table, une colonne, une vue : « full structure », « table structure »), 'read' (lire), 'owners' (réservé aux propriétaires), 'write' (écrire des lignes : « row update »,
+  // « table update »…), '' (pas un refus de règle d'accès).
+  function refusalKind(error) {
+    const phrase = refusalPhrase(error);
+    if (!phrase) return '';
+    if (/^Only owners/i.test(phrase)) return 'owners';
+    if (/structure|schema/i.test(phrase)) return 'structure';
+    if (/\bread\b/i.test(phrase)) return 'read';
+    return 'write';
+  }
   // Un document que Grist ouvre en lecture seule pour cette personne (compte Lecteur du document, ou instantané de son historique) : Grist ajoute
   // `readonly=true` à l'adresse du cadre du widget (WidgetFrame.ts, `gristDoc.isReadonly`, faux pour qui peut modifier le document). Il l'ajoute après les
   // paramètres de l'adresse du widget : la dernière valeur est la sienne. Absent (Grist plus ancien) ou autre que `true` : personne n'est tenu pour
@@ -1476,5 +1504,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, lightRecords, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, lightRecords, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();
