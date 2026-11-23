@@ -400,11 +400,27 @@ const Editor = (function () {
     return html.replace(PASTED_IMG_TAG, tag => pastedImageAsEditorImage(Dom.inertTemplate(tag).content.firstElementChild) || tag);
   }
 
+  // Un texte brut collé dans un document (Notepad++, le Bloc-notes, un terminal, un fichier .md ouvert dans un éditeur de texte : le presse-papiers ne porte alors que `text/plain`) : une ligne,
+  // un paragraphe, les lignes vides comprises. ProseMirror coupe ce texte avec `split(/(?:\r\n?|\n)+/)` : les retours qui se suivent n'en comptent qu'un, et la ligne vide qui séparait deux
+  // paragraphes disparaissait au collage (relevé du 23/11 : « je vois mes sauts de ligne dans Notepad++, je colle, je ne les ai plus »). Même règle que l'e-mail (js/email-plain-text.js,
+  // `textToSlice`), qui garde déjà les lignes vides ; les marques du curseur sont reprises comme ProseMirror le fait. Le Markdown n'est pas lu : un « # » reste un « # » (c'est l'import
+  // d'un fichier .md qui le lit, js/markdown-import.js). Ni la grille (ses cases rognent déjà ce qu'elles reçoivent : `GridEditor.trimPastedSlice`) ni l'e-mail (son propre lecteur, qui écarte les
+  // marques qu'il refuse) ne passent par ici : `null` rend la main à ProseMirror, donc à eux. Un bloc de code ne passe pas non plus ici (ProseMirror y colle le texte tel quel, sans appeler le lecteur).
+  function plainTextToSlice(text, $context, plain, view) {
+    if (GridEditor.isActive() || EmailPlainText.isActive()) return null;
+    const { schema, doc } = view.state;
+    const marks = $context.marks();
+    const paragraphs = text.replace(/\r\n?/g, '\n').split('\n').map(line => schema.nodes.paragraph.create(null, line ? schema.text(line, marks) : null));
+    return new (doc.slice(0, 0).constructor)(doc.content.constructor.fromArray(paragraphs), 0, 0);
+  }
+
   function clipboardProps() {
     return {
       // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le
       // reste garde le texte par défaut.
       clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
+      // Le texte brut collé garde ses lignes vides (plainTextToSlice) : une ligne, un paragraphe.
+      clipboardTextParser: plainTextToSlice,
       // Le remplissage que Windows ajoute autour du HTML copié est retiré d'abord (withoutFragmentPadding : sans lui, une variable copiée seule se colle suivie de deux sauts de ligne),
       // puis chaque emoji collé comme une image (Teams, Outlook sur le web, Gmail, WhatsApp Web : `<img alt="😀">`) redevient son caractère (js/emoji-paste.js) : l'éditeur n'aurait gardé aucune image.
       // Un tableau de tableur (Excel, Sheets, LibreOffice) collé dans un document devient un tableau du document, case par case

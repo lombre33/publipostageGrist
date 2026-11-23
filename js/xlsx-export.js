@@ -863,6 +863,12 @@ const XlsxExport = (function () {
     if (!cellFill && runs.length && runs.every(run => run.style.background && run.style.background === runs[0].style.background)) return runs[0].style.background;
     return cellFill;
   }
+  // Un fond à motif (js/cell-pattern.js) : la trame d'Excel la plus proche, l'encre en avant-plan, le fond de la case (à défaut blanc) en arrière-plan ; null sans motif.
+  function cellPatternOf(td) {
+    const pattern = CellPattern.parse(td);
+    const type = pattern && CellPattern.excel(pattern.kind);
+    return type ? { type: 'pattern', pattern: type, fgColor: { argb: 'FF' + pattern.ink.slice(1).toUpperCase() }, bgColor: { argb: cssColorArgb(td.style.backgroundColor) || 'FFFFFFFF' } } : null;
+  }
   function cellAlignment(td, content, typedInfo) {
     const vertical = td.getAttribute('data-valign') || td.style.verticalAlign;
     const alignment = { vertical: vertical === 'top' || vertical === 'bottom' ? vertical : 'middle', wrapText: true };
@@ -876,7 +882,8 @@ const XlsxExport = (function () {
       for (let cc = p.col; cc < p.col + p.colspan; cc++) {
         const cell = sheet.getCell(rr + 1, cc + 1);
         cell.alignment = look.alignment;
-        if (look.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: look.fill } };
+        if (look.pattern) cell.fill = look.pattern;
+        else if (look.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: look.fill } };
         cell.border = look.border;
         if (cell !== master && !cell.font) cell.font = master.font;
       }
@@ -893,6 +900,7 @@ const XlsxExport = (function () {
     styleMergedArea(sheet, p, master, {
       alignment: cellAlignment(td, content, typedInfo),
       fill: cellFillOf(td, runs),
+      pattern: cellPatternOf(td),
       border: borderSides && borderSides.get(td) ? borderOfSides(borderSides.get(td)) : CELL_BORDER,
     });
     return content.images.map(img => ({ img, row: p.row, col: p.col }));

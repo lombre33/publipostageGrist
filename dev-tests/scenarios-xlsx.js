@@ -61,7 +61,11 @@
     const fills = childrenNamed(styles.getElementsByTagName('fills')[0], 'fill').map(f => {
       const pattern = f.getElementsByTagName('patternFill')[0];
       const fg = f.getElementsByTagName('fgColor')[0];
-      return pattern && attr(pattern, 'patternType') === 'solid' ? { argb: colorOf(fg) } : null;
+      const type = attr(pattern, 'patternType');
+      if (pattern && type === 'solid') return { argb: colorOf(fg) };
+      // Une trame (hachures, points) : son type et ses deux couleurs ; « none » et la trame grise réservée d'Excel restent « pas de fond ».
+      if (pattern && type && type !== 'none' && type !== 'gray125') return { pattern: type, argb: colorOf(fg), back: colorOf(f.getElementsByTagName('bgColor')[0]) };
+      return null;
     });
     const borders = childrenNamed(styles.getElementsByTagName('borders')[0], 'border').map(b => {
       const side = n => { const el = childrenNamed(b, n)[0]; return el && el.getAttribute('style') ? { style: el.getAttribute('style'), color: colorOf(el.getElementsByTagName('color')[0]) } : null; };
@@ -642,6 +646,32 @@
       if (c('B1').style.font.color !== 'FFFF0000') bad.push('B1 couleur posée perdue=' + c('B1').style.font.color);
       const bords = ['left', 'right', 'top', 'bottom'].map(side => c('A1').style.border[side] && c('A1').style.border[side].color);
       if (!bords.every(color => color === 'FF777777')) bad.push('bordures=' + bords);
+      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+    },
+  });
+
+  cases.push({
+    id: 'xlsx_a_patterned_cell_fill_comes_out_as_the_nearest_excel_pattern',
+    description: "Un fond de case à motif (hachures, points, quadrillage) sort en trame d'Excel, la plus proche : l'encre du motif en avant-plan, le fond de la case en arrière-plan (blanc à défaut) ; une case au fond uni reste unie ; un damier, que la trame d'Excel n'a pas, prend la trame la plus proche",
+    run: async (h) => {
+      await seed(h);
+      const x = await exportGrid([120, 120, 120], [30, 30], [
+        [td('hachure', ' data-fill-pattern="dnDiag" data-fill-ink="#c00000" style="background-color: #ffff00"'), td('sans fond', ' data-fill-pattern="ltVert" data-fill-ink="#000000"'), td('uni', ' style="background-color: #ffff00"')],
+        [td('damier', ' data-fill-pattern="lgCheck" data-fill-ink="#1f4e79"'), td('encre illisible', ' data-fill-pattern="dnDiag" data-fill-ink="rouge" style="background-color: #00ff00"'), td('nu')],
+      ]);
+      const c = ref => x.sheet.cell(ref);
+      const bad = [];
+      const a = c('A1').style.fill;
+      if (!a || a.pattern !== 'darkDown' || a.argb !== 'FFC00000' || a.back !== 'FFFFFF00') bad.push('A1=' + JSON.stringify(a));
+      const b = c('B1').style.fill;
+      if (!b || b.pattern !== 'lightVertical' || b.argb !== 'FF000000' || b.back !== 'FFFFFFFF') bad.push('B1=' + JSON.stringify(b));
+      const u = c('C1').style.fill;
+      if (!u || u.pattern || u.argb !== 'FFFFFF00') bad.push('C1 uni=' + JSON.stringify(u));
+      const d = c('A2').style.fill;
+      if (!d || d.pattern !== 'darkTrellis' || d.argb !== 'FF1F4E79') bad.push('A2 damier=' + JSON.stringify(d));
+      const e = c('B2').style.fill;
+      if (!e || e.pattern || e.argb !== 'FF00FF00') bad.push('B2 encre illisible : le fond uni reste=' + JSON.stringify(e));
+      if (c('C2').style.fill) bad.push('C2 nu=' + JSON.stringify(c('C2').style.fill));
       return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
     },
   });

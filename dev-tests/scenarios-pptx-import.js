@@ -3262,6 +3262,9 @@
       expect('« Bilan » à (200 ; 100) depuis l\'angle du cadre, soit (300 ; 150)', !!two && near(two.x, 300, 1.5) && near(two.y, 150, 1.5), two && [two.x, two.y]);
       expect('le texte reste un texte (taille 18 pt), centré, modifiable', !!one && /font-size: 18pt/.test(one.inner) && /text-align: center/.test(one.inner), one && one.inner);
       expect('la forme garde sa couleur et sa forme : rond orange', !!one && /ED7D31/i.test(one.fill || '') && /ellipse|ovale|circle/i.test(one.shape || ''), one && [one.fill, one.shape]);
+      // DÉBOGAGE TEMPORAIRE (23/11, à retirer avec `probe`) : le compte rendu dit, pour chaque forme à texte du schéma, son fond et la couleur de son texte (de quoi trouver un texte invisible).
+      const probes = (r.stats && r.stats.probes) || [];
+      expect('DÉBOGAGE : la ligne du schéma compte ses deux formes à texte, et chaque forme dit son fond et la couleur de son texte (blanc : celle de la police du style)', probes.some(line => /^diagram "Diagramme 19" slide 1 : 2 shapes with text$/.test(line)) && probes.some(line => /fill=#ED7D31 .*colors=\S*#?(ffffff|rgb\(255, 255, 255\)) text="Revue"$/i.test(line)), probes);
       // Sans dessin enregistré : compté, avec sa raison.
       const bare = await run1({ slides: [{ rels: [], shapes: frame(20, 'Diagramme 19', 100, 50, 400, 300) }] });
       const item = detailOf(bare, 'diagrams');
@@ -3382,6 +3385,31 @@
       return result(bad);
     });
 
+  add('pptx_import_cell_patterns_round_trip_through_the_editor_s_own_powerpoint_export',
+    'Lot 2 des hachures de cases : un fond de case à motif écrit par l\'export PowerPoint de l\'éditeur est un vrai `a:pattFill` (le nom du motif, l\'encre en avant-plan, le fond en arrière-plan, blanc à défaut) et se relit tel quel à l\'import ; la teinte moyenne d\'un motif (PDF, OpenDocument) est celle de l\'encre sur la part qu\'elle couvre',
+    async () => {
+      await ExportEngines.ensure('pptx', 'pptxImport');
+      const td = (text, kind, ink, back) => `<td data-fill-pattern="${kind}" data-fill-ink="${ink}" style="${back ? 'background-color: ' + back + '; ' : ''}${CellPattern.paint(kind, ink)}"><p>${text}</p></td>`;
+      const html = SlideProps.html({ bg: '#ffffff' }) + '<table><tbody><tr>' + td('A', 'dnDiag', '#ff0000', '#ffff00') + td('B', 'pct50', '#0000ff', '') + td('C', 'smCheck', '#000000', '#ffffff') + '</tr></tbody></table><p></p>';
+      await PageLayout.setMarginsMm(SlidesEntry.pageFor('presentation', null));
+      const blob = await PptxExport.fromHtml(html, { marginsPt: PageLayout.getMarginsPt(), title: 'Essai' });
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const slideXml = await zip.file('ppt/slides/slide1.xml').async('string');
+      const { bad, expect } = checker();
+      expect('le fichier écrit trois `a:pattFill` aux noms de PowerPoint, l\'encre en avant-plan, le fond (blanc à défaut) en arrière-plan',
+        (slideXml.match(/<a:pattFill prst="(dnDiag|pct50|smCheck)">/g) || []).length === 3
+        && /<a:pattFill prst="dnDiag"><a:fgClr><a:srgbClr val="FF0000"\/><\/a:fgClr><a:bgClr><a:srgbClr val="FFFF00"\/><\/a:bgClr>/.test(slideXml)
+        && /<a:pattFill prst="pct50"><a:fgClr><a:srgbClr val="0000FF"\/><\/a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"\/><\/a:bgClr>/.test(slideXml), slideXml.slice(slideXml.indexOf('pattFill') - 40, slideXml.indexOf('pattFill') + 300));
+      const imported = await PptxImport.fromBuffer(await blob.arrayBuffer());
+      const cells = Array.from(slidesOf(imported.html)[0].tables[0].querySelectorAll('td'));
+      const marks = cell => [cell.getAttribute('data-fill-pattern'), cell.getAttribute('data-fill-ink'), cell.style.backgroundColor].join('|');
+      expect('relu, chaque case redonne son motif, son encre et son fond', marks(cells[0]) === 'dnDiag|#ff0000|rgb(255, 255, 0)' && marks(cells[1]) === 'pct50|#0000ff|rgb(255, 255, 255)' && marks(cells[2]) === 'smCheck|#000000|rgb(255, 255, 255)', cells.map(marks));
+      expect('la teinte moyenne : rouge sur 12,5 % de jaune (a), bleu à moitié sur blanc (b), noir à moitié sur blanc (c), un motif inconnu garde le fond',
+        CellPattern.averageTone({ kind: 'dnDiag', ink: '#ff0000' }, '#ffff00') === '#ffdf00' && CellPattern.averageTone({ kind: 'pct50', ink: '#0000ff' }, null) === '#8080ff'
+        && CellPattern.averageTone({ kind: 'smCheck', ink: '#000000' }, '#ffffff') === '#808080' && CellPattern.averageTone({ kind: 'inconnu', ink: '#000000' }, '#fff2cc') === '#fff2cc', [CellPattern.averageTone({ kind: 'dnDiag', ink: '#ff0000' }, '#ffff00'), CellPattern.averageTone({ kind: 'pct50', ink: '#0000ff' }, null)]);
+      return result(bad);
+    });
+
   add('pptx_import_report_detail_of_a_heavy_decor_gives_the_concrete_debug_file_slides_groups_colors_points_and_a_map_of_the_page',
     'DÉBOGAGE TEMPORAIRE : le décor d\'un masque dit son fichier, les diapositives qui le montrent, la boîte de son groupe (en % de la page), les couleurs de ses formes, ses points de tracé et une carte de la page en 10 lignes de 48 cases (à retirer avec le débogage)',
     async () => {
@@ -3402,6 +3430,90 @@
       const withPicture = await run1({ master: { shapes: sp({ id: 7, name: 'Bandeau', x: 0, y: 0, w: 960, h: 60, fill: solid('2F5597') }) + sp({ id: 8, name: 'Carré', x: 10, y: 10, w: 20, h: 20, fill: solid('FFFFFF') }) }, slides });
       const light = (withPicture.stats.holders[0] || {}).debug || {};
       expect('un décor sans groupe : ses formes isolées sont dites (2, bandeau en haut sur toute la largeur), aucun groupe', !light.groups.length && light.loose && light.loose.shapes === 2 && light.loose.x === 0 && light.loose.y === 0 && light.loose.w === 100 && light.loose.h === 11, light);
+      return result(bad);
+    });
+
+  // Le texte tourné d'un quart de tour (« AXE ECOSYSTEME » écrit de bas en haut le long d'un bandeau) : PowerPoint pose le bloc de lignes dans la LARGEUR de la boîte selon son ancrage (en haut : du côté où
+  // les lignes commencent, au milieu, en bas : de l'autre côté). L'import traitait l'ancrage comme celui d'un texte horizontal : un texte tourné et centré devenait un cadre de 12 pt de haut, collé au bord gauche.
+  add('pptx_import_turned_text_is_anchored_across_the_width_of_its_box',
+    'Un texte tourné d\'un quart de tour garde la hauteur de sa boîte (ses lignes ont pour longueur sa hauteur) et son cadre prend la largeur de son texte, posé selon l\'ancrage : `vert270` centré au milieu de la boîte, en haut à gauche, en bas à droite ; `vert` en haut à droite, en bas à gauche, centré au milieu ; un bandeau plein garde sa boîte et le texte y est au milieu, dans l\'éditeur',
+    async (h) => {
+      const text = para(run('AXE ECOSYSTEME', 'sz="1400" b="1"'));
+      const box = (id, x, vert, anchor) => textBox(x, 50, 80, 300, text, { id, body: `vert="${vert}" anchor="${anchor}"` });
+      const r = await run1({
+        slides: [{
+          shapes: box(2, 20, 'vert270', 'ctr') + box(3, 140, 'vert', 'b') + box(4, 260, 'vert270', 't') + box(5, 380, 'vert270', 'b') + box(6, 500, 'vert', 't') + box(7, 620, 'vert', 'ctr')
+            + sp({ id: 8, name: 'Bandeau', x: 740, y: 50, w: 80, h: 300, fill: solid('0070C0'), text, body: 'vert="vert270" anchor="ctr"' }),
+        }],
+      });
+      const { bad, expect } = checker();
+      const frames = slidesOf(r.html)[0].frames;
+      const [centered, vertBottom, topLeft, bottomRight, vertTop, vertCentered, band] = frames;
+      const thick = centered && centered.w;
+      expect('sept cadres', frames.length === 7, frames.length);
+      expect('l\'épaisseur du texte est d\'une ligne de 14 pt (16,4 pt) et des marges de 7,2 pt de chaque côté : 30,8 pt', near(thick, 30.8, 1.2), thick);
+      expect('`vert270` centré : le cadre est au milieu de la boîte (x = 20 + (80 - 30,8) / 2) et garde sa hauteur et son haut', near(centered.x, 20 + (80 - thick) / 2, 0.3) && near(centered.y, 50, 0.3) && near(centered.h, 300, 0.3), centered);
+      expect('`vert` en bas : à gauche de la boîte (x = 140)', near(vertBottom.x, 140, 0.3) && near(vertBottom.w, thick, 0.3) && near(vertBottom.h, 300, 0.3), vertBottom);
+      expect('`vert270` en haut : à gauche (x = 260)', near(topLeft.x, 260, 0.3) && near(topLeft.w, thick, 0.3), topLeft);
+      expect('`vert270` en bas : à droite (x = 380 + 80 - 30,8)', near(bottomRight.x, 380 + 80 - thick, 0.3) && near(bottomRight.w, thick, 0.3), bottomRight);
+      expect('`vert` en haut : à droite (x = 500 + 80 - 30,8)', near(vertTop.x, 500 + 80 - thick, 0.3) && near(vertTop.w, thick, 0.3), vertTop);
+      expect('`vert` centré : au milieu', near(vertCentered.x, 620 + (80 - thick) / 2, 0.3), vertCentered);
+      expect('le bandeau plein garde sa boîte entière (740, 50, 80 x 300)', band.shape === 'rect' && near(band.x, 740, 0.3) && near(band.w, 80, 0.3) && near(band.h, 300, 0.3), band);
+      expect('rien n\'est réduit ni compté', !r.report.some(item => item.key === 'shrunk'), r.report);
+      // Dans l'éditeur : le texte du cadre centré est au milieu de sa boîte, celui du bandeau au milieu du bandeau, celui d'un cadre `vert270` en haut contre le bord gauche de sa boîte, en bas contre le bord droit.
+      await inEditor(h, r);
+      const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+      const els = Array.from(document.querySelectorAll('.tiptap .pp-free-frame'));
+      const spot = (el) => {
+        const p = el.querySelector('.pp-free-frame-content p');
+        const range = document.createRange();
+        range.selectNodeContents(p);
+        const glyphs = range.getBoundingClientRect();
+        const outer = el.querySelector('.pp-free-frame-box').getBoundingClientRect();
+        return { center: ((glyphs.left + glyphs.right) / 2 - outer.left) / zoom * 0.75, width: outer.width / zoom * 0.75, textLeft: (glyphs.left - outer.left) / zoom * 0.75, textRight: (outer.right - glyphs.right) / zoom * 0.75 };
+      };
+      const [c, , tl, br, , , b] = els.map(spot);
+      expect('éditeur : le cadre centré montre son texte au milieu de sa boîte, à 2 pt près', !!c && near(c.center, c.width / 2, 2), c);
+      expect('éditeur : le bandeau plein montre son texte au milieu de sa boîte, à 2 pt près', !!b && near(b.center, b.width / 2, 2) && b.width > 70, b);
+      expect('éditeur : `vert270` en haut, le texte est contre le bord gauche de sa boîte (marge de 7,2 pt)', !!tl && near(tl.textLeft, 7.2, 2), tl);
+      expect('éditeur : `vert270` en bas, le texte est contre le bord droit de sa boîte (marge de 7,2 pt)', !!br && near(br.textRight, 7.2, 2), br);
+      return result(bad);
+    });
+
+  // Un tableau ne dépasse jamais le bas de la page quand son cadre du fichier la tient : sa tolérance de 3 % (TABLE_FIT_SLACK) le faisait sortir de la diapositive de quelques points quand il y finit au ras.
+  add('pptx_import_table_never_goes_below_the_page',
+    'Un tableau qui finit au ras du bas de la page dans le fichier (y + hauteur = 540) et que l\'éditeur agrandit de moins de 3 % (une ligne en plus grands caractères) est réduit pour tenir dans la page : son bas est à 540 pt au plus, dans l\'éditeur, au lieu de 545',
+    async (h) => {
+      const filler = n => ({ h: 40, cells: [{ text: 'Ligne ' + n }, { text: String(n) }] });
+      const rows = [{ h: 20, cells: [{ text: 'Titre', attrs: 'sz="1600" b="1"' }, { text: 'Total', attrs: 'sz="1600" b="1"' }] }, filler(1), filler(2), filler(3)];
+      const r = await run1({ slides: [{ shapes: table({ x: 40, y: 400, cols: [300, 200], rows }) }] });
+      const { bad, expect } = checker();
+      const frame = slidesOf(r.html)[0].tableFrames[0];
+      await inEditor(h, r);
+      const zoom = EditorCore.layoutZoom(EditorCore.getEditor().view.dom);
+      const tbl = document.querySelector('.tiptap .pp-free-frame table');
+      const real = tbl.getBoundingClientRect().height / zoom * 0.75;
+      const bottom = frame.y + 3.6 + real;
+      expect('le tableau est réduit (sa ligne de titre de 16 pt ne tient pas dans les 20 pt du fichier)', r.report.some(item => item.key === 'shrunk'), r.report.map(item => item.key));
+      expect('son bas, dans l\'éditeur, est à 540 pt au plus (0,6 pt de tolérance) : ' + bottom.toFixed(1), bottom <= 540.6, { y: frame.y, real, bottom });
+      return result(bad);
+    });
+
+  // DÉBOGAGE TEMPORAIRE (23/11, à retirer avec `probe` de js/pptx-import.js) : le compte rendu porte les mesures d'un tableau (boîte du fichier, hauteur dans l'éditeur, bas) et celles des textes des diapositives 8, 9, 24, 26, 27 et 28.
+  add('pptx_import_debug_probes_give_the_measures_of_tables_and_of_the_texts_of_the_watched_slides',
+    'DÉBOGAGE TEMPORAIRE : `stats.probes` dit, pour un tableau, sa boîte du fichier, la page, sa hauteur dans l\'éditeur et son bas ; pour un texte de la diapositive 8, la boîte du fichier et celle du cadre, l\'ancrage, l\'ajustement (avec `fontScale`), les marges et la première ligne ; un texte d\'une autre diapositive n\'y est pas (à retirer avec le débogage)',
+    async () => {
+      const first = table({ x: 40, y: 100, cols: [200, 200], rows: [{ h: 30, cells: [{ text: 'A' }, { text: 'B' }] }] })
+        + textBox(50, 200, 300, 80, para(run('Ailleurs')), { id: 4, name: 'Zone ignorée' });
+      const watched = textBox(50, 60, 300, 80, para(run('Bonjour le monde', 'sz="1400"'), 'lvl="1" marL="342900" indent="-342900"'), { id: 3, name: 'Zone vue', body: 'anchor="ctr"', bodyXml: '<a:normAutofit fontScale="92500" lnSpcReduction="10000"/>' });
+      const r = await run1({ slides: [{ shapes: first }].concat(Array.from({ length: 6 }, () => ({ shapes: '' })), [{ shapes: watched }]) });
+      const { bad, expect } = checker();
+      const probes = (r.stats && r.stats.probes) || [];
+      const tableLine = probes.find(line => /^table "Tableau" slide 1 /.test(line)) || '';
+      const textLine = probes.find(line => /^text "Zone vue" slide 8 /.test(line)) || '';
+      expect('la ligne du tableau dit sa boîte du fichier, la page, sa hauteur naturelle et son bas', /file=\(40,100,400,30\) page=960(\.\d)?x540 natural=\d/.test(tableLine) && /bottom=\d/.test(tableLine) && / rows=1 cols=2$/.test(tableLine), tableLine);
+      expect('la ligne du texte de la diapositive 8 dit l\'ancrage, l\'ajustement avec son fontScale, les marges (7,2 et 3,6), le niveau et le retrait', /anchor=ctr /.test(textLine) && /fit=normAutofit fontScale=92500 lnSpcReduction=10000 /.test(textLine) && / ins=7.2\/3.6\/7.2\/3.6 /.test(textLine) && /lvl=1 marL=342900 indent=-342900$/.test(textLine) && /first="Bonjour le monde"/.test(textLine), textLine);
+      expect('le texte de la diapositive 1 (non suivie) n\'a pas de ligne', !probes.some(line => /Zone ignorée/.test(line)), probes);
       return result(bad);
     });
 

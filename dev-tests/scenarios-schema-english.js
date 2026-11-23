@@ -13,7 +13,7 @@
 
   // Les noms d'avant des tables du widget et de leurs colonnes : rien de cela ne doit apparaître dans un document en anglais.
   const LEGACY_TABLES = ['Publipostage_Modeles', 'Publipostage_Commentaires', 'Publipostage_LiensTables', 'Publipostage_PreferencesModeles', 'Publipostage_Abreviations', 'Publipostage_FormatsPage'];
-  const LEGACY_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf',
+  const LEGACY_COLUMNS = ['Nom', 'Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf', 'EmailLie',
     'ModeleId', 'Auteur', 'Texte', 'CreeLe', 'LectureId', 'Debut', 'Fin', 'Citation', 'Avant', 'Apres', 'Resolu', 'Genre', 'Donnees', 'Utilisateur', 'Epingle', 'Dossier', 'Replie', 'TypeExport', 'QualitePdf',
     'LignesExport', 'Abreviation', 'Largeur', 'Hauteur', 'TableCible', 'ColonneCible', 'ColonneSource', 'TableSource'];
 

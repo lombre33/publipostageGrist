@@ -43,6 +43,8 @@
 .pp-free-frame[data-ff-vert] > .pp-free-frame-box > .pp-free-frame-content { flex: none; height: calc(var(--ff-h, 36pt) + 2 * var(--ff-bleed, 0pt)); text-orientation: mixed; }
 .pp-free-frame[data-ff-vert="vert"] > .pp-free-frame-box > .pp-free-frame-content { writing-mode: vertical-rl; }
 .pp-free-frame[data-ff-vert="vert270"] > .pp-free-frame-box > .pp-free-frame-content { writing-mode: sideways-lr; }
+/* Une forme centre aussi son texte tourné dans sa largeur (un bandeau plein dont le titre se lit de bas en haut : PowerPoint le met au milieu) ; un cadre de texte le garde du côté où ses lignes commencent. */
+.pp-free-frame[data-ff-shape][data-ff-vert] > .pp-free-frame-box > .pp-free-frame-content { align-self: center; }
 /* Les colonnes de texte d'un cadre (`--ff-cols`, `--ff-col-gap`, js/free-frame.js) : le texte les remplit l'une après l'autre, équilibrées. */
 .pp-free-frame-content { column-count: var(--ff-cols, auto); column-gap: var(--ff-col-gap, normal); }
 .pp-free-frame-content > :first-child { margin-top: 0; }

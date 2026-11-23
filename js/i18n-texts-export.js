@@ -315,6 +315,8 @@ const I18nTextsExport = {
   'odp.import.report.embedded': { fr: '{n} {n|objet incorporé (formule, dessin…) non repris|objets incorporés (formules, dessins…) non repris}', en: '{n} embedded {n|object|objects} (formula, drawing…) not imported' },
   'odp.import.report.media': { fr: '{n} {n|vidéo ou son non repris|vidéos ou sons non repris}', en: '{n} {n|video or sound|videos or sounds} not imported' },
   'odp.import.report.freeDrawings': { fr: '{n} {n|tracé libre, courbe ou polygone non repris|tracés libres, courbes ou polygones non repris}', en: '{n} free {n|drawing, curve or polygon|drawings, curves or polygons} not imported' },
+  'odp.import.report.pathEnds': { fr: '{n} {n|pointe de courbe ou de ligne brisée non reprise|pointes de courbes ou de lignes brisées non reprises}', en: '{n} {n|arrowhead|arrowheads} on a curve or polyline not imported' },
+  'odp.import.report.objectLinks': { fr: '{n} {n|lien ou action au clic posé sur un objet non repris|liens ou actions au clic posés sur des objets non repris}', en: '{n} {n|link or click action|links or click actions} on an object not imported' },
   'odp.import.report.images': { fr: '{n} {n|image non reprise|images non reprises} (format que le navigateur ne lit pas, ou trop lourde)', en: '{n} {n|image|images} not imported (a format the browser cannot read, or too heavy)' },
   'odp.import.report.shapes': { fr: '{n} {n|forme remplacée par un rectangle|formes remplacées par un rectangle}', en: '{n} {n|shape|shapes} replaced by a rectangle' },
   'odp.import.report.imageEffects': { fr: '{n} {n|image rognée ou retournée, reprise entière et droite|images rognées ou retournées, reprises entières et droites}', en: '{n} cropped or flipped {n|image|images} kept whole and upright' },

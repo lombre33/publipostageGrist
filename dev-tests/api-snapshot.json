@@ -1,4 +1,7 @@
 {"_comment":"Relevé de l'API des modules globaux (dev-tests/verify-api-snapshot.mjs --update). modules : clés triées « nom:genre » (f fonction, d donnée, g accesseur). connus : appels `Nom.x` dont Nom n'existe pas dans la page de test, déjà là au gel.",
+"EmailLink":"CHANGED:d canLink:f documents:f documentsOf:f emailOf:f emails:f isDangling:f isEmail:f saidFor:f set:f",
+"EmailLinkPanel":"render:f wire:f",
+"MainEmailLink":"create:f",
 "modules":{
 "AccessRights":"get:f getConfig:f getStatus:f init:f onChange:f refresh:f",
 "ActionHistory":"add:f conflict:f count:f forget:f reseed:f reset:f sync:f whenIdle:f wire:f",
@@ -273,7 +276,7 @@
 "TemplatePack":"VERSION:d apply:f displayActions:f formulaActions:f isPackError:f isReference:f marginsOf:f normalize:f parseType:f plan:f readDocumentSchema:f sameKind:f tableActions:f",
 "TemplatePreferences":"clearFolderState:f createFolderState:f getCached:f getExportChoices:f getFolder:f hasFolderState:f isFolderCollapsed:f isPinned:f listFolders:f listStateFolders:f loadForCurrentUser:f normalizeFolderPath:f refresh:f setExportChoices:f setFolder:f setFolderCollapsed:f setPinned:f",
 "TemplateTreeSelect":"appendSections:f attach:f defaultMarks:f iconSpan:f makeGroup:f pinButton:f refresh:f rowShell:f",
-"Templates":"PDF_PASSWORD_LOCATION:g TABLE_NAME:d byId:f canBeDocumentDefault:f declareExtensionType:f ensureToken:f getCached:f getCurrentId:f getDefaultId:f getDocumentSetting:f getDocumentSettings:f getLoadedChars:f getWriteSeq:f isCurrent:f isDefault:f isKnownType:f isOpenableType:f isWriting:f lastWritten:f loadAll:f onCreated:f openableById:f readPdfPassword:f remove:f restoreRow:f restoreVersion:f sameDateModif:f sameName:f save:f saveContent:f setCurrentId:f setDefault:f snapshotRow:f unavailableOf:f unavailableText:f uniqueName:f updateDocumentSettings:f verifyStored:f whenIdle:f writePdfPassword:f",
+"Templates":"PDF_PASSWORD_LOCATION:g TABLE_NAME:d byId:f canBeDocumentDefault:f declareExtensionType:f ensureToken:f getCached:f getCurrentId:f getDefaultId:f getDocumentSetting:f getDocumentSettings:f getLoadedChars:f getWriteSeq:f isCurrent:f isDefault:f isKnownType:f isOpenableType:f isWriting:f lastWritten:f loadAll:f onCreated:f openableById:f readPdfPassword:f remove:f restoreRow:f restoreVersion:f sameDateModif:f sameName:f save:f saveContent:f setCurrentId:f setDefault:f setLinkedEmail:f snapshotRow:f unavailableOf:f unavailableText:f uniqueName:f updateDocumentSettings:f verifyStored:f whenIdle:f writePdfPassword:f",
 "TextDirection":"ATTR:d createExtension:f isRtl:f isShownRtl:f markup:f run:f syncRow:f",
 "TextExpansion":"add:f charProblem:f createExtension:f filterEntries:f list:f load:f remove:f reset:f setTriggerChar:f storedChar:f triggerChar:f update:f",
 "TocLinks":"link:f reveal:f",

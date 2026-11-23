@@ -412,7 +412,7 @@ const I18nTextsSettings = {
   'settings.access.status.noEmail': { fr: 'Votre email Grist est introuvable : tous les droits.', en: 'Your Grist email could not be found: all rights.' },
   // Compte Lecteur de Grist (js/access-rights.js, état « viewer ») : pas d'email lu, la table des droits ne compte pas pour lui.
   'settings.access.status.viewer': { fr: 'Compte Lecteur dans Grist : {rights}.', en: 'Viewer account in Grist: {rights}.' },
-  'settings.access.status.error': { fr: 'Table des droits illisible pour vous : lecture seule par précaution.', en: 'Rights table unreadable for you: read-only as a precaution.' },
+  'settings.access.status.error': { fr: 'Table des droits illisible pour vous : lecture seule par précaution. Une règle d’accès de Grist la cache sans doute à votre compte : demandez à la personne qui gère le document de vous en autoriser la lecture (chacun peut lire sa propre ligne).', en: 'Rights table unreadable for you: read-only as a precaution. A Grist access rule most likely hides it from your account: ask the person who manages the document to allow you to read it (everyone can read their own row).' },
   'settings.access.status.tableGone': { fr: 'La table des droits n’existe plus : choisissez-en une autre. Lecture seule d’ici là, par précaution.', en: 'The rights table no longer exists: choose another one. Read-only until then, as a precaution.' },
   'settings.access.right.readOnly': { fr: 'lecture seule', en: 'read-only' },
   'settings.access.right.edit': { fr: 'modification', en: 'editing' },

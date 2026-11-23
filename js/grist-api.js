@@ -91,6 +91,34 @@ const GristAPI = (function () {
   function isAccessRefusal(error) {
     return !!error && /\bBlocked by\b|\bOnly owners\b/i.test(String(error.message || error));
   }
+  // Le dernier refus d'une règle d'accès, gardé pour le constat d'une icône grisée (js/lock-diagnostic.js, « Dernier refus de Grist ») : sa phrase et son genre, rien de personnel. `noteRefusal` est appelée par le chemin des écritures
+  // (SchemaColumns.docApi.applyUserActions) et par les écritures directes ; elle rend si c'était un refus.
+  let _lastRefusal = null;
+  function lastRefusal() { return _lastRefusal; }
+  function noteRefusal(error) {
+    const refused = isAccessRefusal(error);
+    if (refused) _lastRefusal = { phrase: refusalPhrase(error), kind: refusalKind(error), at: Date.now() };
+    return refused;
+  }
+  // La phrase de la règle que Grist cite, sans rien d'autre (jamais un nom de table, de colonne ou de document) : « Blocked by full structure access rules », « Blocked by row update access rules », « Only owners can ... ».
+  function refusalPhrase(error) {
+    const text = String((error && error.message) || error || '');
+    const rule = text.match(/Blocked by (?:[A-Za-z ]{1,60}? )?access rules?/i);
+    if (rule) return rule[0];
+    const owners = text.match(/Only owners [A-Za-z ]{1,60}/i);
+    if (owners) return owners[0].trim();
+    return /\bBlocked by\b/i.test(text) ? 'Blocked by' : '';
+  }
+  // Ce que le refus interdit : 'structure' (créer ou modifier une table, une colonne, une vue : « full structure », « table structure »), 'read' (lire), 'owners' (réservé aux propriétaires), 'write' (écrire des lignes : « row update »,
+  // « table update »…), '' (pas un refus de règle d'accès).
+  function refusalKind(error) {
+    const phrase = refusalPhrase(error);
+    if (!phrase) return '';
+    if (/^Only owners/i.test(phrase)) return 'owners';
+    if (/structure|schema/i.test(phrase)) return 'structure';
+    if (/\bread\b/i.test(phrase)) return 'read';
+    return 'write';
+  }
   // Un document que Grist ouvre en lecture seule pour cette personne (compte Lecteur du document, ou instantané de son historique) : Grist ajoute
   // `readonly=true` à l'adresse du cadre du widget (WidgetFrame.ts, `gristDoc.isReadonly`, faux pour qui peut modifier le document). Il l'ajoute après les
   // paramètres de l'adresse du widget : la dernière valeur est la sienne. Absent (Grist plus ancien) ou autre que `true` : personne n'est tenu pour
@@ -1254,6 +1282,30 @@ const GristAPI = (function () {
     return _tokenCache;
   }
 
+  // Une lecture SQL « légère » du document, par l'adresse de son interface de programmation : de quoi lire les noms, les dates et les longueurs des modèles sans leur texte (le rapport de fluidité la sonde,
+  // js/perf-trace.js:probeLight, 23/11 ; la table des modèles se lit sinon en entier par fetchTable, contenus compris). Le jeton est celui de lecture seule des pièces jointes (getAccessTokenCached) ; la demande
+  // est un GET simple (ni corps ni en-tête particulier : pas de pré-requête CORS) ; elle ne peut rien écrire. Rend les lignes, des objets { colonne: valeur } aux valeurs brutes de SQLite (un booléen y est 0 ou 1,
+  // une date des secondes). Lève une erreur dont `reason` dit pourquoi : 'jeton' (Grist n'en donne pas), 'réseau' (hors ligne, CORS, politique de GFS), 'http' (avec `status` : droits, instance sans cette
+  // interface), 'délai', 'forme' (réponse sans `records`). Rien ne dépend d'elle : celui qui l'appelle sait toujours lire autrement.
+  async function lightQuery(sql, timeoutMs) {
+    const fail = (reason, extra) => Object.assign(new Error('lightQuery : ' + reason), { reason }, extra);
+    let info;
+    try { info = await getAccessTokenCached(); } catch (e) { throw fail('jeton'); }
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs || 8000) : 0;
+    try {
+      let response;
+      try {
+        response = await fetch(info.baseUrl + '/sql?q=' + encodeURIComponent(sql) + '&auth=' + encodeURIComponent(info.token), { method: 'GET', credentials: 'omit', signal: controller ? controller.signal : undefined });
+      } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'réseau'); }
+      if (!response.ok) throw fail('http', { status: response.status });
+      let body;
+      try { body = await response.json(); } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'forme'); }
+      if (!body || !Array.isArray(body.records)) throw fail('forme');
+      return body.records.map(record => (record && record.fields) || {});
+    } finally { clearTimeout(timer); }
+  }
+
   // L'hôte de l'instance de Grist qui sert le document (`grist.numerique.gouv.fr`, `docs.getgrist.com`...), en minuscules : celui de l'adresse de l'interface de programmation que donne le jeton d'accès. '' quand Grist ne
   // donne pas d'adresse lisible (jeton refusé, adresse sans hôte) ; ne lève jamais. Un constat, pas une preuve : js/state-mode.js s'en sert pour avertir, jamais pour autoriser.
   async function getInstanceHost() {
@@ -1433,5 +1485,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

@@ -381,6 +381,26 @@ async function run(theme, lang) {
     const mixed = await importModel('mixte.md', modelText + '\n{{AutreTable.Nom}} {{AutreTable.Ville}}\n\n![Logo](images/logo.png)\n', T.importedImageVariables);
     check(`${label} - avec une image locale en plus, une seule phrase : « ${T.importedImageVariables} », en entier, sans être coupée, dans le panneau`,
       mixed.state.text === mixed.line.text && !mixed.state.error && mixed.state.whole && mixed.state.inPanel, mixed.state);
+    // 6c) Un fichier écrit sous Windows (Notepad++ : fins de ligne \r\n) : deux lignes l'une sous l'autre restent l'une sous l'autre dans le document importé (« je vois les sauts de ligne dans Notepad++,
+    //     en important le fichier je les perds », 23/11 : marked les fondait en un blanc), la ligne vide sépare toujours les paragraphes, et le coin d'état n'a rien de plus à dire.
+    const notepad = await importModel('notepad.md', ['# Notes du jour', 'Première ligne', 'Deuxième ligne', '', 'Autre paragraphe', 'suite', 'et fin', '', '- puce un', '  suite de la puce', '- puce deux', ''].join('\r\n'), T.imported);
+    const lineShape = await page.evaluate(() => {
+      // Le `<br>` de fin que ProseMirror pose dans un paragraphe vide (le paragraphe final que l'éditeur garde sous une liste) n'est pas un saut de ligne ; ce paragraphe vide n'est pas du contenu.
+      const paragraphs = Array.from(document.querySelectorAll('.tiptap > p')).map(p => Array.from(p.childNodes).map(n => (n.nodeName === 'BR' ? (n.classList.contains('ProseMirror-trailingBreak') ? '' : '|') : n.textContent)).join('')).filter(Boolean);
+      // Chaque ligne d'un paragraphe sur sa propre rangée à l'écran : le haut de la première lettre de chaque ligne.
+      const tops = Array.from(document.querySelectorAll('.tiptap > p')).slice(0, 2).map(p => {
+        const out = [];
+        const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) { const r = document.createRange(); r.setStart(n, 0); r.setEnd(n, 1); out.push(Math.round(r.getBoundingClientRect().top)); }
+        return out;
+      });
+      return { paragraphs, tops, bullets: Array.from(document.querySelectorAll('.tiptap ul > li')).map(li => li.innerHTML.replace(/<\/?p>/g, '').replace(/<br[^>]*>/g, '|')) };
+    });
+    check(`${label} - un fichier Notepad++ (fins de ligne Windows) : « Première ligne|Deuxième ligne » et « Autre paragraphe|suite|et fin » restent des lignes séparées, deux paragraphes, aucun de plus`,
+      lineShape.paragraphs.join('/') === 'Première ligne|Deuxième ligne/Autre paragraphe|suite|et fin' && notepad.state.text === notepad.line.text && !notepad.state.error, { lineShape: lineShape.paragraphs, status: notepad.state.text });
+    check(`${label} - à l'écran, chaque ligne est sur sa propre rangée (la deuxième est plus bas que la première), et la suite d'une puce est une ligne de plus`,
+      lineShape.tops[0].length === 2 && lineShape.tops[0][1] > lineShape.tops[0][0] + 5 && lineShape.tops[1].length === 3 && lineShape.tops[1][2] > lineShape.tops[1][1] + 5 && lineShape.tops[1][1] > lineShape.tops[1][0] + 5
+      && lineShape.bullets.join('/') === 'puce un|suite de la puce/puce deux', lineShape);
     await snap('model');
 
     // 7) Depuis une grille, puis depuis un email (« + » puis « Nouvelle grille » / « Nouvel email » au vrai clic) : l'import quitte ce modèle, rien de la grille ni de l'email ne reste et le document s'affiche

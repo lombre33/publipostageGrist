@@ -287,6 +287,47 @@ const ExportCommon = (function () {
 
   // Lignes d'un bloc de code (<pre>) pour le PDF et le Word : retours chariot normalisés, tabulation = 4 espaces (`tab-size: 4` de `.tiptap pre`,
   // css/editor-v2.css). Une ligne vide reste une entrée vide : à l'exporteur d'en faire une ligne de hauteur normale.
+  // Les points d'une liste de cases à cocher que Word, OpenDocument et le texte brut écrivent comme des paragraphes qui COMMENCENT PAR leur case (☐, ☑ ou ☒, la forme que les exports de l'éditeur écrivent aussi) :
+  // `taskEntryOf(html)` lit un paragraphe en balisage ({ checked, inner } ou null), `taskListHtml(entries)` rend la liste de cases de l'éditeur de points consécutifs. Un point coché de l'éditeur est barré
+  // et grisé dans les exports : ces deux marques, posées sur tout son texte, sont rendues à l'éditeur, qui les dessine lui-même.
+  const TASK_PARAGRAPH = /^<p[^>]*>(?:<span[^>]*>)?([☐☑☒])[ \u00a0]?(?:<\/span>)?([^]*)<\/p>$/;
+  const TASK_CHECKED_LOOK = /^<s><span style="color: #667085">([^]*)<\/span><\/s>$/;
+  function taskEntryOf(html) {
+    const found = TASK_PARAGRAPH.exec(String(html || ''));
+    if (!found || /<\/?(?:p|ul|ol|li|table|blockquote|h[1-6])\b/.test(found[2])) return null;
+    const checked = found[1] !== '☐';
+    const look = checked ? TASK_CHECKED_LOOK.exec(found[2]) : null;
+    return { checked, inner: look ? look[1] : found[2] };
+  }
+  // Les paragraphes d'un bloc de code que Word et OpenDocument écrivent un par ligne : tout le texte du paragraphe dans UNE série de caractères à police à chasse fixe (Courier New, Consolas, Cousine...) ; `codeEntryOf` lit
+  // le texte de la ligne (déjà échappé), `groupedBlocks(blocks)` rend les blocs avec leurs points de liste de cases (☐ ☑ ☒) réunis en liste de cases à cocher et leurs lignes de code réunies en un bloc de code.
+  const CODE_LINE = /^<p[^>]*><span style="[^"]*font-family: (?:Courier New|Consolas|Cousine|Liberation Mono|Lucida Console|Menlo|Monaco|monospace)[^"]*">([^<]*)<\/span><\/p>$/i;
+  const codeEntryOf = html => { const found = CODE_LINE.exec(String(html || '')); return found ? found[1] : null; };
+  function groupedBlocks(blocks) {
+    let out = '';
+    let tasks = [];
+    let code = [];
+    const flush = () => {
+      if (tasks.length) out += taskListHtml(tasks);
+      if (code.length) out += '<pre><code>' + code.join('\n') + '</code></pre>';
+      tasks = [];
+      code = [];
+    };
+    blocks.forEach((html) => {
+      const task = taskEntryOf(html);
+      const line = task ? null : codeEntryOf(html);
+      if (task) { if (code.length) flush(); tasks.push(task); return; }
+      if (line !== null) { if (tasks.length) flush(); code.push(line.replace(/\u00a0/g, ' ')); return; }
+      flush();
+      out += html;
+    });
+    flush();
+    return out;
+  }
+  function taskListHtml(entries) {
+    return '<ul data-type="taskList">' + entries.map(entry => '<li data-type="taskItem" data-checked="' + (entry.checked ? 'true' : 'false') + '"><label><input type="checkbox"' + (entry.checked ? ' checked' : '')
+      + '><span></span></label><div><p>' + (entry.inner || '') + '</p></div></li>').join('') + '</ul>';
+  }
   function codeLinesOf(node) {
     return (node.textContent || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.replace(/\t/g, '    '));
   }
@@ -853,6 +894,6 @@ const ExportCommon = (function () {
     return { NAMESPACES, XML_HEAD, namespaceAttrs, escText, escAttr, fixed, attrsOf, textXml };
   })();
 
-  return { EDITOR_STYLE, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();

@@ -148,6 +148,34 @@
   });
 
   cases.push({
+    id: 'viewer_account_says_why_in_the_tooltip_the_findings_and_the_context',
+    description: 'Compte Lecteur de Grist : l’info-bulle d’une commande grisée dit « votre compte est Lecteur dans Grist », le constat a une ligne ✕ « Votre compte est Lecteur dans Grist » (la table des droits n’est pas lue pour lui), le contexte dit le compte (« Lecteur », adresse du cadre « readonly=true ») et que l’email n’est pas lu ; l’export, qu’il garde, n’est pas grisé',
+    run: async (h) => {
+      await savedTemplate(h, 'Lecteur Grist dit');
+      try {
+        const applied = await asViewer();
+        const editBtn = el('btn-mode-edit');
+        const tip = editBtn.getAttribute('title') || '';
+        const found = LockDiagnostic.forLock(editBtn, LockReasons.detailOf(editBtn));
+        const resolved = text => LockDiagnostic.resolve(text == null ? '' : text, false);
+        const checks = found.checks.map(c => c.s + ' ' + resolved(c.t));
+        const rows = Object.fromEntries(found.context.map(([k, v]) => [k, resolved(v)]));
+        const verdictChecks = {
+          applied,
+          tooltipHasTheCause: tip.includes(I18n.t('lock.readOnly')) && tip.includes(I18n.t('lock.cause.viewer')),
+          findingIsACause: checks.some(c => /^no /.test(c) && c.includes('Votre compte est Lecteur dans Grist')),
+          contextAccount: (rows['Compte Grist'] || '').startsWith('Lecteur') && (rows['Compte Grist'] || '').includes('readonly=true'),
+          contextEmailNotRead: (rows['Email Grist'] || '').startsWith('non lu'),
+          contextState: (rows['Lecture des droits'] || '').includes('compte Lecteur'),
+          exportNotGreyed: !locked('v2-export-pdf-group'),
+        };
+        const v = verdict(verdictChecks);
+        return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+      } finally { await finish(); }
+    },
+  });
+
+  cases.push({
     id: 'viewer_account_is_not_identified_and_the_rights_table_does_not_apply',
     description: 'Un Lecteur n’est pas identifié : sa ligne de la table des droits (tous les droits, ici) ne compte pas, la table n’est pas lue, aucune sonde d’email n’est tentée, l’export et les commentaires ne se règlent pas pour lui ; le réglage reste connu (la case de la Lecture épurée)',
     run: async (h) => {

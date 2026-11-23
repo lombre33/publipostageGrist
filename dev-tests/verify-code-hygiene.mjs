@@ -341,7 +341,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const I18N_DOCUMENT_KEYS = [
     'template.select', 'template.newOption', 'template.namePlaceholder', 'template.rename.aria', 'template.setDefault.tip', 'template.setDefault.aria', 'templateTree.pin.aria',
     'templateTree.default.aria', 'templateTree.default.setTip', 'templateTree.default.clearTip', 'templateTree.default.unavailableTip', 'templateTree.default.unopenableTip',
-    'templateTree.allSection', 'templateTree.title', 'templateTree.empty', 'organize.modal.title', 'organize.modal.defaultLegend', 'organize.modal.searchPlaceholder',
+    'templateTree.allSection', 'templateTree.search', 'templateTree.noMatch', 'templateTree.empty', 'organize.modal.title', 'organize.modal.defaultLegend', 'organize.modal.searchPlaceholder',
     'organize.modal.noMatch', 'organize.modal.newFolderHint', 'organize.modal.folderDefault.aria', 'toolbar.organizeTemplates', 'toolbar.new', 'toolbar.autosave.aria',
     'status.templateNameRequired', 'status.nameKept', 'status.unsavedTemplateWarning', 'status.saveRefused', 'status.deleteRefused', 'status.deleteError',
     'status.noTemplateSelected', 'status.defaultTemplateSet', 'status.defaultTemplateCleared', 'status.defaultTemplateError', 'status.templateDeleted', 'status.templateRemoved',
@@ -2369,7 +2369,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 {
   const LEGACY_TABLES = ['Publipostage_Modeles', 'Publipostage_Commentaires', 'Publipostage_LiensTables', 'Publipostage_PreferencesModeles', 'Publipostage_Abreviations', 'Publipostage_FormatsPage'];
   // Les noms de colonnes d'avant qui ne sont jamais autre chose qu'une colonne du widget (Nom, Texte, Fin, Date, PJ, Cc, Mode, Page, Margins... sont aussi des mots ou des noms qui ont gardé leur nom).
-  const LEGACY_COLUMNS = ['Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf', 'ModeleId',
+  const LEGACY_COLUMNS = ['Contenu', 'NomFichierPDF', 'DateModif', 'EstParDefaut', 'TypeModele', 'Destinataires', 'Cci', 'Objet', 'SuiviModifications', 'Jeton', 'ModifiePar', 'MotDePassePdf', 'EmailLie', 'ModeleId',
     'Auteur', 'CreeLe', 'LectureId', 'Debut', 'Citation', 'Avant', 'Apres', 'Resolu', 'Genre', 'Donnees', 'Utilisateur', 'Epingle', 'Dossier', 'Replie', 'TypeExport', 'QualitePdf', 'LignesExport', 'Abreviation',
     'Largeur', 'Hauteur', 'TableCible', 'ColonneCible', 'ColonneSource', 'TableSource'];
   const columnPattern = new RegExp(`(?:['"\`](?:${LEGACY_COLUMNS.join('|')})['"\`])|(?:\\.(?:${LEGACY_COLUMNS.join('|')})(?![\\w$]))|(?:(?<![\\w$.])(?:${LEGACY_COLUMNS.join('|')})\\s*:)`);

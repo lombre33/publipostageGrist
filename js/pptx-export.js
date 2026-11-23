@@ -216,6 +216,8 @@ const PptxExport = (function () {
   // Une couleur unie, avec sa TRANSPARENCE en pour cent quand elle en a une : `<a:alpha>` est l'opacité en millièmes de pour cent (50 % de transparence : 50000).
   const colorXml = (hex, tr) => (tr ? `<a:srgbClr val="${hex}"><a:alpha val="${Math.round((100 - tr) * 1000)}"/></a:srgbClr>` : `<a:srgbClr val="${hex}"/>`);
   const fillXml = (hex, tr) => `<a:solidFill>${colorXml(hex, tr)}</a:solidFill>`;
+  // Un fond de case à motif (js/cell-pattern.js, dont les noms sont ceux de PowerPoint) : `a:pattFill`, l'encre en avant-plan, le fond de la case (à défaut blanc) en arrière-plan.
+  const patternFillXml = (pattern, backHex) => `<a:pattFill prst="${pattern.kind}"><a:fgClr>${colorXml(pattern.ink.slice(1).toUpperCase())}</a:fgClr><a:bgClr>${colorXml(backHex || 'FFFFFF')}</a:bgClr></a:pattFill>`;
   const sizeOf = px => clampInt(parseFloat(px) * PX_TO_PT * 100, 100, 400000);
   // L'espacement des caractères (`letter-spacing` calculé, « normal » ou des pixels) en centièmes de point, comme l'attribut `spc` d'un texte.
   const spacingOf = px => (/^-?[\d.]+px$/.test(String(px)) ? clampInt(parseFloat(px) * PX_TO_PT * 100, -400000, 400000) : 0);
@@ -721,6 +723,7 @@ const PptxExport = (function () {
     const base = units.length ? '' : endRunXml(runStyleOf(cell, cell), slide);
     const paragraphs = units.length ? paragraphsXml(units, contentLeft, slide, ctx) : `<a:p>${base}</a:p>`;
     const fill = cell.style.backgroundColor && cssHex(cell.style.backgroundColor);
+    const pattern = CellPattern.parse(cell);
     const valign = ExportCommon.cellVerticalAlign(cell);
     const attrs = [];
     if (owner.colspan > 1) attrs.push(`gridSpan="${owner.colspan}"`);
@@ -728,7 +731,7 @@ const PptxExport = (function () {
     const edge = side => (sides ? sides[side] : null);
     return `<a:tc ${attrs.join(' ')}><a:txBody><a:bodyPr/><a:lstStyle/>${paragraphs}</a:txBody>`
       + `<a:tcPr marL="${pxEmu(pad('Left'))}" marR="${pxEmu(pad('Right'))}" marT="${pxEmu(pad('Top'))}" marB="${pxEmu(pad('Bottom'))}" anchor="${valign === 'middle' ? 'ctr' : (valign === 'bottom' ? 'b' : 't')}">`
-      + `${borderXml('lnL', edge('left'))}${borderXml('lnR', edge('right'))}${borderXml('lnT', edge('top'))}${borderXml('lnB', edge('bottom'))}${fill ? fillXml(fill) : '<a:noFill/>'}</a:tcPr></a:tc>`;
+      + `${borderXml('lnL', edge('left'))}${borderXml('lnR', edge('right'))}${borderXml('lnT', edge('top'))}${borderXml('lnB', edge('bottom'))}${pattern ? patternFillXml(pattern, fill) : (fill ? fillXml(fill) : '<a:noFill/>')}</a:tcPr></a:tc>`;
   }
   const mergedCellXml = (hMerge, vMerge) => `<a:tc${hMerge ? ' hMerge="1"' : ''}${vMerge ? ' vMerge="1"' : ''}><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="en-US"/></a:p></a:txBody><a:tcPr/></a:tc>`;
   // `at` : le rectangle du tableau sur la diapositive (points), `place` le transforme (un cadre pivoté déplace son contenu).

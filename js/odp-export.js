@@ -541,7 +541,16 @@ const OdpExport = (function () {
   function cellXml(env, tc, covered) {
     if (covered) return '<table:covered-table-cell/>';
     const tcPr = kid(tc, 'tcPr');
-    const fill = fillOf(env, tcPr);
+    let fill = fillOf(env, tcPr);
+    // Un fond à motif (`a:pattFill`, js/cell-pattern.js) : l'OpenDocument n'a pas de trame de case, la case prend la teinte moyenne du motif sur son fond (comme dans l'export OpenDocument texte).
+    const patt = !fill && tcPr ? kid(tcPr, 'pattFill') : null;
+    if (patt && typeof CellPattern !== 'undefined') {
+      const kind = CellPattern.fromPowerPoint(localAttr(patt, 'prst') || '');
+      const ink = colorOf(env, kid(patt, 'fgClr'));
+      const back = colorOf(env, kid(patt, 'bgClr'));
+      const tone = kind && ink ? CellPattern.averageTone({ kind: kind.kind, ink: ink.hex }, back ? back.hex : '#ffffff') : null;
+      if (tone) fill = { hex: tone };
+    }
     const anchor = tcPr ? localAttr(tcPr, 'anchor') : 't';
     const props = ['fo:padding-left="' + cm(intAttr(tcPr, 'marL', 91440)) + '"', 'fo:padding-right="' + cm(intAttr(tcPr, 'marR', 91440)) + '"', 'fo:padding-top="' + cm(intAttr(tcPr, 'marT', 45720)) + '"', 'fo:padding-bottom="' + cm(intAttr(tcPr, 'marB', 45720)) + '"'];
     props.push('style:vertical-align="' + (anchor === 'ctr' ? 'middle' : (anchor === 'b' ? 'bottom' : 'top')) + '"', 'fo:background-color="' + (fill ? fill.hex : 'transparent') + '"');
@@ -597,6 +606,14 @@ const OdpExport = (function () {
       if (direction) attrs.push('smil:direction="' + direction + '"');
     }
     return env.reg.named('dp', attrs.join(' '), name => '<style:style style:name="' + name + '" style:family="drawing-page"><style:drawing-page-properties ' + attrs.join(' ') + '/></style:style>');
+  }
+  // La durée du passage en secondes, telle que LibreOffice l'écrit dans la page (`anim:transitionFilter`) : la vitesse du style n'a que trois crans (rapide, moyenne, lente), la durée exacte est ici (« 0.9s »).
+  function transitionTiming(props, id) {
+    if (!props.transition || !(props.dur > 0)) return '';
+    const found = TRANSITIONS[props.transition] ? TRANSITIONS[props.transition](props) : null;
+    const [type, subtype, direction] = found || ['fade', 'crossfade'];
+    return '<anim:par presentation:node-type="timing-root"><anim:par smil:begin="' + id + '.begin"><anim:transitionFilter smil:dur="' + Number((props.dur / 1000).toFixed(3)) + 's" smil:type="' + type + '" smil:subtype="' + subtype + '"'
+      + (direction ? ' smil:direction="' + direction + '"' : '') + '/></anim:par><anim:seq smil:dur="0s" presentation:node-type="main-sequence"/></anim:par>';
   }
   // Les notes de la diapositive : la vignette de la page et le cadre des notes, à la place de la page de notes de PowerPoint (15,24 cm de large, sous la vignette).
   function notesXml(env, text, slideSize, number) {
@@ -676,7 +693,8 @@ const OdpExport = (function () {
       if (doc && descendants(doc.documentElement, 'timing').length) lose(ctx, 'animations');
       const objects = tree ? treeXml(env, tree) : '';
       const notes = props.notes ? notesXml(env, props.notes, slideSize, i + 1) : '';
-      body.push('<draw:page draw:name="page' + (i + 1) + '" draw:style-name="' + pageStyleName(env, props, background, ctx) + '" draw:master-page-name="' + (hasFirst && i === 0 ? 'First' : 'Default') + '">' + objects + notes + '</draw:page>');
+      const timing = transitionTiming(props, 'id' + (i + 1));
+      body.push('<draw:page draw:name="page' + (i + 1) + '" draw:style-name="' + pageStyleName(env, props, background, ctx) + '" draw:master-page-name="' + (hasFirst && i === 0 ? 'First' : 'Default') + '"' + (timing ? ' xml:id="id' + (i + 1) + '" draw:id="id' + (i + 1) + '"' : '') + '>' + timing + objects + notes + '</draw:page>');
     }
     if (charts) lose(ctx, 'charts', charts);
     // Les pages maîtresses : le fond du thème, le décor ; une seconde pour la première diapositive quand le décor lui est autre.
