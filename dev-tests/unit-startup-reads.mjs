@@ -136,6 +136,22 @@ const MODELES_FULL = {
   TypeModele: 'Text', Destinataires: 'Text', Cc: 'Text', Cci: 'Text', Objet: 'Text', PJ: 'Text', SuiviModifications: 'Text', ModifiePar: 'Text',
 };
 const USER_TABLES = ['Missions', 'Personnes'];
+// Les colonnes que les huit migrations de loadAll ajoutent à la table des modèles (sous les noms qu'elle portait avant la reprise en anglais) : un document d'avant les a toutes à ajouter.
+const MIGRATED_COLUMNS = ['HeaderFooter', 'EstParDefaut', 'Margins', 'DateModif', 'TypeModele', 'Destinataires', 'Cc', 'Cci', 'Objet', 'PJ', 'SuiviModifications', 'ModifiePar'];
+
+// Les `times` premières lectures de `table` échouent (hôte occupé, réponse perdue) ; elles comptent dans `readsOf`, comme une lecture qui part.
+function failFirstReads(doc, table, times) {
+  const real = doc.fetchTable.bind(doc);
+  let left = times;
+  doc.fetchTable = (name) => {
+    if (name === table && left > 0) {
+      left--;
+      doc.log.push({ name: 'fetchTable', arg: name, depth: 0, failed: true });
+      return Promise.reject(new Error('lecture perdue (essai)'));
+    }
+    return real(name);
+  };
+}
 
 // Un document « type » : deux tables à lire seulement pour leurs colonnes, la table des modèles (complète ou amputée de `without`), celle des liens.
 function makeDoc({ latencyMs = 0, without = [], modeles = true, rows = 2 } = {}) {
@@ -240,6 +256,35 @@ async function main() {
     await Promise.all([run('Templates.loadAll()'), run('Templates.loadAll()')]);
     const added = doc.actions.filter((a) => a[0] === 'AddVisibleColumn').map((a) => a[2]);
     check('deux loadAll en même temps : la colonne n\'est ajoutée qu\'UNE fois', sameList(added, ['Margins']), added);
+  }
+
+  // 5 bis. Un document d'avant, dont chacune des huit migrations a une colonne à ajouter : la table est lue DEUX fois (au départ, puis à la fin pour rendre les modèles avec leurs nouvelles
+  // colonnes), pas une fois de plus par migration (avant : dix lectures de suite, ~8 s sur une table de 16 Mo, constatées par GFS à l'ouverture d'un gros document).
+  {
+    const doc = makeDoc({ without: MIGRATED_COLUMNS });
+    const { run, errors } = fresh(doc);
+    const templates = await run('Templates.loadAll()');
+    const added = doc.actions.filter((a) => a[0] === 'AddVisibleColumn').map((a) => a[2]);
+    check('document d\'avant : la table est lue deux fois (départ et fin), pas une fois par migration (avant : dix)', doc.readsOf('Publipostage_Modeles') === 2, doc.readsOf('Publipostage_Modeles'));
+    check('document d\'avant : chaque colonne manquante est ajoutée une fois, une écriture par migration', sameList(added.slice().sort(), MIGRATED_COLUMNS.slice().sort()) && doc.log.filter((c) => c.name === 'applyUserActions').length === 8, added);
+    check('document d\'avant : les modèles sont rendus avec leurs colonnes, sans erreur', templates.length === 2 && MIGRATED_COLUMNS.every((c) => doc.tables.Publipostage_Modeles.names.includes(c)) && errors.length === 0, errors);
+    doc.resetLog();
+    await run('Templates.loadAll()');
+    check('document d\'avant : le passage suivant ne relit qu\'une fois et n\'écrit plus rien', doc.readsOf('Publipostage_Modeles') === 1 && doc.log.length === 1, doc.log.map((c) => c.name + ':' + c.arg));
+  }
+
+  // 5 ter. La première lecture de la table échoue une fois (hôte occupé, réponse perdue) : elle est refaite UNE fois. Avant, chaque migration relisait alors la table entière (neuf lectures
+  // de suite, ~8 s sur 16 Mo, constatées par GFS à une ouverture à froid sur six), sans rien écrire ni dire.
+  {
+    const doc = makeDoc();
+    failFirstReads(doc, 'Publipostage_Modeles', 1);
+    const { run, errors } = fresh(doc);
+    const templates = await run('Templates.loadAll()');
+    check('première lecture en échec : la table est relue une fois (l\'échec et la lecture ; avant : neuf lectures de plus)', doc.readsOf('Publipostage_Modeles') === 2, doc.readsOf('Publipostage_Modeles'));
+    check('première lecture en échec : rien n\'est écrit, aucune erreur, les modèles sont rendus', doc.actions.length === 0 && errors.length === 0 && templates.length === 2, { actions: doc.actions.length, errors });
+    doc.resetLog();
+    await run('Templates.loadAll()');
+    check('première lecture en échec : le passage suivant ne relit qu\'une fois', doc.readsOf('Publipostage_Modeles') === 1 && doc.log.length === 1, doc.log.map((c) => c.name + ':' + c.arg));
   }
 
   // === GristAPI.init : schéma rapide ===

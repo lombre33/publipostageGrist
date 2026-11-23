@@ -42,11 +42,14 @@ const Templates = (function () {
     // Pour l'ouverture, `columns` (les colonnes que la migration garantit, [] pour la table elle-même) inscrit la migration dans `columnMigrations` :
     // loadAll lit la table une seule fois et tient pour faites celles dont toutes les colonnes s'y trouvent, au lieu d'une lecture complète par
     // migration (contenus et images compris). Sans `columns`, une migration n'est jamais tenue pour faite d'avance : elle tourne au premier appel.
+    //
+    // `known` (facultatif) : l'ensemble des colonnes que loadAll vient de lire dans la table. Une migration qui doit ajouter une colonne s'en sert au lieu de relire la table entière : sur une
+    // table de 16 Mo, un document d'avant (huit colonnes à ajouter) relisait neuf fois de suite, ~8 s (constaté par GFS), et une première lecture qui échouait une fois aussi (cf. loadAll).
     let inFlight = null;
-    function ensure() {
+    function ensure(known) {
       if (!inFlight) {
         migrationRuns++;
-        inFlight = worker().then(ok => { if (!ok) inFlight = null; return ok; }, error => { inFlight = null; throw error; });
+        inFlight = worker(known).then(ok => { if (!ok) inFlight = null; return ok; }, error => { inFlight = null; throw error; });
       }
       return inFlight;
     }
@@ -78,15 +81,17 @@ const Templates = (function () {
   function ensureColumns(columns) {
     // Migration d'une table existante : ajoute les colonnes `columns` ([id, type, libellé]) qui manquent, sans rien faire pour celles qui sont là
     // (AddTable ne sert qu'aux documents neufs). `columns` est aussi ce que loadAll sait d'une migration déjà faite (cf. ensureOnce).
-    return ensureOnce(async function () {
+    return ensureOnce(async function (known) {
       await ensureTableExists();
       // Un compte Lecteur de Grist n'écrit rien et n'essaie pas : Grist refuserait l'ajout (js/grist-api.js:isDocumentReadOnly). La colonne qui manque à un document d'avant elle se lit vide (templateFromRow) et le premier
       // compte qui modifie le document la crée à son tour.
       if (GristAPI.isDocumentReadOnly()) return false;
       try {
-        const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
-        const actions = columns.filter(([id]) => !(id in tableData)).map(([id, type]) => ['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false }]);
+        // Les colonnes de la table : celles que loadAll vient de lire (`known`, qui reçoit aussi les colonnes ajoutées) ; sans lui (un enregistrement, un module qui demande sa colonne), une lecture.
+        const present = known instanceof Set ? known : new Set(Object.keys(await SchemaColumns.docApi.fetchTable(TABLE_NAME)));
+        const actions = columns.filter(([id]) => !present.has(id)).map(([id, type]) => ['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false }]);
         if (actions.length) await SchemaColumns.docApi.applyUserActions(actions);
+        actions.forEach(action => present.add(action[2]));
         return true;
       } catch (e) {
         console.error('Erreur migration des colonnes ' + columns.map(([id]) => id).join(', '), e);
@@ -162,9 +167,9 @@ const Templates = (function () {
   // La colonne « Modifié par » existe-t-elle (ou vient-elle d'être créée) ? Faux quand la personne n'a pas le droit d'ajouter une colonne : l'enregistrement la laisse alors de côté (un UpdateRecord sur une
   // colonne inconnue annulerait tout le lot) et ne retente pas avant dix minutes.
   let modifiedByRetryAt = 0;
-  async function modifiedByColumnReady() {
+  async function modifiedByColumnReady(known) {
     if (Date.now() < modifiedByRetryAt) return false;
-    try { if (await ensureModifiedByColumn()) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
+    try { if (await ensureModifiedByColumn(known)) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
     modifiedByRetryAt = Date.now() + 10 * 60 * 1000;
     return false;
   }
@@ -172,9 +177,9 @@ const Templates = (function () {
   // La colonne « Attachments » existe-t-elle (ou vient-elle d'être créée) ? Même règle que « Modifié par » : faux quand la personne n'a pas le droit d'ajouter une colonne, l'enregistrement la laisse alors de côté
   // (un UpdateRecord sur une colonne inconnue annulerait tout le lot, et aucun modèle ne s'enregistrerait plus) et ne retente pas avant dix minutes.
   let pjRetryAt = 0;
-  async function pjColumnReady() {
+  async function pjColumnReady(known) {
     if (Date.now() < pjRetryAt) return false;
-    try { if (await ensurePjColumn()) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
+    try { if (await ensurePjColumn(known)) return true; } catch (e) { /* refus de créer la table : l'enregistrement le dira lui-même */ }
     pjRetryAt = Date.now() + 10 * 60 * 1000;
     return false;
   }
@@ -512,19 +517,25 @@ const Templates = (function () {
     const writtenAtStart = cacheWrites;
     const readStartedAt = Date.now();
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
-    const first = await readTable();
+    let first = await readTable();
+    // Une lecture qui échoue ne dit rien des colonnes, et sans elle chaque migration relit la table entière : neuf lectures de suite, ~8 s sur une table de 16 Mo (constaté par GFS, une ouverture sur six).
+    // Une seule nouvelle tentative avant de s'y résoudre (une table absente, un document neuf, échoue vite aux deux).
+    if (!first) first = await readTable();
     if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
+    // Les colonnes de cette lecture, que les migrations de ce passage se passent de l'une à l'autre (celles qu'elles ajoutent y entrent) au lieu de relire la table : un document d'avant, dont huit colonnes
+    // manquent, lit sa table deux fois (au départ et à la fin) et non dix.
+    const known = first ? new Set(Object.keys(first)) : null;
     const runsBefore = migrationRuns;
     try {
       await ensureTableExists();
-      await ensureHeaderFooterColumn();
-      await ensureDefaultColumn();
-      await ensureMarginsColumn();
-      await ensureDateModifColumn();
-      await ensureEmailColumns();
-      await pjColumnReady();
-      await ensureTrackChangesColumn();
-      await modifiedByColumnReady();
+      await ensureHeaderFooterColumn(known);
+      await ensureDefaultColumn(known);
+      await ensureMarginsColumn(known);
+      await ensureDateModifColumn(known);
+      await ensureEmailColumns(known);
+      await pjColumnReady(known);
+      await ensureTrackChangesColumn(known);
+      await modifiedByColumnReady(known);
     } catch (e) {
       // Table refusée par la personne : aucun modèle à lire, et rien d'une erreur (ni ici ni dans le démarrage qui attend cette liste).
       if (!GristAPI.isTablesDeclined(e)) throw e;
