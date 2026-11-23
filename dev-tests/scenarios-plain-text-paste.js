@@ -101,6 +101,63 @@
     },
   });
 
+  // Retour du 23/11, juste après : « je recopie depuis l'éditeur vers un éditeur de texte, j'ai deux sauts de ligne à chaque fois ». Le texte brut d'une copie séparait chaque paragraphe par une ligne
+  // vide (le « \n\n » de ProseMirror) : comme une ligne collée est un paragraphe (plus haut), un texte collé puis recopié doublait ses lignes. Un paragraphe est une ligne (`blockSeparator: '\n'`
+  // du `clipboardTextSerializer` de TipTap, js/editor.js `coreExtensionOptions`) : ce qui est collé revient à l'identique, une ligne vide est un paragraphe vide, comme dans Word et Google Docs.
+  async function copyText(h, html, select) {
+    await h.resetEditor();
+    Editor.setHTML(html);
+    await h.sleep(150);
+    const editor = EditorCore.getEditor();
+    editor.view.focus();
+    if (select) select(editor); else editor.commands.selectAll();
+    await h.sleep(80);
+    const dt = new DataTransfer();
+    editor.view.dom.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+    return { plain: dt.getData('text/plain'), html: dt.getData('text/html') };
+  }
+
+  cases.push({
+    id: 'plain_text_copy_writes_one_line_per_paragraph',
+    description: 'Le texte brut d\'une copie met un paragraphe par ligne : deux paragraphes se suivent sur deux lignes (pas séparés par une ligne vide), un paragraphe vide est une ligne vide, un saut de ligne forcé reste un retour, un titre, une puce et un paragraphe font chacun une ligne ; le HTML copié est le même qu\'avant',
+    run: async (h) => {
+      const bad = [];
+      const check = async (label, html, want) => {
+        const got = (await copyText(h, html)).plain;
+        if (got !== want) bad.push(label + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(want));
+      };
+      await check('paragraphes', '<p>Ligne un</p><p>Ligne deux</p><p></p><p>Para deux</p>', 'Ligne un\nLigne deux\n\nPara deux');
+      await check('saut forcé', '<p>Ligne un<br>Ligne deux</p><p>Autre</p>', 'Ligne un\nLigne deux\nAutre');
+      await check('titre, puces, paragraphe', '<h1>Titre</h1><ul><li><p>a</p></li><li><p>b</p></li></ul><p>Fin</p>', 'Titre\na\nb\nFin');
+      const copied = await copyText(h, '<p>Un <strong>gras</strong></p><p>Deux</p>');
+      if (!/<strong>gras<\/strong>/.test(copied.html) || (copied.html.match(/<p\b/g) || []).length !== 2) bad.push('html : ' + copied.html);
+      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'une ligne par paragraphe' };
+    },
+  });
+
+  cases.push({
+    id: 'plain_text_pasted_then_copied_comes_back_identical',
+    description: 'Un texte brut collé puis recopié revient à l\'identique (lignes vides comprises) : Notepad++ → document → éditeur de texte ne double plus ses lignes',
+    run: async (h) => {
+      const bad = [];
+      const text = ['# Titre', 'Ligne un', 'Ligne deux', '', 'Para deux', '', '', 'Para trois'];
+      await h.resetEditor();
+      Editor.setHTML('<p></p>');
+      await h.focusAtEnd();
+      const dt = new DataTransfer();
+      dt.setData('text/plain', text.join('\r\n'));
+      EditorCore.getEditor().view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await h.sleep(150);
+      const editor = EditorCore.getEditor();
+      editor.commands.selectAll();
+      await h.sleep(80);
+      const out = new DataTransfer();
+      editor.view.dom.dispatchEvent(new ClipboardEvent('copy', { clipboardData: out, bubbles: true, cancelable: true }));
+      if (out.getData('text/plain') !== text.join('\n')) bad.push('aller-retour : ' + JSON.stringify(out.getData('text/plain')));
+      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'aller-retour identique' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.plainTextPaste = cases;
 })();

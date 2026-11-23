@@ -414,11 +414,20 @@ const Editor = (function () {
     return new (doc.slice(0, 0).constructor)(doc.content.constructor.fromArray(paragraphs), 0, 0);
   }
 
+  // Le texte brut d'une copie : une ligne par bloc de texte (un paragraphe, un titre, une ligne de puce), jamais séparés par une ligne vide. Celui de ProseMirror et de TipTap met « \n\n » entre les
+  // blocs (et un de plus à chaque bloc qui en contient d'autres : une puce en écrivait six) : un texte collé de Notepad++ (une ligne, un paragraphe : plainTextToSlice) puis recopié dans un éditeur de
+  // texte doublait ses lignes (relevé du 23/11 : « deux sauts de ligne à chaque fois »). Ici un paragraphe est une ligne, un paragraphe vide est une ligne vide : ce qui est collé revient à l'identique,
+  // comme depuis Word ou Google Docs. Un nœud sans texte propre (le retour à la ligne forcé, une tabulation, un renvoi, un smiley) donne celui que son extension déclare (`renderText`, devenu
+  // `spec.toText`), comme le texte par défaut de TipTap ; les autres (une bulle de variable, une image) n'en ont aucun, comme avant. Une sélection de cases reste un tableau tabulé (TableSelect).
+  const copiedLeafText = node => (node.type.spec.toText ? node.type.spec.toText({ node }) : '');
+  function copiedPlainText(slice) {
+    return TableSelect.clipboardText(slice) || slice.content.textBetween(0, slice.content.size, '\n', copiedLeafText);
+  }
+
   function clipboardProps() {
     return {
-      // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le
-      // reste garde le texte par défaut.
-      clipboardTextSerializer: slice => TableSelect.clipboardText(slice),
+      // Copier une sélection de cases : le texte brut est un tableau tabulé (js/table-select.js), le HTML reste le tableau des cases ; tout le reste, une ligne par paragraphe (copiedPlainText).
+      clipboardTextSerializer: copiedPlainText,
       // Le texte brut collé garde ses lignes vides (plainTextToSlice) : une ligne, un paragraphe.
       clipboardTextParser: plainTextToSlice,
       // Le remplissage que Windows ajoute autour du HTML copié est retiré d'abord (withoutFragmentPadding : sans lui, une variable copiée seule se colle suivie de deux sauts de ligne),
