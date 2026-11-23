@@ -27,15 +27,17 @@
 .tiptap ul, .tiptap ol, .reader-content ul, .reader-content ol { margin: 0; padding-left: 1.4em; }
 /* Puces : les mêmes caractères que l'export PDF (BULLET_MARKERS, js/pdf-export.js), pas les ○ et ■ natifs du navigateur : '°' et '*' sont les
    seuls caractères que les polices embarquées sachent afficher en PDF. Ces trois valeurs doivent rester identiques à BULLET_MARKERS. */
-.tiptap ul li::marker,
-.reader-content ul li::marker { content: '• '; }
-.tiptap ul[data-bullet-style="circle"] li::marker,
-.reader-content ul[data-bullet-style="circle"] li::marker { content: '° '; }
-.tiptap ul[data-bullet-style="square"] li::marker,
-.reader-content ul[data-bullet-style="square"] li::marker { content: '* '; }
+/* `li:not(ol > li)` : le signe d'une puce ne se pose que sur un point de liste À PUCES. Une liste numérotée sous une puce (js/list-kind.js : chaque ligne a son genre) est un descendant du `ul` : sans cela, le « • » de sa
+   ligne mère remplaçait ses numéros. */
+.tiptap ul li:not(ol > li)::marker,
+.reader-content ul li:not(ol > li)::marker { content: '• '; }
+.tiptap ul[data-bullet-style="circle"] li:not(ol > li)::marker,
+.reader-content ul[data-bullet-style="circle"] li:not(ol > li)::marker { content: '° '; }
+.tiptap ul[data-bullet-style="square"] li:not(ol > li)::marker,
+.reader-content ul[data-bullet-style="square"] li:not(ol > li)::marker { content: '* '; }
 /* Le signe choisi pour la liste (« Puce… », js/bullet-format.js) : écrit en variable CSS sur la liste avec un espace après lui ; il l'emporte sur le style de la liste, qu'un des trois boutons de style retire. */
-.tiptap ul[data-bullet-char] li::marker,
-.reader-content ul[data-bullet-char] li::marker { content: var(--pp-bullet-char); }
+.tiptap ul[data-bullet-char] li:not(ol > li)::marker,
+.reader-content ul[data-bullet-char] li:not(ol > li)::marker { content: var(--pp-bullet-char); }
 /* Le rond, le tiret ou le numéro suit la couleur et la taille du début du texte de son point (js/list-markers.js : l'éditeur pose les deux variables en décoration, la Lecture et les exports sur le HTML résolu). Une
    variable CSS s'hérite : sans la remise à zéro du <li>, une sous-liste recevrait le réglage de son parent ; le style en ligne que porte un point l'emporte sur elle. Sans variable, la couleur et la taille du point,
    comme avant. */
@@ -49,15 +51,16 @@
    Sans attribut ou « accentStrike » (défaut) : case bleue d'accent, texte barré et grisé une fois cochée. « classic » : case carrée à coche noire
    native (`accent-color: auto`), texte jamais barré. « accentPlain » : même case d'accent, texte qui reste normal une fois cochée. */
 .tiptap ul[data-type="taskList"], .reader-content ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-.tiptap ul[data-type="taskList"] li, .reader-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 6px; }
+/* Les points de la liste à cases seuls (`> li`) : une puce ou un numéro peut se trouver sous une case (js/list-kind.js), et son point garde sa puce. */
+.tiptap ul[data-type="taskList"] > li, .reader-content ul[data-type="taskList"] > li { display: flex; align-items: flex-start; gap: 6px; }
 /* La case est au milieu de la première ligne du texte, quel que soit le style et sans rien devoir à la ligne de base que le navigateur donne à une case native : l'étiquette est une boîte flexible qui n'a que la
    case pour contenu (la case y devient un bloc, sans marge au-dessus ni en dessous), posée sous le haut de la ligne de la moitié de ce que la ligne a de plus que la case, soit (interligne - 15 px) / 2 : la ligne fait
    1,42 em (celle de `.tiptap` et de `.reader-content`), d'où .71em - 7,5 px, un calcul en em pour qu'il suive la taille du texte et le zoom de la feuille, comme les .2em d'avant.
    Avant, la case native gardait les 3 px de marge que le navigateur lui donne en haut et en bas, en plus des .2em de l'étiquette : dans Chromium les styles « accent » étaient 3,3 px sous le milieu de la ligne (« classic »,
    sans marge, 0,3 px), et un élément d'une ligne faisait 26,5 px (« accent ») ou 23,5 px (« classic ») au lieu des 19,9 px de la ligne, que le PDF lui donne : il fait maintenant la hauteur de sa ligne. Les marges de gauche (4 px)
    et de droite (3 px) restent celles de la case native, écrites ici pour que le texte parte au même endroit partout. */
-.tiptap ul[data-type="taskList"] li > label, .reader-content ul[data-type="taskList"] li > label { flex: none; display: flex; margin-top: calc(.71em - 7.5px); }
-.tiptap ul[data-type="taskList"] li > div, .reader-content ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.tiptap ul[data-type="taskList"] > li > label, .reader-content ul[data-type="taskList"] > li > label { flex: none; display: flex; margin-top: calc(.71em - 7.5px); }
+.tiptap ul[data-type="taskList"] > li > div, .reader-content ul[data-type="taskList"] > li > div { flex: 1; min-width: 0; }
 .tiptap ul[data-type="taskList"] input[type="checkbox"],
 .reader-content ul[data-type="taskList"] input[type="checkbox"] { width: 15px; height: 15px; margin: 0 3px 0 4px; }
 .tiptap ul[data-type="taskList"]:not([data-tasklist-style="classic"]) input[type="checkbox"],

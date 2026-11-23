@@ -95,7 +95,11 @@ const BulletFormat = (function () {
   }
 
   // La ligne du menu : grisée, avec sa raison, hors d'une liste à puces.
-  const locked = editor => (editor && editor.isActive('bulletList') ? null : 'bulletFormat.notHere');
+  // C'est la liste de la LIGNE du curseur qui compte (js/list-kind.js) : une ligne numérotée ou à case sous une puce n'a pas de puce à régler, même si sa ligne mère en a une.
+  const locked = (editor) => {
+    const own = editor ? ListKind.innermost(editor.state.selection.$from) : null;
+    return own && own.kind === 'bullet' ? null : 'bulletFormat.notHere';
+  };
   function syncRow(row, editor) {
     if (!row || !editor) return;
     const reason = locked(editor);

@@ -924,10 +924,17 @@ const EditorCore = (function () {
     // les touches Ctrl+Maj+8 et Ctrl+Maj+7 (js/shortcuts.js). Sur une sélection de cases, dans toutes les cases, l'état voulu étant l'inverse de celui
     // que montre la case de tête : enfoncé, un appui retire la liste de chaque case, sinon il la pose dans chacune. Hors sélection de cases, c'est la
     // bascule de TipTap.
+    //
+    // Une ligne qui a déjà une puce, un numéro ou une case prend le genre demandé pour elle seule, à son niveau (ListKind.convert, js/list-kind.js) : le bouton ne change plus la liste entière.
     const wanted = !editor.isActive(name);
+    const kind = ListKind.KIND_OF_LIST[name];
     return runOnSelectedCells(
-      () => editor.chain().focus()[command]().run(),
-      chain => chain.command(({ state, commands }) => { if (isInsideNode(state.selection.$from, name) !== wanted) commands[command](); return true; }));
+      () => editor.chain().focus().command(({ tr, commands }) => ListKind.convert(tr, kind) || commands[command]()).run(),
+      chain => chain.command(({ tr, state, commands }) => {
+        if (ListKind.convert(tr, kind)) return true;
+        if (isInsideNode(state.selection.$from, name) !== wanted) commands[command]();
+        return true;
+      }));
   }
 
   // Le niveau d'un point de liste : Tab, Maj+Tab et les boutons de retrait le changent pour le point qui porte le curseur, une case à cocher (`taskItem`) comme une puce ou un numéro
@@ -951,15 +958,20 @@ const EditorCore = (function () {
   function canShiftListItem(ed, direction) {
     // Le retrait ('in') ou le retrait inverse ('out') du point du curseur a-t-il quelque chose à faire ? (sinon le bouton reste grisé)
     const name = listItemNameAt(ed.state.selection.$from);
-    return !!name && (direction === 'in' ? ed.can().sinkListItem(name) : ed.can().liftListItem(name));
+    if (!name) return false;
+    if (direction === 'out') return ed.can().liftListItem(name);
+    // Une ligne qui ouvre sa liste glisse sous la liste d'avant, même d'un autre genre (ListKind.sink) : le bouton n'est pas grisé pour autant.
+    return ed.can().sinkListItem(name) || ListKind.sink(ed.state.tr);
   }
   function shiftListItem(ed, direction) {
     // Descend ('in') le point de liste du curseur d'un niveau, sous le point qui le précède, ou le remonte ('out'). Vrai quand le curseur est dans une liste, même quand rien ne bouge (le premier point n'a
     // aucun frère avant lui où s'emboîter) : la touche Tab est alors prise quand même, jamais de repli sur une tabulation écrite dans le texte ou sur la case suivante d'un tableau.
     const name = listItemNameAt(ed.state.selection.$from);
     if (!name) return false;
-    if (direction === 'out') ed.chain().focus().liftListItem(name).run();
+    // La ligne garde son genre en changeant de niveau (js/list-kind.js) : Tab sur la première ligne d'une liste la glisse sous la liste d'avant, Maj+Tab sort une ligne de la liste d'une autre sorte que celle de sa ligne mère.
+    if (direction === 'out') ed.chain().focus().command(({ tr, commands }) => ListKind.lift(tr) || commands.liftListItem(name)).run();
     else ed.chain().focus().command(({ commands, tr }) => {
+      if (ListKind.sink(tr)) return true;
       if (!commands.sinkListItem(name)) return false;
       if (name === 'taskItem') inheritTaskListSettings(tr);
       return true;

@@ -198,13 +198,14 @@
 
   cases.push({
     id: 'tasknest_a_task_holds_only_text_and_subtasks',
-    description: 'Une case ne reçoit toujours que du texte et ses sous-cases : le schéma de la case n\'est pas ouvert à n\'importe quel bloc (un tableau n\'y entre pas, cf. nest_checklist_item_no_nested_block)',
+    description: 'Une case ne reçoit que du texte et des sous-listes (cases, puces ou numéros : une puce, un numéro ou une case à chaque ligne, js/list-kind.js) : le schéma de la case n\'est pas ouvert à n\'importe quel bloc (un tableau n\'y entre pas, cf. nest_checklist_item_no_nested_block)',
     run: async (h) => {
       await h.resetEditor();
       const item = editor().schema.nodes.taskItem;
-      const blocks = ['table', 'bulletList', 'blockquote', 'codeBlock', 'heading'].filter(name => item.contentMatch.matchType(editor().schema.nodes.paragraph).matchType(editor().schema.nodes[name]));
-      const subtasks = !!item.contentMatch.matchType(editor().schema.nodes.paragraph).matchType(editor().schema.nodes.taskList);
-      return { pass: subtasks && blocks.length === 0, notes: JSON.stringify({ subtasks, blocks }) };
+      const afterText = item.contentMatch.matchType(editor().schema.nodes.paragraph);
+      const blocks = ['table', 'blockquote', 'codeBlock', 'heading'].filter(name => afterText.matchType(editor().schema.nodes[name]));
+      const subLists = ['taskList', 'bulletList', 'orderedList'].filter(name => afterText.matchType(editor().schema.nodes[name]));
+      return { pass: subLists.length === 3 && blocks.length === 0, notes: JSON.stringify({ subLists, blocks }) };
     },
   });
 

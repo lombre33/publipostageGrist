@@ -459,10 +459,13 @@ const Editor = (function () {
       EditorNodes.createBulletStyleExtension(Extension),
       EditorNodes.createOrderedListStyleExtension(Extension),
       TaskList,
-      // Une case peut porter des sous-cases : Tab la glisse sous la case qui la précède, comme pour une puce (js/editor-nodes.js:createTabNavigationExtension). Le contenu reste
-      // celui d'une case (du texte, puis ses sous-cases) : `nested` seul ouvrirait la case à tout bloc (`paragraph block*`), un tableau compris, que scenarios-nesting.js refuse.
-      TaskItem.extend({ content: 'paragraph+ taskList*' }).configure({ nested: true }),
+      // Une case peut porter des sous-listes : Tab la glisse sous la case qui la précède, comme pour une puce (js/editor-nodes.js:createTabNavigationExtension), et chaque ligne a sa puce, son numéro ou sa case
+      // (js/list-kind.js) : sous une case, des cases, des puces ou des numéros. Le contenu reste celui d'une case (du texte, puis ses sous-listes) : `nested` seul ouvrirait la case à tout bloc
+      // (`paragraph block*`), un tableau compris, que scenarios-nesting.js refuse.
+      TaskItem.extend({ content: 'paragraph+ (taskList | bulletList | orderedList)*' }).configure({ nested: true }),
       EditorNodes.createTaskListStyleExtension(Extension),
+      // Une puce, un numéro ou une case à chaque ligne : les touches Ctrl+Maj+7, 8 et 9 changent la ligne du curseur, pas toute la liste (js/list-kind.js).
+      ListKind.createExtension(Extension),
       // `includeChildren` n'est volontairement pas activé (défaut false) : un placeholder par cellule de tableau ou colonne vide encombrerait
       // l'écran de plusieurs textes gris, alors que seul le document principal, pris dans son ensemble, doit en montrer un. `placeholder` est une
       // fonction, pas une chaîne figée à la construction : l'extension la relit à chaque recalcul de décoration, et ce même éditeur sert à

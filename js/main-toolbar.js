@@ -312,10 +312,13 @@ const MainToolbar = (function () {
     currentAlign = aligned[0] || 'left';
     const alignMain = byId('v2-btn-align-main');
     if (alignMain) Dom.setMarkup(alignMain, Icons.svg('align' + currentAlign[0].toUpperCase() + currentAlign.slice(1)));
-    // Le bouton « Liste » est enfoncé dès qu'un des trois types de liste l'est.
-    setActive('v2-btn-bullet', Object.keys(LIST_STYLES).some(list => editor.isActive(list)));
+    // Le bouton « Liste » est enfoncé dès qu'un des trois types de liste l'est. C'est la liste de la LIGNE du curseur qui dit le genre et le style : une ligne numérotée sous une puce n'enfonce pas aussi la puce de
+    // sa ligne mère (js/list-kind.js). Une sélection de cases n'est dans aucune liste : l'éditeur répond comme avant.
+    const own = EditorCore.isCellSelection(editor.state.selection) ? undefined : ListKind.innermost(editor.state.selection.$from);
+    const onList = list => (own === undefined ? editor.isActive(list) : !!own && own.node.type.name === list);
+    setActive('v2-btn-bullet', Object.keys(LIST_STYLES).some(onList));
     Object.entries(LIST_STYLES).forEach(([list, { attr, fallback, buttons }]) => {
-      const style = editor.isActive(list) ? editor.getAttributes(list)[attr] || fallback : null;
+      const style = onList(list) ? (own ? own.node.attrs[attr] : editor.getAttributes(list)[attr]) || fallback : null;
       Object.entries(buttons).forEach(([id, name]) => setActive(id, style === name));
     });
   }
@@ -762,15 +765,29 @@ const MainToolbar = (function () {
     bind('v2-btn-bullet', () => EditorCore.toggleList('bulletList', 'toggleBulletList'));
     // Style d'une liste : la crée si le curseur n'y est pas (dans chaque case d'une sélection de cases), sinon change seulement le style de la liste
     // existante.
-    const applyListStyle = (name, command, attrs) => EditorCore.runOnSelectedCells(
-      () => {
-        const chain = editor.chain().focus();
-        if (!editor.isActive(name)) chain[command]();
-        chain.updateAttributes(name, attrs).run();
-      },
-      chain => chain
-        .command(({ state, commands }) => { if (!EditorCore.isInsideNode(state.selection.$from, name)) commands[command](); return true; })
-        .updateAttributes(name, attrs));
+    // Une ligne qui a une autre puce, un autre numéro ou une autre case change de genre pour elle seule, à son niveau, et sa liste neuve prend le style du bouton (ListKind.convert, js/list-kind.js) ; le style d'une
+    // liste qui a déjà ce genre se règle comme avant, pour la liste entière.
+    const applyListStyle = (name, command, attrs) => {
+      const kind = ListKind.KIND_OF_LIST[name];
+      // Chaque commande de la chaîne lit l'état que la précédente a laissé : poser la liste, puis régler son style, sont deux commandes (pas la suite d'un même rappel, qui lirait encore l'état d'avant).
+      let converted = false;
+      return EditorCore.runOnSelectedCells(
+        () => editor.chain().focus()
+          .command(({ tr, commands }) => {
+            converted = ListKind.convert(tr, kind, attrs);
+            if (!converted && !editor.isActive(name)) commands[command]();
+            return true;
+          })
+          .command(({ commands }) => (converted ? true : commands.updateAttributes(name, attrs)))
+          .run(),
+        chain => chain
+          .command(({ tr, state, commands }) => {
+            converted = ListKind.convert(tr, kind, attrs);
+            if (!converted && !EditorCore.isInsideNode(state.selection.$from, name)) commands[command]();
+            return true;
+          })
+          .command(({ commands }) => (converted ? true : commands.updateAttributes(name, attrs))));
+    };
     // Un bouton par style, révélés au survol du bouton « Liste à puces » (table LIST_STYLES).
     Object.entries(LIST_STYLES).forEach(([list, { attr, command, buttons }]) =>
       Object.entries(buttons).forEach(([id, style]) => bind(id, () => applyListStyle(list, command, Object.assign({ [attr]: style }, list === 'bulletList' ? { bulletChar: null } : {})))));
