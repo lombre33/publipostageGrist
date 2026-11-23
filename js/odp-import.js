@@ -35,7 +35,7 @@ const OdpImport = (function () {
   };
   // Les genres du compte rendu, dans l'ordre où la fenêtre les dit : ce qui n'arrive pas ou arrive remplacé, puis les effets, enfin les limites. Les genres que le texte d'un objet compte (js/odt-import.js : polices,
   // tabulations, numérotations...) viennent après, avec les mots de l'import des documents (`scope: 'odt'`).
-  const REPORT_KEYS = ['animations', 'charts', 'embedded', 'media', 'freeDrawings', 'images', 'shapes', 'imageEffects', 'gradients', 'patterns', 'slidePatterns', 'shadows', 'transitions', 'masterObjects', 'slidesCut', 'unreadable'];
+  const REPORT_KEYS = ['animations', 'charts', 'embedded', 'media', 'freeDrawings', 'pathEnds', 'objectLinks', 'images', 'shapes', 'imageEffects', 'gradients', 'patterns', 'slidePatterns', 'shadows', 'transitions', 'masterObjects', 'slidesCut', 'unreadable'];
   const TEXT_KEYS = ['fonts', 'tabs', 'rightIndent', 'paragraphBorders', 'numbering', 'hidden', 'fields', 'nestedTables', 'borderStyles', 'links', 'tableCells', 'images', 'floatingImages', 'imageEffects'];
   const PLACEHOLDER_CLASSES = new Set(['title', 'outline', 'subtitle', 'notes', 'header', 'footer', 'date-time', 'page-number', 'handout', 'page', 'graphic', 'object', 'chart', 'orgchart', 'table', 'text']);
 
@@ -191,6 +191,190 @@ const OdpImport = (function () {
     return box ? box.getBoundingClientRect().height / PX_PER_PT : 0;
   }
 
+  // --- Les tracés libres --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Un tracé du fichier (`draw:path` : données SVG `svg:d` ; `draw:polygon`, `draw:polyline` : une liste de points ; `draw:regular-polygon` ; une forme `non-primitive` dont `draw:enhanced-path` n'est que des
+  // nombres et des commandes de tracé) devient une FORME LIBRE de l'éditeur, comme celles que l'import PowerPoint reprend (js/shape-presets.js : `freeze`, le nom de la forme EST sa géométrie). Un tracé trop
+  // détaillé pour un nom de forme, ou sans surface ni ligne à dessiner, reste compté (`freeDrawings`).
+  const MAX_PATH_TOKENS = 60000;
+  const PATH_TOKEN = /([A-Za-z])|(-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)/g;
+  const PATH_ARITY = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 };
+  // L'arc SVG (forme « points d'arrivée » : rayons, rotation, grand arc, sens) en courbes de Bézier d'au plus un quart de tour (norme SVG, annexe F.6).
+  function arcCurves(x1, y1, rx, ry, turnDeg, large, sweep, x2, y2) {
+    let radiusX = Math.abs(rx);
+    let radiusY = Math.abs(ry);
+    if (!radiusX || !radiusY || (x1 === x2 && y1 === y2)) return [['L', x2, y2]];
+    const phi = (turnDeg % 360) * Math.PI / 180;
+    const cosPhi = Math.cos(phi);
+    const sinPhi = Math.sin(phi);
+    const dx = (x1 - x2) / 2;
+    const dy = (y1 - y2) / 2;
+    const x1p = cosPhi * dx + sinPhi * dy;
+    const y1p = -sinPhi * dx + cosPhi * dy;
+    const grow = (x1p * x1p) / (radiusX * radiusX) + (y1p * y1p) / (radiusY * radiusY);
+    if (grow > 1) { radiusX *= Math.sqrt(grow); radiusY *= Math.sqrt(grow); }
+    const numerator = radiusX * radiusX * radiusY * radiusY - radiusX * radiusX * y1p * y1p - radiusY * radiusY * x1p * x1p;
+    const denominator = radiusX * radiusX * y1p * y1p + radiusY * radiusY * x1p * x1p;
+    const factor = (large === sweep ? -1 : 1) * Math.sqrt(Math.max(0, numerator / denominator));
+    const cxp = factor * (radiusX * y1p) / radiusY;
+    const cyp = factor * -(radiusY * x1p) / radiusX;
+    const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+    const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+    const angle = (ux, uy, vx, vy) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+    const start = angle(1, 0, (x1p - cxp) / radiusX, (y1p - cyp) / radiusY);
+    let sweepAngle = angle((x1p - cxp) / radiusX, (y1p - cyp) / radiusY, (-x1p - cxp) / radiusX, (-y1p - cyp) / radiusY);
+    if (!sweep && sweepAngle > 0) sweepAngle -= 2 * Math.PI;
+    if (sweep && sweepAngle < 0) sweepAngle += 2 * Math.PI;
+    const pieces = Math.max(1, Math.ceil(Math.abs(sweepAngle) / (Math.PI / 2) - 1e-9));
+    const step = sweepAngle / pieces;
+    const k = 4 / 3 * Math.tan(step / 4);
+    const at = (t) => [cx + radiusX * Math.cos(t) * cosPhi - radiusY * Math.sin(t) * sinPhi, cy + radiusX * Math.cos(t) * sinPhi + radiusY * Math.sin(t) * cosPhi];
+    const slope = (t) => [-radiusX * Math.sin(t) * cosPhi - radiusY * Math.cos(t) * sinPhi, -radiusX * Math.sin(t) * sinPhi + radiusY * Math.cos(t) * cosPhi];
+    const out = [];
+    for (let n = 0; n < pieces; n++) {
+      const from = start + step * n;
+      const to = from + step;
+      const p0 = at(from);
+      const p3 = n === pieces - 1 ? [x2, y2] : at(to);
+      const d0 = slope(from);
+      const d3 = slope(to);
+      out.push(['C', p0[0] + k * d0[0], p0[1] + k * d0[1], p3[0] - k * d3[0], p3[1] - k * d3[1], p3[0], p3[1]]);
+    }
+    return out;
+  }
+  // Les données d'un tracé SVG en commandes absolues M, L, C et Z : [['M', x, y], ['L', x, y], ['C', x1, y1, x2, y2, x, y], ['Z']] (les courbes du second degré et les arcs deviennent des courbes cubiques) ;
+  // null quand le texte est illisible ou ne commence pas par un déplacement.
+  function svgCommands(text) {
+    const tokens = [];
+    String(text || '').replace(PATH_TOKEN, (all, letter, number) => { if (tokens.length <= MAX_PATH_TOKENS) tokens.push(letter || Number(number)); return all; });
+    if (!tokens.length || tokens.length > MAX_PATH_TOKENS) return null;
+    const out = [];
+    let command = '';
+    let x = 0;
+    let y = 0;
+    let startX = 0;
+    let startY = 0;
+    let control = null;   // le dernier point de contrôle (pour S et T), avec la lettre de la commande qui l'a posé
+    let i = 0;
+    while (i < tokens.length) {
+      if (typeof tokens[i] === 'string') {
+        command = tokens[i++];
+        if (!(command.toUpperCase() in PATH_ARITY)) return null;
+        if (command === 'Z' || command === 'z') { out.push(['Z']); x = startX; y = startY; control = null; continue; }
+      } else if (!command || command === 'Z' || command === 'z') return null;
+      const upper = command.toUpperCase();
+      const relative = command !== upper;
+      const args = tokens.slice(i, i + PATH_ARITY[upper]);
+      if (args.length < PATH_ARITY[upper] || args.some(arg => typeof arg !== 'number')) return null;
+      i += PATH_ARITY[upper];
+      const ox = relative ? x : 0;
+      const oy = relative ? y : 0;
+      if (upper === 'M') {
+        x = args[0] + ox; y = args[1] + oy; startX = x; startY = y; out.push(['M', x, y]); control = null;
+        command = relative ? 'l' : 'L';   // les couples suivants d'un déplacement sont des droites
+      } else if (upper === 'L') { x = args[0] + ox; y = args[1] + oy; out.push(['L', x, y]); control = null; }
+      else if (upper === 'H') { x = args[0] + ox; out.push(['L', x, y]); control = null; }
+      else if (upper === 'V') { y = args[0] + oy; out.push(['L', x, y]); control = null; }
+      else if (upper === 'C') {
+        out.push(['C', args[0] + ox, args[1] + oy, args[2] + ox, args[3] + oy, args[4] + ox, args[5] + oy]);
+        control = ['C', args[2] + ox, args[3] + oy]; x = args[4] + ox; y = args[5] + oy;
+      } else if (upper === 'S') {
+        const first = control && control[0] === 'C' ? [2 * x - control[1], 2 * y - control[2]] : [x, y];
+        out.push(['C', first[0], first[1], args[0] + ox, args[1] + oy, args[2] + ox, args[3] + oy]);
+        control = ['C', args[0] + ox, args[1] + oy]; x = args[2] + ox; y = args[3] + oy;
+      } else if (upper === 'Q' || upper === 'T') {
+        const point = upper === 'Q' ? [args[0] + ox, args[1] + oy] : (control && control[0] === 'Q' ? [2 * x - control[1], 2 * y - control[2]] : [x, y]);
+        const end = upper === 'Q' ? [args[2] + ox, args[3] + oy] : [args[0] + ox, args[1] + oy];
+        out.push(['C', x + 2 / 3 * (point[0] - x), y + 2 / 3 * (point[1] - y), end[0] + 2 / 3 * (point[0] - end[0]), end[1] + 2 / 3 * (point[1] - end[1]), end[0], end[1]]);
+        control = ['Q', point[0], point[1]]; x = end[0]; y = end[1];
+      } else if (upper === 'A') {
+        const to = [args[5] + ox, args[6] + oy];
+        arcCurves(x, y, args[0], args[1], args[2], args[3] !== 0, args[4] !== 0, to[0], to[1]).forEach(piece => out.push(piece));
+        x = to[0]; y = to[1]; control = null;
+      }
+    }
+    return out.length && out[0][0] === 'M' ? out : null;
+  }
+
+  // La zone de dessin du fichier : `svg:viewBox` (« x y largeur hauteur »), ou null quand il manque ou ne se lit pas.
+  function viewOf(text) {
+    const numbers = String(text || '').trim().split(/[\s,]+/).map(Number);
+    return numbers.length === 4 && numbers.every(Number.isFinite) && numbers[2] > 0 && numbers[3] > 0 ? { x: numbers[0], y: numbers[1], w: numbers[2], h: numbers[3] } : null;
+  }
+  // La zone qu'occupent les commandes d'un tracé (quand le fichier n'a pas dit sa zone de dessin).
+  function boundsOf(subpaths) {
+    const xs = [];
+    const ys = [];
+    subpaths.forEach(sub => sub.commands.forEach((c) => { for (let n = 1; n < c.length; n += 2) { xs.push(c[n]); ys.push(c[n + 1]); } }));
+    if (!xs.length) return null;
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x || 1, h: Math.max(...ys) - y || 1 };
+  }
+  // Une liste de points (`draw:points` : « x,y x,y ... ») en commandes de tracé, fermé pour un polygone.
+  function pointsCommands(text, closed) {
+    const numbers = String(text || '').trim().split(/[\s,]+/).map(Number);
+    if (numbers.length < 4 || numbers.length % 2 || numbers.length > MAX_PATH_TOKENS || !numbers.every(Number.isFinite)) return null;
+    const out = [];
+    for (let n = 0; n < numbers.length; n += 2) out.push([n ? 'L' : 'M', numbers[n], numbers[n + 1]]);
+    if (closed) out.push(['Z']);
+    return out;
+  }
+  // Les tracés d'une forme de genre `non-primitive` (`draw:enhanced-path`) quand ce ne sont que des nombres et les commandes M, L, C, Z, N (fin de tracé), F (sans fond) et S (sans trait) : [{ commands, noFill, noStroke }] ;
+  // null dès qu'une formule (`?f0`, `$0`) ou une autre commande (arcs d'ellipse, quarts) y entre : la forme reste un rectangle, comptée.
+  function enhancedSubpaths(text) {
+    const source = String(text || '');
+    if (/[?$]/.test(source) || !source.trim()) return null;
+    const tokens = [];
+    source.replace(PATH_TOKEN, (all, letter, number) => { if (tokens.length <= MAX_PATH_TOKENS) tokens.push(letter || Number(number)); return all; });
+    if (!tokens.length || tokens.length > MAX_PATH_TOKENS) return null;
+    const subpaths = [];
+    let current = { commands: [], noFill: false, noStroke: false };
+    const close = () => { if (current.commands.length > 1) subpaths.push(current); current = { commands: [], noFill: false, noStroke: false }; };
+    const arity = { M: 2, L: 2, C: 6 };
+    let command = '';
+    let i = 0;
+    while (i < tokens.length) {
+      if (typeof tokens[i] === 'string') {
+        command = tokens[i++];
+        if (command === 'N') { close(); continue; }
+        if (command === 'Z') { current.commands.push(['Z']); continue; }
+        if (command === 'F') { current.noFill = true; continue; }
+        if (command === 'S') { current.noStroke = true; continue; }
+        if (!arity[command]) return null;
+      } else if (!arity[command]) return null;
+      const args = tokens.slice(i, i + arity[command]);
+      if (args.length < arity[command] || args.some(arg => typeof arg !== 'number')) return null;
+      i += arity[command];
+      current.commands.push([command].concat(args));
+      if (command === 'M') command = 'L';
+    }
+    close();
+    return subpaths.length && subpaths[0].commands[0][0] === 'M' ? subpaths : null;
+  }
+  // La forme libre, en nom de forme de l'éditeur : `subpaths` ([{ commands, noFill, noStroke }]), la zone de dessin `view` du fichier et la boîte `box` de l'objet, en points ; '' quand elle ne tient pas dans un nom
+  // de forme ou n'a rien à dessiner. `flip` : { h, v } - la forme retournée dans sa boîte.
+  function freeKind(subpaths, view, box, flip) {
+    if (!subpaths.length || !view || !(box.w > 0 && box.h > 0)) return '';
+    const scale = Math.max(1, Math.min(1000, Math.floor(100000 / Math.max(view.w, view.h))));
+    const units = value => String(Math.round(value * scale * 100) / 100);
+    const specs = subpaths.map((sub) => {
+      const spec = [];
+      if (sub.noFill) spec.push('f0');
+      if (sub.noStroke) spec.push('s0');
+      spec.push('W' + Math.round(view.w * scale), 'H' + Math.round(view.h * scale));
+      sub.commands.forEach((c) => { spec.push(c[0]); for (let n = 1; n < c.length; n += 2) spec.push(units(c[n] - view.x), units(c[n + 1] - view.y)); });
+      return spec.join(' ');
+    });
+    return ShapePresets.freeze({ a: '', g: '', p: specs, r: '' }, box.w, box.h, flip || {});
+  }
+  // La forme libre d'une forme `non-primitive` dont le tracé est simple : son nom de forme, ou ''.
+  function enhancedKind(geometry, box) {
+    if (!geometry || attr(geometry, 'draw:type') !== 'non-primitive') return '';
+    const subpaths = enhancedSubpaths(attr(geometry, 'draw:enhanced-path'));
+    const view = viewOf(attr(geometry, 'svg:viewBox')) || (subpaths && boundsOf(subpaths));
+    return subpaths ? freeKind(subpaths, view, box, { h: attr(geometry, 'draw:mirror-horizontal') === 'true', v: attr(geometry, 'draw:mirror-vertical') === 'true' }) : '';
+  }
+
   // --- Les objets ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les styles d'un objet : le style de présentation (un emplacement : titre, plan...) puis le style graphique, du plus lointain au plus proche.
   function styleLayers(el) {
@@ -250,6 +434,10 @@ const OdpImport = (function () {
       else shape = { kind: 'rect', adj: '' };
     }
     const box = boxOf(ctx, el);
+    if (!forced && !shape.kind && tag === 'draw:custom-shape') {
+      const name = enhancedKind(child(el, 'draw:enhanced-geometry'), box);
+      if (name) shape = { kind: name, adj: '' };
+    }
     const fill = fillOf(ctx, graphic, losses);
     const stroke = strokeOf(ctx, graphic);
     if (graphic['draw:shadow'] === 'visible' && percentOf(graphic['draw:shadow-opacity'], 100) > 0 && (fill.hex || stroke.hex)) losses.add('shadows');
@@ -363,19 +551,42 @@ const OdpImport = (function () {
     ctx.objects += 1;
   }
 
+  // Un objet qui porte une action au clic (`office:event-listeners` : aller à une diapositive, ouvrir un document, un programme, un son...) : que l'éditeur ne reprend pas.
+  function hasClickAction(el) {
+    const listeners = child(el, 'office:event-listeners');
+    return !!listeners && children(listeners, 'presentation:event-listener').some(listener => (attr(listener, 'presentation:action') || 'none') !== 'none');
+  }
+  // Un tracé libre (`draw:path`, `draw:polygon`, `draw:polyline`) : la forme libre de l'éditeur avec le fond, le trait et le texte du fichier ; illisible ou trop détaillé, il est compté. Un polygone est fermé, une ligne
+  // brisée n'a pas de fond ; les pointes d'un tracé ouvert (`draw:marker-start`, `draw:marker-end`) ne sont pas reprises (comptées).
+  async function freeObject(el, env) {
+    const ctx = env.ctx;
+    const tag = name(el);
+    const box = boxOf(ctx, el);
+    const commands = tag === 'draw:path' ? svgCommands(attr(el, 'svg:d')) : pointsCommands(attr(el, 'draw:points'), tag === 'draw:polygon');
+    const subpaths = commands ? [{ commands, noFill: tag === 'draw:polyline', noStroke: false }] : [];
+    const kind = subpaths.length ? freeKind(subpaths, viewOf(attr(el, 'svg:viewBox')) || boundsOf(subpaths), box) : '';
+    if (!kind) { count(ctx, 'freeDrawings'); return; }
+    const graphic = ctx.reader.props(styleLayers(el), 'graphic');
+    if (tag !== 'draw:polygon' && ((graphic['draw:marker-start'] && graphic['draw:marker-start'] !== 'none') || (graphic['draw:marker-end'] && graphic['draw:marker-end'] !== 'none'))) count(ctx, 'pathEnds');
+    await textObject(el, el, env, { kind, adj: '' });
+  }
+
   // Les objets d'une page (diapositive ou page maîtresse) dans l'ordre du fichier ; les groupes sont mis à plat.
   async function objectsOf(parent, env) {
     for (const el of kids(parent)) {
       if (env.seen >= MAX_OBJECTS) { count(env.ctx, 'unreadable'); return; }
       env.seen += 1;
       const tag = name(el);
+      if (!env.layer && hasClickAction(el)) count(env.ctx, 'objectLinks');
       try {
         switch (tag) {
           case 'draw:frame': await frameObject(el, env); break;
           case 'draw:custom-shape': case 'draw:rect': case 'draw:ellipse': case 'draw:circle': case 'draw:caption': await textObject(el, el, env); break;
           case 'draw:line': case 'draw:connector': lineObject(el, env); break;
           case 'draw:g': await objectsOf(el, env); break;
-          case 'draw:polyline': case 'draw:polygon': case 'draw:path': case 'draw:regular-polygon': case 'draw:measure': case 'draw:control': count(env.ctx, 'freeDrawings'); break;
+          case 'draw:polyline': case 'draw:polygon': case 'draw:path': await freeObject(el, env); break;
+          case 'draw:a': if (!env.layer) count(env.ctx, 'objectLinks'); await objectsOf(el, env); break;
+          case 'draw:regular-polygon': case 'draw:measure': case 'draw:control': count(env.ctx, 'freeDrawings'); break;
           default:
             if (/^dr3d:/.test(tag)) count(env.ctx, 'shapes');
             break;

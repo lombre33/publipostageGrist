@@ -464,6 +464,26 @@ const OdtImport = (function () {
   }
 
   // --- Les images et les notes ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // Les dessins vectoriels de Windows (EMF, WMF, et leurs formes compressées) : le navigateur ne les lit pas, js/metafile-render.js (moteur paresseux `metafile`) les dessine en image PNG.
+  const METAFILES = /^(emf|wmf|emz|wmz)$/;
+  const METAFILE_MAX_PX = 1600;
+  // Le dessin Windows du paquet `href` en adresse de données PNG, ou null : le dessinateur ne sait pas le lire, il n'a rien dessiné, il est trop lourd ou le moteur est injoignable.
+  async function metafileSource(ctx, odf, href, extension) {
+    try {
+      const file = odf.fileOf(href);
+      if (!file) return null;
+      if (typeof MetafileRender === 'undefined' && typeof ExportEngines !== 'undefined') await ExportEngines.ensure('metafile');
+      if (typeof MetafileRender === 'undefined') return null;
+      const bytes = await file.async('uint8array');
+      if (bytes.length > MAX_IMAGE_BYTES) return null;
+      const image = await MetafileRender.toImage(bytes, extension, { maxPx: METAFILE_MAX_PX });
+      if (!image || ctx.imageBytes + image.src.length > MAX_IMAGES_BYTES) return null;
+      ctx.imageBytes += image.src.length;
+      return image.src;
+    } catch (e) {
+      return null;
+    }
+  }
   const IMAGE_SNIFF = [['iVBOR', 'image/png'], ['/9j/', 'image/jpeg'], ['R0lGOD', 'image/gif'], ['UklGR', 'image/webp'], ['Qk', 'image/bmp'], ['PHN2Zy', 'image/svg+xml'], ['PD94bW', 'image/svg+xml']];
   // Les images du document, lues une fois pour toutes en adresses de données, avec les plafonds de poids de l'import Word : `draw:image` -> { src } ou { unsupported: true } (format illisible,
   // trop lourde, adresse hors du fichier : jamais allée chercher sur le réseau). Un fichier « flat » les porte en base 64 dans `office:binary-data`.
@@ -483,7 +503,13 @@ const OdtImport = (function () {
           const sniffed = IMAGE_SNIFF.find(([prefix]) => b64.indexOf(prefix) === 0);
           mime = sniffed ? sniffed[1] : '';
         } else if (href && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^\.\.|^\//.test(href)) {
-          mime = imageTypes[href.split('.').pop().toLowerCase()] || '';
+          const extension = href.split('.').pop().toLowerCase();
+          if (METAFILES.test(extension)) {
+            const drawn = await metafileSource(ctx, odf, href, extension);
+            images.set(node, drawn ? { src: drawn } : { unsupported: true });
+            continue;
+          }
+          mime = imageTypes[extension] || '';
           const file = mime ? odf.fileOf(href) : null;
           b64 = file ? await file.async('base64') : '';
         }
