@@ -108,6 +108,7 @@
   async function refreshTemplateList(preloaded) {
     renderTemplateOptions(await (preloaded || Templates.loadAll()));
     adoptTableName();
+    TemplateNotice.sync(); // une notice changée par une autre personne depuis l'ouverture
   }
   function renderTemplateOptions(templates) {
     templateSelect.innerHTML = '';
@@ -234,6 +235,7 @@
     Editor.setHTML('');
     Editor.setHeaderFooterData(tpl ? tpl.headerFooter : null);
     showTemplateNames(tpl);
+    TemplateNotice.show(tpl); // un macro-modèle n'a pas de notice : la ligne du menu du crayon se grise
     currentTypeModele = 'macro';
     if (emailFieldsRow) emailFieldsRow.hidden = true;
     emailFieldsRawCache = null;
@@ -365,6 +367,7 @@
     const openPlan = options && options.progressive && typeModele === SlidesEntry.TYPE ? ImportPlacing.planOpen(tpl) : null;
     loadContentIntoEditor(tpl, typeModele, openPlan);
     showTemplateNames(tpl);
+    TemplateNotice.show(tpl); // la notice du document qui s'ouvre : son bandeau et la ligne « Notice du document… » du menu du crayon
     currentTypeModele = typeModele;
     loadEmailFields(tpl);
     syncEmailEditorMode();
@@ -1181,6 +1184,7 @@
     wireLinkRulesModal();
     wireTemplateGalleryModal();
     wireTemplateRename();
+    TemplateNotice.wire({ status: setStatus }); // la notice du document : le bandeau, la fenêtre et la ligne du menu du crayon (js/template-notice.js)
     wireDefaultTemplateButton();
     wirePdfFilenameToggle();
     wireExportMenus();

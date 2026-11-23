@@ -122,6 +122,7 @@ const MainAccess = (function () {
       updateSaveStatus();
       LiveEntry.changed(); // un document en lecture seule ne s'écrit pas en direct : la ligne du menu suit les droits (js/live-entry.js)
       SlidesEntry.changed(); // ni ses diapositives (js/slides-entry.js)
+      TemplateNotice.refresh(); // la ligne « Notice du document… » et la fenêtre de la notice : écrire ou seulement lire (js/template-notice.js)
     }
 
     // Grist rend les options du widget quand son accès change (GristAPI.onAccessLevelChange) : la carte de l'accès arrive ou s'en va tout de suite, et la

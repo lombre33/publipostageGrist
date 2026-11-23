@@ -141,7 +141,7 @@ const MainSave = (function () {
         setStatus(I18n.t('status.saveError'), true);
         return;
       }
-      if (epoch === persist.autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); LiveEntry.changed(); } // un modèle neuf enregistré peut s'écrire en direct
+      if (epoch === persist.autosaveEpoch) { Templates.setCurrentId(savedId); ExportChoices.adopt(savedId); LiveEntry.changed(); TemplateNotice.sync(); } // un modèle neuf enregistré peut s'écrire en direct
       await refreshTemplateList();
       // L'écriture et la relecture de la liste durent des secondes quand Grist est lent : un autre modèle a pu être choisi entre-temps (autosaveEpoch).
       // L'écran, la liste et le modèle courant sont alors les siens : ce geste ne les remet pas sur le modèle qu'il vient d'écrire (l'enregistrement
@@ -199,6 +199,8 @@ const MainSave = (function () {
         }
         return;
       }
+      // La copie garde la notice du document d'où elle vient (js/template-notice.js) : elle se lit avant que l'écran quitte l'original.
+      const noticeToCopy = from != null ? String((Templates.byId(from) || {}).notice || '') : '';
       // Une copie est un autre modèle : l'écriture en direct, qui est celle du texte de celui-ci, s'arrête d'abord (js/live-entry.js).
       await LiveEntry.stop();
       // Un enregistrement encore en cours (Grist lent) rendrait, à sa fin, son identifiant au modèle courant (cf. runSave) : la copie, qui part d'un
@@ -211,6 +213,14 @@ const MainSave = (function () {
       ExportChoices.detach();
       if (from == null) await onSave();
       else await saveAsNewTemplate(from, false);
+      // La notice suit la copie une fois celle-ci enregistrée ; un échec ne défait pas la copie (la notice reste à recopier à la main depuis l'original).
+      const copyId = Templates.getCurrentId();
+      if (noticeToCopy && copyId != null && String(copyId) !== String(from) && Templates.byId(copyId) && !Templates.byId(copyId).notice) {
+        try {
+          await Templates.saveNotice(copyId, noticeToCopy);
+          TemplateNotice.show(Templates.byId(copyId));
+        } catch (e) { console.error('[main] notice non recopiée dans la copie', e); }
+      }
     }
 
     // Enregistre l'écran comme un modèle NEUF - une copie (« Enregistrer sous… »), un modèle de la galerie - puis range l'action dans l'historique d'Annuler / Rétablir. `from` : le modèle que l'écran montrait avant (null : aucun) ;

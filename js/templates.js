@@ -3,6 +3,8 @@ const Templates = (function () {
   const TABLE_NAME = 'Publipostage_Templates';
   // La colonne où le document garde, quand la personne le choisit, le mot de passe commun des PDF protégés (cf. writePdfPassword plus bas).
   const PDF_PASSWORD_COLUMN = 'PdfPassword';
+  // La colonne où chaque modèle garde sa notice (cf. ensureNoticeColumn, saveNotice).
+  const NOTICE_COLUMN = 'Notice';
   let templatesCache = [];
   // Les mises à jour du cache que les écritures de CE widget font (cf. settleWritten) : un compteur, et pour chaque ligne sa valeur à la dernière mise à jour. loadAll s'en sert pour ne pas
   // remettre dans le cache l'état d'avant d'une ligne que ce widget a écrite pendant sa lecture (cf. keepWrittenSince).
@@ -137,12 +139,16 @@ const Templates = (function () {
     // l'historique dit qui avait écrit chaque version. Écrite dans le même UpdateRecord que Content et ModifiedAt ; créée à l'ouverture comme les colonnes ci-dessus, mais une personne qui n'a pas le droit
     // d'ajouter une colonne enregistre quand même, sans elle (cf. modifiedByColumnReady).
     const ensureModifiedByColumn = ensureColumns([['ModifiedBy', 'Text']]);
+
+    // La notice du modèle (js/template-notice.js : « comment se servir de ce modèle », du HTML court, jamais exporté) : une colonne à part, hors de Content, pour qu'aucun export ne puisse la lire. Comme le jeton, ni loadAll ni
+    // saveRow ne la lancent : un document dont aucun modèle n'a de notice n'a pas de colonne de plus ; elle se crée à la première écriture d'une notice (saveNotice), jamais pour lire.
+    const ensureNoticeColumn = ensureColumns([[NOTICE_COLUMN, 'Text']]);
     return {
-      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
+      ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn, ensureNoticeColumn,
     };
   }
   const {
-    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn,
+    ensureHeaderFooterColumn, ensureMarginsColumn, ensureDateModifColumn, ensureDefaultColumn, ensureEmailColumns, ensurePjColumn, ensureTrackChangesColumn, ensureTokenColumn, ensurePdfPasswordColumn, ensureModifiedByColumn, ensureNoticeColumn,
   } = defineColumnMigrations();
 
   // La colonne « Modifié par » existe-t-elle (ou vient-elle d'être créée) ? Faux quand la personne n'a pas le droit d'ajouter une colonne : l'enregistrement la laisse alors de côté (un UpdateRecord sur une
@@ -289,6 +295,8 @@ const Templates = (function () {
       jeton: String(cell('Token', '') || ''),
       // Qui a écrit cet état (cf. ensureModifiedByColumn) : '' quand on ne le sait pas (modèle d'avant la colonne, personne non identifiée).
       modifiePar: String(cell('ModifiedBy', '') || ''),
+      // La notice du modèle (cf. ensureNoticeColumn) : du HTML tel que la table le garde, '' quand il n'y en a pas. Elle n'est lue qu'à travers TemplateNotice.clean, jamais posée telle quelle dans la page.
+      notice: String(cell(NOTICE_COLUMN, '') || ''),
     };
   }
 
@@ -305,7 +313,7 @@ const Templates = (function () {
     cacheWritten(id);
     const cached = byId(id);
     if (!cached) return;
-    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], ModifiedAt: [dateModif] };
+    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], [NOTICE_COLUMN]: [cached.notice], ModifiedAt: [dateModif] };
     Object.keys(columns).forEach(column => { if (column !== 'ModifiedAt') row[column] = [columns[column]]; });
     Object.assign(cached, templateFromRow(row, 0));
   }
@@ -911,6 +919,20 @@ const Templates = (function () {
     return token;
   }
 
+  // La notice d'un modèle (js/template-notice.js), écrite dans la colonne `Notice` SEULE : ni Content ni ModifiedAt, donc aucun conflit avec l'enregistrement automatique du texte (même règle qu'ensureToken). Crée la colonne à la
+  // première notice. Un modèle d'un type inconnu n'est pas écrit (refuseUnwritable) ; une colonne qu'on ne peut pas créer (compte qui n'a pas le droit d'ajouter une colonne, Lecteur) lève : la fenêtre le dit, rien n'est perdu.
+  // Le cache prend la notice tout de suite et la garde contre une lecture de la table partie avant l'écriture (keepWrittenSince). Rend le HTML écrit.
+  async function saveNotice(id, html) {
+    refuseUnwritable(id);
+    const value = typeof html === 'string' ? html : '';
+    await ensureTableExists();
+    if (!(await ensureNoticeColumn())) throw new Error('La colonne des notices ne peut pas être créée : rien n’a été enregistré.');
+    await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, id, { [NOTICE_COLUMN]: value }]]);
+    const cached = byId(id);
+    if (cached) { cached.notice = value; cacheWrittenAt.set(String(id), ++cacheWrites); }
+    return value;
+  }
+
   function createWriteTracker() {
     // Les écritures en cours de ce widget et ce qu'elles laissent dans Grist. js/main.js (auto-save, commentaires de la Lecture) compare le ModifiedAt
     // relu dans Grist à celui que ce widget a écrit en dernier pour dire « modifié ailleurs ». Or une écriture n'est pas un instant : Grist
@@ -1000,7 +1022,7 @@ const Templates = (function () {
 
   // Les colonnes qu'une ligne de la table porte pour le widget (celles que templateFromRow lit et que saveRow écrit) : de quoi rendre une ligne supprimée telle qu'elle était. Pas les autres colonnes du document : Grist
   // refuse toute valeur dans une colonne à formule, et tout le lot sur une colonne qu'il ne connaît pas.
-  const ROW_COLUMNS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy'];
+  const ROW_COLUMNS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFooter', 'Margins', 'IsDefault', 'TemplateType', 'To', 'Cc', 'Bcc', 'Subject', 'Attachments', 'TrackedChanges', 'Token', 'ModifiedBy', NOTICE_COLUMN];
 
   // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
   // ligne n'existe plus ou si la table ne se lit pas.
@@ -1060,7 +1082,7 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
+    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, saveNotice, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, verifyStored, getLoadedChars, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,

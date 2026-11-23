@@ -358,6 +358,7 @@ const MainAutosave = (function () {
       if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
       persist.autosaveLastCheckAt = checkStartedAt;
       adoptTableName(); // un nom donné ailleurs depuis l'ouverture (GFS) : le titre le prend avant que ce passage n'écrive
+      TemplateNotice.sync(); // et une notice changée ailleurs : son bandeau reparaît (js/template-notice.js)
       const remoteTpl = remote.remoteTpl;
       if (changedElsewhere(remoteTpl)) {
         // Une personne du direct vient d'enregistrer : sa date est annoncée dans la seconde (adoptLiveSave), le conflit n'est dit qu'au passage d'après, une fois par date inconnue. Le passage suivant relit.

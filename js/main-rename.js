@@ -138,6 +138,23 @@ const MainRename = (function () {
         },
       });
       renameBtn.addEventListener('click', () => { templateNameInput.hidden ? openEditor() : commitAndClose(); });
+      // La ligne « Renommer » du menu du crayon (avec « Notice du document… », js/template-notice.js) fait ce que fait le crayon : son clic, et le même grisé (lecture seule, lecture d'un PDF) avec sa raison.
+      const renameRow = document.getElementById('v2-rename-row');
+      if (renameRow) {
+        const rowLocked = () => renameBtn.getAttribute('aria-disabled') === 'true';
+        const syncRenameRow = () => {
+          const locked = rowLocked();
+          if (locked) renameRow.setAttribute('aria-disabled', 'true'); else renameRow.removeAttribute('aria-disabled');
+          renameRow.classList.toggle('v2-hover-row-disabled', locked);
+          const reason = renameBtn.getAttribute('data-pp-lock-reason') || renameBtn.getAttribute('data-pp-pdf-reason') || '';
+          if (locked && reason) renameRow.title = reason; else renameRow.removeAttribute('title');
+        };
+        const go = () => { if (!rowLocked()) renameBtn.click(); };
+        renameRow.addEventListener('click', go);
+        renameRow.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+        new MutationObserver(syncRenameRow).observe(renameBtn, { attributes: true, attributeFilter: ['aria-disabled', 'data-pp-lock-reason', 'data-pp-pdf-reason'] });
+        syncRenameRow();
+      }
       templateNameInput.addEventListener('blur', commitAndClose);
       templateNameInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') templateNameInput.blur();
