@@ -301,7 +301,6 @@ const PerfTrace = (function () {
   // si elle répond ; ce que le rapport dit ici le décide (23/11). Une seule lecture, faite quand on enregistre le rapport (Ctrl + Alt + Maj + L) : rien ne part sur le réseau tant que personne ne le demande.
   // Les valeurs de SQL sont comparées à celles du cache (des dates qui s'égalent, des longueurs qui s'égalent) : ce que la lecture légère saurait dire d'un modèle changé, sans le relire.
   const PROBE_TIMEOUT_MS = 4000;
-  const WHOLE_TIMEOUT_MS = 40000;
   let lightProbeResult = null;
   const codePoints = text => { let count = text.length; for (let i = 0; i < text.length; i++) { const unit = text.charCodeAt(i); if (unit >= 0xD800 && unit <= 0xDBFF) count--; } return count; };
   async function probeSql() {
@@ -343,25 +342,22 @@ const PerfTrace = (function () {
       const { records, bytes } = await GristAPI.lightRecords(contentAt.table, [target.id], PROBE_TIMEOUT_MS);
       const fields = records[0] && records[0].fields;
       const result = { state: 'ok', rows: records.length, bytes, id: target.id, same: !!fields && fields[contentAt.column] === target.contenu };
-      // Une table lourde (2 Mo et plus à la lecture du démarrage) : sa lecture ENTIÈRE par REST est mesurée aussi, à côté de celle de fetchTable (le temps de la demande et celui du décodage à la page) ; une table légère n'a pas besoin de ce détour.
-      if (Templates.getLoadedChars() >= 2097152) {
-        const wholeStart = performance.now();
-        try {
-          const whole = await GristAPI.lightRecords(contentAt.table, null, WHOLE_TIMEOUT_MS);
-          result.whole = { state: 'ok', ms: Math.round(performance.now() - wholeStart), parseMs: whole.parseMs, rows: whole.records.length, bytes: whole.bytes };
-        } catch (error) {
-          result.whole = { state: 'refused', ms: Math.round(performance.now() - wholeStart), reason: (error && error.reason) || 'erreur', status: error && error.status, detail: error && error.detail };
-        }
-      }
       return done(result);
     } catch (error) {
       return done({ state: 'refused', reason: (error && error.reason) || 'erreur', status: error && error.status, detail: error && error.detail });
     }
   }
-  async function probeLight() {
-    const sql = await probeSql();
-    sql.rest = await probeRest();
-    return sql;
+  // Une seule sonde à la fois : un second appui sur le raccourci pendant qu'elle tourne attend la même au lieu d'en relancer une (qui aurait remplacé le résultat par un résultat sans la lecture REST, et refait des demandes).
+  let probing = null;
+  function probeLight() {
+    if (!probing) {
+      probing = (async () => {
+        const sql = await probeSql();
+        sql.rest = await probeRest();
+        return sql;
+      })().finally(() => { probing = null; });
+    }
+    return probing;
   }
   const REASONS = { jeton: 'Grist ne donne pas de jeton', 'réseau': 'la demande n’a pas abouti (hors ligne, politique du site ou de GFS)', http: 'Grist a refusé', 'délai': 'pas de réponse à temps', forme: 'réponse que je ne sais pas lire', erreur: 'erreur' };
   function lightFacts() {
@@ -382,9 +378,6 @@ const PerfTrace = (function () {
     if (!probe || probe.state === 'absent') return ['Lecture d’une ligne par REST : indisponible dans cette page'];
     if (probe.state === 'refused') return ['Lecture d’une ligne par REST : refusée après ' + span(probe.ms) + ' - ' + (REASONS[probe.reason] || probe.reason) + (probe.status ? ' (HTTP ' + probe.status + ')' : '') + (probe.detail ? ' : « ' + probe.detail + ' »' : '')];
     const lines = ['Lecture d’une ligne par REST : répond en ' + span(probe.ms) + ' (ligne #' + probe.id + ', ' + megabytes(probe.bytes) + ', ' + probe.rows + ' ligne rendue, texte identique à celui du cache : ' + (probe.same ? 'oui' : 'NON') + ')'];
-    const whole = probe.whole;
-    if (whole && whole.state === 'ok') lines.push('Lecture de TOUTE la table par REST : ' + span(whole.ms) + ' (' + whole.rows + ' lignes, ' + megabytes(whole.bytes) + ', dont décodage à la page ' + span(whole.parseMs) + ') - à comparer à la lecture par fetchTable du démarrage');
-    else if (whole) lines.push('Lecture de TOUTE la table par REST : refusée après ' + span(whole.ms) + ' - ' + (REASONS[whole.reason] || whole.reason) + (whole.status ? ' (HTTP ' + whole.status + ')' : '') + (whole.detail ? ' : « ' + whole.detail + ' »' : ''));
     return lines;
   }
   // Les fichiers du chargement : les plus lents, ceux servis sans transfert (le cache du navigateur : seulement pour ceux de la page, un autre site ne donne pas sa taille), et pour chaque site le dernier fichier reçu
