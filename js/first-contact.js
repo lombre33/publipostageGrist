@@ -153,6 +153,7 @@ const FirstContact = (function () {
   }
 
   function start() {
+    setTimeout(endOpeningScreen, OPENING_SCREEN_MAX_MS);
     if (started || devMode()) return;
     started = true;
     if (alone()) setTimeout(() => { if (!gristAnswered()) show('outside'); }, OUTSIDE_WAIT_MS);
@@ -175,7 +176,12 @@ const FirstContact = (function () {
     if (started && !finished && !kind) armSlowTimer();
   }
 
+  // L'écran d'attente de css/first-contact.css (la classe `pp-opening` d'<html>, posée par index.html) : retiré dès que le démarrage a abouti ou échoué, jamais gardé par une erreur qui le recouvrirait.
+  function endOpeningScreen() { document.documentElement.classList.remove('pp-opening'); }
+  const OPENING_SCREEN_MAX_MS = 60000;
+
   function ready() {
+    endOpeningScreen();
     if (!started) return;
     finished = true;
     clearTimeout(slowTimer);
@@ -183,6 +189,7 @@ const FirstContact = (function () {
   }
 
   function failed(error) {
+    endOpeningScreen();
     if (!started || kind === 'outside') return;
     finished = true;
     clearTimeout(slowTimer);

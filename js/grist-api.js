@@ -1307,8 +1307,9 @@ const GristAPI = (function () {
       let text;
       try { text = await response.text(); } catch (e) { throw fail(e && e.name === 'AbortError' ? 'délai' : 'forme'); }
       let body;
+      const parseStart = performance.now();
       try { body = JSON.parse(text); } catch (e) { throw fail('forme'); }
-      return { body, bytes: text.length };
+      return { body, bytes: text.length, parseMs: Math.round(performance.now() - parseStart) };
     } finally { clearTimeout(timer); }
   }
   async function lightQuery(sql, timeoutMs) {
@@ -1318,11 +1319,13 @@ const GristAPI = (function () {
   }
   // Les lignes d'une table par l'interface REST (`/tables/<table>/records`), au jeton en lecture seule, sans passer par la lecture complète du module de Grist : `ids` les restreint à ces numéros de ligne (le filtre de Grist). Rend
   // { records: [{ id, fields }], bytes }. Lecture seule, une seule demande ; refusée ou illisible : la même erreur que lightQuery (reason, status, detail).
+  // `ids` absent (null) : TOUTES les lignes de la table, sans limite (le rapport de fluidité mesure ce que coûterait lire la table des modèles par là plutôt que par fetchTable) ; `parseMs` : ce que le décodage du texte a pris à la page.
   async function lightRecords(table, ids, timeoutMs) {
-    const filter = Array.isArray(ids) ? '&filter=' + encodeURIComponent(JSON.stringify({ id: ids })) : '';
-    const { body, bytes } = await lightGet('/tables/' + encodeURIComponent(table) + '/records?limit=' + (Array.isArray(ids) ? ids.length : 1) + filter, timeoutMs);
+    const some = Array.isArray(ids);
+    const filter = some ? '&filter=' + encodeURIComponent(JSON.stringify({ id: ids })) : '';
+    const { body, bytes, parseMs } = await lightGet('/tables/' + encodeURIComponent(table) + '/records' + (some ? '?limit=' + ids.length + filter : ''), timeoutMs);
     if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightRecords : forme'), { reason: 'forme' });
-    return { records: body.records, bytes };
+    return { records: body.records, bytes, parseMs };
   }
 
   // L'hôte de l'instance de Grist qui sert le document (`grist.numerique.gouv.fr`, `docs.getgrist.com`...), en minuscules : celui de l'adresse de l'interface de programmation que donne le jeton d'accès. '' quand Grist ne

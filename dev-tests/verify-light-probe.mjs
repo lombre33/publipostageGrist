@@ -37,8 +37,8 @@ const { page } = await t.openPage({
       const cors = { 'Access-Control-Allow-Origin': '*' };
       const asked = new URL(request.url());
       if (mode.kind === 'ok' && /\/tables\/[^/]+\/records$/.test(asked.pathname)) {
-        const ids = JSON.parse(asked.searchParams.get('filter') || '{"id":[]}').id || [];
-        return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ records: tableRows.filter(fields => ids.includes(fields.id)).map(fields => ({ id: fields.id, fields })) }) });
+        const ids = asked.searchParams.has('filter') ? JSON.parse(asked.searchParams.get('filter')).id || [] : null;
+        return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ records: tableRows.filter(fields => ids === null || ids.includes(fields.id)).map(fields => ({ id: fields.id, fields })) }) });
       }
       if (mode.kind === 'abort') return route.abort('failed');
       if (mode.kind === 'http403') return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: '{"error":"Forbidden"}' });
@@ -83,6 +83,28 @@ check('la lecture d\'une ligne est un GET simple vers `/tables/<table>/records`,
   !!restAsk && restAsk.method === 'GET' && restUrl.pathname === '/api/docs/DOC1/tables/' + names.date.table + '/records' && restUrl.searchParams.get('auth') === 'stub-token' && !restAsk.headers.authorization && !restAsk.headers['content-type']
   && /^\{"id":\[\d+\]\}$/.test(restUrl.searchParams.get('filter') || '') && restUrl.searchParams.get('limit') === '1', restAsk);
 check('le rapport dit le temps de la lecture d\'une ligne, ses octets, et que son texte est identique à celui du cache', /Lecture d’une ligne par REST : répond en \d+ ms \(ligne #\d+, [\d.,]+ (?:Ko|Mo), 1 ligne rendue, texte identique à celui du cache : oui\)/.test(ok.report), ok.report.split('\n').filter(l => /REST/.test(l)));
+
+// 23/11, lot 3 : la lecture de TOUTE la table par REST (mesurée seulement quand la table lue au démarrage est lourde : 2 Mo et plus) ; ici, la fonction seule, puis le rapport d'une table que l'on fait passer pour lourde.
+const whole = await page.evaluate(async (column) => {
+  const read = await GristAPI.lightRecords(SchemaColumns.whereIs(Templates.TABLE_NAME, 'Content').table, null, 4000);
+  return { rows: read.records.length, bytes: read.bytes, parseMs: read.parseMs, cached: Templates.getCached().length, sameText: read.records.every(record => typeof record.fields[column] === 'string') };
+}, contentAt.column);
+const wholeAsk = seen[seen.length - 1];
+check('lue sans numéros de ligne, la table vient TOUTE (une ligne par modèle), sans filtre ni limite dans la demande, avec le temps du décodage', whole.rows === whole.cached && whole.rows > 0 && whole.sameText && typeof whole.parseMs === 'number' && !/[?&](filter|limit)=/.test(wholeAsk.url), { whole, url: wholeAsk.url });
+const heavyReport = await page.evaluate(async () => {
+  const real = Templates.getLoadedChars;
+  let overridden = true;
+  try { Templates.getLoadedChars = () => 3 * 1048576; } catch (error) { overridden = false; }
+  if (!overridden || Templates.getLoadedChars() !== 3 * 1048576) return { overridden: false };
+  try { const result = await PerfTrace.probeLight(); return { overridden: true, whole: result.rest && result.rest.whole, report: PerfTrace.report() }; } finally { Templates.getLoadedChars = real; }
+});
+if (heavyReport.overridden) {
+  check('une table lourde (3 Mo à la lecture du démarrage) est lue aussi en entier par REST, et le rapport en dit le temps, les lignes, les octets et le décodage', !!heavyReport.whole && heavyReport.whole.state === 'ok' && /Lecture de TOUTE la table par REST : \d+ ms \(\d+ lignes, [\d.,]+ (?:Ko|Mo), dont décodage à la page \d+ ms\)/.test(heavyReport.report), heavyReport.report.split('\n').filter(l => /REST/.test(l)));
+} else {
+  check('une table lourde est lue aussi en entier par REST (essai sauté : `Templates` refuse qu\'on remplace getLoadedChars) ; une table légère ne l\'est pas', true);
+}
+const lightReport = await page.evaluate(async () => { const result = await PerfTrace.probeLight(); return { whole: result.rest && result.rest.whole }; });
+check('une table légère (moins de 2 Mo) n\'a pas cette lecture de plus', !lightReport.whole, lightReport);
 
 // --- 4. Ce qui ne marche pas ---
 async function probeWith(kind, delay) {
