@@ -140,13 +140,13 @@
     });
 
   add('docx_line_spacing_matches_editor',
-    'L\'interligne posé est celui de l\'éditeur (1.42), pas celui du style Word "Normal"',
+    'L\'interligne posé est celui de l\'éditeur (1.42 fois le corps), pas celui du style Word "Normal" : en multiples de la ligne simple de la police (1,172 pour Roboto), 1.42 / 1.172 = 1,2116 (291 deux-cent-quarantièmes), comme le PDF',
     async (h) => {
       const parts = await h.exportDocxParts('<p>a</p>');
       const spacing = parts.doc.getElementsByTagName('w:spacing')[0];
       const line = spacing && spacing.getAttribute('w:line');
-      // 240èmes de ligne quand lineRule="auto" : 240 * 1.42 = 341.
-      return { pass: Number(line) === 341 && spacing.getAttribute('w:lineRule') === 'auto' && spacing.getAttribute('w:after') === '0', notes: 'line=' + line + ' rule=' + (spacing && spacing.getAttribute('w:lineRule')) + ' after=' + (spacing && spacing.getAttribute('w:after')) };
+      // 240èmes de ligne quand lineRule="auto" : 240 * 1.42 / 1.172 = 291 (l'éditeur compte en multiples du corps, Word en multiples de la ligne simple).
+      return { pass: Number(line) === 291 && spacing.getAttribute('w:lineRule') === 'auto' && spacing.getAttribute('w:after') === '0', notes: 'line=' + line + ' rule=' + (spacing && spacing.getAttribute('w:lineRule')) + ' after=' + (spacing && spacing.getAttribute('w:after')) };
     });
 
   // --- Alignement ---

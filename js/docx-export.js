@@ -100,7 +100,9 @@ const DocxExport = (function () {
   const EMU_PER_PT = 12700; // 914400 EMU par pouce (unité des positions et tailles de dessin OOXML) / 72 pt
   // w:spacing/@line s'exprime en 240èmes de ligne quand lineRule="auto" (240 = interligne simple) : posé sur chaque paragraphe généré pour que les
   // sauts de ligne à l'intérieur d'un paragraphe qui revient à la ligne correspondent à l'éditeur, au lieu de l'interligne du style Word « Normal ».
-  const LINE_SPACING_240THS = Math.round(240 * STYLE.lineHeight);
+  // L'interligne de l'éditeur est une hauteur de ligne en multiples du CORPS (`line-height: 1.42`) ; celui de Word, en multiples de la ligne « simple » de la police (STYLE.naturalLine : 1,172 pour Roboto). Sans cette division, le
+  // Word aurait des lignes 17 % plus hautes que l'éditeur et le PDF (qui divise de même, EDITOR_LINE_HEIGHT_RATIO).
+  const LINE_SPACING_240THS = Math.round(240 * STYLE.lineHeight / STYLE.naturalLine);
   // Le réglage « Paragraphe… » (js/paragraph-format.js) d'un paragraphe, d'un élément de liste ou d'une citation : l'interligne (le facteur CSS réglé, lu comme celui d'origine l'est : en 240èmes
   // de ligne), l'espace avant (au premier morceau du paragraphe) et l'espace après (au dernier), en vingtièmes de point. Sans réglage, le w:spacing d'avant (aucun espace, interligne de l'éditeur).
   function spacingOf(node, isFirst = true, isLast = true) {
@@ -160,7 +162,7 @@ const DocxExport = (function () {
     // 'auto' (pas de couleur explicite dans le HTML) plutôt que de laisser le style Word « Titre N » imposer sa couleur par défaut (accent du thème,
     // souvent bleu) : un titre de l'éditeur n'a pas de couleur particulière, il hérite du noir du corps du texte (`.tiptap { color }`).
     // La couleur d'un <span> posé dedans (applyInlineRunStyle) garde la priorité si la personne a choisi une couleur.
-    if (/^H[1-6]$/.test(tag)) { out.bold = true; out.size = HEADING_HALF_PT[tag]; out.color = 'auto'; }
+    if (/^H[1-6]$/.test(tag)) { out.bold = true; out.size = HEADING_HALF_PT[tag]; out.color = 'auto'; out.upright = true; }
     if (tag === 'STRONG' || tag === 'B') out.bold = true;
     if (tag === 'EM' || tag === 'I') out.italics = true;
     if (tag === 'U') out.underline = { type: 'single' };
@@ -224,7 +226,8 @@ const DocxExport = (function () {
   function runOpts(style) {
     const opts = { size: style.size || DEFAULT_HALF_PT };
     if (style.bold) opts.bold = true;
-    if (style.italics) opts.italics = true;
+    // Le style Word « Titre 4 » est en italique : un titre de l'éditeur ne l'est pas, son texte le dit en toutes lettres (sauf si la personne l'a mis en italique).
+    if (style.italics) opts.italics = true; else if (style.upright) opts.italics = false;
     if (style.underline) opts.underline = style.underline;
     if (style.strike) opts.strike = true;
     if (style.superScript) opts.superScript = true;
@@ -1575,6 +1578,13 @@ const DocxExport = (function () {
   }
   // Le retrait du texte d'une citation (et du tableau qu'elle porte).
   const QUOTE_INDENT_TWIP = 400;
+  // Le style Word « Citation » (`Quote`, le nom que Word, LibreOffice et l'import lisent comme une citation) : en italique et gris comme `.tiptap blockquote`, avec son retrait et son filet.
+  const QUOTE_STYLE_ID = 'Quote';
+  const QUOTE_TEXT_HEX = '444444';
+  function quoteParagraphStyle() {
+    return { id: QUOTE_STYLE_ID, name: 'Quote', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { italics: true, color: QUOTE_TEXT_HEX },
+      paragraph: { indent: { left: QUOTE_INDENT_TWIP }, border: { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } } } };
+  }
   // Un titre du corps vu du sommaire : son niveau, son texte (marqueur compris, celui que le PDF et la Lecture écrivent aussi) et l'ancre du signet caché
   // « _Toc… » posé autour de lui, que visent les liens des entrées du sommaire (Word garde ces signets-là quand il met le sommaire à jour). Seul le corps
   // compte : après lui ctx.headingBlocks est nul (buildDocxDocument), un titre posé dans un en-tête ou un pied n'est pas au sommaire.
@@ -1677,7 +1687,7 @@ const DocxExport = (function () {
       // outlineLevel : le niveau de plan que le style Word « Titre N » porte déjà pour Word, mais pas pour LibreOffice, dont la mise à jour du
       // sommaire (menu Outils > Mettre à jour) ne retrouve sinon aucun titre et vide le sommaire.
       if (isHeading) { opts.heading = docx.HeadingLevel[HEADING_LEVEL[node.tagName]]; opts.outlineLevel = parseInt(node.tagName.slice(1), 10) - 1; }
-      if (node.tagName === 'BLOCKQUOTE') { opts.indent = { left: QUOTE_INDENT_TWIP }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
+      if (node.tagName === 'BLOCKQUOTE') { opts.style = QUOTE_STYLE_ID; ctx.hasQuote = true; opts.indent = { left: QUOTE_INDENT_TWIP }; opts.border = { left: { style: 'single', size: 16, color: 'CBD5E1', space: 8 } }; }
       return new docx.Paragraph(opts);
     });
   }
@@ -2256,7 +2266,8 @@ const DocxExport = (function () {
     const doc = { sections, footnotes: ctx.footnotes, defaultTabStop: TabIndent.STOP_TWIPS };
     if (ctx.numberingConfigs.length) doc.numbering = { config: ctx.numberingConfigs };
     doc.styles = { default: { document: { run: { font: BODY_FONT } } } };
-    if (ctx.hasToc) doc.styles.paragraphStyles = tocParagraphStyles();
+    const paragraphStyles = (ctx.hasToc ? tocParagraphStyles() : []).concat(ctx.hasQuote ? [quoteParagraphStyle()] : []);
+    if (paragraphStyles.length) doc.styles.paragraphStyles = paragraphStyles;
     const file = new docx.Document(doc);
     // docx.js écrit numbering.xml AVANT les en-têtes et les pieds : l'instance d'une liste posée dans l'un d'eux n'y serait pas déclarée, le paragraphe
     // pointerait vers un numId inconnu et Word n'afficherait ni puce ni numéro. Chaque instance est donc créée ici, avant la mise en fichier

@@ -86,7 +86,8 @@
     [1, 2, 3, 4, 5, 6].forEach(level => expect('le titre ' + level + ' garde son niveau', root.querySelectorAll('h' + level).length === 1 && root.querySelector('h' + level).textContent === ['Un', 'Deux', 'Trois', 'Quatre', 'Cinq', 'Six'][level - 1], out.html.slice(0, 200)));
     expect('les titres gardent la taille de l\'éditeur (aucune taille inline en trop)', !/<h[1-6][^>]*>\s*<span style="font-size/.test(out.html), out.html.slice(0, 300));
     expect('la citation est une citation', !!root.querySelector('blockquote') && /Une citation/.test(root.querySelector('blockquote').textContent), out.html);
-    expect('le code garde ses deux lignes, en police à chasse fixe', /ligne 1/.test(root.textContent) && /ligne 2/.test(root.textContent) && /Courier New|monospace/i.test(out.html), out.html);
+    expect('le code revient en bloc de code, avec ses deux lignes', !!root.querySelector('pre > code') && root.querySelector('pre > code').textContent === 'ligne 1\nligne 2', out.html);
+    expect('le trait horizontal revient en trait horizontal', !!root.querySelector('hr'), out.html);
     expect('le texte courant et la fin sont là, dans l\'ordre', /Texte courant\./.test(root.textContent) && root.textContent.indexOf('Texte courant') < root.textContent.indexOf('Fin'));
     return result(bad);
   });
@@ -176,7 +177,8 @@
     expect('liste numérotée : deux items au premier niveau, une sous-liste en lettres', !!root.querySelector('ol > li > ol[data-number-style="alpha"]') && root.querySelectorAll('ol > li').length >= 3, out.html);
     const roman = root.querySelector('ol[data-number-style="roman"]');
     expect('numéros romains qui partent de 4', !!roman && roman.getAttribute('start') === '4' && /Quatre/.test(roman.textContent), roman && roman.outerHTML);
-    expect('liste de tâches : ☑ et ☐ devant le texte', /☑\s*Fait/.test(root.textContent) && /☐\s*À faire/.test(root.textContent), root.textContent);
+    const tasks = Array.from(root.querySelectorAll('ul[data-type="taskList"] > li[data-type="taskItem"]'));
+    expect('liste de tâches : une vraie liste de cases à cocher, la première cochée, la seconde non', tasks.length === 2 && tasks[0].getAttribute('data-checked') === 'true' && /Fait/.test(tasks[0].textContent) && tasks[1].getAttribute('data-checked') === 'false' && /À faire/.test(tasks[1].textContent), root.innerHTML.slice(-400));
     expect('toutes les listes sont lues', lists.length >= 5, lists.length);
     return result(bad);
   });

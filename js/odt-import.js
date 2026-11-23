@@ -217,6 +217,10 @@ const OdtImport = (function () {
     if (!text) return;
     const look = runLook(st.ctx, props, st.baseSize, !!st.link);
     if (look.hidden) { lose(st, 'hidden'); return; }
+    // Un titre de l'éditeur est déjà en gras : le gras du style de titre d'OpenDocument n'ajoute pas de balise (comme à l'import Word).
+    if (st.heading) look.b = false;
+    // Une citation de l'éditeur est déjà en italique et grise (#444) : l'italique et le gris du style de citation n'ajoutent pas de balise.
+    if (st.quote) { look.i = false; look.style = look.style.filter(rule => rule !== 'color: #444444'); }
     const track = currentTrack(st);
     const comments = openComments(st.ctx, null);
     let rest = text;
@@ -627,18 +631,24 @@ const OdtImport = (function () {
     const level = isHeading ? headingLevel(el) : 0;
     const baseSize = level ? EDITOR_HEADING_PT['H' + level] : EDITOR_BODY_PT;
     const st = newState(ctx, textBase, baseSize, 0);
+    st.heading = !!level;
+    st.quote = !level && isQuote(chain) && !inList;
     readInline(st, el, textBase);
     anchorStrays(st);
     // Le dernier blanc d'un paragraphe ne compte pas.
     if (st.last && / $/.test(st.last.text)) { st.last.text = st.last.text.slice(0, -1); if (!st.last.text) st.items.splice(st.items.lastIndexOf(st.last), 1); }
     const sizePt = Number.isFinite(textBase._size) ? textBase._size : EDITOR_BODY_PT;
     const format = formatOf(para, sizePt, inList, st);
+    // Le retrait et l'espacement d'une citation (ceux de l'export de l'éditeur : 12 pt, 3 pt) sont ceux de `blockquote` : ils ne sont pas posés en plus.
+    if (st.quote) { delete format.indentLeft; if (format.spaceBefore <= 4) delete format.spaceBefore; if (format.spaceAfter <= 4) delete format.spaceAfter; }
     // Les tabulations ne comptent que dans un paragraphe qui en contient une : un style qui en déclare sans qu'on s'en serve ne change rien à ce qu'on voit.
     const hasTab = st.items.some(item => item.text && item.text.indexOf('\t') >= 0);
     const tabStop = toPoints((ctx.styles.defaults.get('paragraph') || {}).para && ctx.styles.defaults.get('paragraph').para['style:tab-stop-distance']);
     if (hasTab && tabStop && tabStop > 0) format.tabSize = round2(tabStop);
     if (hasTab) { const own = chain.some(style => style.tabs > 0); if (own) lose(st, 'tabs'); }
-    if (hasBorders(para)) lose(st, 'paragraphBorders');
+    // Un paragraphe vide du style « Ligne horizontale » (celui que LibreOffice et l'export de l'éditeur écrivent pour un trait) : le trait horizontal de l'éditeur, son filet n'est pas une perte.
+    const rule = !level && !inList && !st.items.some(item => item.text) && chain.some(style => /^(?:horizontal[ _]?line|ligne horizontale|trait horizontal)$/i.test(style.display));
+    if (hasBorders(para) && !rule) lose(st, 'paragraphBorders');
     const rtl = rtlOf(para);
     const align = alignOf(para, rtl);
     const direction = TextDirection.markup(rtl);
@@ -653,6 +663,7 @@ const OdtImport = (function () {
       block = '<p' + direction + ParagraphFormat.markup(format, align, rtl) + keep + '>' + html + filler + '</p>';
     }
     if (!level && isQuote(chain) && !inList) block = '<blockquote>' + block + '</blockquote>';
+    if (rule && empty) block = '<hr>';
     st.losses.forEach(key => count(ctx, key));
     const out = [];
     if (pageBreakBefore(ctx, para, chain)) out.push(PAGE_BREAK);
@@ -763,10 +774,9 @@ const OdtImport = (function () {
   const INDEXES = ['text:table-of-content', 'text:illustration-index', 'text:alphabetical-index', 'text:user-index', 'text:table-index', 'text:object-index', 'text:bibliography'];
   // Les blocs d'un conteneur (le corps, une case de tableau, une section), en balisage.
   function blocksOf(ctx, container, depth) {
-    let out = '';
-    if (!container || depth > MAX_DEPTH) return out;
-    kids(container).forEach((part) => { out += blockHtml(ctx, part, depth); });
-    return out;
+    if (!container || depth > MAX_DEPTH) return '';
+    // Des paragraphes consécutifs qui commencent par une case (☐ ☑ ☒) ou dont tout le texte est à chasse fixe (le bloc de code d'un export) : la liste de cases et le bloc de code de l'éditeur.
+    return ExportCommon.groupedBlocks(kids(container).map(part => blockHtml(ctx, part, depth)));
   }
   // Un bloc du conteneur (un paragraphe, une liste, un tableau, une section, un index...), en balisage ; rien pour ce que l'éditeur n'a pas (compté).
   function blockHtml(ctx, part, depth) {

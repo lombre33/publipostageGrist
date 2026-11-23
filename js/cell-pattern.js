@@ -10,7 +10,7 @@
 //   CellPattern.fromPowerPoint(prst)    { kind, exact } : le motif de PowerPoint repris, exact ou rapproché ; null pour un nom inconnu
 //   CellPattern.autoInk(backgroundHex)  la couleur de motif qui se lit sur ce fond (le motif choisi sans couleur)
 //   CellPattern.averageTone(pattern, backgroundHex)  la teinte moyenne de la case (pour une sortie qui ne sait pas tramer)
-//   CellPattern.word(kind), .excel(kind)   le nom du motif le plus proche dans Word (`w:shd`) et dans Excel (`patternType`)
+//   CellPattern.word(kind), .excel(kind)   le nom du motif le plus proche dans Word (`w:shd`) et dans Excel (`patternType`) ; .fromWord(nom) le chemin inverse (import)
 const CellPattern = (function () {
   const INK = /^#[0-9a-f]{6}$/i;
   const SLANT = Math.SQRT1_2; // d'un pas mesuré sur l'axe à la distance entre deux traits obliques
@@ -125,6 +125,13 @@ const CellPattern = (function () {
     ltUpDiag: 'thinReverseDiagStripe', upDiag: 'reverseDiagStripe', dkUpDiag: 'reverseDiagStripe', wdUpDiag: 'reverseDiagStripe',
     cross: 'horzCross', diagCross: 'diagCross', smGrid: 'thinHorzCross', lgGrid: 'horzCross', smCheck: 'pct50', lgCheck: 'pct50',
   };
+  // Le chemin inverse (à l'import) : le motif de l'éditeur que dit une trame de Word. Les pourcentages de Word sont rangés au plus proche de ceux de PowerPoint ; la trame sans équivalent propre (`thinDiagCross`) prend le damier de traits croisés.
+  const FROM_WORD = {
+    pct5: 'pct10', pct10: 'pct10', pct12: 'pct10', pct15: 'pct10', pct20: 'pct25', pct25: 'pct25', pct30: 'pct25', pct35: 'pct25', pct37: 'pct25', pct40: 'pct50', pct45: 'pct50', pct50: 'pct50',
+    pct55: 'pct50', pct60: 'pct50', pct62: 'pct75', pct65: 'pct75', pct70: 'pct75', pct75: 'pct75', pct80: 'pct75', pct85: 'pct75', pct87: 'pct75', pct90: 'pct75', pct95: 'pct75',
+    thinHorzStripe: 'ltHorz', horzStripe: 'horz', thinVertStripe: 'ltVert', vertStripe: 'vert', thinDiagStripe: 'ltDnDiag', diagStripe: 'dnDiag', thinReverseDiagStripe: 'ltUpDiag', reverseDiagStripe: 'upDiag',
+    horzCross: 'cross', thinHorzCross: 'smGrid', diagCross: 'diagCross', thinDiagCross: 'diagCross',
+  };
   const EXCEL = {
     pct10: 'gray125', pct25: 'lightGray', pct50: 'mediumGray', pct75: 'darkGray',
     ltHorz: 'lightHorizontal', horz: 'darkHorizontal', dkHorz: 'darkHorizontal', ltVert: 'lightVertical', vert: 'darkVertical', dkVert: 'darkVertical',
@@ -134,5 +141,5 @@ const CellPattern = (function () {
   // Les couleurs de motif que le menu propose.
   const INKS = ['#000000', '#595959', '#a6a6a6', '#ffffff', '#1f4e79', '#c00000', '#548235', '#bf8f00'];
 
-  return { KINDS, INKS, parse, attributes, paint, fromPowerPoint, autoInk, averageTone, word: kind => WORD[kind] || null, excel: kind => EXCEL[kind] || null, isInk: value => !!ink(value) };
+  return { KINDS, INKS, parse, attributes, paint, fromPowerPoint, autoInk, averageTone, word: kind => WORD[kind] || null, fromWord: name => FROM_WORD[name] || null, excel: kind => EXCEL[kind] || null, isInk: value => !!ink(value) };
 }());
