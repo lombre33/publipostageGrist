@@ -244,6 +244,7 @@
 <link rel="stylesheet" href="css/import-placing.css?v=0.1">
 <link rel="stylesheet" href="css/import-report.css?v=0.1">
 <link rel="stylesheet" href="css/email-drafts.css?v=0.1">
+<link rel="stylesheet" href="css/email-link.css?v=0.1">
 <link rel="stylesheet" href="css/variable-actions.css?v=0.46">
 <link rel="stylesheet" href="css/emoji-chip.css?v=0.1">
 <link rel="stylesheet" href="css/loop-marks.css?v=0.2" media="not all" id="pp-loop-marks-css">
@@ -325,9 +326,9 @@
 <link rel="preload" as="script" href="js/version.js?v=0.4">
 <link rel="preload" as="script" href="js/html-sanitize.js?v=0.10">
 <link rel="preload" as="script" href="js/page-tree.js?v=0.6">
-<link rel="preload" as="script" href="js/schema-columns.js?v=0.2">
+<link rel="preload" as="script" href="js/schema-columns.js?v=0.3">
 <link rel="preload" as="script" href="js/grist-api.js?v=0.125">
-<link rel="preload" as="script" href="js/templates.js?v=0.114">
+<link rel="preload" as="script" href="js/templates.js?v=0.115">
 <link rel="preload" as="script" href="js/table-consent.js?v=0.2">
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.215">
@@ -343,7 +344,7 @@
 <link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.22">
 <link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.12">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.8">
-<link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
+<link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.2">
 <link rel="preload" as="script" href="js/i18n-texts-pivot.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-lockbubble.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-state.js?v=0.1">
@@ -581,15 +582,18 @@
 <link rel="preload" as="script" href="js/main-autosave.js?v=0.4">
 <link rel="preload" as="script" href="js/main-save.js?v=0.3">
 <link rel="preload" as="script" href="js/main-leave.js?v=0.1">
+<link rel="preload" as="script" href="js/email-link.js?v=0.1">
+<link rel="preload" as="script" href="js/email-link-panel.js?v=0.1">
 <link rel="preload" as="script" href="js/main-email.js?v=0.4">
 <link rel="preload" as="script" href="js/main-page-zoom.js?v=0.1">
 <link rel="preload" as="script" href="js/main-rename.js?v=0.1">
 <link rel="preload" as="script" href="js/main-macro-return.js?v=0.2">
+<link rel="preload" as="script" href="js/main-email-link.js?v=0.1">
 <link rel="preload" as="script" href="js/main-access.js?v=0.5">
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
 <link rel="preload" as="script" href="js/main-live.js?v=0.6">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.268">
+<link rel="preload" as="script" href="js/main.js?v=0.269">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -601,6 +605,11 @@
         <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du document" data-i18n-placeholder="template.namePlaceholder" aria-label="Nom du document" data-i18n-aria="template.namePlaceholder" hidden>
         <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le document" data-tip="Renommer" data-i18n-aria="template.rename.aria" data-i18n-tip="template.rename.tip"></button>
         <button id="btn-set-default-template" type="button" class="rename-btn" aria-label="Définir ce document comme document par défaut à l'ouverture" data-tip="Document par défaut" data-i18n-aria="template.setDefault.aria" data-i18n-tip="template.setDefault.tip"></button>
+        <!-- Email lié (js/main-email-link.js) : un clic mène à l'email lié du document ou de la grille, au document d'où l'on vient quand c'est un email ; son menu au survol liste les autres emails (ou documents) à ouvrir. Comme Enregistrer, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, son aria-label et l'intitulé du menu disent le geste. -->
+        <span class="v2-hover-group" id="v2-linked-email-group" data-close-on-click>
+          <button id="btn-linked-email" type="button" class="rename-btn" aria-label="Email lié" data-i18n-aria="emailLink.button.aria"></button>
+          <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-linked-email-flyout" role="menu"></span>
+        </span>
       </div>
       <div class="action-cluster">
         <span class="v2-hover-group" id="v2-new-template-group" data-close-on-click>
@@ -1312,6 +1321,25 @@
         </section>
       </div>
       <div class="settings-panel" data-settings-panel="mailClient" hidden>
+        <!-- Email lié (js/email-link-panel.js) : l'email qui accompagne le document ouvert, ou les documents qui renvoient à l'email ouvert. -->
+        <section class="settings-section settings-emaillink" id="settings-emaillink-section">
+          <h4 class="settings-section-title" id="settings-emaillink-title" data-i18n="emailLink.title.document">Email lié à ce document</h4>
+          <p class="settings-panel-intro" id="settings-emaillink-intro" data-i18n="emailLink.intro.document">L’email qui accompagne ce document. Le bouton à côté de l’étoile y mène en un clic, et revient au document depuis l’email.</p>
+          <div class="settings-emaillink-choose" id="settings-emaillink-choose" hidden>
+            <label for="settings-emaillink-select" data-i18n="emailLink.select.label">Email lié</label>
+            <select id="settings-emaillink-select" aria-describedby="settings-emaillink-reason"></select>
+          </div>
+          <div class="settings-emaillink-docs" id="settings-emaillink-docs-block" hidden>
+            <ul class="settings-emaillink-list" id="settings-emaillink-list"></ul>
+            <p class="settings-access-hint" id="settings-emaillink-empty" data-i18n="emailLink.list.empty" hidden>Aucun document n’est lié à cet email.</p>
+            <label for="settings-emaillink-add" data-i18n="emailLink.add.label">Lier un document</label>
+            <select id="settings-emaillink-add" aria-describedby="settings-emaillink-reason"></select>
+            <p class="settings-access-hint" data-i18n="emailLink.add.hint">Un document n’a qu’un email : le lier ici le retire de celui qu’il avait.</p>
+          </div>
+          <p class="settings-emaillink-gone" id="settings-emaillink-gone" role="status" data-i18n="emailLink.select.goneHint" hidden>L’email lié à ce document n’existe plus : choisissez-en un autre, ou « Aucun » pour retirer le lien.</p>
+          <p class="settings-emaillink-reason" id="settings-emaillink-reason" role="status" hidden></p>
+        </section>
+        <h4 class="settings-section-title settings-mailclient-title" data-i18n="settings.mailClient.title">Messagerie</h4>
         <p class="settings-panel-intro" data-i18n="settings.mailClient.intro">Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.</p>
         <div class="settings-radio-row">
           <label><input type="radio" name="settings-mail-client" value="standard"><span data-i18n="settings.mailClient.standard">Standard</span></label>
@@ -1452,9 +1480,9 @@
 <script src="js/version.js?v=0.4"></script>
 <script src="js/html-sanitize.js?v=0.10"></script>
 <script src="js/page-tree.js?v=0.6"></script>
-<script src="js/schema-columns.js?v=0.2"></script>
+<script src="js/schema-columns.js?v=0.3"></script>
 <script src="js/grist-api.js?v=0.125"></script>
-<script src="js/templates.js?v=0.114"></script>
+<script src="js/templates.js?v=0.115"></script>
 <script src="js/table-consent.js?v=0.2"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
@@ -1481,7 +1509,7 @@
 <script src="js/i18n-texts-settings.js?v=0.22"></script>
 <script src="js/i18n-texts-status.js?v=0.12"></script>
 <script src="js/i18n-texts-variables.js?v=0.8"></script>
-<script src="js/i18n-texts-eml.js?v=0.1"></script>
+<script src="js/i18n-texts-eml.js?v=0.2"></script>
 <script src="js/i18n-texts-pivot.js?v=0.3"></script>
 <script src="js/i18n-texts-lockbubble.js?v=0.5"></script>
 <script src="js/i18n-texts-state.js?v=0.1"></script>
@@ -1745,14 +1773,17 @@
 <script src="js/main-autosave.js?v=0.4"></script>
 <script src="js/main-save.js?v=0.3"></script>
 <script src="js/main-leave.js?v=0.1"></script>
+<script src="js/email-link.js?v=0.1"></script>
+<script src="js/email-link-panel.js?v=0.1"></script>
 <script src="js/main-email.js?v=0.4"></script>
 <script src="js/main-page-zoom.js?v=0.1"></script>
 <script src="js/main-rename.js?v=0.1"></script>
 <script src="js/main-macro-return.js?v=0.2"></script>
+<script src="js/main-email-link.js?v=0.1"></script>
 <script src="js/main-access.js?v=0.5"></script>
 <script src="js/main-reader.js?v=0.2"></script>
 <script src="js/main-live.js?v=0.6"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.268"></script>
+<script src="js/main.js?v=0.269"></script>
 </body>
 </html>

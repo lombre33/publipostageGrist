@@ -160,6 +160,22 @@ async function realClick(page, selector) {
   return b;
 }
 
+// Le cadre de Réglages défile (« Fermer » reste en bas) : un contrôle sous le pli se rejoint à la molette, comme le fait la personne, puis se clique. L'onglet Email a depuis le 23/11 sa section « Email lié à ce document » au-dessus du choix de la messagerie.
+async function scrollIntoReach(page, selector) {
+  for (let i = 0; i < 8; i++) {
+    const seen = await page.evaluate((sel) => {
+      const el = document.querySelector(sel), box = document.querySelector('#settings-modal .modal-content'), close = document.getElementById('settings-close');
+      if (!el || !box) return { ok: true };
+      const r = el.getBoundingClientRect(), c = box.getBoundingClientRect(), f = close ? close.getBoundingClientRect() : c;
+      return { ok: r.top >= c.top && r.bottom <= f.top, x: c.left + c.width / 2, y: c.top + 90 };
+    }, selector);
+    if (seen.ok) return;
+    await page.mouse.move(seen.x, seen.y, { steps: 2 });
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(120);
+  }
+}
+
 // Géométrie de la fenêtre Réglages telle que l'écran la montre : fenêtre, onglets, onglet visible, bouton Fermer (et ce qui reçoit un vrai point de contact
 // à son centre).
 const measure = page => page.evaluate(() => {
@@ -422,6 +438,7 @@ async function emailChoiceSurvivesReload() {
   await realClick(page, '#v2-btn-settings');
   await page.waitForTimeout(300);
   await realClick(page, '#settings-modal .settings-tab[data-settings-tab="mailClient"]');
+  await scrollIntoReach(page, 'input[name="settings-mail-client"][value="zimbra"]');
   await realClick(page, 'input[name="settings-mail-client"][value="zimbra"]');
   await realClick(page, '#settings-close');
   await page.reload({ waitUntil: 'load' });
@@ -433,6 +450,7 @@ async function emailChoiceSurvivesReload() {
   await page.waitForTimeout(150);
   const kept = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), zimbra: document.querySelector('input[name="settings-mail-client"][value="zimbra"]').checked, standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
   check('Email : après un rechargement de la page, « Zimbra » est toujours le choix en vigueur et reste coché dans la fenêtre', kept.client === 'zimbra' && kept.zimbra && !kept.standard, kept);
+  await scrollIntoReach(page, 'input[name="settings-mail-client"][value="standard"]');
   await realClick(page, 'input[name="settings-mail-client"][value="standard"]');
   await page.reload({ waitUntil: 'load' });
   await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
