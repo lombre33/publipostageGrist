@@ -158,6 +158,35 @@
     },
   });
 
+  // Entrée (un nouveau paragraphe) se recopiait en DOUBLE saut de ligne, Maj+Entrée (un retour forcé) en un seul (retour du 23/11, sur n'importe quel document, importé d'un .md ou non) : les deux
+  // font maintenant un seul saut de ligne dans le texte copié. Un .md importé en CRLF (Notepad++) : ses titres, paragraphes, retours et puces reviennent une ligne chacun.
+  cases.push({
+    id: 'plain_text_copy_of_enter_and_shift_enter_and_of_an_imported_markdown_is_one_line_break_each',
+    description: 'Entrée (nouveau paragraphe) et Maj+Entrée (retour forcé) se recopient chacun en UN saut de ligne ; un .md importé (titre, paragraphe de deux lignes, puces) recopié donne une ligne par ligne vue à l\'écran, sans ligne vide ajoutée',
+    run: async (h) => {
+      const bad = [];
+      await h.resetEditor();
+      Editor.setHTML('<p></p>');
+      await h.focusAtEnd();
+      const editor = EditorCore.getEditor();
+      editor.commands.insertContent('un');
+      editor.commands.splitBlock();
+      editor.commands.insertContent('deux');
+      editor.commands.setHardBreak();
+      editor.commands.insertContent('trois');
+      await h.sleep(100);
+      editor.commands.selectAll();
+      const dt = new DataTransfer();
+      editor.view.dom.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+      if (dt.getData('text/plain') !== 'un\ndeux\ntrois') bad.push('Entrée / Maj+Entrée : ' + JSON.stringify(dt.getData('text/plain')));
+      await MarkdownImport.ensureLibLoaded();
+      const converted = MarkdownImport.toDocument(['# Titre', 'Texte sous le titre', '', 'Para', 'sur deux lignes', '', '- puce un', '- puce deux', ''].join('\r\n'));
+      const copied = await copyText(h, converted.html);
+      if (copied.plain.replace(/\n+$/, '') !== 'Titre\nTexte sous le titre\nPara\nsur deux lignes\npuce un\npuce deux') bad.push('.md importé : ' + JSON.stringify(copied.plain));
+      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'un saut de ligne chacun' };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.plainTextPaste = cases;
 })();
