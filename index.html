@@ -231,7 +231,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
-<link rel="stylesheet" href="css/style.css?v=0.111">
+<link rel="stylesheet" href="css/style.css?v=0.112">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.6">
 <link rel="stylesheet" href="css/editor-v2.css?v=0.154">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.88">
@@ -303,7 +303,7 @@
 <link rel="stylesheet" href="css/whats-new.css?v=0.5">
 <link rel="stylesheet" href="css/page-zoom.css?v=0.10">
 <link rel="stylesheet" href="css/batch-progress.css?v=0.1">
-<link rel="stylesheet" href="css/field-editor.css?v=0.1">
+<link rel="stylesheet" href="css/field-editor.css?v=0.2">
 <link rel="stylesheet" href="css/email-plain-text.css?v=0.2">
 <link rel="stylesheet" href="css/print.css?v=0.4">
 <link rel="stylesheet" href="css/template-gallery.css?v=0.3">
@@ -569,7 +569,7 @@
 <link rel="preload" as="script" href="js/reading-line.js?v=0.4">
 <link rel="preload" as="script" href="js/reading-value.js?v=0.1">
 <link rel="preload" as="script" href="js/field-codec.js?v=0.9">
-<link rel="preload" as="script" href="js/field-editor.js?v=0.14">
+<link rel="preload" as="script" href="js/field-editor.js?v=0.15">
 <link rel="preload" as="script" href="js/import-placing.js?v=0.7">
 <link rel="preload" as="script" href="js/import-report.js?v=0.2">
 <link rel="preload" as="script" href="js/main-import.js?v=0.19">
@@ -761,16 +761,16 @@
     </div>
     <div id="v2-email-fields-row" hidden>
       <span class="v2-email-field-label" id="v2-email-subject-label" data-i18n="email.subject.label">Objet</span>
-      <div id="v2-email-subject" class="pp-field-editor v2-email-field-input v2-email-field-subject" aria-labelledby="v2-email-subject-label" data-i18n-placeholder="email.subject.placeholder" placeholder="Objet de l'email (#Variable autorisée)"></div>
+      <div id="v2-email-subject" class="pp-field-editor pp-field-opens v2-email-field-input v2-email-field-subject" aria-labelledby="v2-email-subject-label" data-i18n-placeholder="email.subject.placeholder" placeholder="Objet de l'email (#Variable autorisée)"></div>
       <span class="v2-email-field-label" id="v2-email-to-label" data-i18n="email.to.label">À</span>
-      <div id="v2-email-to" class="pp-field-editor v2-email-field-input" spellcheck="false" aria-labelledby="v2-email-to-label" data-i18n-placeholder="email.to.placeholder" placeholder="Destinataires (#Variable ou adresses séparées par des virgules)"></div>
+      <div id="v2-email-to" class="pp-field-editor pp-field-opens v2-email-field-input" spellcheck="false" aria-labelledby="v2-email-to-label" data-i18n-placeholder="email.to.placeholder" placeholder="Destinataires (#Variable ou adresses séparées par des virgules)"></div>
       <span class="v2-email-field-label" id="v2-email-cc-label" data-i18n="email.cc.label">Cc</span>
-      <div id="v2-email-cc" class="pp-field-editor v2-email-field-input" spellcheck="false" aria-labelledby="v2-email-cc-label" data-i18n-placeholder="email.cc.placeholder" placeholder="Copie"></div>
+      <div id="v2-email-cc" class="pp-field-editor pp-field-opens v2-email-field-input" spellcheck="false" aria-labelledby="v2-email-cc-label" data-i18n-placeholder="email.cc.placeholder" placeholder="Copie"></div>
       <button type="button" id="v2-btn-toggle-cci" class="v2-email-cci-toggle" data-i18n="email.cci.show">+ Cci</button>
-      <div id="v2-email-cci" class="pp-field-editor v2-email-field-input" spellcheck="false" data-i18n-placeholder="email.cci.placeholder" placeholder="Copie cachée" aria-label="Copie cachée" data-i18n-aria="email.cci.placeholder" hidden></div>
+      <div id="v2-email-cci" class="pp-field-editor pp-field-opens v2-email-field-input" spellcheck="false" data-i18n-placeholder="email.cci.placeholder" placeholder="Copie cachée" aria-label="Copie cachée" data-i18n-aria="email.cci.placeholder" hidden></div>
       <!-- PJ (js/eml-export.js) : les pièces jointes du .eml, seulement des variables de colonnes Pièces jointes de Grist (`data-variables-kind`, js/variables.js:fieldItems ; js/field-editor.js:variablesOnly). Le lien mailto: ne porte aucune pièce jointe. -->
       <button type="button" id="v2-btn-toggle-pj" class="v2-email-cci-toggle" data-i18n="email.pj.show">+ PJ</button>
-      <div id="v2-email-pj" class="pp-field-editor v2-email-field-input" spellcheck="false" data-variables-kind="attachments" data-i18n-placeholder="email.pj.placeholder" placeholder="Pièces jointes de l’email (.eml) : #Colonne de pièces jointes" aria-label="Pièces jointes" data-i18n-aria="email.pj.aria" hidden></div>
+      <div id="v2-email-pj" class="pp-field-editor pp-field-opens v2-email-field-input" spellcheck="false" data-variables-kind="attachments" data-i18n-placeholder="email.pj.placeholder" placeholder="Pièces jointes de l’email (.eml) : #Colonne de pièces jointes" aria-label="Pièces jointes" data-i18n-aria="email.pj.aria" hidden></div>
     </div>
     <div id="v2-toolbar">
       <span class="v2-hover-group" id="v2-heading-group">
@@ -1733,7 +1733,7 @@
 <script src="js/reading-line.js?v=0.4"></script>
 <script src="js/reading-value.js?v=0.1"></script>
 <script src="js/field-codec.js?v=0.9"></script>
-<script src="js/field-editor.js?v=0.14"></script>
+<script src="js/field-editor.js?v=0.15"></script>
 <script src="js/import-placing.js?v=0.7"></script>
 <script src="js/import-report.js?v=0.2"></script>
 <script src="js/main-import.js?v=0.19"></script>

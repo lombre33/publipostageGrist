@@ -205,7 +205,8 @@ const boxState = () => page.evaluate(() => {
 const fieldState = id => page.evaluate(fieldId => {
   const host = document.getElementById(fieldId);
   const chips = Array.from(host.querySelectorAll('.mention-chip'));
-  const hr = host.getBoundingClientRect();
+  // La zone de saisie : la ligne du champ, ou - champ ouvert, texte trop long pour la ligne - son cadre sous la ligne (js/field-editor.js : `unfold`).
+  const hr = (host.querySelector('.pp-field-text') || host).getBoundingClientRect();
   return {
     value: host.value, chips: chips.map(c => c.textContent), focused: host.contains(document.activeElement),
     chipsInField: chips.every(c => { const r = c.getBoundingClientRect(); return r.width > 0 && r.left >= hr.left - 0.5 && r.right <= hr.right + 0.5; }),

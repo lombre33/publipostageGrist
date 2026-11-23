@@ -180,6 +180,73 @@ const FieldEditor = (function () {
     return FloatingToolbars.variableWindowOpen(field && field.hostWindow) || !!(link && link.style.display === 'flex');
   }
 
+  // Le champ sert encore tant qu'il a le focus, que la barre de l'une de ses bulles en a un champ de formulaire (décimales, devise) ou qu'une fenêtre de la bulle (condition, clé de correspondance) est ouverte : ce que ces
+  // réglages changent appartient à la même séance, et le champ qui s'ouvre (`unfold`) reste ouvert.
+  const inUse = field => field.editor.view.hasFocus() || windowOpen(field) || field.panels.some(panel => panel.el.contains(document.activeElement));
+
+  const { unfold, watchFold } = (function () {
+    // Le champ qui s'ouvre (classe `pp-field-opens` : Objet, À, Cc, Cci et PJ du mode email) : fermé, il tient sur une ligne de la largeur que la barre lui laisse (une vingtaine de caractères à 700 px) ; avec le curseur
+    // - ou, en Lecture, après un clic sur la valeur résolue - et quand son texte ne tient plus, sa zone de saisie se pose juste SOUS la ligne des champs, sur toute la largeur du bandeau et sur plusieurs lignes, par-dessus
+    // la barre d'outils (css/field-editor.css) : la ligne reste en place avec ses voisins, qui se cliquent comme avant, rien ne se décale, le document non plus. Le champ de la ligne montre alors le début de son texte
+    // (`data-preview`). Ce que le champ porte reste UNE ligne : seul l'affichage passe à la ligne, l'Entrée ne coupe rien. Ce fichier ne pose que la classe `is-open`, l'aperçu et les mesures de l'ouverture ;
+    // la place et les lignes sont dans la feuille de style.
+    const MARGIN = 10;      // le retrait du bandeau (css/toolbar-v2.css : `#v2-email-fields-row`), à gauche et à droite
+    const MAX_HEIGHT = 126; // cinq lignes de 22 px et leurs marges ; au-delà, la zone défile
+    const GAP = 4;          // l'écart entre la ligne des champs et la zone de saisie ouverte (css/field-editor.css : `top`)
+    const opens = field => field.host.classList.contains('pp-field-opens');
+
+    // Les mesures de l'ouverture, prises sur le champ tel qu'il est dans sa ligne (fermé, ou déjà ouvert : il garde sa place) : de quoi aller du retrait gauche du bandeau à son retrait droit, la hauteur permise jusqu'au bas du cadre.
+    function place(field) {
+      const { host } = field;
+      const row = host.parentElement;
+      if (!row) return;
+      const box = host.getBoundingClientRect();
+      const rowBox = row.getBoundingClientRect();
+      const set = (name, value) => host.style.setProperty(name, value);
+      set('--pp-open-left', (rowBox.left + MARGIN - box.left - host.clientLeft) + 'px');
+      set('--pp-open-width', Math.max(box.width, rowBox.width - 2 * MARGIN) + 'px');
+      set('--pp-open-max', Math.max(60, Math.min(MAX_HEIGHT, window.innerHeight - box.bottom - GAP - 8)) + 'px');
+    }
+
+    // Le texte ne tient pas sur la ligne du champ fermé : il la dépasse, la ligne finit par « … ». Un texte qui tient n'ouvre rien : le champ reste de sa taille et ses voisins restent sous la souris.
+    const clipped = field => {
+      const line = field.editor.view.dom.firstElementChild;
+      return !!line && line.scrollWidth > line.clientWidth + 1;
+    };
+
+    // Ouvre le champ tant qu'il sert (le curseur, la barre d'une bulle, une fenêtre de la bulle) ou qu'on le consulte en Lecture, et que son texte ne tient pas sur sa ligne ; une fois ouvert, il le reste tant qu'il sert (il ne
+    // se referme pas au fil des effacements). Le referme sinon, le texte revenu à son début (le curseur l'avait fait défiler vers sa fin).
+    function unfold(field) {
+      if (!opens(field)) return;
+      const { host } = field;
+      const wasOpen = host.classList.contains('is-open');
+      const open = (field.peek || (field.editor.isEditable && inUse(field))) && (wasOpen || clipped(field));
+      if (open && !wasOpen) place(field);
+      // Le champ de la ligne, dont la zone de saisie est sous lui, montre le début du texte (css/field-editor.css : `::after`).
+      if (open) host.dataset.preview = FieldCodec.serializePlain(itemsOfDoc(field.editor.state.doc)); else if (wasOpen) delete host.dataset.preview;
+      host.classList.toggle('is-open', !!open);
+      if (!open && wasOpen) {
+        // La ligne (fermée, c'est elle qui défile) et la zone de saisie : le curseur a fait défiler l'une ou l'autre ; le champ refermé montre le début du texte.
+        const dom = field.editor.view.dom;
+        dom.scrollLeft = 0;
+        if (dom.firstElementChild) dom.firstElementChild.scrollLeft = 0;
+      }
+    }
+
+    // Un champ en Lecture ne prend pas le focus : un clic sur sa valeur l'ouvre (la lire en entier, la copier), un clic ailleurs, Échap ou le retour en édition la referme. Une fois par page : les champs
+    // ouverts suivent le redimensionnement du cadre.
+    let watching = false;
+    function watchFold() {
+      if (watching) return;
+      watching = true;
+      const close = except => fields.forEach(field => { if (field.peek && !(except && field.host.contains(except))) { field.peek = false; unfold(field); } });
+      document.addEventListener('pointerdown', event => close(event.target), true);
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') close(null); }, true);
+      window.addEventListener('resize', () => fields.forEach(field => { if (field.host.classList.contains('is-open')) place(field); }));
+    }
+    return { unfold, watchFold };
+  })();
+
   const { show, tidy, sync } = (function () {
     // Ce que le champ affiche : un autre document, le texte résolu de la Lecture, l'état « vide »
 
@@ -249,10 +316,6 @@ const FieldEditor = (function () {
       return changed;
     }
 
-    // Le champ sert encore tant qu'il a le focus, que la barre de l'une de ses bulles en a un champ de formulaire (décimales, devise) ou qu'une fenêtre de la bulle (condition, clé de correspondance) est ouverte : ce que ces
-    // réglages changent appartient à la même séance.
-    const inUse = field => field.editor.view.hasFocus() || windowOpen(field) || field.panels.some(panel => panel.el.contains(document.activeElement));
-
     // Le focus du champ ouvre la séance (une seule à la fois : le retour du focus après la barre ou la fenêtre la continue). Pas en Lecture : le champ y montre le texte résolu, rien ne s'y modifie.
     function open(field) {
       // Le champ d'une fenêtre est un brouillon : la fenêtre pose son contenu en une fois à « Enregistrer », rien ne se défait champ par champ dans l'historique du modèle.
@@ -306,6 +369,9 @@ const FieldEditor = (function () {
         field.readOnly = !!flag;
         // Sans le second argument, setEditable émet `update` : le brouillon passerait « modifié » à chaque passage en Lecture.
         editor.setEditable(!field.readOnly, false);
+        // Le retour en édition referme la consultation de la Lecture.
+        field.peek = false;
+        unfold(field);
         if (field.readOnly) editor.view.dom.setAttribute('aria-readonly', 'true'); else editor.view.dom.removeAttribute('aria-readonly');
         host.classList.toggle('is-readonly', field.readOnly);
       },
@@ -352,7 +418,7 @@ const FieldEditor = (function () {
     // Une valeur posée sur l'élément avant sa transformation n'est pas perdue.
     const earlyValue = Object.prototype.hasOwnProperty.call(host, 'value') ? String(host.value || '') : '';
     const field = {
-      host, libs, editor: null, panels: [], shown: null, readOnly: false, session: null,
+      host, libs, editor: null, panels: [], shown: null, readOnly: false, peek: false, session: null,
       multiline: !!opts.multiline, keepSpaces: !!opts.keepSpaces, hostWindow: opts.hostWindow || null, limit: opts.limit || null,
       variablesKind: (host.dataset && host.dataset.variablesKind) || '',
     };
@@ -365,10 +431,10 @@ const FieldEditor = (function () {
       editorProps: editorProps(field.multiline, field.mentions),
       enableInputRules: false,
       enablePasteRules: false,
-      onUpdate: () => { field.shown = null; sync(field); emit(host, 'input', true); },
+      onUpdate: () => { field.shown = null; sync(field); unfold(field); emit(host, 'input', true); },
       // Une pastille « @ » posée ou collée prend son état du moment (nom à jour, info-bulle, rouge quand sa fiche n'existe plus) : js/mention.js la repeint, comme dans le document.
       onTransaction: () => { sync(field); if (field.mentions) Mention.markChips(field.editor.view.dom); },
-      onFocus: () => open(field),
+      onFocus: () => { open(field); unfold(field); },
       onBlur: () => {
         emit(host, 'blur');
         // Après le tour : une fenêtre ouverte par ce clic (condition, clé de correspondance...) tient une position, le champ n'y touche pas.
@@ -376,6 +442,7 @@ const FieldEditor = (function () {
           if (field.editor.isDestroyed) return;
           if (!field.editor.view.hasFocus() && !windowOpen(field)) tidy(field);
           settle(field);
+          unfold(field);
         }, 0);
       },
     });
@@ -393,6 +460,13 @@ const FieldEditor = (function () {
     field.panels = [FloatingToolbars.attachVariableToolbar(field.editor, host, barExtra), FloatingToolbars.attachTimeChipToolbar(field.editor, host, barExtra)];
     if (field.mentions) field.panels.push(FloatingToolbars.attachMentionToolbar(field.editor, host, barExtra));
     host.classList.toggle('is-multiline', field.multiline);
+    // En Lecture (champ non modifiable), un clic sur la valeur résolue ouvre le champ pour la lire en entier.
+    host.addEventListener('pointerdown', () => {
+      if (field.editor.isEditable || field.peek) return;
+      field.peek = true;
+      unfold(field);
+    });
+    watchFold();
     // Le bord du champ, hors du texte, place le curseur : un clic y viserait sinon rien.
     host.addEventListener('mousedown', event => {
       if (event.target !== host || !field.editor.isEditable) return;
@@ -404,7 +478,7 @@ const FieldEditor = (function () {
     host.addEventListener('compositionend', () => sync(field));
     fields.set(host, field);
     // Le focus qui passe ailleurs - le corps, une autre ligne de la barre - ferme la séance du champ quitté, même quand le départ n'a pas fait de `blur` utile (le retour d'une fenêtre fermée).
-    if (!watchingFocus) { watchingFocus = true; document.addEventListener('focusin', () => settle(), true); }
+    if (!watchingFocus) { watchingFocus = true; document.addEventListener('focusin', () => { settle(); fields.forEach(unfold); }, true); }
     if (earlyValue) host.value = earlyValue; else sync(field);
     return field.editor;
   }
