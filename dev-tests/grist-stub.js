@@ -1002,10 +1002,13 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
     // Exposée aussi en haut de grist (grist-plugin-api.ts exporte fetchSelectedTable à la fois seule et dans docApi).
     fetchSelectedTable: fetchSelectedTable,
     docApi: {
-      listTables: async function () { return state.tables.slice(); },
+      listTables: async function () { state.callOrder.push('listTables'); const held = slowRead; if (held) await held; return state.tables.slice(); },
       // Latence nulle (le défaut) : les mêmes fonctions qu'avant, appelées directement, sans minuteur ni tour de microtâche de plus - seuls les scénarios qui posent setLatency
       // ou failReadBackOnce voient autre chose.
       fetchTable: async function (tableId) {
+        state.callOrder.push('fetchTable ' + tableId);
+        const held = holdBehindSlowRead(tableId);
+        if (held) await held;
         if (state.latency.fetchTable) return withLatency('fetchTable', async () => readTable(tableId));
         return readTable(tableId);
       },
@@ -1016,6 +1019,9 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
       // Un identifiant tiré à chaque chargement de la page : deux pages de test ne partagent jamais un instantané (setDocId pour jouer « le même document, rouvert »).
       // Chaque demande est gardée (state.tokenCalls : { readOnly }) ; state.tokenFailure refuse d'en donner ; state.tokenTtlMs fixe la durée de vie annoncée (js/row-attachment.js redemande un jeton qui expire) ; state.tokenBaseUrl fixe l'adresse de l'interface de programmation que le jeton donne (js/grist-api.js:getInstanceHost lit son hôte).
       getAccessToken: async function (options) {
+        state.callOrder.push('getAccessToken');
+        const held = slowRead;
+        if (held) await held;
         state.tokenCalls.push({ readOnly: !!(options && options.readOnly) });
         if (state.tokenFailure) throw new Error(state.tokenFailure);
         return { token: options && options.readOnly === false ? 'stub-write-token' + state.tokenCalls.length : 'stub-token', baseUrl: state.tokenBaseUrl || 'http://localhost/api/docs/' + state.docId, ttlMsecs: state.tokenTtlMs };
@@ -1039,6 +1045,22 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   };
 
   state.tokenCalls = [];
+  // L'ordre des appels de l'API des documents (listTables, fetchTable <table>, getAccessToken), pour qu'un essai dise lequel est parti avant l'autre.
+  state.callOrder = [];
+  // L'hôte de Grist traite ses appels dans l'ordre : pendant la lecture d'une grosse table (42 Mo chez une personne : 4,6 s), un appel posé après elle attend sa fin, un appel posé avant elle repart tout de suite. `state.slowTable` + `state.slowMs`
+  // jouent cette lecture : la table nommée (son nom dans le document) met `slowMs` à répondre, et tout listTables, fetchTable ou getAccessToken posé pendant ce temps attend la fin (js/early-preview.js : son jeton doit partir avant).
+  state.slowTable = '';
+  state.slowMs = 0;
+  let slowRead = null;
+  let slowStarted = false;   // une seule lecture lente : la première de cette table
+  function holdBehindSlowRead(tableId) {
+    if (state.slowTable && tableId === state.slowTable && state.slowMs > 0 && !slowRead && !slowStarted) {
+      slowStarted = true;
+      slowRead = new Promise(resolve => setTimeout(resolve, state.slowMs)).then(() => { slowRead = null; });
+      return slowRead;
+    }
+    return slowRead;
+  }
   state.tokenFailure = '';
   state.tokenBaseUrl = '';
   state.tokenTtlMs = 120000;

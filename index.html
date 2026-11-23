@@ -60,7 +60,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-c/RaE/NMLwhbIqtrdmjl9RCu79OAuzu3vCnqyiaF9Zs='
     'sha256-T5mKluScfRtuj0P/t6/XPNGRtl1KicJ00NJXmuWrmxk=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
-    'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-3pld5q8DliXcQRd9eIdK7uML8T2+GEQBbkk8dKd859s=';
+    'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-O2zv+sPJvUfYXOt2U+m33BNokMPFvAZ265U/OpsoQWs=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -307,7 +307,7 @@
 <link rel="stylesheet" href="css/state-check.css?v=0.1">
 <link rel="stylesheet" href="css/versions-history.css?v=0.2">
 <link rel="stylesheet" href="css/external-images.css?v=0.3">
-<link rel="stylesheet" href="css/first-contact.css?v=0.3">
+<link rel="stylesheet" href="css/first-contact.css?v=0.4">
 <link rel="stylesheet" href="css/whats-new.css?v=0.5">
 <link rel="stylesheet" href="css/page-zoom.css?v=0.10">
 <link rel="stylesheet" href="css/batch-progress.css?v=0.1">
@@ -324,7 +324,7 @@
 <link rel="preload" as="script" href="js/gfs-bar.js?v=0.6">
 <link rel="preload" as="script" href="js/gfs-ambiance.js?v=0.1">
 <link rel="preload" as="script" href="js/gfs-correcteurs.js?v=0.1">
-<link rel="preload" as="script" href="js/perf-trace.js?v=0.8">
+<link rel="preload" as="script" href="js/perf-trace.js?v=0.9">
 <link rel="preload" as="script" href="js/dom.js?v=0.4">
 <link rel="preload" as="script" href="js/image-io.js?v=0.4">
 <link rel="preload" as="script" href="js/heavy-images.js?v=0.1">
@@ -334,9 +334,10 @@
 <link rel="preload" as="script" href="js/html-sanitize.js?v=0.10">
 <link rel="preload" as="script" href="js/page-tree.js?v=0.6">
 <link rel="preload" as="script" href="js/schema-columns.js?v=0.5">
-<link rel="preload" as="script" href="js/grist-api.js?v=0.129">
-<link rel="preload" as="script" href="js/templates.js?v=0.117">
+<link rel="preload" as="script" href="js/grist-api.js?v=0.130">
+<link rel="preload" as="script" href="js/templates.js?v=0.118">
 <link rel="preload" as="script" href="js/table-consent.js?v=0.2">
+<link rel="preload" as="script" href="js/early-preview.js?v=0.1">
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.215">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.8">
@@ -465,7 +466,7 @@
 <link rel="preload" as="script" href="js/batch-failures.js?v=0.3">
 <link rel="preload" as="script" href="js/view-source.js?v=0.1">
 <link rel="preload" as="script" href="js/batch-scope.js?v=0.5">
-<link rel="preload" as="script" href="js/first-contact.js?v=0.6">
+<link rel="preload" as="script" href="js/first-contact.js?v=0.7">
 <link rel="preload" as="script" href="js/whats-new.js?v=0.5">
 <link rel="preload" as="script" href="js/external-images.js?v=0.10">
 <link rel="preload" as="script" href="js/print-export.js?v=0.12">
@@ -602,7 +603,7 @@
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
 <link rel="preload" as="script" href="js/main-live.js?v=0.6">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.272">
+<link rel="preload" as="script" href="js/main.js?v=0.273">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -1494,7 +1495,7 @@
 <script src="js/gfs-bar.js?v=0.6"></script>
 <script src="js/gfs-ambiance.js?v=0.1"></script>
 <script src="js/gfs-correcteurs.js?v=0.1"></script>
-<script src="js/perf-trace.js?v=0.8"></script>
+<script src="js/perf-trace.js?v=0.9"></script>
 <script src="js/dom.js?v=0.4"></script>
 <script src="js/image-io.js?v=0.4"></script>
 <script src="js/heavy-images.js?v=0.1"></script>
@@ -1504,14 +1505,18 @@
 <script src="js/html-sanitize.js?v=0.10"></script>
 <script src="js/page-tree.js?v=0.6"></script>
 <script src="js/schema-columns.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.129"></script>
-<script src="js/templates.js?v=0.117"></script>
+<script src="js/grist-api.js?v=0.130"></script>
+<script src="js/templates.js?v=0.118"></script>
 <script src="js/table-consent.js?v=0.2"></script>
+<script src="js/early-preview.js?v=0.1"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
   // arrivent et s'exécutent. js/main.js reprend ces promesses (window.__earlyStart) ; sans elles (échec ici), il les lance lui-même.
   try {
     const gristInit = GristAPI.init();
+    // L'aperçu du document que GFS désigne (js/early-preview.js) : son jeton de lecture doit partir AVANT la lecture de la table des modèles, que Grist traite en plusieurs secondes sans rien laisser passer devant les appels
+    // qui la suivent. Sans effet, ni erreur, quand rien n'est désigné.
+    try { EarlyPreview.begin(); } catch (e) { /* l'aperçu n'est qu'un plus : le démarrage est celui d'avant */ }
     const templatesLoaded = Templates.loadAll();
     gristInit.catch(() => {}); // l'échec se lit à l'attente, dans js/main.js
     templatesLoaded.catch(() => {});
@@ -1683,7 +1688,7 @@
 <script src="js/batch-failures.js?v=0.3"></script>
 <script src="js/view-source.js?v=0.1"></script>
 <script src="js/batch-scope.js?v=0.5"></script>
-<script src="js/first-contact.js?v=0.6"></script>
+<script src="js/first-contact.js?v=0.7"></script>
 <script src="js/whats-new.js?v=0.5"></script>
 <script src="js/external-images.js?v=0.10"></script>
 <script src="js/print-export.js?v=0.12"></script>
@@ -1820,6 +1825,6 @@
 <script src="js/main-reader.js?v=0.2"></script>
 <script src="js/main-live.js?v=0.6"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.272"></script>
+<script src="js/main.js?v=0.273"></script>
 </body>
 </html>
