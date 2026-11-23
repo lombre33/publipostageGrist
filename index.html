@@ -60,7 +60,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-c/RaE/NMLwhbIqtrdmjl9RCu79OAuzu3vCnqyiaF9Zs='
     'sha256-T5mKluScfRtuj0P/t6/XPNGRtl1KicJ00NJXmuWrmxk=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
-    'sha256-dr2nJ9qlSEpVpFpN01rgQ3bZHAcSZWrebqvX0xSlX7I=';
+    'sha256-3pld5q8DliXcQRd9eIdK7uML8T2+GEQBbkk8dKd859s=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -244,6 +244,7 @@
 <link rel="stylesheet" href="css/import-placing.css?v=0.1">
 <link rel="stylesheet" href="css/import-report.css?v=0.1">
 <link rel="stylesheet" href="css/email-drafts.css?v=0.1">
+<link rel="stylesheet" href="css/email-link.css?v=0.1">
 <link rel="stylesheet" href="css/variable-actions.css?v=0.46">
 <link rel="stylesheet" href="css/emoji-chip.css?v=0.1">
 <link rel="stylesheet" href="css/loop-marks.css?v=0.2" media="not all" id="pp-loop-marks-css">
@@ -316,7 +317,7 @@
 <link rel="preload" as="script" href="js/gfs-bar.js?v=0.6">
 <link rel="preload" as="script" href="js/gfs-ambiance.js?v=0.1">
 <link rel="preload" as="script" href="js/gfs-correcteurs.js?v=0.1">
-<link rel="preload" as="script" href="js/perf-trace.js?v=0.4">
+<link rel="preload" as="script" href="js/perf-trace.js?v=0.6">
 <link rel="preload" as="script" href="js/dom.js?v=0.4">
 <link rel="preload" as="script" href="js/image-io.js?v=0.4">
 <link rel="preload" as="script" href="js/heavy-images.js?v=0.1">
@@ -325,15 +326,15 @@
 <link rel="preload" as="script" href="js/version.js?v=0.4">
 <link rel="preload" as="script" href="js/html-sanitize.js?v=0.10">
 <link rel="preload" as="script" href="js/page-tree.js?v=0.6">
-<link rel="preload" as="script" href="js/schema-columns.js?v=0.2">
-<link rel="preload" as="script" href="js/grist-api.js?v=0.125">
-<link rel="preload" as="script" href="js/templates.js?v=0.114">
+<link rel="preload" as="script" href="js/schema-columns.js?v=0.3">
+<link rel="preload" as="script" href="js/grist-api.js?v=0.126">
+<link rel="preload" as="script" href="js/templates.js?v=0.115">
 <link rel="preload" as="script" href="js/table-consent.js?v=0.2">
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.215">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.8">
 <link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.16">
-<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.40">
+<link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.41">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.8">
 <link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.2">
@@ -343,7 +344,7 @@
 <link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.22">
 <link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.12">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.8">
-<link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.1">
+<link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.2">
 <link rel="preload" as="script" href="js/i18n-texts-pivot.js?v=0.3">
 <link rel="preload" as="script" href="js/i18n-texts-lockbubble.js?v=0.5">
 <link rel="preload" as="script" href="js/i18n-texts-state.js?v=0.1">
@@ -373,7 +374,7 @@
 <link rel="preload" as="script" href="js/icons.js?v=0.98">
 <link rel="preload" as="script" href="js/editor-core.js?v=0.53">
 <link rel="preload" as="script" href="js/color-palette.js?v=0.6">
-<link rel="preload" as="script" href="js/cell-pattern.js?v=0.1">
+<link rel="preload" as="script" href="js/cell-pattern.js?v=0.3">
 <link rel="preload" as="script" href="js/header-footer-preview.js?v=1.70">
 <link rel="preload" as="script" href="js/loop-marks.js?v=0.2">
 <link rel="preload" as="script" href="js/editor-nodes.js?v=1.93">
@@ -435,14 +436,14 @@
 <link rel="preload" as="script" href="js/cross-refs.js?v=0.1">
 <link rel="preload" as="script" href="js/page-copies.js?v=0.3">
 <link rel="preload" as="script" href="js/email-plain-text.js?v=0.3">
-<link rel="preload" as="script" href="js/editor.js?v=2.123">
-<link rel="preload" as="script" href="js/export-common.js?v=0.41">
+<link rel="preload" as="script" href="js/editor.js?v=2.124">
+<link rel="preload" as="script" href="js/export-common.js?v=0.42">
 <link rel="preload" as="script" href="js/native-libs.js?v=0.1">
 <link rel="preload" as="script" href="js/pdf-glyph-fallback.js?v=0.3">
 <link rel="preload" as="script" href="js/export-engines.js?v=0.2">
 <link rel="preload" as="script" href="js/versions-store.js?v=0.8">
 <link rel="preload" as="script" href="js/grid-xlsx-import.js?v=0.14">
-<link rel="preload" as="script" href="js/markdown-import.js?v=0.5">
+<link rel="preload" as="script" href="js/markdown-import.js?v=0.6">
 <link rel="preload" as="script" href="js/html-import.js?v=0.4">
 <link rel="preload" as="script" href="js/mailto-export.js?v=0.20">
 <link rel="preload" as="script" href="js/eml-export.js?v=0.1">
@@ -582,15 +583,18 @@
 <link rel="preload" as="script" href="js/main-autosave.js?v=0.4">
 <link rel="preload" as="script" href="js/main-save.js?v=0.3">
 <link rel="preload" as="script" href="js/main-leave.js?v=0.1">
+<link rel="preload" as="script" href="js/email-link.js?v=0.1">
+<link rel="preload" as="script" href="js/email-link-panel.js?v=0.1">
 <link rel="preload" as="script" href="js/main-email.js?v=0.4">
 <link rel="preload" as="script" href="js/main-page-zoom.js?v=0.1">
 <link rel="preload" as="script" href="js/main-rename.js?v=0.1">
 <link rel="preload" as="script" href="js/main-macro-return.js?v=0.2">
+<link rel="preload" as="script" href="js/main-email-link.js?v=0.1">
 <link rel="preload" as="script" href="js/main-access.js?v=0.5">
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
 <link rel="preload" as="script" href="js/main-live.js?v=0.6">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.268">
+<link rel="preload" as="script" href="js/main.js?v=0.270">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -602,6 +606,11 @@
         <input id="template-name" type="text" class="title-cluster-input" placeholder="Nom du document" data-i18n-placeholder="template.namePlaceholder" aria-label="Nom du document" data-i18n-aria="template.namePlaceholder" hidden>
         <button id="btn-rename-template" type="button" class="rename-btn" aria-label="Renommer le document" data-tip="Renommer" data-i18n-aria="template.rename.aria" data-i18n-tip="template.rename.tip"></button>
         <button id="btn-set-default-template" type="button" class="rename-btn" aria-label="Définir ce document comme document par défaut à l'ouverture" data-tip="Document par défaut" data-i18n-aria="template.setDefault.aria" data-i18n-tip="template.setDefault.tip"></button>
+        <!-- Email lié (js/main-email-link.js) : un clic mène à l'email lié du document ou de la grille, au document d'où l'on vient quand c'est un email ; son menu au survol liste les autres emails (ou documents) à ouvrir. Comme Enregistrer, le bouton n'a pas de data-tip : l'info-bulle se retirerait dès l'ouverture du menu, son aria-label et l'intitulé du menu disent le geste. -->
+        <span class="v2-hover-group" id="v2-linked-email-group" data-close-on-click>
+          <button id="btn-linked-email" type="button" class="rename-btn" aria-label="Email lié" data-i18n-aria="emailLink.button.aria"></button>
+          <span class="v2-hover-flyout v2-hover-flyout-v v2-hover-flyout-scrollable" id="v2-linked-email-flyout" role="menu"></span>
+        </span>
       </div>
       <div class="action-cluster">
         <span class="v2-hover-group" id="v2-new-template-group" data-close-on-click>
@@ -1313,6 +1322,25 @@
         </section>
       </div>
       <div class="settings-panel" data-settings-panel="mailClient" hidden>
+        <!-- Email lié (js/email-link-panel.js) : l'email qui accompagne le document ouvert, ou les documents qui renvoient à l'email ouvert. -->
+        <section class="settings-section settings-emaillink" id="settings-emaillink-section">
+          <h4 class="settings-section-title" id="settings-emaillink-title" data-i18n="emailLink.title.document">Email lié à ce document</h4>
+          <p class="settings-panel-intro" id="settings-emaillink-intro" data-i18n="emailLink.intro.document">L’email qui accompagne ce document. Le bouton à côté de l’étoile y mène en un clic, et revient au document depuis l’email.</p>
+          <div class="settings-emaillink-choose" id="settings-emaillink-choose" hidden>
+            <label for="settings-emaillink-select" data-i18n="emailLink.select.label">Email lié</label>
+            <select id="settings-emaillink-select" aria-describedby="settings-emaillink-reason"></select>
+          </div>
+          <div class="settings-emaillink-docs" id="settings-emaillink-docs-block" hidden>
+            <ul class="settings-emaillink-list" id="settings-emaillink-list"></ul>
+            <p class="settings-access-hint" id="settings-emaillink-empty" data-i18n="emailLink.list.empty" hidden>Aucun document n’est lié à cet email.</p>
+            <label for="settings-emaillink-add" data-i18n="emailLink.add.label">Lier un document</label>
+            <select id="settings-emaillink-add" aria-describedby="settings-emaillink-reason"></select>
+            <p class="settings-access-hint" data-i18n="emailLink.add.hint">Un document n’a qu’un email : le lier ici le retire de celui qu’il avait.</p>
+          </div>
+          <p class="settings-emaillink-gone" id="settings-emaillink-gone" role="status" data-i18n="emailLink.select.goneHint" hidden>L’email lié à ce document n’existe plus : choisissez-en un autre, ou « Aucun » pour retirer le lien.</p>
+          <p class="settings-emaillink-reason" id="settings-emaillink-reason" role="status" hidden></p>
+        </section>
+        <h4 class="settings-section-title settings-mailclient-title" data-i18n="settings.mailClient.title">Messagerie</h4>
         <p class="settings-panel-intro" data-i18n="settings.mailClient.intro">Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.</p>
         <div class="settings-radio-row">
           <label><input type="radio" name="settings-mail-client" value="standard"><span data-i18n="settings.mailClient.standard">Standard</span></label>
@@ -1444,7 +1472,7 @@
 <script src="js/gfs-bar.js?v=0.6"></script>
 <script src="js/gfs-ambiance.js?v=0.1"></script>
 <script src="js/gfs-correcteurs.js?v=0.1"></script>
-<script src="js/perf-trace.js?v=0.4"></script>
+<script src="js/perf-trace.js?v=0.6"></script>
 <script src="js/dom.js?v=0.4"></script>
 <script src="js/image-io.js?v=0.4"></script>
 <script src="js/heavy-images.js?v=0.1"></script>
@@ -1453,9 +1481,9 @@
 <script src="js/version.js?v=0.4"></script>
 <script src="js/html-sanitize.js?v=0.10"></script>
 <script src="js/page-tree.js?v=0.6"></script>
-<script src="js/schema-columns.js?v=0.2"></script>
-<script src="js/grist-api.js?v=0.125"></script>
-<script src="js/templates.js?v=0.114"></script>
+<script src="js/schema-columns.js?v=0.3"></script>
+<script src="js/grist-api.js?v=0.126"></script>
+<script src="js/templates.js?v=0.115"></script>
 <script src="js/table-consent.js?v=0.2"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
@@ -1467,12 +1495,22 @@
     templatesLoaded.catch(() => {});
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
   } catch (e) { console.error('[boot] démarrage anticipé impossible', e); }
+  // Les bibliothèques de l'éditeur (TipTap, ProseMirror : les import() de js/editor.js:importLibraries) ne partaient qu'à Editor.init, après les 280 scripts : la page n'était prête qu'à 3,2 s alors que ses scripts
+  // finissaient à 1,5 s (rapport Firefox du 2026-11-20). Elles partent ici, en même temps que les scripts ; importLibraries reprend les mêmes modules (une seule adresse chacun : ce que l'import() d'avant a déjà
+  // chargé ne se recharge pas). Une adresse qui échoue ici échouera aussi à Editor.init, qui le dit comme avant. Cette liste est celle de importLibraries (dev-tests/verify-early-libs.mjs la compare).
+  try {
+    window.__earlyLibs = ['@tiptap/core', '@tiptap/starter-kit', '@tiptap/extension-text-align', '@tiptap/extension-text-style', '@tiptap/extension-font-family', '@tiptap/suggestion', '@tiptap/extension-document', '@tiptap/extension-table', '@tiptap/extension-table-row', '@tiptap/extension-table-cell', '@tiptap/extension-table-header', '@tiptap/extension-task-list', '@tiptap/extension-task-item', '@tiptap/extension-placeholder', '@floating-ui/dom', 'prosemirror-state', 'prosemirror-view', 'prosemirror-tables', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-history'].map(function (nom) {
+      var module = import(nom);
+      module.catch(function () {});
+      return module;
+    });
+  } catch (e) { /* pas d'import() dynamique ici : Editor.init charge tout, comme avant */ }
 </script>
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.215"></script>
 <script src="js/reader-guide.js?v=0.8"></script>
 <script src="js/i18n-texts-templates.js?v=0.16"></script>
-<script src="js/i18n-texts-export.js?v=0.40"></script>
+<script src="js/i18n-texts-export.js?v=0.41"></script>
 <script src="js/i18n-texts-format.js?v=0.5"></script>
 <script src="js/i18n-texts-blocks.js?v=0.8"></script>
 <script src="js/i18n-texts-editor.js?v=0.2"></script>
@@ -1482,7 +1520,7 @@
 <script src="js/i18n-texts-settings.js?v=0.22"></script>
 <script src="js/i18n-texts-status.js?v=0.12"></script>
 <script src="js/i18n-texts-variables.js?v=0.8"></script>
-<script src="js/i18n-texts-eml.js?v=0.1"></script>
+<script src="js/i18n-texts-eml.js?v=0.2"></script>
 <script src="js/i18n-texts-pivot.js?v=0.3"></script>
 <script src="js/i18n-texts-lockbubble.js?v=0.5"></script>
 <script src="js/i18n-texts-state.js?v=0.1"></script>
@@ -1512,7 +1550,7 @@
 <script src="js/icons.js?v=0.98"></script>
 <script src="js/editor-core.js?v=0.53"></script>
 <script src="js/color-palette.js?v=0.6"></script>
-<script src="js/cell-pattern.js?v=0.1"></script>
+<script src="js/cell-pattern.js?v=0.3"></script>
 <script src="js/header-footer-preview.js?v=1.70"></script>
 <script src="js/loop-marks.js?v=0.2"></script>
 <script src="js/editor-nodes.js?v=1.93"></script>
@@ -1574,33 +1612,33 @@
 <script src="js/cross-refs.js?v=0.1"></script>
 <script src="js/page-copies.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
-<script src="js/editor.js?v=2.123"></script>
-<script src="js/export-common.js?v=0.41"></script>
+<script src="js/editor.js?v=2.124"></script>
+<script src="js/export-common.js?v=0.42"></script>
 <script src="js/native-libs.js?v=0.1"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.3"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
 <script src="js/export-engines.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.120"></script>
+<script type="text/x-lazy-engine" data-engine="pdf" src="js/pdf-export.js?v=1.121"></script>
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.10"></script>
 <script type="text/x-lazy-engine" data-engine="archive" src="js/pdf-archive.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.105"></script>
-<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.34"></script>
+<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.107"></script>
+<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.35"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.4"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxPivot" src="js/xlsx-pivot.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.13"></script>
 <script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.24"></script>
-<script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.37"></script>
+<script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.38"></script>
 <script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.66"></script>
 <script type="text/x-lazy-engine" data-engine="metafile" src="js/metafile-render.js?v=0.1"></script>
-<script type="text/x-lazy-engine" data-engine="docxImport" src="js/docx-import.js?v=0.10"></script>
-<script type="text/x-lazy-engine" data-engine="odtImport" src="js/odt-import.js?v=0.5"></script>
+<script type="text/x-lazy-engine" data-engine="docxImport" src="js/docx-import.js?v=0.11"></script>
+<script type="text/x-lazy-engine" data-engine="odtImport" src="js/odt-import.js?v=0.7"></script>
 <script type="text/x-lazy-engine" data-engine="odsImport" src="js/ods-import.js?v=0.1"></script>
-<script type="text/x-lazy-engine" data-engine="odpImport" src="js/odp-import.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="odtExport" src="js/odt-export.js?v=0.5"></script>
+<script type="text/x-lazy-engine" data-engine="odpImport" src="js/odp-import.js?v=0.4"></script>
+<script type="text/x-lazy-engine" data-engine="odtExport" src="js/odt-export.js?v=0.6"></script>
 <script type="text/x-lazy-engine" data-engine="odsExport" src="js/ods-export.js?v=0.1"></script>
-<script type="text/x-lazy-engine" data-engine="odpExport" src="js/odp-export.js?v=0.1"></script>
+<script type="text/x-lazy-engine" data-engine="odpExport" src="js/odp-export.js?v=0.2"></script>
 <!-- Historique des versions : le magasin (js/versions-store.js) se charge avec la page ; la fenêtre (js/versions-history.js) attend le premier clic de « Historique des versions… »
      (VersionsStore.loadWindow) et la comparaison (js/versions-compare.js) celui de « Comparer » (VersionsStore.loadCompare) : balises inertes comme celles des moteurs ci-dessus, dont
      elles gardent l'adresse et la version de cache. -->
@@ -1608,7 +1646,7 @@
 <script type="text/x-lazy-module" data-module="versions" src="js/versions-history.js?v=0.4"></script>
 <script type="text/x-lazy-module" data-module="versions-compare" src="js/versions-compare.js?v=0.2"></script>
 <script src="js/grid-xlsx-import.js?v=0.14"></script>
-<script src="js/markdown-import.js?v=0.5"></script>
+<script src="js/markdown-import.js?v=0.6"></script>
 <script src="js/html-import.js?v=0.4"></script>
 <script src="js/mailto-export.js?v=0.20"></script>
 <script src="js/eml-export.js?v=0.1"></script>
@@ -1748,14 +1786,17 @@
 <script src="js/main-autosave.js?v=0.4"></script>
 <script src="js/main-save.js?v=0.3"></script>
 <script src="js/main-leave.js?v=0.1"></script>
+<script src="js/email-link.js?v=0.1"></script>
+<script src="js/email-link-panel.js?v=0.1"></script>
 <script src="js/main-email.js?v=0.4"></script>
 <script src="js/main-page-zoom.js?v=0.1"></script>
 <script src="js/main-rename.js?v=0.1"></script>
 <script src="js/main-macro-return.js?v=0.2"></script>
+<script src="js/main-email-link.js?v=0.1"></script>
 <script src="js/main-access.js?v=0.5"></script>
 <script src="js/main-reader.js?v=0.2"></script>
 <script src="js/main-live.js?v=0.6"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.268"></script>
+<script src="js/main.js?v=0.270"></script>
 </body>
 </html>

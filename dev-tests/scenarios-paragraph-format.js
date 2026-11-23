@@ -503,7 +503,7 @@
 
   cases.push({
     id: 'paragraphformat_word_writes_the_spacing_of_each_paragraph',
-    description: 'Word (OOXML dézippé) : `w:spacing` porte l\'espace avant (20 pt = 400 vingtièmes) et après (10 pt = 200) et l\'interligne (2,344 de la taille = 563 deux-cent-quarantièmes de ligne) des paragraphes réglés ; un paragraphe sans réglage garde `after=0`, l\'interligne d\'origine (341) et aucun `before` ; un élément de liste et un paragraphe de case suivent de même',
+    description: 'Word (OOXML dézippé) : `w:spacing` porte l\'espace avant (20 pt = 400 vingtièmes) et après (10 pt = 200) et l\'interligne (2,344 de la taille = 563 deux-cent-quarantièmes de ligne) des paragraphes réglés ; un paragraphe sans réglage garde `after=0`, l\'interligne d\'origine (291 : 1,42 fois le corps, en multiples de la ligne simple) et aucun `before` ; un élément de liste et un paragraphe de case suivent de même',
     run: async (h) => {
       const html = '<p>Aa</p><p data-line-height="2.344" data-space-before="20" data-space-after="10">Bb</p><ul><li><p data-space-before="12" data-space-after="3">Li</p></li></ul>'
         + '<table><tbody><tr><td><p data-space-after="7">Ce</p></td></tr></tbody></table>';
@@ -515,10 +515,10 @@
         return sp ? { before: sp.getAttribute('w:before'), after: sp.getAttribute('w:after'), line: sp.getAttribute('w:line'), rule: sp.getAttribute('w:lineRule') } : null;
       };
       const got = { Aa: spacingOf('Aa'), Bb: spacingOf('Bb'), Li: spacingOf('Li'), Ce: spacingOf('Ce') };
-      const pass = got.Aa && got.Aa.before === null && got.Aa.after === '0' && got.Aa.line === '341' && got.Aa.rule === 'auto'
+      const pass = got.Aa && got.Aa.before === null && got.Aa.after === '0' && got.Aa.line === '291' && got.Aa.rule === 'auto'
         && got.Bb && got.Bb.before === '400' && got.Bb.after === '200' && got.Bb.line === '563' && got.Bb.rule === 'auto'
-        && got.Li && got.Li.before === '240' && got.Li.after === '60' && got.Li.line === '341'
-        && got.Ce && got.Ce.before === null && got.Ce.after === '140' && got.Ce.line === '341';
+        && got.Li && got.Li.before === '240' && got.Li.after === '60' && got.Li.line === '291'
+        && got.Ce && got.Ce.before === null && got.Ce.after === '140' && got.Ce.line === '291';
       return { pass, notes: JSON.stringify(got) };
     },
   });

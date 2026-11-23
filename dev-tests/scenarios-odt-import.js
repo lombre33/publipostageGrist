@@ -453,6 +453,29 @@
     return result(bad);
   });
 
+  // Un dessin Windows (EMF) écrit octet par octet : un carré rouge plein.
+  const emfSquare = () => {
+    const U32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+    const U16 = v => [v & 255, (v >>> 8) & 255];
+    const emfRec = (type, ...words) => { const content = words.flat(Infinity); return [...U32(type), ...U32(8 + content.length), ...content]; };
+    const records = [emfRec(39, U32(1), U32(0), U32(0x0000ff), U32(0)), emfRec(37, U32(1)), emfRec(37, U32(0x80000008)), emfRec(43, U32(0), U32(0), U32(400), U32(400))];
+    const content = records.concat([emfRec(14, U32(0), U32(16), U32(20))]).flat(Infinity);
+    const header = [...U32(1), ...U32(88), ...U32(0), ...U32(0), ...U32(799), ...U32(399), ...U32(0), ...U32(0), ...U32(20000), ...U32(10000), ...U32(0x464d4520), ...U32(0x10000), ...U32(88 + content.length), ...U32(records.length + 1),
+      ...U16(3), ...U16(0), ...U32(0), ...U32(0), ...U32(0), ...U32(800), ...U32(400), ...U32(200), ...U32(100)];
+    let text = '';
+    Uint8Array.from(header.concat(content)).forEach((byte) => { text += String.fromCharCode(byte); });
+    return btoa(text);
+  };
+  add('odtImport_a_windows_drawing_in_a_document_is_drawn_as_a_picture', 'un dessin Windows (EMF) dans un document, que le navigateur ne lit pas, est dessiné en image PNG au lieu d\'être compté perdu', async () => {
+    await ready();
+    const { bad, expect } = checker();
+    const out = await imported({ body: p('Dessin ' + frame({ href: 'Pictures/dessin.emf' })), media: { 'dessin.emf': emfSquare() } });
+    const image = dom(out.html).querySelector('img.editor-image');
+    expect('une image dans le texte, en PNG', !!image && /^data:image\/png;base64,/.test(image.getAttribute('src') || ''), out.html.slice(0, 200));
+    expect('rien de compté perdu', countOf(out.report, 'images') === 0, out.report);
+    return result(bad);
+  });
+
   add('odtImport_footnotes_become_editor_notes_and_endnotes_are_counted', 'une note de bas de page devient le repère de l\'éditeur avec son texte (paragraphes réunis, sans son numéro) ; une note de fin aussi, comptée ; une note vide n\'en fait pas', async () => {
     const note = (cls, text) => `<text:note text:id="n${cls}" text:note-class="${cls}"><text:note-citation>1</text:note-citation><text:note-body>${text}</text:note-body></text:note>`;
     const out = await imported({ body: p('Pied' + note('footnote', p('Première ligne.') + p('Seconde ligne.')) + ' fin' + note('endnote', p('Note de fin.')) + note('footnote', p(''))) });

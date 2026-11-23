@@ -223,7 +223,7 @@
 
   cases.push({
     id: 'epl_pasted_text_keeps_its_blank_lines_and_indent_in_an_email',
-    description: 'Un texte brut collé dans un email garde ses lignes vides (plusieurs de suite) et son retrait, un texte d\'une ligne se glisse dans la ligne du curseur ; dans un document le collage reste celui de ProseMirror (les retours à la ligne de suite comptent pour un)',
+    description: 'Un texte brut collé dans un email garde ses lignes vides (plusieurs de suite) et son retrait, un texte d\'une ligne se glisse dans la ligne du curseur ; dans un document aussi (23/11 : Notepad++, un .md ouvert dans un éditeur de texte : la ligne vide qui sépare deux paragraphes ne disparaît plus au collage, js/editor.js `plainTextToSlice`)',
     run: async (h) => {
       const result = await inBoth(h, async () => {
         await startWith('<p></p>');
@@ -238,7 +238,7 @@
       });
       const emailLines = '<p>A</p><p></p><p>B</p><p></p><p></p><p>  - C</p>';
       const pass = !!result.email && result.email.lines === emailLines && result.email.inline === '<p>Bon à tousjour</p>'
-        && !!result.document && result.document.lines === '<p>A</p><p>B</p><p>  - C</p>' && result.document.inline === '<p>Bon à tousjour</p>';
+        && !!result.document && result.document.lines === emailLines && result.document.inline === '<p>Bon à tousjour</p>';
       return { pass, notes: JSON.stringify(result) };
     },
   });

@@ -1,0 +1,40 @@
+/* Email lié à un document (js/email-link.js, js/main-email-link.js, js/email-link-panel.js).
+   Le bouton de la rangée du nom du document, à côté de l'étoile : un clic mène à l'email lié (enveloppe) ou, depuis un email, au document (feuille). Même gabarit discret que le crayon et l'étoile (12 px, css/toolbar-v2.css) ;
+   l'étoile n'est plus le dernier bouton de la rangée, il prend son coin arrondi. */
+#toolbar-top #v2-title-cluster #btn-set-default-template { border-radius: 0; }
+#toolbar-top #btn-linked-email { border-radius: 0 calc(var(--radius-btn, var(--radius-sm)) - 1px) calc(var(--radius-btn, var(--radius-sm)) - 1px) 0; }
+#toolbar-top #btn-linked-email::before, #toolbar-top #btn-linked-email.is-to-email::before { width: 12px; height: 12px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Cpath d='m3.5 7 8.5 6 8.5-6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Cpath d='m3.5 7 8.5 6 8.5-6'/%3E%3C/svg%3E"); }
+#toolbar-top #btn-linked-email.is-to-document::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5M9 13h6M9 17h6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/%3E%3Cpath d='M14 3v5h5M9 13h6M9 17h6'/%3E%3C/svg%3E"); }
+/* Cadre étroit, barre de GFS en haut : la zone de la barre raccourcit le sélecteur du modèle (css/toolbar-v2.css : max-width, 88 px au moins) et lui garde un nom lisible (28 px au moins, dev-tests/verify-gfs-bar-toolbar.mjs). Trois boutons de 26 px dans le
+   regroupement, au lieu de deux, lui laissaient 24 px à 400 px de large et 7 px avec la barre à six boutons : les trois boutons passent à 20 px (l'icône de 12 px garde 4 px de chaque côté) et le plancher monte à 92 px - le regroupement finit encore avant
+   la zone (104 px à 400 px de large, six boutons), le nom garde 32 px. Au-dessus de 450 px de large, ou sans barre de GFS en haut, rien ne change. */
+@media (max-width: 450px) {
+  html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(92px, calc(var(--gfs-bar-x) - 17px)); }
+  html[data-gfs-bar="top"] #v2-title-cluster button.rename-btn { width: 20px; }
+}
+/* Un compagnon trouvé : l'icône prend la couleur d'accent, comme l'étoile du document par défaut ; sans compagnon, elle reste discrète. */
+#toolbar-top #btn-linked-email.has-target { color: var(--accent); }
+#toolbar-top #btn-linked-email:disabled, #toolbar-top #btn-linked-email[data-pp-lock-soft] { opacity: .4; cursor: default; }
+/* Le menu au survol : les noms longs sont coupés par « … » (le nom entier est dans l'info-bulle de la ligne). */
+#v2-linked-email-flyout { min-width: 200px; max-width: 320px; }
+#v2-linked-email-flyout .v2-hover-row { overflow: hidden; text-overflow: ellipsis; }
+
+/* Réglages > Email > « Email lié à ce document ». Les listes ont le gabarit des listes d'Accès ; la raison d'un grisé est une phrase visible sous le contrôle (consigne 088 de GFS), jamais seulement une info-bulle. */
+.settings-emaillink .settings-section-title { margin: 0 0 6px; }
+.settings-emaillink label { display: block; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text); margin: 8px 0 4px; }
+.settings-emaillink select { min-width: 0; width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); padding: 0 6px; font-family: var(--font-ui); font-size: 13px; background: var(--surface); color: var(--text); }
+.settings-emaillink select:disabled { opacity: .55; }
+.settings-emaillink-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.settings-emaillink-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 0 0 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.settings-emaillink-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text); }
+.settings-emaillink-remove { flex: none; font-family: var(--font-ui); font-weight: 600; font-size: 12.5px; height: 26px; padding: 0 10px; border: none; border-left: 1px solid var(--border); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: transparent; color: var(--text); cursor: pointer; }
+.settings-emaillink-remove:hover:not(:disabled) { background: var(--surface-sunken); }
+.settings-emaillink-remove:disabled { opacity: .55; cursor: default; }
+.settings-emaillink-reason, .settings-emaillink-gone { font-size: 12.5px; color: var(--text-muted); margin: 8px 0 0; overflow-wrap: anywhere; }
+.settings-emaillink-gone { color: var(--danger-ink); }
+/* « Messagerie » : le titre de ce qui était déjà dans l'onglet ; la marge du dessus le sépare de la section du lien (css/text-expansion.css remet à 0 celle de tous les titres de section, d'où le sélecteur plus précis). */
+h4.settings-section-title.settings-mailclient-title { margin: 20px 0 6px; }
