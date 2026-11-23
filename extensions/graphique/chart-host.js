@@ -264,7 +264,7 @@ const ChartHostSource = (function () {
   // traduit en définition de Grist BI et en lignes LITTÉRALES : { ok: true, definition, source } ou { ok: false, raison }. Le graphique n'a pas de table dans Grist : sa source est faite de ses propres chiffres,
   // une ligne par catégorie, une colonne de catégories et une colonne de nombres par série (le module nomme une série d'après l'identifiant de sa colonne : l'identifiant EST le nom de la série). La définition est
   // celle de Grist BI (`type`, `dimension`, `measures` avec leur couleur et leur type), écrite avec « aucun » comme agrégat : un point par ligne, dans l'ordre, deux catégories de même nom ne sont jamais additionnées.
-  // Raisons : `invalide` (pas un modèle), `forme` (nuage, radar, cascade : pas ici), `vide` (aucune catégorie ou aucune série), `series` (plus de huit séries : la définition n'en porte pas plus).
+  // Raisons : `invalide` (pas un modèle), `forme` (nuage, radar, cascade, empilé à 100 % : pas ici), `vide` (aucune catégorie ou aucune série), `series` (plus de huit séries : la définition n'en porte pas plus).
   // Ce qui se perd, dit ici pour que personne ne le cherche : la couleur de chaque part d'un secteur ou d'un anneau (la définition ne connaît que des jeux de couleurs nommés), les axes nommés et la mise en page du fichier.
   const MODEL_TYPES = { bar: 'bar', line: 'line', area: 'line', pie: 'pie', donut: 'pie' };
   const MODEL_MAX_SERIES = 8;
@@ -283,6 +283,7 @@ const ChartHostSource = (function () {
     if (!model || typeof model !== 'object') return { ok: false, raison: 'invalide' };
     const type = MODEL_TYPES[model.kind];
     if (!type) return { ok: false, raison: 'forme' };
+    if (model.percent || model.stackPercent) return { ok: false, raison: 'forme' };   // « empilé à 100 % » : la définition le connaît mais le module ne le dessine pas encore, jamais un simple empilé à sa place
     const categories = Array.isArray(model.categories) ? model.categories : [];
     const series = (Array.isArray(model.series) ? model.series : []).filter(serie => serie && Array.isArray(serie.values));
     if (!categories.length || !series.length) return { ok: false, raison: 'vide' };
