@@ -45,7 +45,10 @@ fonctionnelle. Deux couleurs sémantiques s'y ajoutent, jamais décoratives, pui
   (§3, « Changer la colonne de la variable… ») : le rouge reste à ce qui a disparu - colonne, chemin de références, table.
 - **Sorte de modèle** (exception voulue, demande d'Antoine du 21/10 : « dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») - l'icône d'un document est bleue, celle d'une grille
   verte, celle d'une présentation orange, comme dans l'explorateur de Grist Factory Suite (jetons `--t-doc`, `--t-grid`, `--t-slides`, les mêmes valeurs que `css/gfs.css` de GFS ; `--t-doc` a la valeur
-  de `--accent`, en jeton à part). Elle ne vaut que dans la liste déroulante des modèles et sur son déclencheur (§3, « Icône de la sorte de modèle ») : partout ailleurs - barre d'outils, menus,
+  de `--accent`, en jeton à part). Depuis le 24/11 (demande : « icône macro modèle colorée avec chaque segment de la couleur de l'une des autres ; mail aussi prendre l'une des couleurs non
+  utilisées », version B de la carte), l'icône d'un macro-modèle porte trois feuilles bleue, verte et orange (les trois sortes qu'il assemble : `--t-doc`, `--t-grid`, `--t-slides`) et celle d'un
+  e-mail est violette (`--t-email`, la seule teinte que rien d'autre ne porte : le rouge est ce qui est cassé, l'ambre ce qui est sans lien, le vert la grille, le bleu l'accent). Elle ne vaut que
+  dans la liste déroulante des modèles et sur son déclencheur (§3, « Icône de la sorte de modèle ») : partout ailleurs - barre d'outils, menus,
   fenêtres, « Organiser mes modèles » - l'éditeur reste monochrome. La couleur s'ajoute à la forme de l'icône sans la remplacer et ne dit jamais un état : le vert de la grille n'est pas celui
   d'« enregistré » ou d'« actif ».
 
@@ -67,6 +70,7 @@ Palette exacte de Publipostage+ (`css/style.css`, jetons de `:root`, thèmes cla
 | Danger ; fond doux | `--danger`, `--danger-soft` | `#d84343`, `#fbe9e9` | `#f08a8a`, `#3a2426` |
 | Texte rouge (message d'erreur, « Retirer la condition », « Supprimer », compteur dépassé, avertissement) | `--danger-ink` | `#c53030` | `#f08a8a` |
 | Icône d'une sorte de modèle (liste des modèles et son déclencheur) : document, grille, présentation | `--t-doc`, `--t-grid`, `--t-slides` | `#2f6fed`, `#2e7d32`, `#c7600a` | `#5b91f5`, `#6cc57a`, `#f0933e` |
+| Icône de l'e-mail dans la liste des modèles et son déclencheur (le macro-modèle n'a pas de jeton : ses trois feuilles prennent les trois jetons ci-dessus) | `--t-email` | `#7a3fc4` | `#b794f6` |
 | Voile derrière les fenêtres | `--pp-scrim` | `rgba(15, 23, 42, .45)` | `rgba(3, 6, 12, .62)` |
 | Rayon d'angle | `--radius-sm` | 7 px sur les contrôles (boutons, champs, lignes de liste), 8 px sur le cadre des fenêtres, rond pour les pastilles et le logo : coins arrondis partout, jamais carrés | idem |
 | Ombres | `--shadow-float`, `--shadow-card` | portée douce pour les éléments flottants et les fenêtres, très légère pour les cartes | plus marquée |
@@ -702,12 +706,16 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   reste seulement dans le libellé de l'option réelle et du bouton fermé de la liste.
 - Icône de la sorte de modèle (demande d'Antoine du 21/10 : « dans la drop down de choix des modèles, coloré l'icone comme dans gfs » ; exception voulue à « un seul éditeur, monochrome », §1 « Palette ») :
   dans la liste déroulante et sur son déclencheur, l'icône d'un document est bleue (`--t-doc`), celle d'une grille verte (`--t-grid`), celle d'une présentation orange (`--t-slides`), comme dans
-  l'explorateur de Grist Factory Suite (mêmes jetons et mêmes valeurs). Le tracé dit toujours la sorte, la couleur s'y ajoute et ne la porte jamais seule ; l'e-mail, le macro-modèle et les dossiers
-  gardent la couleur du texte (pas de couleur pour eux sans demande d'Antoine) ; une ligne grisée (extension éteinte, type inconnu) n'a aucune couleur de sorte, comme dans l'explorateur de GFS, et le
+  l'explorateur de Grist Factory Suite (mêmes jetons et mêmes valeurs). Le tracé dit toujours la sorte, la couleur s'y ajoute et ne la porte jamais seule ; les dossiers gardent la couleur du
+  texte (pas de couleur pour eux sans demande d'Antoine). L'e-mail est violet (`--t-email`, 24/11 : une teinte que rien d'autre ne porte ; 4,5:1 au moins sur ces mêmes fonds, 5,49 à 6,30 en clair et
+  5,25 à 6,35 en sombre) ; le macro-modèle, qui assemble des documents, des grilles et des présentations, est dessiné en trois feuilles en escalier, celle de devant bleue (`--t-doc`), celle du
+  milieu verte (`--t-grid`), celle de derrière orange (`--t-slides`) : un seul masque porte le dessin, le fond est fait de quatre aplats posés sur trois zones que le vide entre les tracés sépare (sans
+  JS, sans pseudo-élément) ; ses trois feuilles gardent chacune l'exigence de leur couleur (3:1). Une ligne grisée (extension éteinte, type inconnu) n'a aucune couleur de sorte, comme dans l'explorateur de GFS, et le
   déclencheur la perd avec elle quand GFS éteint l'extension de la présentation ouverte (même classe `is-unavailable`, posée par `syncTriggerLabel`) ; la ligne survolée et la ligne choisie gardent la
   couleur de leur sorte. Chaque couleur fait 3:1 au moins (icône) sur le fond de la liste, de la ligne survolée, de la ligne choisie et de la barre, en clair et en sombre (3,59 à 5,13 en clair, 4,17 à 7,34
-  en sombre). « Organiser mes modèles », qui partage la brique de ligne, reste monochrome. Gardé par `templateTree` (couleurs calculées : trois sortes, deux thèmes, le déclencheur), `contrast`,
-  `templateOrganize` et le script Node `templateKindColorsMouse` (pixels peints, vraie souris, 700×400).
+  en sombre). « Organiser mes modèles », qui partage la brique de ligne, reste monochrome (le macro-modèle y est d'une seule couleur, ses trois feuilles au texte de la ligne). Gardé par `templateTree`
+  (couleurs calculées : cinq sortes, deux thèmes, le déclencheur, le macro-modèle grisé), `contrast` (le violet à 4,5:1, les feuilles à 3:1), `templateOrganize` et le script Node
+  `templateKindColorsMouse` (pixels peints, vraie souris, 700×400 : chaque feuille mesurée dans sa zone).
 - Modèle d'un type que le widget ne sait pas ouvrir (garde « type inconnu », consigne 002 de Grist Factory Suite, 14/10 ; `Templates.isOpenableType` : seuls document, grille, email et
   macro s'ouvrent, et la présentation quand Grist Factory Suite active son extension (« Présentation » ci-dessous), la valeur vide est un document) : il reste dans la liste et dans « Organiser mes modèles », grisé et jamais retiré (`aria-disabled`, texte `--text-muted`, icône du
   document atténuée, curseur « interdit », pas de fond au survol), avec sa raison sous son nom (11,5 px, `--text-muted`, 4,5:1) : « Créé avec une version plus récente de Publipostage+ »,
@@ -2324,3 +2332,4 @@ revérifié dans le code (jetons de `css/style.css`, `css/modal-base.css`, `js/m
 - 2026-11-03 : le direct partage la page du modèle (carte du 03/11 : « Oui, partagés en direct ») : §3, règle « Écriture en direct », paragraphe « La page en direct » (format, sens, marges, thème et décor, filigrane, couleurs et mises en forme gardées ; Annuler par personne ; la personne qui enregistre l'écrit) ; gardé par `livePage`, `liveSlides`, `liveEditor`, `liveMouse`, `liveGfs`, `liveAuto`, `liveSync` et `codeHygiene`.
 - 2026-11-03 : une personne qui rejoint le direct après un enregistrement du groupe prend sa date et perd le bandeau « modifié ailleurs » de cet enregistrement (carte du 03/11 : « Oui, corriger ») : §3, règle « Écriture en direct », paragraphe « Enregistrer » ; gardé par `liveEditor`.
 - 2026-11-03 : le direct montre sur la bande où écrit chaque personne (carte du 03/11 : « Oui, un repère de sa couleur ») : §3, règle « Écriture en direct », paragraphe « Dans une présentation » (une pastille de la couleur de la personne sous la miniature de sa diapositive, hors de la mise en page ; son nom en info-bulle ; un « +N » au-delà de quatre ; la `place` de sa sélection dans la présence) ; gardé par `liveStrip`, `liveSlides`, `liveEditor`, `livePage`, les essais de la bande et `codeHygiene`.
+- 2026-11-24 : l'icône d'un macro-modèle porte trois feuilles bleue, verte et orange et celle d'un e-mail est violette, dans la liste déroulante des documents et sur son bouton (demande d'Antoine : « icône macro modèle colorée avec chaque segment de la couleur de l'une des autres ; mail aussi prendre l'une des couleurs non utilisées » ; version B de la carte) : §1 (Palette : jeton `--t-email`, puce « Sorte de modèle ») et §3 (« Icône de la sorte de modèle ») le disent ; gardé par `templateTree`, `contrast` et `templateKindColorsMouse`.
