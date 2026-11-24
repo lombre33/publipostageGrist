@@ -411,7 +411,7 @@ const VariableLoop = (function () {
     emptySelect.id = 'var-loop-empty';
     // Le texte « Si aucune ligne » : un champ à variables, le même que le « Sinon afficher » d'une valeur (js/field-editor.js, monté par mountEmptyField). L'élément `input` n'est
     // qu'un <div> qui en reprend l'interface (`value`, `placeholder`, évènement `input`) : le reste de la fenêtre le traite comme le champ de texte d'avant.
-    const emptyText = { label: el('label'), input: el('div', 'var-loop-empty-field') };
+    const emptyText = { label: el('label'), input: el('div', 'var-loop-empty-field pp-field-grows') };
     emptyText.label.id = 'var-loop-empty-text-label';
     emptyText.label.htmlFor = 'var-loop-empty-text';
     emptyText.input.id = 'var-loop-empty-text';

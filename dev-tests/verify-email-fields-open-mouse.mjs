@@ -231,8 +231,74 @@ const fieldState = id => page.evaluate(fieldId => {
 const openIds = () => page.evaluate(() => Array.from(document.querySelectorAll('.pp-field-opens.is-open')).map(e => e.id));
 const topAt = (x, y) => page.evaluate(({ x, y }) => { const e = document.elementFromPoint(x, y); return e ? (e.closest('[id]') ? e.closest('[id]').id : e.tagName) : null; }, { x, y });
 
-async function run(theme, lang) {
-  const T = `${theme}/${lang}`;
+
+// Le champ du nom du fichier PDF : son état, sa boîte (celle de la ligne, qui ne bouge pas) et celle de la zone de saisie ouverte, la ligne de la barre qui le porte, l'aperçu, le texte coupé ou non.
+const pdfState = () => page.evaluate(() => {
+  const host = document.getElementById('pdf-filename-template');
+  const text = host.querySelector('.pp-field-text');
+  const line = text.firstElementChild;
+  const h = host.getBoundingClientRect(), t = text.getBoundingClientRect();
+  const bar = host.closest('.bar-row').getBoundingClientRect();
+  const after = getComputedStyle(host, '::after');
+  return {
+    hidden: host.hidden || h.width === 0, open: host.classList.contains('is-open'), focused: host.contains(document.activeElement), value: host.value,
+    host: { left: h.left, top: h.top, width: h.width, height: h.height, bottom: h.bottom },
+    box: { left: t.left, top: t.top, width: t.width, height: t.height, right: t.right, bottom: t.bottom },
+    bar: { left: bar.left, right: bar.right, bottom: bar.bottom }, preview: host.dataset.preview || '',
+    previewShown: after.content !== 'none' && after.content !== 'normal' && after.position === 'absolute',
+    lineClipped: line ? line.scrollWidth > line.clientWidth + 1 : false, ellipsis: line ? getComputedStyle(line).textOverflow : '',
+    allShown: text.scrollHeight <= text.clientHeight + 1 && text.scrollWidth <= text.clientWidth + 1,
+    insideViewport: t.left >= -0.5 && t.top >= -0.5 && t.right <= innerWidth + 0.5 && t.bottom <= innerHeight + 0.5,
+    toolbar: Math.round(document.getElementById('v2-toolbar').getBoundingClientRect().top * 10) / 10,
+    editor: Math.round(document.getElementById('editor-container').getBoundingClientRect().top * 10) / 10,
+    sideScroll: document.documentElement.scrollWidth > innerWidth + 0.5,
+  };
+});
+const PDF_SHORT = 'Facture_2026';
+const PDF_LONG_START = 'Dossier_de_candidature_complet_pieces_justificatives_attestation_';
+const PDF_LONG_END = '_2026_version_finale_a_transmettre';
+
+// Le nom du PDF s'ouvre comme les champs de l'email : un nom court ne l'ouvre pas ; un nom long, une variable posée à la liste « # », l'ouvre sous la ligne de la barre, par-dessus elle, sur toute la largeur ;
+// Entrée le referme (le nom est gardé, le champ montre son début coupé par « … ») ; un clic le rouvre, un clic ailleurs le referme. `where` : le mode (nom du fichier PDF d'un document ou d'un email).
+async function pdfChecks(T, where) {
+  const label = `${T}, nom du PDF (${where})`;
+  await realClick('#btn-toggle-pdf-filename', 300);
+  const shown = await pdfState();
+  check(`${label} : le crayon montre le champ, vide et fermé`, !shown.hidden && shown.value === '' && !shown.open, shown);
+  await realClick('#pdf-filename-template .pp-field-text', 150);
+  await typeSlow(PDF_SHORT);
+  const short = await pdfState();
+  check(`${label} : « ${PDF_SHORT} » tient sur la ligne, le champ a le curseur mais ne s'ouvre pas, à sa largeur de ${Math.round(shown.host.width)} px`, short.focused && !short.open && Math.abs(short.host.width - shown.host.width) < 1, short);
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Delete');
+  await typeSlow(PDF_LONG_START);
+  await page.keyboard.type('#Contacts.Pre', { delay: 20 });
+  await page.waitForTimeout(350);
+  const list = await page.evaluate(() => { const b = document.getElementById('autocomplete-box'); if (!b || b.style.display === 'none') return null; const r = b.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + 12); return { onTop: !!top && b.contains(top), items: Array.from(b.querySelectorAll('.ac-item')).map(i => i.textContent).slice(0, 3) }; });
+  check(`${label} : « # » dans le champ ouvre la liste des variables devant lui`, !!list && list.onTop && list.items.some(i => i.includes('Prenom')), list);
+  await pressKey('Enter', 300);
+  await typeSlow(PDF_LONG_END);
+  const long = await pdfState();
+  check(`${label} : un nom long ouvre le champ SOUS sa ligne, par-dessus la barre (le cadre commence au bas de la ligne, dans la fenêtre, plus large que la ligne)`,
+    long.open && long.box.top >= long.host.bottom && long.insideViewport && long.box.width > long.host.width * 1.5 && !long.sideScroll, long);
+  check(`${label} : tout le nom est lu dans le cadre, sur plusieurs lignes, et la ligne de la barre montre le début du même texte`, long.allShown && long.box.height > long.host.height && long.previewShown && long.preview === long.value && long.value.includes('#Contacts.Prenom'), long);
+  check(`${label} : la valeur reste une ligne, la ligne du champ ne bouge pas (${Math.round(shown.host.width)} px de large) et la barre d'outils comme le document restent à leur place`,
+    !long.value.includes('\n') && Math.abs(long.host.width - shown.host.width) < 1 && Math.abs(long.host.top - shown.host.top) < 1 && long.toolbar === shown.toolbar && long.editor === shown.editor, { long, shown });
+  await SHOT(`${T.replace('/', '-')}-pdf-${where}-ouvert`);
+  await pressKey('Enter', 300);
+  const entered = await pdfState();
+  check(`${label} : Entrée referme le champ, garde le nom entier et montre son début coupé par « … »`, !entered.open && !entered.focused && entered.value === long.value && entered.lineClipped && entered.ellipsis === 'ellipsis' && entered.preview === '', entered);
+  await realClick('#pdf-filename-template', 300);
+  check(`${label} : un clic dans le champ le rouvre`, (await pdfState()).open, await pdfState());
+  await page.mouse.click(WIDTH / 2, HEIGHT - 20); await page.waitForTimeout(300);
+  const outside = await pdfState();
+  check(`${label} : un clic ailleurs le referme, le nom est intact`, !outside.open && outside.value === long.value, outside);
+  await realClick('#pdf-filename-template .pp-field-text', 200);
+  await page.keyboard.press('Control+a'); await page.keyboard.press('Delete');
+  await page.mouse.click(WIDTH / 2, HEIGHT - 20); await page.waitForTimeout(250);
+  await realClick('#btn-toggle-pdf-filename', 300);
+}
+
+const seedContacts = async () => {
   await page.evaluate(async contacts => {
     const stub = window.__gristStub;
     stub.setVariables('Contacts', { Prenom: 'Text', Email: 'Text' });
@@ -241,6 +307,18 @@ async function run(theme, lang) {
     stub.fireRecord(contacts[0], 'Contacts');
   }, CONTACTS);
   await page.waitForTimeout(300);
+};
+
+async function run(theme, lang) {
+  const T = `${theme}/${lang}`;
+  await seedContacts();
+
+  // 0) Le nom du fichier PDF d'un document ordinaire (hors mode email). Le nom tapé rend le document « modifié » : la page est rechargée à neuf pour la suite (un nouvel email demanderait sinon de l'enregistrer).
+  await pdfChecks(T, 'document');
+  await restartIn(lang);
+  await page.evaluate(t => Settings.setTheme(t), theme);
+  await page.waitForTimeout(250);
+  await seedContacts();
 
   // 1) Un nouvel email à la souris ; tout est fermé, à sa taille d'avant.
   await realHover('#v2-new-template-group #btn-new');
@@ -397,9 +475,8 @@ async function run(theme, lang) {
   await realClick('#btn-mode-edit', 900);
   check(`${T}, le retour en édition referme ce qui était ouvert en Lecture`, (await openIds()).length === 0, await openIds());
 
-  // 12) Le nom du PDF ne s'ouvre jamais ; la page ne défile pas de côté.
-  const pdf = await page.evaluate(() => ({ cls: document.getElementById('pdf-filename-template').className }));
-  check(`${T}, le nom du fichier PDF n'est pas un champ qui s'ouvre`, !pdf.cls.includes('pp-field-opens'), pdf);
+  // 12) Le nom du PDF s'ouvre aussi dans un email ; la page ne défile pas de côté.
+  await pdfChecks(T, 'email');
   check(`${T}, la page ne défile jamais de côté`, !(await layout()).sideScroll, await layout());
 }
 

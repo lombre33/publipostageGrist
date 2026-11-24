@@ -25,7 +25,8 @@ const VariableConditionOtherwise = (function () {
       const label = el('label');
       label.id = kind.id + ctx.suffix + '-label';
       label.htmlFor = kind.id + ctx.suffix;
-      const input = el('div', kind.input);
+      // Une ligne de la fenêtre grandit sur place quand son texte ne tient plus (js/field-editor.js : `pp-field-grows`) ; le bloc de plusieurs lignes passe déjà à la ligne.
+      const input = el('div', kind.input + (kind.multiline ? '' : ' pp-field-grows'));
       input.id = kind.id + ctx.suffix;
       input.setAttribute('aria-labelledby', label.id);
       input.spellcheck = false;

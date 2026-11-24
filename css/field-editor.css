@@ -28,7 +28,7 @@
    la barre et le document ne se décalent pas d'un pixel, et un clic qui referme le champ ne tombe pas sur autre chose que ce qu'on visait. Ce que le champ porte reste UNE ligne : seul l'affichage passe à la ligne.
    Les bulles, leurs barres et les listes « # » et « @ » se posent comme avant (leur niveau, --z-floating-toolbar et --z-menu, est au-dessus de la zone ouverte, --z-open-field). */
 /* `text-overflow` ne change jamais d'un état à l'autre (la zone ouverte n'y fait que passer `overflow` à `visible`, où il ne joue plus) : Chromium ne redessine pas le « … » d'une ligne refermée quand `text-overflow` change avec la classe `is-open`, le texte restait coupé net (mesuré à 700 x 400). */
-.pp-field-opens > .pp-field-text > p { overflow: hidden; text-overflow: ellipsis; }
+:is(.pp-field-opens, .pp-field-grows) > .pp-field-text > p { overflow: hidden; text-overflow: ellipsis; }
 #toolbar-top .pp-field-opens.is-open { overflow: visible; z-index: var(--z-open-field); border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 /* La zone de saisie ouverte est tirée sous la ligne : ses bords, son liseré d'accent et son ombre sont les siens. `top` : le bas du champ plus l'écart que js/field-editor.js (`GAP`) retire de la hauteur permise. */
 .pp-field-opens.is-open > .pp-field-text {
@@ -41,3 +41,10 @@
 .pp-field-opens.is-open::after {
   content: attr(data-preview); position: absolute; left: 8px; right: 8px; top: 50%; transform: translateY(-50%); overflow: hidden; text-overflow: ellipsis; white-space: pre; pointer-events: none; color: var(--text);
 }
+
+/* Le champ qui grandit sur place (classe `pp-field-grows` : « Sinon afficher » d'une valeur et « Si aucune ligne » d'une boucle, dans leur fenêtre ; js/field-editor.js : `unfold` pose `is-open`). Une fenêtre défile, ses lignes
+   sont l'une sous l'autre et rien d'autre n'est à portée de la souris sur la ligne du champ : il n'y a pas de zone à poser sous lui, le champ passe sur plusieurs lignes (cinq au plus, puis il défile) et la fenêtre suit.
+   Même règle que le champ d'une barre : il ne s'ouvre que si son texte ne tient pas sur sa ligne, et refermé il montre le début de son texte coupé par « … ». */
+.pp-field-grows.is-open { max-height: 134px; overflow-x: hidden; overflow-y: auto; }
+.pp-field-grows.is-open > .pp-field-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pp-field-grows.is-open > .pp-field-text > p { overflow: visible; }
