@@ -36,27 +36,27 @@ const TEXTS = {
   fr: {
     row: 'Importer un Markdown…', excel: 'Importer un Excel…', unsaved: 'Modifications non enregistrées', discard: 'Ne pas enregistrer', cancel: 'Annuler',
     reading: /^Lecture du fichier Markdown/, savedAs: name => `Enregistré dans Grist sous « ${name} ». `, savedTwice: name => `Enregistré dans Grist sous « ${name} » (le nom existait déjà). `, imported: 'Markdown importé.',
-    importedImages: 'Markdown importé ; 1 image locale non reprise.',
+    importedImages: 'Markdown importé ; 1 image non reprise (fichier à côté ou adresse web).',
     unreadable: 'Ce fichier n’est pas un texte Markdown lisible.', empty: 'Ce fichier Markdown est vide : il n’y a rien à importer.',
     tooBig: /^Ce fichier est trop gros pour être importé : 10,1 Mo \(au plus 10 Mo\)\.$/, placeholder: '[image non reprise : Logo]',
     mdTemplate: 'Markdown (modèle)', templateExported: 'Modèle exporté en Markdown, variables comprises.',
     importedVariable: 'Markdown importé ; 1 variable inconnue laissée en texte.',
-    importedImageVariables: 'Markdown importé ; 1 image locale non reprise, 2 variables inconnues.',
+    importedImageVariables: 'Markdown importé ; 1 image non reprise, 2 variables inconnues.',
   },
   en: {
     row: 'Import from Markdown…', excel: 'Import from Excel…', unsaved: 'Unsaved changes', discard: 'Don’t save', cancel: 'Cancel',
     reading: /^Reading the Markdown file/, savedAs: name => `Saved to Grist as “${name}”. `, savedTwice: name => `Saved to Grist as “${name}” (the name was already taken). `, imported: 'Markdown imported.',
-    importedImages: 'Markdown imported; 1 local image not imported.',
+    importedImages: 'Markdown imported; 1 image not imported (file alongside or web address).',
     unreadable: 'This file is not readable Markdown text.', empty: 'This Markdown file is empty: there is nothing to import.',
     tooBig: /^This file is too big to import: 10\.1 MB \(at most 10 MB\)\.$/, placeholder: '[image not imported: Logo]',
     mdTemplate: 'Markdown (template)', templateExported: 'Template exported to Markdown, variables included.',
     importedVariable: 'Markdown imported; 1 unknown variable left as text.',
-    importedImageVariables: 'Markdown imported; 1 local image not imported, 2 unknown variables.',
+    importedImageVariables: 'Markdown imported; 1 image not imported, 2 unknown variables.',
   },
 };
 
 // Le fichier d'un jour de réunion : en-tête YAML (ignoré), titre, encadré GitHub, texte aux marques et note de bas de page, liste à cases, tableau aux colonnes alignées, une image qui n'est pas en
-// ligne (non reprise), une image intégrée, puis l'en-tête et le pied de page entre les commentaires que l'export du widget écrit.
+// ligne (non reprise : depuis le 24/11 une adresse web ne l'est pas non plus), une image intégrée, puis l'en-tête et le pied de page entre les commentaires que l'export du widget écrit.
 const doc = (...lines) => lines.join('\n') + '\n';
 const meeting = title => doc('---', 'title: Compte rendu', 'tags: [reunion]', '---', '', `# ${title}`, '', '> [!NOTE]', '> Document importé depuis un fichier Markdown.', '',
   'Les **points clés** du *12 octobre*, avec une note[^1] et ~~un ancien plan~~.', '', '## Décisions', '', '- [x] Envoyer le compte rendu', '- [ ] Relancer les absents', '',
@@ -239,7 +239,7 @@ async function run(theme, lang) {
     check(`${label} - le sélecteur s'ouvre de nouveau`, !!first.chooser);
     await settle(page, /Markdown import/);
     const done = await statusOf(page);
-    check(`${label} - le coin d'état commence par l'enregistrement sous le nom du fichier, dit que le Markdown est importé et qu'une image n'a pas été reprise (celle qui n'est pas en ligne), se lit en entier, dans le panneau`,
+    check(`${label} - le coin d'état commence par l'enregistrement sous le nom du fichier, dit que le Markdown est importé et qu'une image n'a pas été reprise (celle d'un fichier à côté : une adresse web ne l'est plus non plus), se lit en entier, dans le panneau`,
       done.text === T.savedAs('compte-rendu') + T.importedImages && !done.error && done.whole && done.inPanel, done);
     const rows1 = await stored(page);
     check(`${label} - le document est ENREGISTRÉ dans Grist sous le nom du fichier « compte-rendu » (une ligne, relue dans la table), sans que personne l'ait nommé ni enregistré`,

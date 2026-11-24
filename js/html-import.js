@@ -714,16 +714,15 @@ const HtmlImport = (function () {
       const width = widthOf(img);
       const tiny = (parseFloat(width) <= 2 && /px|^[\d.]+$/.test(width)) || (heightOf(img) > 0 && heightOf(img) <= 2);
       if (tiny) { img.remove(); report.pixels = (report.pixels || 0) + 1; return; }
-      const web = /^https?:\/\//i.test(src);
-      if (!web && !DATA_IMAGE.test(src)) {
-        // Une data URI d'un autre genre (un dessin SVG) est un dessin non repris ; le reste (chemin relatif, file:, blob:, rien) est un fichier d'à côté.
-        if (/^data:/i.test(src)) report.svg = (report.svg || 0) + 1; else report.imagesRelative = (report.imagesRelative || 0) + 1;
+      if (!DATA_IMAGE.test(src)) {
+        // Une adresse web n'est plus reprise (24/11 : plus aucun appel vers un autre site) ; une data URI d'un autre genre (un dessin SVG) est un dessin non repris ; le reste (chemin relatif, file:, blob:, rien) est un fichier d'à côté.
+        if (/^https?:\/\//i.test(src)) report.imagesExternal = (report.imagesExternal || 0) + 1;
+        else if (/^data:/i.test(src)) report.svg = (report.svg || 0) + 1; else report.imagesRelative = (report.imagesRelative || 0) + 1;
         const note = doc.createElement('em');
         note.textContent = '[' + (alt ? I18n.t('markdown.imageNotImportedNamed', { alt }) : I18n.t('markdown.imageNotImported')) + ']';
         img.replaceWith(note);
         return;
       }
-      if (web) report.imagesExternal = (report.imagesExternal || 0) + 1;
       const fresh = doc.createElement('img');
       fresh.setAttribute('class', 'editor-image');
       fresh.setAttribute('src', src);

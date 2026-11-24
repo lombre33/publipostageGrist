@@ -216,7 +216,7 @@ const I18nTextsFormat = {
   'insert.table': { fr: 'Insérer un tableau', en: 'Insert a table' },
   'insert.twoColumns': { fr: 'Insérer 2 colonnes', en: 'Insert 2 columns' },
   'insert.image.tip': { fr: 'Ajouter une image', en: 'Add an image' },
-  'insert.image.aria': { fr: 'Insérer une image (URL)', en: 'Insert an image (URL)' },
+  'insert.image.aria': { fr: 'Insérer une image (par collage)', en: 'Insert an image (by pasting)' },
   'insert.imageFromVariable': { fr: 'Image depuis une variable (colonne PJ)…', en: 'Image from a variable (attachment column)…' },
   'insert.qr.row': { fr: 'QR code…', en: 'QR code…' },
   'insert.qr.rowEdit': { fr: 'Modifier le QR code…', en: 'Edit QR code…' },

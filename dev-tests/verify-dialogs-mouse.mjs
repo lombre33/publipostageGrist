@@ -2,7 +2,7 @@
 // Saisies et confirmations du widget (js/dialogs.js, css/modal-base.css) : Dialogs.prompt et Dialogs.confirm à 700x400 (le panneau d'Antoine), à la VRAIE souris
 // (page.mouse) et au VRAI clavier (frappe, Entrée, Échap, Tab), en clair et en sombre - à la place de window.prompt / window.confirm (choix d'Antoine du
 // 2026-09-29). Deux parties : 1) la fenêtre elle-même (run) ; 2) les endroits du widget qui l'appellent (runSites), chacun déclenché par le vrai clic sur
-// le vrai bouton : image par adresse, enregistrer sous, supprimer un modèle, email trop long, les trois exports en lot, la table créée depuis la galerie,
+// le vrai bouton : le bouton d'image (grisé, sans fenêtre d'adresse), enregistrer sous, supprimer un modèle, email trop long, les trois exports en lot, la table créée depuis la galerie,
 // supprimer un fil de commentaires, nouveau dossier / sous-dossier / déplacer vers un dossier (Organiser mes documents), supprimer une correspondance de tables.
 // Le verrou d'export (withExportLock, js/main.js) grise le bouton avant que la fenêtre « Email trop long » s'ouvre : lancé au clavier (vraies touches Tab et Entrée),
 // le clavier doit revenir sur « Créer l'email » et sur « Exporter en PDF » à la fermeture ; lancé à la souris, rien ne change (aucun cadre de focus).
@@ -475,7 +475,6 @@ async function run(theme) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 // Partie 2 : les endroits du widget qui appellent la fenêtre, à la vraie souris et au vrai clavier.
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
-const DATA_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 const badge = (table, column) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"></span>`;
 
 // Centre d'un élément (amené dans la vue), vrai déplacement puis vrai clic ; rend aussi ce qui se trouve réellement sous le pointeur.
@@ -607,23 +606,17 @@ async function runSites(theme) {
   await page.waitForTimeout(300);
   let s, r, c;
 
-  // 1) Insérer une image par son adresse (barre de mise en forme).
+  // 1) Le bouton « Insérer une image » (barre de mise en forme) ne demande plus d'adresse (demande d'Antoine du 24/11 : plus aucun appel vers un autre site) : grisé,
+  //    un clic réel n'ouvre aucune fenêtre de saisie, n'insère rien et ouvre la bulle qui dit comment faire (copier l'image puis la coller).
   await page.evaluate(() => Editor.setHTML('<p>Texte</p>'));
   const imgCount = () => page.evaluate(() => document.querySelectorAll('.tiptap img.editor-image').length);
-  await realClick('#v2-btn-image');
-  s = await state();
-  expectDialog(`${T}, image : la fenêtre s’ouvre dans le panneau, champ vide, boutons Annuler et Insérer`, s,
-    { title: 'Insérer une image', label: 'Adresse de l’image', message: null, value: '', buttons: ['Annuler', 'Insérer'], focus: 'input' });
+  await realClick('#v2-btn-image', 300);
+  const imageBubble = await page.evaluate(() => ({ open: LockBubble.isOpen(), onButton: LockBubble.current() === document.getElementById('v2-btn-image'), text: (document.querySelector('.pp-lockbubble-why') || {}).textContent || '' }));
+  check(`${T}, image : le bouton grisé n’ouvre aucune fenêtre de saisie d’adresse et n’insère rien`, !(await isOpen()) && (await imgCount()) === 0, await imgCount());
+  check(`${T}, image : une bulle sous le bouton dit de copier l’image puis de la coller (Ctrl+V)`, imageBubble.open && imageBubble.onButton && /Copiez l’image puis collez-la \(Ctrl\+V\)/.test(imageBubble.text), imageBubble);
   await snap(`${T}-s1-image`);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-  check(`${T}, image : Échap n’insère rien et le focus revient au bouton`, (await imgCount()) === 0 && !(await isOpen()), await imgCount());
-  await realClick('#v2-btn-image');
-  await page.keyboard.type(DATA_PNG);
-  await click(OK);
-  await page.waitForTimeout(400);
-  check(`${T}, image : « Insérer » (clic réel) met l’image dans le document avec l’adresse tapée`,
-    (await imgCount()) === 1 && await page.evaluate(src => document.querySelector('.tiptap img.editor-image').getAttribute('src') === src, DATA_PNG) && !(await isOpen()));
+  await realClick('#v2-btn-image', 300);
+  check(`${T}, image : un second clic referme la bulle`, !(await page.evaluate(() => LockBubble.isOpen())) && (await imgCount()) === 0);
 
   // 2) Enregistrer sous (copie) : la copie prend le nom tapé, Échap n'en crée pas.
   await page.evaluate(name => { Editor.setHTML('<p>Contrat de test</p>'); document.getElementById('template-name').value = name; }, `Modèle ${T}`);
@@ -1127,15 +1120,14 @@ async function runEnglish() {
   await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(200);
   await page.evaluate(() => Editor.setHTML('<p>Text</p>'));
-  await realClick('#v2-btn-image');
-  let s = await state();
-  expectDialog(`${T}, image : titre, libellé et boutons dans la langue de l’interface`, s, { title: 'Insert an image', label: 'Image address', message: null, value: '', buttons: ['Cancel', 'Insert'], focus: 'input' });
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
+  await realClick('#v2-btn-image', 300);
+  const imageBubble = await page.evaluate(() => ({ open: LockBubble.isOpen(), text: (document.querySelector('.pp-lockbubble-why') || {}).textContent || '' }));
+  check(`${T}, image : le bouton grisé n’ouvre pas de fenêtre ; sa bulle dit, dans la langue de l’interface, de copier l’image puis de la coller`, !(await isOpen()) && imageBubble.open && /Copy the image, then paste it \(Ctrl\+V\)/.test(imageBubble.text), imageBubble);
+  await realClick('#v2-btn-image', 300);
   await page.evaluate(() => { Editor.setHTML('<p>Contract</p>'); document.getElementById('template-name').value = 'Template EN'; });
   await realClick('#btn-save', 800);
   await openSaveAs();
-  s = await state();
+  let s = await state();
   expectDialog(`${T}, enregistrer sous : « Save as (copy) », « Save », le premier nom libre déjà saisi`, s, { title: 'Save as (copy)', label: 'Name of the new document', message: null, value: 'Template EN (2)', buttons: ['Cancel', 'Save'], focus: 'input' });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);

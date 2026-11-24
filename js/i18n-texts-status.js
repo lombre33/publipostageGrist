@@ -202,7 +202,6 @@ const I18nTextsStatus = {
 
   // --- Confirmations / invites (main.js) ; titres des fenêtres de saisie et de confirmation (js/dialogs.js), qui prennent aussi les textes des
   // clés voisines ---
-  'dialog.imageUrl.title': { fr: 'Insérer une image', en: 'Insert an image' },
   'dialog.newTable.title': { fr: 'Nouvelle table Grist', en: 'New Grist table' },
   // « Créer avec ses tables » (js/template-gallery-modal.js) : la question avant de créer, et le refus quand une table du document porte déjà le nom d'une
   // table du modèle avec d'autres colonnes.
@@ -258,11 +257,6 @@ const I18nTextsStatus = {
   // l'annule.
   'dialog.externalImages.title': { fr: 'Images d’un site externe', en: 'Images from an external site' },
   'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
-  // Image insérée par son adresse quand elle vient d'un autre site (js/main-toolbar.js) : la question posée une fois, à l'insertion.
-  'dialog.imageExternal.title': { fr: 'Image d’un site externe', en: 'Image from an external site' },
-  'dialog.imageExternal.message': { fr: 'Cette image est hébergée sur un site externe ({site}).\n\n• Intégrer l’image : elle est copiée dans le modèle et ne dépend plus de ce site.\n• Garder le lien : elle reste sur ce site. À chaque ouverture du modèle, elle n’apparaît qu’après un clic sur « Afficher » et elle est signalée en rouge.', en: 'This image is hosted on an external site ({site}).\n\n• Embed image: it is copied into the template and no longer depends on that site.\n• Keep link: it stays on that site. Each time the template is opened, it only appears after a click on “Show” and is flagged in red.' },
-  'dialog.imageExternal.embed': { fr: 'Intégrer l’image', en: 'Embed image' },
-  'dialog.imageExternal.keep': { fr: 'Garder le lien', en: 'Keep link' },
   // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et
   // Grist (contour en tirets, css/external-images.css).
   'image.externalSite': { fr: 'Image hébergée sur un site externe ({site}) : chaque affichage la télécharge depuis ce site.', en: 'Image hosted on an external site ({site}): every display downloads it from that site.' },

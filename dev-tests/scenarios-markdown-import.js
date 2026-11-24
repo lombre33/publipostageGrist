@@ -8,7 +8,7 @@
 //  - le texte : gras, italique, barré, code, liens, et ce que l'export du widget écrit en HTML en ligne (souligné, exposant, indice, couleur, taille) ;
 //  - les blocs : alertes GitHub en encadrés de la bonne couleur, listes à cases (une liste mêlée en fait deux, une liste numérotée garde ☐ ☑), notes de bas de page [^1] (une note
 //    échappée, dans du code ou sans définition reste du texte), sommaire (en liens vers les titres, ou [TOC]), sauts de page, tableaux GFM et HTML, alignements ;
-//  - les images : une adresse web ou une data URI est reprise (largeur et alignement compris), le reste est dit à la place de l'image et compté ;
+//  - les images : seule une data URI est reprise (largeur et alignement compris) ; une adresse web, un chemin ou un fichier est dit à la place de l'image et compté (aucun appel vers un autre site) ;
 //  - l'en-tête et le pied de page que l'export écrit entre commentaires ; l'en-tête YAML d'un fichier Jekyll ou Hugo n'est pas du texte ;
 //  - le fichier : UTF-8 avec ou sans BOM, UTF-16, Windows-1252, fins de ligne Windows, un fichier binaire, vide ou trop gros est refusé ;
 //  - ce qui est dangereux est retiré (script, gestionnaire, adresse javascript:, cadre) ;
@@ -56,7 +56,7 @@
         'Ligne un\\', 'Ligne deux', '', '![Logo](https://exemple.fr/logo.png)'));
       const { bad, expect } = checker();
       expect('titres', textsOf(edited, 'h1').join('|') === 'Compte rendu de réunion' && textsOf(edited, 'h2').join('|') === 'Décisions', textsOf(edited, 'h1,h2'));
-      expect('gras, italique, barré', textsOf(edited, 'strong').join('|') === 'points clés' && textsOf(edited, 'em').join('|') === '12 octobre' && textsOf(edited, 's').join('|') === 'ancien');
+      expect('gras, italique, barré', textsOf(edited, 'strong').join('|') === 'points clés' && textsOf(edited, 'em').filter(t => !/^\[image non reprise/.test(t)).join('|') === '12 octobre' && textsOf(edited, 's').join('|') === 'ancien');
       const lists = all(edited, 'ul:not([data-type])');
       expect('une liste à puces de deux éléments, dont le deuxième en porte une autre de deux', lists.length === 2 && lists[0].children.length === 2 && textsOf(lists[0].children[1].outerHTML, 'ul > li').join('|') === 'Recruter deux personnes|Former l’équipe', lists.length);
       const tasks = all(edited, 'ul[data-type="taskList"] > li');
@@ -68,9 +68,8 @@
       const code = all(edited, 'pre code')[0];
       expect('code : langage ts, sans saut de ligne de trop', !!code && code.className === 'language-ts' && code.textContent === 'const a = 1;', code && [code.className, code.textContent]);
       expect('retour à la ligne', all(edited, 'p br').length === 1 && /Ligne un<br>Ligne deux/.test(edited));
-      const image = all(edited, 'img.editor-image')[0];
-      expect('image web', !!image && image.getAttribute('src') === 'https://exemple.fr/logo.png' && image.getAttribute('alt') === 'Logo');
-      expect('« &#x20; » donne un blanc, pas le texte « &#x20; »', !/&amp;#x20;|&#x20;/.test(edited) && converted.skippedImages === 0 && converted.headerFooter === null);
+      expect('image d\'un autre site : pas reprise, un mot la dit, comptée', all(edited, 'img').length === 0 && !/exemple\.fr\/logo/.test(edited) && textsOf(edited, 'em').includes('[image non reprise : Logo]') && converted.skippedImages === 1, [all(edited, 'img').length, textsOf(edited, 'em'), converted.skippedImages]);
+      expect('« &#x20; » donne un blanc, pas le texte « &#x20; »', !/&amp;#x20;|&#x20;/.test(edited) && converted.headerFooter === null);
       return result(bad);
     });
 
@@ -234,30 +233,32 @@
       return result(bad);
     });
 
-  add('markdown_import_images_web_and_embedded_are_kept_the_others_are_named',
-    'Une image à adresse web, à adresse sans protocole (//hôte) ou en data URI est reprise (largeur de <img width="150"> ou "50%" comprise, alignement d\'un <div align> ou <p align>) ; une image à chemin relatif ou file: n\'est pas reprise : un mot dit « image non reprise » avec son texte de remplacement à sa place, et l\'import les compte',
+  add('markdown_import_embedded_images_are_kept_the_others_are_named',
+    'Une image en data URI est reprise (largeur de <img width="150"> ou "50%" comprise, alignement d\'un <div align> ou <p align>) ; une image à adresse web, sans protocole (//hôte), à chemin relatif ou file: n\'est pas reprise (demande d\'Antoine du 24/11 : plus aucun appel vers un autre site) : un mot dit « image non reprise » avec son texte de remplacement à sa place, et l\'import les compte',
     async (h) => {
-      const { converted, edited } = await inEditor(h, doc('![web](https://exemple.fr/a.png)', '', '![proto](//exemple.fr/b.png)', '', `![data](${png})`, '', '![local](images/c.png "titre")', '', '![](file:///c:/x.png)', '',
-        '<img src="https://exemple.fr/d.png" alt="largeur" width="150">', '', '<img src="https://exemple.fr/e.png" width="50%">', '', '<div align="center">', '  <img src="https://exemple.fr/f.png" width="200">', '</div>', '',
-        '<p align="right"><img src="https://exemple.fr/g.png"></p>'));
+      const data = kind => png.replace('image/png', 'image/' + kind);
+      const { converted, edited } = await inEditor(h, doc(`![data](${png})`, '', '![web](https://exemple.fr/a.png)', '', '![proto](//exemple.fr/b.png)', '', '![local](images/c.png "titre")', '', '![](file:///c:/x.png)', '',
+        `<img src="${data('jpeg')}" alt="largeur" width="150">`, '', `<img src="${data('gif')}" width="50%">`, '', '<div align="center">', `  <img src="${data('webp')}" width="200">`, '</div>', '',
+        `<p align="right"><img src="${data('bmp')}"></p>`, '', '<img src="https://exemple.fr/d.png" alt="largeur web" width="150">', '', '<p align="center"><img src="https://exemple.fr/e.png" width="50%"></p>'));
       const { bad, expect } = checker();
       const images = Object.fromEntries(all(edited, 'img.editor-image').map(i => [i.getAttribute('src').replace(png, 'DATA'), i]));
-      expect('sept images reprises', Object.keys(images).length === 7, Object.keys(images));
-      expect('adresse sans protocole en https', !!images['https://exemple.fr/b.png']);
+      expect('cinq images reprises, toutes en data URI', Object.keys(images).length === 5 && Object.keys(images).every(k => /^data:image\//.test(k) || k === 'DATA'), Object.keys(images).map(k => k.slice(0, 22)));
       expect('data URI', !!images.DATA);
-      expect('largeur en pixels', images['https://exemple.fr/d.png'] && /width: 150px/.test(images['https://exemple.fr/d.png'].getAttribute('style')), images['https://exemple.fr/d.png'] && images['https://exemple.fr/d.png'].outerHTML);
-      expect('largeur en pour cent', images['https://exemple.fr/e.png'] && /width: 50%/.test(images['https://exemple.fr/e.png'].getAttribute('style')), images['https://exemple.fr/e.png'] && images['https://exemple.fr/e.png'].outerHTML);
-      expect('image centrée par son <div align>', images['https://exemple.fr/f.png'] && images['https://exemple.fr/f.png'].getAttribute('data-align') === 'center' && /width: 200px/.test(images['https://exemple.fr/f.png'].getAttribute('style')), images['https://exemple.fr/f.png'] && images['https://exemple.fr/f.png'].outerHTML);
-      expect('image à droite par son <p align>', images['https://exemple.fr/g.png'] && images['https://exemple.fr/g.png'].getAttribute('data-align') === 'right');
-      expect('deux images non reprises, comptées', converted.skippedImages === 2, converted.skippedImages);
+      const style = key => images[data(key)] && images[data(key)].getAttribute('style');
+      expect('largeur en pixels', /width: 150px/.test(style('jpeg')), images[data('jpeg')] && images[data('jpeg')].outerHTML.slice(0, 80));
+      expect('largeur en pour cent', /width: 50%/.test(style('gif')), images[data('gif')] && images[data('gif')].outerHTML.slice(0, 80));
+      expect('image centrée par son <div align>', images[data('webp')] && images[data('webp')].getAttribute('data-align') === 'center' && /width: 200px/.test(style('webp')), images[data('webp')] && images[data('webp')].outerHTML.slice(0, 120));
+      expect('image à droite par son <p align>', images[data('bmp')] && images[data('bmp')].getAttribute('data-align') === 'right');
+      expect('six images non reprises, comptées', converted.skippedImages === 6, converted.skippedImages);
+      expect('aucune adresse d\'un autre site, d\'un chemin ni d\'un fichier ne reste dans le document', !/exemple\.fr|images\/c\.png|file:|c:\/x/.test(edited) && !all(converted.html, 'img').some(i => !/^data:image\//.test(i.getAttribute('src') || '')), converted.html.slice(0, 200));
       const lang = I18n.getLang();
       I18n.setLang('en');
       let english;
-      try { english = imp(doc('![local](images/c.png)', '', '![](images/d.png)')); } finally { I18n.setLang(lang); }
-      expect('en anglais, le mot dit « image not imported: local » (deux-points collé au mot)', textsOf(english.html, 'em').join('|') === '[image not imported: local]|[image not imported]', textsOf(english.html, 'em'));
+      try { english = imp(doc('![local](images/c.png)', '', '![](images/d.png)', '', '![web](https://exemple.fr/a.png)')); } finally { I18n.setLang(lang); }
+      expect('en anglais, le mot dit « image not imported: local » (deux-points collé au mot)', textsOf(english.html, 'em').join('|') === '[image not imported: local]|[image not imported]|[image not imported: web]', textsOf(english.html, 'em'));
       expect('dans le HTML converti, aucune image n\'est posée nue à la racine (une image seule sur sa ligne est rangée dans un paragraphe)', all(converted.html, 'img.editor-image').every(img => img.parentElement.tagName !== 'BODY'), converted.html.slice(0, 300));
       const texts = textsOf(edited, 'em');
-      expect('un mot à la place de chacune, avec son texte de remplacement', texts.join('|') === '[image non reprise : local]|[image non reprise]', texts);
+      expect('un mot à la place de chacune, avec son texte de remplacement', texts.join('|') === '[image non reprise : web]|[image non reprise : proto]|[image non reprise : local]|[image non reprise]|[image non reprise : largeur web]|[image non reprise]', texts);
       return result(bad);
     });
 
@@ -374,7 +375,7 @@
     });
 
   add('markdown_import_a_rich_document_exported_by_the_widget_comes_back_the_same',
-    'Aller-retour : un document de l\'éditeur (titres, texte en HTML en ligne, note de bas de page, listes dont une à cases, tableau aux colonnes alignées, citation, cinq encadrés, code, image web et image centrée de 50 %, filet, saut de page, sommaire, en-tête et pied dont une première page) exporté en Markdown, importé puis exporté de nouveau donne exactement le même Markdown ; et les éléments que le texte Markdown ne montre pas à lui seul (couleur et icône des encadrés, cases cochées, texte de la note, alignements, largeur et centrage de l\'image, sommaire, saut de page) sont ceux de l\'original',
+    'Aller-retour : un document de l\'éditeur (titres, texte en HTML en ligne, note de bas de page, listes dont une à cases, tableau aux colonnes alignées, citation, cinq encadrés, code, une image et une image centrée de 50 %, filet, saut de page, sommaire, en-tête et pied dont une première page) exporté en Markdown, importé puis exporté de nouveau donne exactement le même Markdown ; et les éléments que le texte Markdown ne montre pas à lui seul (couleur et icône des encadrés, cases cochées, texte de la note, alignements, largeur et centrage de l\'image, sommaire, saut de page) sont ceux de l\'original',
     async (h) => {
       await ready();
       await h.resetEditor();
@@ -387,7 +388,7 @@
         + '<blockquote><p>Citation d\'un auteur</p></blockquote>'
         + ['blue', 'green', 'purple', 'amber', 'red'].map(c => `<div class="callout" data-color="${c}" data-icon="info" role="note"><p>Encadré ${c}</p></div>`).join('')
         + '<pre><code class="language-js">let a = 1;\n\nconsole.log(a)</code></pre>'
-        + '<p><img class="editor-image" src="https://exemple.fr/logo.png" alt="Logo" style="width: 120px"></p>'
+        + `<p><img class="editor-image" src="${png.replace('image/png', 'image/gif')}" alt="Logo" style="width: 120px"></p>`
         + `<p><img class="editor-image" src="${png}" alt="Centrée" data-align="center" style="width: 50%"></p>`
         + '<hr><div class="page-break-marker"></div><h1>Annexe</h1><p>Fin<br>deux lignes</p><h2>Annexe</h2>';
       const zones = { enabled: true, differentFirstPage: true, header: { default: '<p>Entête <strong>société</strong></p>', first: '<p>Première page</p>' }, footer: { default: '<p style="text-align: center">Pied</p>', first: '' } };
@@ -480,7 +481,7 @@
       await seedModel();
       const { bad, expect } = checker();
       const key = `{{${CLIENTS}.Nom}}`;
-      const { converted, edited } = await inEditor(h, doc(`Échappé : \\${key}`, '', 'Code : `' + key + '` et ``a `' + key + '` b``', '', '```', key, '```', '', '~~~js', `const a = "${key}";`, '~~~', '', `<img alt="${key}" src="https://exemple.fr/a.png">`));
+      const { converted, edited } = await inEditor(h, doc(`Échappé : \\${key}`, '', 'Code : `' + key + '` et ``a `' + key + '` b``', '', '```', key, '```', '', '~~~js', `const a = "${key}";`, '~~~', '', `<img alt="${key}" src="${png}">`));
       expect('aucune bulle', bubblesOf(edited).length === 0, bubblesOf(edited));
       expect('texte échappé', textsOf(edited, 'p').some(t => t === 'Échappé : ' + key), textsOf(edited, 'p'));
       expect('codes', JSON.stringify(textsOf(edited, 'code')) === JSON.stringify([key, 'a `' + key + '` b', key, `const a = "${key}";`]), textsOf(edited, 'code'));

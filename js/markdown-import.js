@@ -381,8 +381,8 @@ const MarkdownImport = (function () {
     });
   }
 
-  // Les images. Seules une adresse web et une data URI sont des images que l'éditeur sait montrer : le reste (un chemin relatif, file:) est dit par un mot à la place de
-  // l'image. La largeur vient de l'attribut width de l'export (<img width="150"> ou "50%") ; sans elle, la largeur par défaut de l'éditeur s'applique.
+  // Les images. Seule une data URI d'image est reprise (24/11 : plus aucun appel vers un autre site) : une adresse web, un chemin relatif ou file: sont dits par un mot à la place de
+  // l'image, et comptés. La largeur vient de l'attribut width de l'export (<img width="150"> ou "50%") ; sans elle, la largeur par défaut de l'éditeur s'applique.
   function widthOf(img) {
     const attr = (img.getAttribute('width') || '').trim();
     const style = (img.style && img.style.width) || '';
@@ -393,10 +393,9 @@ const MarkdownImport = (function () {
     Array.from(root.querySelectorAll('img')).forEach(img => {
       // Une image que le modèle lie à une colonne (ce que l'export d'un modèle écrit en HTML) n'a pas d'adresse : elle est dessinée à la lecture, elle reste telle quelle.
       if (ExportCommon.isMergeImage(img)) { img.classList.add('editor-image'); return; }
-      let src = (img.getAttribute('src') || '').trim();
-      if (/^\/\//.test(src)) src = 'https:' + src;
+      const src = (img.getAttribute('src') || '').trim();
       const alt = (img.getAttribute('alt') || '').replace(/\s+/g, ' ').trim();
-      if (!/^https?:\/\//i.test(src) && !/^data:image\//i.test(src)) {
+      if (!/^data:image\//i.test(src)) {
         ctx.skippedImages += 1;
         const note = el(doc, 'em');
         note.textContent = '[' + (alt ? I18n.t('markdown.imageNotImportedNamed', { alt }) : I18n.t('markdown.imageNotImported')) + ']';

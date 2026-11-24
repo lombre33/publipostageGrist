@@ -100,6 +100,8 @@ const I18nTextsReview = {
   'lock.gridSheet': { fr: 'Indisponible dans une grille : il n’y a pas de feuille à afficher', en: 'Unavailable in a grid: there is no sheet to show' },
   'lock.linked': { fr: 'Indisponible dans un tableau lié à un modèle Grille : ses cases suivent les règles d’une grille', en: 'Unavailable in a table linked to a Grid template: its cells follow the rules of a grid' },
   'lock.slides': { fr: 'Indisponible dans une présentation : elle a déjà ses diapositives', en: 'Unavailable in a presentation: it already has its slides' },
+  // Le bouton « Insérer une image » (js/main-toolbar.js, syncLocks) : plus d'adresse d'un autre site, une image se colle ; le menu du bouton garde les pièces jointes de Grist.
+  'lock.imagePaste': { fr: 'Copiez l’image puis collez-la (Ctrl+V). Une pièce jointe de Grist se pose par « Image depuis une variable », dans le menu de ce bouton', en: 'Copy the image, then paste it (Ctrl+V). A Grist attachment goes in through “Image from a variable”, in this button’s menu' },
   'lock.link': { fr: 'Indisponible ici : pas de lien dans un bloc de code ni sur une image seule', en: 'Unavailable here: no link inside a code block or on a lone image' },
   'lock.codeBlock': { fr: 'Indisponible ici : un bloc de code effacerait une variable ou une image de la sélection', en: 'Unavailable here: a code block would erase a variable or an image from the selection' },
   'lock.indent': { fr: 'Indisponible ici : placez le curseur dans un point de liste qui en suit un autre', en: 'Unavailable here: put the cursor in a list item that follows another one' },
