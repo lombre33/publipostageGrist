@@ -50,6 +50,10 @@ async function run(lang, colorScheme) {
   const { page, requests } = await t.openPage({ hosted: true, stub: { extensions: ACTIVE, lecteurs: PLAYERS }, seed: SEED, lang, colorScheme });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
+  // La languette du panneau du haut (`#v2-bar-fold-tab`, 48 × 14 px, au milieu, css/bar-fold.css) pend sur le haut de la zone qui défile. Tout ce qui recouvre un coin du calque le fait masquer (scénario 4) :
+  // la vidéo à moitié sortie par le haut, dont le coin tombe sous la languette (à 1 px près, selon la largeur de la page), est donc masquée, comme sous un menu. Ce n'est pas ce que ces scénarios mesurent
+  // (le suivi, le rognage, la place du lecteur) : la languette est retirée de la page pour tout le parcours.
+  await page.addStyleTag({ content: '#v2-bar-fold { display: none !important; }' });
   const rectOf = (selector, index = 0) => page.evaluate(([sel, i]) => {
     const el = document.querySelectorAll(sel)[i];
     if (!el) return null;
@@ -628,6 +632,17 @@ async function run(lang, colorScheme) {
     return out;
   });
   const IMG = '#editor-container .ProseMirror .editor-image-video img';
+  // L'image au milieu de la zone qui défile : `scrollIntoView` centre son enveloppe (`.editor-image-video`, la ligne du paragraphe, plus haute que l'image : elle suit le texte posé sur sa ligne), et
+  // l'image, 16/9 sur toute la largeur du panneau (229 px dans 249), en sortait de 1 px par le bas, poignée en bas à droite comprise (hors du panneau, la souris ne l'atteint pas).
+  const centerImage = async () => {
+    await page.evaluate((sel) => {
+      const scroller = document.getElementById('editor-container');
+      const r = document.querySelector(sel).getBoundingClientRect();
+      const z = scroller.getBoundingClientRect();
+      scroller.scrollTop += (r.top + r.height / 2) - (z.top + z.height / 2);
+    }, IMG);
+    await sleep(400);
+  };
   const PLAY = '#editor-container .ProseMirror .editor-image-video .editor-image-video-play';
   const docPlayer = async () => { await sleep(350); return { calls: await countOf('afficher'), last: await lastOf('afficher'), player: await stubPlayer() }; };
   await chooseBlock();
@@ -641,8 +656,7 @@ async function run(lang, colorScheme) {
     docs.length === 1 && docs[0].video === 'youtube:9bZkp7q19f0@42' && docs[0].src === '' && docs[0].wrap === 'block' && docs[0].align === 'center' && docs[0].width === '480px' && docs[0].alt === T.title && docs[0].layer === 'normal', docs);
   const savedHtml = await page.evaluate(() => Editor.getHTML());
   check(tag + 'le modèle enregistré ne contient ni adresse, ni lecteur : ni `youtube.com`, ni <iframe>, <video>, <object>, <embed>, ni `src` sur l\'image de la vidéo', !/youtube\.com|youtu\.be|<iframe|<video|<object|<embed/i.test(savedHtml) && /<img[^>]*data-video="youtube:9bZkp7q19f0@42"/.test(savedHtml) && !/<img[^>]*data-video[^>]*\ssrc=/.test(savedHtml), savedHtml);
-  await page.evaluate(() => { document.querySelector('#editor-container .ProseMirror .editor-image-video').scrollIntoView({ block: 'center' }); });
-  await sleep(400);
+  await centerImage();
   const box = await rectOf(IMG);
   const leaked = requests.filter(u => /youtube|youtu\.be|ytimg|vimeo|googlevideo/i.test(u));
   check(tag + 'la vignette (un rectangle gris, ▶ et le nom du site) est une image 16/9 dessinée dans l\'éditeur, entière dans le panneau, sans rien demander à YouTube', !!box && near(box.height / box.width, 9 / 16, 0.01) && box.left >= 0 && box.right <= WIDTH && box.top >= 0 && box.bottom <= HEIGHT && leaked.length === 0, { box, leaked });
@@ -683,8 +697,7 @@ async function run(lang, colorScheme) {
   // Elle se redimensionne à la poignée, en gardant ses proportions.
   await click('.v2-image-toolbar button[data-action="align-center"]');
   await sleep(350);
-  await page.evaluate(() => { document.querySelector('#editor-container .ProseMirror .editor-image-video').scrollIntoView({ block: 'center' }); });
-  await sleep(300);
+  await centerImage();
   const corner = await rectOf('#editor-container .ProseMirror .editor-image-video .editor-image-handle-se');
   const before = await rectOf(IMG);
   await reach(corner);
@@ -777,6 +790,10 @@ async function runFramed() {
   const { page, app } = await t.openPage({ hosted: true, framed: true, stub: { extensions: ACTIVE, lecteurs: PLAYERS }, seed: SEED, lang: 'fr', colorScheme: 'light' });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
+  // La languette du panneau du haut (`#v2-bar-fold-tab`, 48 × 14 px, au milieu, css/bar-fold.css) pend sur le haut de la zone qui défile. Tout ce qui recouvre un coin du calque le fait masquer (scénario 4) :
+  // la vidéo à moitié sortie par le haut, dont le coin tombe sous la languette (à 1 px près, selon la largeur de la page), est donc masquée, comme sous un menu. Ce n'est pas ce que ces scénarios mesurent
+  // (le suivi, le rognage, la place du lecteur) : la languette est retirée de la page pour tout le parcours.
+  await app.addStyleTag({ content: '#v2-bar-fold { display: none !important; }' });
   const near = (a, b, tolerance = 1.5) => typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= tolerance;
   await Promise.race([
     page.evaluate(() => window.__gfsStub.ouvrir({ fichier: { id: '7', type: 'modele' }, type: '', dossier: '', raison: 'explorateur' })),
