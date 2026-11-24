@@ -183,7 +183,7 @@ async function runPass(lang, scheme) {
     return { ids: rows.map(r => r.id), lastBottom: last.bottom, flyoutBottom: flyout.getBoundingClientRect().bottom, scrolls: flyout.scrollHeight > flyout.clientHeight, chart: (document.getElementById('v2-btn-chart') || {}).textContent.trim() };
   });
   check(`${T}, menu des blocs : il garde ses lignes (celle du graphique de la page comprise) plus « Vidéo… », entière dans le panneau, le volet défilant pour la dernière`,
-    blocks.ids.length === 10 && !blocks.ids.includes('v2-btn-chart-make') && blocks.chart === X.pageRow && blocks.lastBottom <= HEIGHT + 0.5 && blocks.flyoutBottom <= HEIGHT + 0.5 && blocks.scrolls && blocks.ids[8] === 'v2-btn-video' && blocks.ids[9] === 'v2-btn-slide-text', blocks);
+    blocks.ids.length === 11 && !blocks.ids.includes('v2-btn-chart-make') && blocks.chart === X.pageRow && blocks.lastBottom <= HEIGHT + 0.5 && blocks.flyoutBottom <= HEIGHT + 0.5 && blocks.scrolls && blocks.ids[9] === 'v2-btn-video' && blocks.ids[10] === 'v2-btn-slide-text', blocks);
   await page.mouse.move(WIDTH - 30, HEIGHT - 30, { steps: 3 });
   await sleep(300);
 

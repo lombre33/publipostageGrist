@@ -75,8 +75,18 @@ async function run(lang, colorScheme) {
     await sleep(350);
     return c;
   };
+  // Le volet à onze lignes ne tient pas dans 400 px : une ligne sous son bord bas (la vidéo, la diapositive) vient d'abord sous la molette, comme le ferait la personne.
+  const scrollFlyoutTo = async (selector) => {
+    const flyout = await rectOf('#v2-blocks-flyout');
+    const row = await rectOf(selector);
+    if (!flyout || !row || row.bottom <= flyout.bottom - 2) return;
+    await page.mouse.move(flyout.x, flyout.top + 60, { steps: 3 });
+    await page.mouse.wheel(0, 300);
+    await sleep(250);
+  };
   const chooseBlock = async (selector = '#v2-btn-video') => {
     const c = await openBlocks();
+    await scrollFlyoutTo(selector);
     const r = await rectOf(selector);
     const x = Math.min(Math.max(c.x, r.left + 8), r.right - 8);
     await page.mouse.move(x, r.y, { steps: 8 });
@@ -374,9 +384,18 @@ async function run(lang, colorScheme) {
     const hit = document.elementFromPoint(r.left + 12, r.top + r.height / 2);
     const label = row.querySelector('span:not(.v2-menu-row-icon)');
     const ids = Array.from(flyout.querySelectorAll('.v2-menu-row')).map(b => b.id);
-    return { text: label.textContent.trim(), aria: row.getAttribute('aria-label'), icon: !!row.querySelector('.v2-menu-row-icon svg'), locked: row.classList.contains('v2-hf-locked'), inPanel: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, onTop: !!hit && row.contains(hit), flyoutBottom: f.bottom, ids, vh: innerHeight };
+    return { text: label.textContent.trim(), aria: row.getAttribute('aria-label'), icon: !!row.querySelector('.v2-menu-row-icon svg'), locked: row.classList.contains('v2-hf-locked'), inPanel: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, onTop: !!hit && row.contains(hit), flyoutBottom: f.bottom, scrollable: flyout.scrollHeight > flyout.clientHeight, ids, vh: innerHeight };
   });
-  check(tag + '« ' + T.row + ' » est une ligne du menu « Lien et blocs de contenu » (après « Graphique de la page… »), avec son icône, entière dans le panneau de 700 x 400, au premier plan et active', blocks.text === T.row && blocks.icon && !blocks.locked && blocks.inPanel && blocks.onTop && blocks.ids.indexOf('v2-btn-video') === blocks.ids.indexOf('v2-btn-chart') + 1, blocks);
+  // Onze lignes ne tiennent pas dans 400 px : « Vidéo… » est sous le bord bas du volet (qui défile) et la molette, sur le volet, la fait venir entière dans le panneau, au premier plan.
+  await scrollFlyoutTo('#v2-btn-video');
+  const reached = await page.evaluate(() => {
+    const row = document.getElementById('v2-btn-video');
+    const r = row.getBoundingClientRect();
+    const f = document.getElementById('v2-blocks-flyout').getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + 12, r.top + r.height / 2);
+    return { inPanel: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, inFlyout: r.top >= f.top && r.bottom <= f.bottom + 0.5, onTop: !!hit && row.contains(hit), page: document.scrollingElement.scrollTop };
+  });
+  check(tag + '« ' + T.row + ' » est une ligne du menu « Lien et blocs de contenu » (après « Graphique de la page… »), avec son icône et active ; à 700 x 400 le volet défile (onze lignes) et la molette la fait venir entière dans le panneau, au premier plan, sans faire défiler la page', blocks.text === T.row && blocks.icon && !blocks.locked && blocks.scrollable && blocks.ids.indexOf('v2-btn-video') === blocks.ids.indexOf('v2-btn-chart') + 1 && reached.inPanel && reached.inFlyout && reached.onTop && reached.page === 0, { blocks, reached });
   check(tag + 'son nom pour un lecteur d\'écran dit YouTube et Vimeo', new RegExp(T.aria).test(blocks.aria), blocks.aria);
   // Grist ne laisse passer ni la lecture automatique ni le plein écran au lecteur de GFS (consigne 057, faits vérifiés 50) : rien, dans les textes de l'objet, ne promet une vidéo qui démarre seule, un plein écran, ni qu'UN clic la lit (le lecteur du site s'ouvre, la personne y lance la lecture).
   const texts = await page.evaluate(() => ['insert.video.row', 'insert.video.aria', 'video.dialog.title', 'video.dialog.label', 'video.dialog.message', 'video.dialog.placeholder', 'video.dialog.confirm', 'video.dialog.invalid', 'video.play', 'video.title'].map(k => I18n.t(k, { n: 1, provider: 'YouTube' })));
@@ -848,8 +867,18 @@ async function runStandalone(lang, colorScheme) {
     await sleep(350);
     return c;
   };
+  // Le volet à onze lignes ne tient pas dans 400 px : une ligne sous son bord bas (la vidéo, la diapositive) vient d'abord sous la molette, comme le ferait la personne.
+  const scrollFlyoutTo = async (selector) => {
+    const flyout = await rectOf('#v2-blocks-flyout');
+    const row = await rectOf(selector);
+    if (!flyout || !row || row.bottom <= flyout.bottom - 2) return;
+    await page.mouse.move(flyout.x, flyout.top + 60, { steps: 3 });
+    await page.mouse.wheel(0, 300);
+    await sleep(250);
+  };
   const chooseBlock = async (selector = '#v2-btn-video') => {
     const c = await openBlocks();
+    await scrollFlyoutTo(selector);
     const r = await rectOf(selector);
     const x = Math.min(Math.max(c.x, r.left + 8), r.right - 8);
     await page.mouse.move(x, r.y, { steps: 8 });
