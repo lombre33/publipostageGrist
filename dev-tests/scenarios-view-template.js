@@ -482,9 +482,9 @@
     },
   });
 
-  // Mode d'ouverture de la vue (demande du 24/11, « un réglage par page ») : une seconde option du widget, `ouvertureDeLaVue` (`read` | `edit`, absente = le dernier mode choisi), au pied du modèle de la vue
+  // Mode d'ouverture de la vue (demande du 24/11, « un réglage par page ») : une seconde option du widget, `pp_view_open_mode` (`read` | `edit`, absente = le dernier mode choisi), au pied du modèle de la vue
   // (Réglages > Vue). Ce que le démarrage en fait (js/main.js:startMode) est dans dev-tests/verify-view-open-mode.mjs, qui sème le faux Grist avant l'init.
-  const OPEN_KEY = 'ouvertureDeLaVue';
+  const OPEN_KEY = 'pp_view_open_mode';
   const openOption = () => { const value = (stub().state.options || {})[OPEN_KEY]; return value === undefined ? null : value; };
   const openPanel = () => {
     const select = el('settings-viewopen-mode');
@@ -504,7 +504,7 @@
 
   cases.push({
     id: 'view_open_mode_list_writes_its_own_option_and_leaves_the_template_choice_alone',
-    description: "Réglages > Vue > « Mode d'ouverture de cette vue » : la liste dit « Le dernier mode choisi » au départ, Lecture et Édition écrivent l'option `ouvertureDeLaVue` (la phrase dessous le dit), « Le dernier mode choisi » la retire ; le modèle de la vue n'est jamais touché, et « Retirer » le modèle ne retire pas le mode",
+    description: "Réglages > Vue > « Mode d'ouverture de cette vue » : la liste dit « Le dernier mode choisi » au départ, Lecture et Édition écrivent l'option `pp_view_open_mode` (la phrase dessous le dit), « Le dernier mode choisi » la retire ; le modèle de la vue n'est jamais touché, et « Retirer » le modèle ne retire pas le mode",
     run: async (h) => {
       const f = await ensureFixture(h);
       await openByHand(f.A);

@@ -1005,7 +1005,7 @@ window.EditorTestSuites.undoSettings = (function () {
   // --- Quatrième lot : l'onglet Vue de Réglages ---
   const stub = () => window.__gristStub;
   const VIEW_TABLE = 'UvLignes';
-  const OPTION = { view: 'modeleDeLaVue', open: 'ouvertureDeLaVue', date: 'dateDernierExport', row: 'modeleSelonLigne' };
+  const OPTION = { view: 'modeleDeLaVue', open: 'pp_view_open_mode', date: 'dateDernierExport', row: 'modeleSelonLigne' };
   // Le brouillon des options du widget, tel que Grist le garderait (le faux Grist) ; null quand le réglage est absent ou retiré.
   const optionOf = key => { const value = (stub().state.options || {})[key]; return value === undefined ? null : value; };
   const idText = id => String(id);
