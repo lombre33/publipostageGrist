@@ -1365,16 +1365,18 @@
       }
       const choose = I18n.t('macro.modal.choosePlaceholder');
       const skip = I18n.t('macro.modal.defaultSkip');
+      // « Choisi selon la ligne » est un choix de la liste « Modèle » d'un document, épinglé : il reste proposé même à la recherche (« choisir », « base »).
+      const byRow = I18n.t('macro.modal.byRowChoice');
       const use = nom => I18n.t('macro.modal.defaultUse', { name: nom });
       const documents = ['Notification_base', 'Notification_bureau', 'Notification_projet'];
       const pass = out.fields.every(f => f.hidden && f.width > 40)
         && out.fields[0].text === choose && out.fields[0].placeholder && out.fields[1].text === choose && out.fields[1].placeholder
         && out.fields[2].text === skip && !out.fields[2].placeholder
-        && JSON.stringify(out.opened[0].rows) === JSON.stringify([choose].concat(documents)) && JSON.stringify(out.opened[1].rows) === JSON.stringify([choose].concat(documents))
+        && JSON.stringify(out.opened[0].rows) === JSON.stringify([choose, byRow].concat(documents)) && JSON.stringify(out.opened[1].rows) === JSON.stringify([choose].concat(documents))
         && JSON.stringify(out.opened[2].rows) === JSON.stringify([skip].concat(documents.map(use)))
         && out.opened.every(o => o.headers === 0 && o.searchPlaceholder === I18n.t('searchSelect.searchTemplates'))
-        && JSON.stringify(out.skipFound) === JSON.stringify([skip]) && out.chooseFound.length === 0
-        && JSON.stringify(out.searched.cover) === JSON.stringify(['Notification_base']) && JSON.stringify(out.searched.rule) === JSON.stringify(['Notification_bureau'])
+        && JSON.stringify(out.skipFound) === JSON.stringify([skip]) && JSON.stringify(out.chooseFound) === JSON.stringify([byRow])
+        && JSON.stringify(out.searched.cover) === JSON.stringify([byRow, 'Notification_base']) && JSON.stringify(out.searched.rule) === JSON.stringify(['Notification_bureau'])
         && JSON.stringify(out.searched.dflt) === JSON.stringify([use('Notification_projet')])
         && out.values.cover === '11' && out.values.rule === '12' && out.values.dflt === '13'
         && JSON.stringify(out.values.shown) === JSON.stringify(['Notification_base', 'Notification_bureau', use('Notification_projet')])
@@ -1465,7 +1467,7 @@
         console.warn = warn;
         if (macroModal().style.display !== 'none') await closeMacroWindow(h);
       }
-      const pass = result.native.every(n => n.visible && !n.field && n.options === 4)
+      const pass = result.native.every(n => n.visible && !n.field && n.options === (n === result.native[0] ? 5 : 4))
         && result.kept.cover === '11' && result.kept.rule === '12' && result.kept.dflt === '13' && !result.kept.ruleField
         && result.back.every(b => b.field && b.hidden);
       return { pass, notes: JSON.stringify(result) };

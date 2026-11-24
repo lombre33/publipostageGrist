@@ -504,6 +504,7 @@ const I18nTextsTemplates = {
   // Un document de la composition (fenêtre du macro-modèle, résumé, historique des versions) : « Document 2 » est le deuxième de la liste, qu'il soit toujours inclus, sous condition ou choisi selon la ligne.
   'macro.modal.docLabel': { fr: 'Document {n}', en: 'Document {n}' },
   'macro.modal.byRowTag': { fr: 'choisi selon la ligne', en: 'chosen by the row' },
+  'macro.modal.byRowChoice': { fr: 'Choisi selon la ligne', en: 'Chosen by the row' },
   'macro.modal.docModel': { fr: 'Modèle', en: 'Template' },
   'macro.modal.docInclude': { fr: 'Inclure ce document', en: 'Include this document' },
   'macro.modal.docAlways': { fr: 'Toujours', en: 'Always' },
