@@ -80,6 +80,9 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
     viewFailure: null,
     cursorCalls: [],
     cursorFailure: null,
+    // Clés d'options du widget que l'hôte REFUSE d'écrire : { clé: code du refus }. GFS ne laisse écrire que les clés que son manifeste déclare ; sinon `setOption` rejette (`GFS_CLE_NON_DECLAREE`, contrats 5.2) : rien
+    // n'est écrit et aucun écho ne revient. Un autre code (`GRIST_REFUSE`) joue un refus qui n'est pas celui-là.
+    refusedOptionKeys: {},
     viewCalls: [],
     // Les écouteurs `grist.on('message', ...)` : le bus de messages de Grist, que grist.onRecords lit aussi (message `dataChange`, cf. fireViewChange). Ajouter ne remplace jamais.
     messageCallbacks: [],
@@ -977,6 +980,7 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
     getOptions: async function () { return state.options == null ? null : JSON.parse(JSON.stringify(state.options)); },
     getOption: async function (key) { return state.options ? state.options[key] : undefined; },
     setOption: async function (key, value) {
+      if (Object.prototype.hasOwnProperty.call(state.refusedOptionKeys, key)) { const code = state.refusedOptionKeys[key]; throw Object.assign(new Error(code + ' : écriture de « ' + key + ' » refusée'), { code }); }
       const next = Object.assign({}, state.options, { [key]: value === undefined ? null : JSON.parse(JSON.stringify(value)) });
       const unchanged = state.options != null && JSON.stringify(sortKeys(next)) === JSON.stringify(sortKeys(state.options));
       state.options = next;

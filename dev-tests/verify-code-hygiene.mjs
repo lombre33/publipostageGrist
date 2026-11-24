@@ -1221,6 +1221,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const optionKeys = [...attachment.matchAll(/const (?:COLUMN|MODE)_OPTION = '([^']+)';/g)].map(match => match[1]);
   check('PDF joint à la ligne : les deux options du widget (la colonne, le mode) portent le préfixe pp_ - GFS refuse une clé non déclarée, et il ne déclare que des clés pp_*',
     optionKeys.length === 2 && optionKeys.every(key => /^pp_[a-z0-9_]+$/.test(key)), JSON.stringify(optionKeys));
+  // Le mode d'ouverture de la vue (24/11) : sa première clé, `ouvertureDeLaVue`, n'avait pas le préfixe ; chez GFS `setOption` la refusait (`GFS_CLE_NON_DECLAREE`) et rien ne se gardait. Elle s'appelle `pp_view_open_mode`.
+  const viewOpenKey = (noCommentsJs(read('js/view-template.js')).match(/const OPEN_KEY = '([^']+)';/) || [])[1] || '';
+  check('Mode d’ouverture de la vue : l’option du widget porte le préfixe pp_ - sans lui GFS refuse l’écriture (GFS_CLE_NON_DECLAREE) et le choix ne se garde pas chez elle', /^pp_[a-z0-9_]+$/.test(viewOpenKey), viewOpenKey);
   check('stockage de chaque personne : js/person-store.js suit la règle de GFS pour une clé (1 à 64 caractères A-Z a-z 0-9 _ . : -) et un texte pour valeur, lit l’espace de GFS (GfsLink.storageGet) quand il y en a un et le navigateur sinon, et n’écrit RIEN avant que le contexte soit arrivé (lire ne doit jamais écrire : aucune file d’attente qui irait écraser ce que GFS garde)',
     /const KEY = \/\^\[A-Za-z0-9_\.:-\]\{1,64\}\$\/;/.test(store) && /sharedSpace \? GfsLink\.storageGet\(key\) : browserGet\(key\)/.test(store) && /if \(sharedSpace\) return GfsLink\.storageSet\(key, value\);\s*if \(GfsLink\.hosted && !loaded\) return false;\s*return browserWrite\(key, value\);/.test(store)
       && /value !== null && typeof value !== 'string'/.test(store) && !/\bwaiting\b|\bqueue\b/.test(store) && /sharedSpace = GfsLink\.hasStorage\(\);/.test(store) && /const ready = GfsLink\.ready\.then\(load\);/.test(store), 'js/person-store.js');
@@ -2453,7 +2456,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     anglais: (readme.match(/^- \*\*No data is stored outside of Grist\*\*[^\n]*/m) || [''])[0],
   };
   // Les clés que le code garde : celles de js/ et d'index.html, comme le fait controles.mjs, sauf deux options du widget que Grist garde avec lui (pas dans le navigateur) ; `pp_schema_` est un préfixe (une clé par document).
-  const IN_GRIST = new Set(['pp_attach_column', 'pp_attach_mode']);
+  const IN_GRIST = new Set(['pp_attach_column', 'pp_attach_mode', 'pp_view_open_mode']);
   const keys = new Set();
   for (const file of [...listFiles('js', /\.js$/), 'index.html']) {
     for (const match of read(file).matchAll(/['"`](pp_[A-Za-z0-9_]+)/g)) if (!IN_GRIST.has(match[1])) keys.add(match[1].startsWith('pp_schema_') ? 'pp_schema_' : match[1]);

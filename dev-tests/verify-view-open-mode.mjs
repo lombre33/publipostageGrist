@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Mode d'ouverture de la VUE (demande d'Antoine du 24/11 : « comment définir qu'un modèle par défaut d'une page s'ouvre en mode lecture et pas écriture ? », choix « un réglage par page ») :
-// js/view-template.js porte une seconde option du widget, `ouvertureDeLaVue` (`read` | `edit`, absente = « le dernier mode choisi »), que js/main.js:startMode lit AVANT la préférence de la
+// js/view-template.js porte une seconde option du widget, `pp_view_open_mode` (`read` | `edit`, absente = « le dernier mode choisi »), que js/main.js:startMode lit AVANT la préférence de la
 // personne (`pp_last_mode`, dev-tests/verify-last-mode.mjs). Une fois la page prête il est trop tard pour rejouer le démarrage : chaque cas sème le faux Grist AVANT l'init (`spec.options`) et
 // lit ce que voit la personne (bouton allumé, éditeur ou lecteur affiché), à 700x400, comme verify-last-mode.mjs ; le réglage, lui, se fait dans Réglages > Vue au vrai clic.
 //   1) la vue dit Lecture : le modèle ★ s'ouvre en Lecture, même sans préférence de la personne, et rien n'est retenu à sa place (pp_last_mode reste absent) ;
@@ -11,13 +11,18 @@
 //      un choix écrit l'option du widget (et seulement elle : le modèle de la vue n'est pas touché), la phrase dessous le dit, Ctrl + Z le défait, Ctrl + Y le rend ; « Le dernier mode choisi » retire l'option ;
 //      l'option écrite par ce choix fait ouvrir la page suivante en Lecture ;
 //   6) le bouton Édition reste utilisable : un vrai clic sur « Mode édition » passe à l'Édition et retient « edit » (la préférence de la personne), la vue n'en est pas changée ;
-//   7) aucune erreur de page.
+//   7) GFS ne laisse écrire qu'une clé que son manifeste déclare (`GFS_CLE_NON_DECLAREE`) : la clé de l'option porte le préfixe `pp_` (la règle des clés nouvelles de GFS) et, quand l'hôte REFUSE l'écriture (le faux Grist le
+//      joue : `state.refusedOptionKeys`), la phrase sous la liste dit en rouge que le choix n'est pas gardé (Grist Factory d'abord, un autre refus ensuite), en français puis en anglais, la liste garde le choix, rien n'est
+//      écrit dans la vue, le rappel « Enregistrer » ne s'allume pas (il n'y a pas de brouillon), et un choix accepté ensuite efface la phrase ; un choix accepté allume le rappel comme avant ;
+//   8) aucune erreur de page (hors le refus joué, que le code écrit dans la console).
 // Lancé par run-headless.mjs (groupe Node « viewOpenMode », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-view-open-mode.mjs
 import { open, stopServer, sleep, click } from './load-lib.mjs';
 
 const PORT = Number(process.env.VIEW_OPEN_MODE_PORT || 9291);
 const LAST = 'pp_last_mode';
-const VIEW = 'ouvertureDeLaVue';
+const VIEW = 'pp_view_open_mode';
+// Les refus joués ci-dessous : le code les écrit dans la console (console.error), ce n'est pas une erreur de la page.
+const EXPECTED = /\[ViewTemplate\] enregistrement de l.option du mode d.ouverture impossible/;
 let failed = 0;
 let total = 0;
 const check = (label, ok, extra) => {
@@ -120,7 +125,7 @@ try {
       sentence: document.getElementById('settings-viewopen-status').textContent,
       title: document.getElementById('settings-viewopen-section').querySelector('.settings-section-title').textContent,
       lockedShown: !document.getElementById('settings-viewopen-locked').hidden,
-      option: (window.__gristStub.state.options || {}).ouvertureDeLaVue,
+      option: (window.__gristStub.state.options || {}).pp_view_open_mode,
       template: (window.__gristStub.state.options || {}).modeleDeLaVue,
     };
   });
@@ -136,6 +141,11 @@ try {
   check('choisir Lecture écrit l\'option du widget (et pas celle du modèle de la vue)', p.option === 'read' && (p.template === undefined || p.template === null), p);
   check('la phrase dit que le modèle de la vue s\'ouvre en Lecture', /s’ouvre en Lecture/.test(p.sentence) && p.value === 'read', p.sentence);
   const written = await page.evaluate(() => JSON.parse(JSON.stringify(window.__gristStub.state.options)));
+  const reminder = await page.evaluate(() => { const box = document.getElementById('settings-save-reminder'); return { hidden: box.hidden, text: box.textContent.trim() }; });
+  check('un choix accepté allume le rappel « Enregistrer » comme avant (brouillon de Grist)', reminder.hidden === false && /Enregistrer/.test(reminder.text), reminder);
+  check('la clé de l\'option porte le préfixe pp_ (GFS ne déclare que des clés pp_* pour les réglages nouveaux)', Object.keys(written).includes('pp_view_open_mode') && /^pp_[a-z0-9_]+$/.test(VIEW), Object.keys(written));
+  const sentenceClass = await page.evaluate(() => document.getElementById('settings-viewopen-status').classList.contains('is-problem'));
+  check('la phrase d\'un choix accepté n\'est pas en rouge', sentenceClass === false, sentenceClass);
   await page.selectOption('#settings-viewopen-mode', 'edit');
   await sleep(400);
   p = await panel();
@@ -153,11 +163,11 @@ try {
   await sleep(200);
   await page.keyboard.press('Control+z');
   await sleep(700);
-  let after = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).ouvertureDeLaVue, said: ViewTemplate.openMode(), status: document.getElementById('status-msg').textContent }));
+  let after = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).pp_view_open_mode, said: ViewTemplate.openMode(), status: document.getElementById('status-msg').textContent }));
   check('Ctrl + Z rend le choix d\'avant (« Le dernier mode choisi »), le coin d\'état le dit', (after.option === null || after.option === undefined) && after.said === null && /Mode d’ouverture de cette vue/.test(after.status) && /dernier mode/.test(after.status), after);
   await page.keyboard.press('Control+y');
   await sleep(700);
-  after = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).ouvertureDeLaVue, said: ViewTemplate.openMode() }));
+  after = await page.evaluate(() => ({ option: (window.__gristStub.state.options || {}).pp_view_open_mode, said: ViewTemplate.openMode() }));
   check('Ctrl + Y le rend (Lecture)', after.option === 'read' && after.said === 'read', after);
 
   console.log('\n[5 bis] L\'option écrite par ce choix fait ouvrir la page suivante en Lecture');
@@ -172,7 +182,7 @@ try {
   check('un vrai clic sur « Mode édition » passe à l\'Édition', isEdit(s) && s.editor, s);
   await page.evaluate(() => { try { PersonStore.get('pp_last_mode'); } catch (e) { /* rien */ } });
   await sleep(300);
-  const optionStill = await page.evaluate(() => (window.__gristStub.state.options || {}).ouvertureDeLaVue);
+  const optionStill = await page.evaluate(() => (window.__gristStub.state.options || {}).pp_view_open_mode);
   check('l\'option de la vue n\'est pas changée par ce clic', optionStill === 'read', optionStill);
   await page.keyboard.press('Alt+l');
   await sleep(900);
@@ -201,8 +211,55 @@ try {
   });
   check('la phrase est lisible sur le fond sombre (4,5:1 au moins)', colors.sentence >= 4.5, colors);
 
+  console.log('\n[8] Grist Factory refuse l\'écriture : le choix n\'est pas gardé, et l\'écran le dit');
+  for (const [lang, theme, code, wanted, labelOf] of [
+    ['fr', 'light', 'GFS_CLE_NON_DECLAREE', /Ce choix n’est pas gardé : Grist Factory ne connaît pas encore ce réglage de la vue\. La vue s’ouvrira comme avant\./, 'français clair, clé non déclarée'],
+    ['en', 'dark', 'GFS_CLE_NON_DECLAREE', /This choice is not kept: Grist Factory does not know this view setting yet\. The view will open as before\./, 'anglais sombre, clé non déclarée'],
+    ['fr', 'light', 'GRIST_REFUSE', /Ce choix n’est pas gardé : Grist a refusé de l’écrire dans la vue\. La vue s’ouvrira comme avant\./, 'français clair, un autre refus'],
+  ]) {
+    page = await start(specWith(SPEC_STAR), { lang, theme });
+    await page.evaluate(refusal => { window.__gristStub.state.refusedOptionKeys = { pp_view_open_mode: refusal }; }, code);
+    await click(page, '#v2-btn-settings');
+    await sleep(500);
+    await click(page, '.settings-tab[data-settings-tab="rowTemplate"]');
+    await sleep(300);
+    await page.evaluate(() => document.getElementById('settings-viewopen-section').scrollIntoView({ block: 'end' }));
+    await sleep(250);
+    await page.selectOption('#settings-viewopen-mode', 'read');
+    await sleep(500);
+    const refused = await page.evaluate(() => {
+      const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number); const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+      const ratio = (a, b) => { const x = lum(a); const y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const status = document.getElementById('settings-viewopen-status');
+      const modalContent = document.querySelector('#settings-modal .modal-content');
+      const box = document.getElementById('settings-save-reminder');
+      const r = status.getBoundingClientRect();
+      const body = document.querySelector('#settings-modal .settings-body');
+      return {
+        sentence: status.textContent, problem: status.classList.contains('is-problem'),
+        contrast: ratio(getComputedStyle(status).color, getComputedStyle(modalContent).backgroundColor),
+        value: document.getElementById('settings-viewopen-mode').value,
+        option: (window.__gristStub.state.options || {}).pp_view_open_mode,
+        reminderHidden: box.hidden, reminderText: box.textContent.trim(),
+        fits: r.left >= 0 && r.right <= window.innerWidth && body.scrollWidth <= body.clientWidth + 1,
+        local: ViewTemplate.openMode(),
+      };
+    });
+    check(labelOf + ' : la phrase dit que le choix n\'est pas gardé', wanted.test(refused.sentence), refused.sentence);
+    check(labelOf + ' : la phrase est en rouge (is-problem), lisible (4,5:1 au moins) et tient dans la fenêtre', refused.problem && refused.contrast >= 4.5 && refused.fits, refused);
+    check(labelOf + ' : la liste garde le choix et rien n\'est écrit dans la vue', refused.value === 'read' && refused.local === 'read' && (refused.option === null || refused.option === undefined), refused);
+    check(labelOf + ' : le rappel « Enregistrer » ne s\'allume pas (il n\'y a pas de brouillon dans Grist)', refused.reminderHidden === true && refused.reminderText === '', refused);
+  }
+  // Le refus levé : un choix accepté efface la phrase et se garde.
+  await page.evaluate(() => { window.__gristStub.state.refusedOptionKeys = {}; });
+  await page.selectOption('#settings-viewopen-mode', 'edit');
+  await sleep(500);
+  const healed = await page.evaluate(() => ({ sentence: document.getElementById('settings-viewopen-status').textContent, problem: document.getElementById('settings-viewopen-status').classList.contains('is-problem'), option: (window.__gristStub.state.options || {}).pp_view_open_mode }));
+  check('un choix accepté ensuite efface la phrase de refus et s\'écrit dans la vue', healed.option === 'edit' && healed.problem === false && /s’ouvre en Édition/.test(healed.sentence), healed);
+
   errors.push(...w.errors);
-  check('aucune erreur de page', errors.length === 0, errors.slice(0, 3));
+  const unexpected = errors.filter(line => !EXPECTED.test(line));
+  check('aucune erreur de page', unexpected.length === 0, unexpected.slice(0, 3));
 } catch (e) {
   failed++;
   total++;

@@ -1042,7 +1042,13 @@ const GristAPI = (function () {
     const before = _currentOptions;
     _currentOptions = Object.assign({}, _currentOptions, { [key]: value });
     notifyAll(_optionWriteCallbacks, 'onWidgetOptionWrite', { before, after: _currentOptions });
-    await grist.setOption(key, value);
+    try { await grist.setOption(key, value); }
+    catch (e) {
+      // Écriture refusée (clé que GFS ne déclare pas, accès retiré) : il n'y a pas de brouillon dans Grist, donc rien à « Enregistrer ». Les abonnés le savent : le rappel ne demande pas un clic qui n'existe pas. La valeur reste
+      // celle de la page (elle vit jusqu'au rechargement) ; l'appelant reçoit le refus et le dit à l'écran.
+      notifyAll(_optionWriteCallbacks, 'onWidgetOptionWrite', { before: _currentOptions, after: before });
+      throw e;
+    }
   }
 
   async function findReferenceColumns(fromTableId, toTableId) {

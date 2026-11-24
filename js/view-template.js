@@ -15,18 +15,21 @@
 //   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore et s'ouvre ici, sinon null
 //   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix ; l'un et l'autre se défont par Ctrl + Z (js/settings-history.js)
 //   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
-// Le MODE d'ouverture de la vue (demande du 24/11 : « comment définir qu'un modèle par défaut d'une page s'ouvre en mode lecture et pas écriture ? », choix « un réglage par page ») : une seconde option du widget, `ouvertureDeLaVue`
+// Le MODE d'ouverture de la vue (demande du 24/11 : « comment définir qu'un modèle par défaut d'une page s'ouvre en mode lecture et pas écriture ? », choix « un réglage par page ») : une seconde option du widget, `pp_view_open_mode`
 // (`read` | `edit`, absente = « le dernier mode choisi »), même mécanique que le modèle de la vue (écho, brouillon de Grist jusqu'à « Enregistrer », Ctrl + Z, grisé en lecture seule). Elle l'emporte sur le dernier mode de la personne
 // (`pp_last_mode`, js/main.js:startMode) quand un modèle ordinaire s'ouvre de lui-même ; un modèle vierge, un import, un macro-modèle ou l'absence de modèle ouvrent l'Édition comme avant, et la personne garde le bouton Édition ou
 // Lecture (sauf en lecture seule). Écran : section « Mode d'ouverture de cette vue » de Réglages > Vue, juste sous « Modèle par défaut de cette vue ».
 //   ViewTemplate.openMode() -> 'read' | 'edit' | null (null : le dernier mode choisi par la personne)
 //   ViewTemplate.setOpenMode(mode) -> choisit le mode (null ou 'last' : le dernier mode choisi) ; se défait par Ctrl + Z comme le modèle de la vue
+// Sa clé porte le préfixe `pp_` : Grist Factory Suite ne laisse écrire (`setOption`) ni lire (`getOptions`) qu'une clé que son manifeste déclare dans `reglages`, et il ne déclare plus que des clés `pp_*` (contrats 5.2,
+// 2.5 point 3 ; GFS-ETAT.md). Tant que GFS n'a pas déclaré celle-ci, `setOption` y est refusé (`GFS_CLE_NON_DECLAREE`) : le choix n'est PAS gardé, et l'écran le dit (sous la liste, en rouge) au lieu de se taire.
 const ViewTemplate = (function () {
   const OPTION_KEY = 'modeleDeLaVue';
-  const OPEN_KEY = 'ouvertureDeLaVue';
+  const OPEN_KEY = 'pp_view_open_mode';
 
   let currentId = null;      // id choisi (texte) ou null
   let currentOpen = null;    // 'read' | 'edit' ou null (le dernier mode choisi)
+  let openRefusal = null;    // null, 'gfs' (GFS ne connaît pas la clé) ou 'other' (Grist ou GFS a refusé autrement) : la dernière écriture du mode n'a PAS été gardée dans la vue
   // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que
   // js/row-template.js). Une garde par option : leurs valeurs n'ont rien à voir.
   const echoes = GristAPI.createEchoGuard();
@@ -63,12 +66,20 @@ const ViewTemplate = (function () {
   const set = id => SettingsHistory.track(SETTING, () => write(id));
   const clear = () => SettingsHistory.track(SETTING, () => write(null));
 
+  // Le refus d'une clé que le manifeste de GFS ne déclare pas : le code du courtier est celui du protocole (contrats 5.2, erreurs), que Grist remet à l'app dans `code` ou dans le texte de l'erreur.
+  const undeclared = e => !!e && (e.code === 'GFS_CLE_NON_DECLAREE' || /GFS_CLE_NON_DECLAREE/.test(String(e.message || e)));
+
   async function writeOpen(mode) {
     const next = normalizeOpen(mode);
     openEchoes.remember(JSON.stringify(next));
     currentOpen = next;
+    openRefusal = null;
     try { await GristAPI.setWidgetOption(OPEN_KEY, next); }
-    catch (e) { console.error('[ViewTemplate] enregistrement de l’option du mode d’ouverture impossible', e); }
+    catch (e) {
+      // Rien n'est gardé dans la vue : la page ne doit pas laisser croire que « Lecture » est enregistré. Le choix reste celui de la liste (Ctrl + Z le défait comme avant), la phrase dit qu'il ne tiendra pas.
+      openRefusal = undeclared(e) ? 'gfs' : 'other';
+      console.error('[ViewTemplate] enregistrement de l’option du mode d’ouverture impossible', e);
+    }
     renderPanel();
   }
   // Le mode d'ouverture, tel que Ctrl + Z le défait : la même écriture que le geste, et le coin d'état dit ce que la vue ouvre désormais.
@@ -89,7 +100,7 @@ const ViewTemplate = (function () {
       const incoming = normalize(incomingOptions && incomingOptions[OPTION_KEY]);
       const incomingOpen = normalizeOpen(incomingOptions && incomingOptions[OPEN_KEY]);
       if (!echoes.isEcho(JSON.stringify(incoming))) { currentId = incoming; renderPanel(); }
-      if (!openEchoes.isEcho(JSON.stringify(incomingOpen)) && incomingOpen !== currentOpen) { currentOpen = incomingOpen; renderPanel(); }
+      if (!openEchoes.isEcho(JSON.stringify(incomingOpen)) && incomingOpen !== currentOpen) { currentOpen = incomingOpen; openRefusal = null; renderPanel(); }
     });
   }
 
@@ -175,8 +186,12 @@ const ViewTemplate = (function () {
     const reason = locked ? I18n.t('settings.viewOpen.locked') : '';
     [select, el('settings-viewopen-mode-label')].forEach(node => { if (!node) return; if (reason) node.title = reason; else node.removeAttribute('title'); });
     if (locked) select.setAttribute('aria-describedby', 'settings-viewopen-locked'); else select.removeAttribute('aria-describedby');
+    // Un refus passe avant la phrase du choix : celle-ci dirait ce que la vue fait, et elle ne le fait pas (rouge = cassé, jeton `--danger-ink`).
     const status = el('settings-viewopen-status');
-    if (status) status.textContent = I18n.t('settings.viewOpen.status.' + (currentOpen || 'last'));
+    if (status) {
+      status.textContent = openRefusal ? I18n.t('settings.viewOpen.refused.' + openRefusal) : I18n.t('settings.viewOpen.status.' + (currentOpen || 'last'));
+      status.classList.toggle('is-problem', !!openRefusal);
+    }
     const lockedHint = el('settings-viewopen-locked');
     if (lockedHint) lockedHint.hidden = !locked;
   }
