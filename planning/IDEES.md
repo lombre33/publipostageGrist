@@ -2,7 +2,7 @@
 
 Ce fichier recense, au fil de l'eau, **toutes les idées de fonctions et d'études lancées dans le chat du projet**. Une ligne par idée : sa date, ce qu'elle apporte en mots d'usage, l'effort de développement estimé (de 1 à 5) et son état. Il complète [ROADMAP.md](ROADMAP.md) (liste du 14/09/2026, plus tenue à jour) et le classeur `RoadMap_Suite_Grist_Factory_fusionnee.xlsx` du dossier du projet. On y garde ce qui n'est pas réalisé, y compris ce qui a été refusé, pour ne pas le reproposer.
 
-Dernière mise à jour : 23/11/2026.
+Dernière mise à jour : 24/11/2026.
 
 ## États
 
@@ -37,6 +37,7 @@ C'est une estimation à la louche, faite d'après ce qui existe déjà dans le c
 
 | Date | Idée | Effort | État |
 |---|---|---|---|
+| 24/11/2026 | **Icônes de la liste des documents en couleur pour le macro-modèle et l'e-mail** : le macro-modèle porte trois feuilles bleue, verte et orange (les trois sortes qu'il assemble), l'e-mail est violet. | 2 : réutilise les jetons des autres sortes, un jeton de plus, un seul fichier de style | fait (version B choisie sur carte le 24/11) |
 | 23/11/2026 | **Notice du document** : sur un document, une grille ou une présentation, ajouter une page d'explication sur le fonctionnement (« comment se servir de ce document »), comme un commentaire. Texte court avec titres, gras, listes et liens ; un bandeau fin sous la barre d'outils et une fenêtre ; rouverte et écrite depuis le menu du crayon à côté du nom ; jamais imprimée ni exportée. | 3 : une colonne `Notice` de plus dans la table des documents (hors du texte, donc aucun export ne la voit), une fenêtre avec un petit éditeur, un bandeau, une ligne de menu, Annuler et la lecture seule | fait (23/11, `1304f2a` : sur `main`) |
 | 23/11/2026 | **Banque d'icônes nommées** : en plus des smileys, choisir une icône par son nom avec « @ ». Les icônes seraient rangées dans Grist (en pièce jointe) et/ou dans le dépôt. | 4 : images à choisir et à nommer en FR et EN, rangement dans Grist, dessin fidèle dans le PDF, le Word, le HTML et l'e-mail | idée |
 | 23/11/2026 | **Aperçu de la première page au survol d'un lien** vers un titre, une annexe ou un signet : en passant la souris, on voit le début de l'endroit visé. (Le renvoi « cf [titre] » existe depuis le 20/11, `ed0bb1b` ; l'aperçu, non.) | 3 : l'info-bulle au survol existe déjà ; reste à dessiner l'extrait de l'endroit visé, en édition et en Lecture | idée |

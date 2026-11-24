@@ -279,6 +279,9 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .macro-doc-condition .var-condition-rules { background: var(--surface); }
 .macro-doc-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--warn-ink); }
 .macro-doc-hint[hidden] { display: none; }
+/* Sous « Modèle : Choisi selon la ligne » : les règles de la position, sous la condition d'inclusion quand elle est ouverte. */
+.macro-by-row { margin-top: 2px; }
+.macro-doc-condition:not([hidden]) + .macro-by-row { margin-top: 8px; }
 /* `flex-wrap: wrap` (au lieu du `nowrap` implicite) : sans lui, les zones `flex: 1` (`min-width: 0`) de la ligne se réduiraient jusqu'à
    l'illisible plutôt que de passer à la ligne (sélecteur de colonne réduit à 10 px dans un panneau étroit ou avec l'avertissement « colonne
    absente »). */

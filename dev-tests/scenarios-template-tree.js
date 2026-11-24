@@ -240,53 +240,72 @@
   });
 
   // Demande d'Antoine du 21/10 (« dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») : dans la liste déroulante, l'icône de la sorte de modèle prend la teinte de l'explorateur de
-  // GFS (css/gfs.css de GFS : --t-doc, --t-grid, --t-slides) - document bleu, grille verte, présentation orange ; l'e-mail, le macro-modèle et les dossiers gardent la couleur du texte, une ligne grisée
-  // n'a aucune couleur. Les valeurs attendues sont écrites ici et non lues dans la feuille : un jeton changé par erreur ferait mentir un test qui se relirait lui-même. Le thème se change comme js/settings.js.
+  // GFS (css/gfs.css de GFS : --t-doc, --t-grid, --t-slides) - document bleu, grille verte, présentation orange ; les dossiers gardent la couleur du texte, une ligne grisée n'a aucune couleur.
+  // Demande du 24/11 (« icône macro modèle colorée avec chaque segment de la couleur de l'une des autres ; mail aussi prendre l'une des couleurs non utilisées », version B de la carte) : l'e-mail est
+  // violet (--t-email, que rien d'autre ne porte) ; le macro-modèle a trois feuilles, celle de devant du bleu du document, celle du milieu du vert de la grille, celle de derrière de l'orange de la
+  // présentation (un seul masque, trois zones d'un fond : quatre aplats, dont deux pour la feuille de derrière, en L). Les valeurs attendues sont écrites ici et non lues dans la feuille : un jeton changé par erreur ferait mentir un test qui se relirait lui-même. Le thème se change comme js/settings.js.
   cases.push({
     id: 'tree_kind_icons_take_the_colour_gfs_gives_them_in_light_and_dark',
-    description: 'Dans la liste déroulante, l’icône de chaque sorte de modèle prend la couleur de l’explorateur de GFS (document bleu, grille verte, présentation orange, clair et sombre) ; e-mail, macro-modèle et dossier gardent la couleur du texte, une ligne grisée n’a aucune couleur ; l’icône du déclencheur suit le modèle ouvert',
+    description: 'Dans la liste déroulante, l’icône de chaque sorte de modèle prend sa couleur (document bleu, grille verte, présentation orange comme dans l’explorateur de GFS, e-mail violet, macro-modèle à trois feuilles bleue, verte et orange, clair et sombre) ; le dossier garde la couleur du texte, une ligne grisée n’a aucune couleur ; l’icône du déclencheur suit le modèle ouvert',
     run: async (h) => {
       const COLOURS = {
-        light: { document: 'rgb(47, 111, 237)', grille: 'rgb(46, 125, 50)', presentation: 'rgb(199, 96, 10)' },
-        dark: { document: 'rgb(91, 145, 245)', grille: 'rgb(108, 197, 122)', presentation: 'rgb(240, 147, 62)' },
+        light: { document: 'rgb(47, 111, 237)', grille: 'rgb(46, 125, 50)', presentation: 'rgb(199, 96, 10)', email: 'rgb(122, 63, 196)' },
+        dark: { document: 'rgb(91, 145, 245)', grille: 'rgb(108, 197, 122)', presentation: 'rgb(240, 147, 62)', email: 'rgb(183, 148, 246)' },
       };
       const html = document.documentElement;
       const previousTheme = html.getAttribute('data-theme');
       const triggerIcon = () => trigger().querySelector('.tts-icon');
       const colourOf = el => getComputedStyle(el).color;
       const kept = row => colourOf(row.querySelector('.tts-icon')) === colourOf(row);   // l'icône garde la couleur de sa ligne : aucune teinte de sorte
+      // Les trois feuilles du macro-modèle sont les aplats du fond de l'icône (un masque peint son fond) : le calculé en liste les couleurs, dans l'ordre des couches (derrière : haut puis droite ; devant ; milieu).
+      const sheets = icon => { const cs = getComputedStyle(icon); return { layers: cs.backgroundImage.split('linear-gradient(').slice(1).map(g => (g.match(/rgb\([^)]*\)/) || [''])[0]), image: cs.backgroundImage }; };
+      const sheetColours = want => [want.presentation, want.presentation, want.document, want.grille];
       const probes = [];
       const byTheme = {};
-      const triggerSeen = {};
+      const triggerBy = { macro: {}, email: {} };
       const declare = active => Templates.declareExtensionType('presentation', Extensions.nameOf('diapositives'), active);
+      // Le déclencheur suit le modèle ouvert : on le lit dans les deux thèmes, tel qu'il est au moment où ce modèle est ouvert.
+      const readTrigger = kind => {
+        for (const theme of ['light', 'dark']) {
+          html.setAttribute('data-theme', theme);
+          triggerBy[kind][theme] = kind === 'macro' ? sheets(triggerIcon()).layers : { colour: colourOf(triggerIcon()) };
+        }
+        html.setAttribute('data-theme', 'light');
+      };
       html.setAttribute('data-theme', 'light');
       try {
         const docId = await createTemplate(h, 'document', 'Arbre - Icône document');
         const emailId = await createTemplate(h, 'email', 'Arbre - Icône email');
         const macroId = await createTemplate(h, 'macro', 'Arbre - Icône macro');
-        // Le déclencheur suit le modèle ouvert : le macro-modèle (le dernier créé) et l'e-mail gardent la couleur du bouton ; le document, choisi par la liste, a la sienne (relevée plus bas, dans les deux thèmes).
-        triggerSeen.macro = colourOf(triggerIcon()) === colourOf(trigger());
+        // Le macro-modèle, le dernier créé, est ouvert : le déclencheur porte ses trois feuilles ; puis l'e-mail, puis le document (relevé plus bas, dans les deux thèmes).
+        readTrigger('macro');
         await openPopup(h);
         await clickEl(h, rowFor(emailId));
         await h.sleep(150);
-        triggerSeen.email = colourOf(triggerIcon()) === colourOf(trigger());
+        readTrigger('email');
         await openPopup(h);
         await clickEl(h, rowFor(docId));
         await h.sleep(150);
         await openPopup(h);
         // Les sortes qu'un faux Grist neuf ne porte pas : des lignes de la même brique que celles de la liste (rowShell), posées dans le panneau le temps de la mesure. La présentation une fois grisée
-        // (l'extension « diapositives » est éteinte dans ce faux Grist), une fois active (le type est redéclaré actif, puis remis comme js/slides-entry.js le déclare).
+        // (l'extension « diapositives » est éteinte dans ce faux Grist), une fois active (le type est redéclaré actif, puis remis comme js/slides-entry.js le déclare). Un macro-modèle grisé à la main
+        // (la classe que pose un type inconnu) : ses trois feuilles perdent leur teinte et reprennent la couleur de la ligne (plus aucun aplat, le fond est currentColor).
         const probe = (kind, typeModele) => { const row = TemplateTreeSelect.rowShell(kind, 0, typeModele, 'Sonde ' + (typeModele || 'dossier')); popup().appendChild(row); probes.push(row); return row; };
         const grille = probe('leaf', 'grille');
         const folder = probe('folder', null);
         const slidesOff = probe('leaf', 'presentation');
+        const macroGreyed = probe('leaf', 'macro');
+        macroGreyed.classList.add('is-unavailable');
         declare(() => true);
         const slidesOn = probe('leaf', 'presentation');
         for (const theme of ['light', 'dark']) {
           html.setAttribute('data-theme', theme);
+          const greyedIcon = macroGreyed.querySelector('.tts-icon');
           byTheme[theme] = {
             document: colourOf(rowFor(docId).querySelector('.tts-icon')), grille: colourOf(grille.querySelector('.tts-icon')), presentation: colourOf(slidesOn.querySelector('.tts-icon')), trigger: colourOf(triggerIcon()),
-            email: kept(rowFor(emailId)), macro: kept(rowFor(macroId)), folder: kept(folder), greyedSlides: kept(slidesOff), greyedIsMuted: colourOf(slidesOff) !== colourOf(rowFor(docId)),
+            email: colourOf(rowFor(emailId).querySelector('.tts-icon')), macro: sheets(rowFor(macroId).querySelector('.tts-icon')).layers,
+            folder: kept(folder), greyedSlides: kept(slidesOff), greyedIsMuted: colourOf(slidesOff) !== colourOf(rowFor(docId)),
+            greyedMacro: getComputedStyle(greyedIcon).backgroundImage === 'none' && getComputedStyle(greyedIcon).backgroundColor === colourOf(macroGreyed),
           };
         }
       } finally {
@@ -298,10 +317,12 @@
       const right = theme => {
         const seen = byTheme[theme], want = COLOURS[theme];
         return !!seen && seen.document === want.document && seen.trigger === want.document && seen.grille === want.grille && seen.presentation === want.presentation
-          && seen.email && seen.macro && seen.folder && seen.greyedSlides && seen.greyedIsMuted;
+          && seen.email === want.email && JSON.stringify(seen.macro) === JSON.stringify(sheetColours(want))
+          && JSON.stringify(triggerBy.macro[theme]) === JSON.stringify(sheetColours(want)) && triggerBy.email[theme].colour === want.email
+          && seen.folder && seen.greyedSlides && seen.greyedIsMuted && seen.greyedMacro;
       };
-      const pass = right('light') && right('dark') && triggerSeen.macro === true && triggerSeen.email === true;
-      return { pass, notes: JSON.stringify({ byTheme, triggerSeen }) };
+      const pass = right('light') && right('dark');
+      return { pass, notes: JSON.stringify({ byTheme, triggerBy }) };
     },
   });
 

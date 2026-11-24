@@ -2,12 +2,15 @@
 // Icônes colorées de la liste des modèles (demande d'Antoine du 21/10 : « dans la drop down de choix des modèles, coloré l'icone comme dans gfs ») à la VRAIE souris, à la taille du panneau Grist
 // d'Antoine (700x400), en clair puis en sombre, seul puis hébergé par un GFS simulé (dev-tests/gfs-stub.js). Les scénarios de dev-tests/scenarios-template-tree.js lisent la couleur CALCULÉE dans la
 // page ; ici on regarde les pixels d'une vraie capture : une icône peinte en masque n'a de couleur que si le navigateur la peint.
-//  SEUL, français, clair : un clic de souris ouvre la liste. Les icônes du document (bleu), de la grille (vert) sont à la couleur de l'explorateur de GFS ; la présentation, grisée (l'extension « diapositives »
-//   est éteinte), l'e-mail, le macro-modèle et le dossier gardent celle du texte ; une ligne survolée et la ligne choisie gardent la leur ; le déclencheur suit le modèle ouvert (document bleu, e-mail et
-//   macro-modèle neutres) ; « Organiser mes documents » reste monochrome.
+// Demande du 24/11 (« icône macro modèle colorée avec chaque segment de la couleur de l'une des autres ; mail aussi prendre l'une des couleurs non utilisées », version B de la carte) : l'e-mail est
+// violet, le macro-modèle a trois feuilles (devant bleue comme un document, milieu verte comme une grille, derrière orange comme une présentation) : chaque feuille se mesure dans sa propre zone de
+// l'icône (un bord qui n'appartient qu'à elle).
+//  SEUL, français, clair : un clic de souris ouvre la liste. Les icônes du document (bleu), de la grille (vert) sont à la couleur de l'explorateur de GFS ; l'e-mail est violet, les trois feuilles du
+//   macro-modèle bleue, verte et orange ; la présentation, grisée (l'extension « diapositives » est éteinte), et le dossier gardent la couleur du texte ; une ligne survolée et la ligne choisie gardent la leur ;
+//   le déclencheur suit le modèle ouvert (document bleu, e-mail violet, macro-modèle bleu, vert et orange) ; « Organiser mes documents » reste monochrome, macro-modèle et e-mail compris.
 //  HÉBERGÉ, anglais, sombre, extension « diapositives » active : la présentation est orange, ouverte par un clic elle colore le déclencheur ; GFS l'éteint en direct : le déclencheur et la ligne perdent la
 //   couleur, rien ne disparaît ; rallumée, l'orange revient.
-// Les couleurs attendues sont celles de l'explorateur de GFS (css/gfs.css de GFS : --t-doc, --t-grid, --t-slides), écrites ici et non lues dans la feuille.
+// Les couleurs attendues sont celles de l'explorateur de GFS (css/gfs.css de GFS : --t-doc, --t-grid, --t-slides) et le violet de l'e-mail (--t-email), écrites ici et non lues dans la feuille.
 // Lancé par run-headless.mjs (groupe Node "templateKindColorsMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-template-kind-colors-mouse.mjs
 // TEMPLATE_KIND_COLORS_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { mkdir } from 'node:fs/promises';
@@ -27,9 +30,12 @@ const SEED = seedModels() + `
 `;
 const ID = { doc: 2, email: 4, macro: 5, slides: 6, grid: 7 };
 const COLOURS = {
-  light: { document: [47, 111, 237], grille: [46, 125, 50], presentation: [199, 96, 10] },
-  dark: { document: [91, 145, 245], grille: [108, 197, 122], presentation: [240, 147, 62] },
+  light: { document: [47, 111, 237], grille: [46, 125, 50], presentation: [199, 96, 10], email: [122, 63, 196] },
+  dark: { document: [91, 145, 245], grille: [108, 197, 122], presentation: [240, 147, 62], email: [183, 148, 246] },
 };
+// Les trois feuilles du macro-modèle, chacune dans une zone où elle est seule (fractions du carré de 14 px ; viewBox de 24) : le bord gauche de la feuille de devant (tracé à x = 2), le bord droit de la
+// feuille du milieu (x = 17, entre le bord droit de celle de devant, 14, et celui de celle de derrière, 20,5), le bord droit de la feuille de derrière (x = 20,5).
+const SHEET_ZONE = { devant: { x0: 0, x1: 0.17, y0: 0.5, y1: 0.9 }, milieu: { x0: 0.66, x1: 0.75, y0: 0.4, y1: 0.7 }, derriere: { x0: 0.82, x1: 0.9, y0: 0.2, y1: 0.55 } };
 const rowSel = id => `.tts-popup .tts-row-leaf[data-template-id="${id}"]`;
 const rgbOf = css => (css.match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
 
@@ -63,11 +69,11 @@ function toolsOf(page) {
   const colourOf = selector => page.evaluate((sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).color : null; }, selector);
   // Une vraie capture du carré de l'icône (2 px de marge) : le pixel le plus éloigné du fond (celui de la marge) doit être sur la droite fond -> couleur attendue (même taux de couverture sur les trois
   // canaux) et assez couvert. `alpha` : la couverture de ce pixel (0 : fond, 1 : la couleur pleine) ; `resid` : l'écart, en niveaux de 0 à 255, entre ce pixel et cette droite.
-  const paint = async (selector, expected) => {
+  const paint = async (selector, expected, zone) => {
     const box = await page.evaluate((sel) => { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }, selector);
     if (!box || !box.w) return null;
     const png = await page.screenshot({ clip: { x: Math.floor(box.x) - 2, y: Math.floor(box.y) - 2, width: Math.ceil(box.w) + 4, height: Math.ceil(box.h) + 4 } });
-    return page.evaluate(async ({ b64, fg }) => {
+    return page.evaluate(async ({ b64, fg, zone, w, h }) => {
       const img = new Image();
       img.src = 'data:image/png;base64,' + b64;
       await img.decode();
@@ -79,6 +85,7 @@ function toolsOf(page) {
       const bg = [d[0], d[1], d[2]];
       let best = null;
       for (let i = 0; i < d.length; i += 4) {
+        if (zone) { const px = (i / 4) % c.width, py = Math.floor(i / 4 / c.width); if (px < 2 + zone.x0 * w || px > 2 + zone.x1 * w || py < 2 + zone.y0 * h || py > 2 + zone.y1 * h) continue; }
         const delta = [d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]];
         const dist = Math.hypot(...delta);
         if (!best || dist > best.dist) best = { delta, dist, p: [d[i], d[i + 1], d[i + 2]] };
@@ -88,12 +95,12 @@ function toolsOf(page) {
       const alpha = (best.delta[0] * dir[0] + best.delta[1] * dir[1] + best.delta[2] * dir[2]) / len2;
       const resid = Math.hypot(best.delta[0] - alpha * dir[0], best.delta[1] - alpha * dir[1], best.delta[2] - alpha * dir[2]);
       return { bg, pixel: best.p, alpha: Math.round(alpha * 100) / 100, resid: Math.round(resid * 10) / 10 };
-    }, { b64: png.toString('base64'), fg: expected });
+    }, { b64: png.toString('base64'), fg: expected, zone: zone || null, w: box.w, h: box.h });
   };
   // « Cette icône est peinte dans cette couleur » : assez couverte, sur la droite fond -> couleur. `against` : la contre-épreuve, l'autre couleur que l'icône ne doit PAS avoir (sinon la mesure ne prouverait rien).
-  const painted = async (selector, expected, against) => {
-    const mine = await paint(selector, expected);
-    const other = against ? await paint(selector, against) : null;
+  const painted = async (selector, expected, against, zone) => {
+    const mine = await paint(selector, expected, zone);
+    const other = against ? await paint(selector, against, zone) : null;
     const ok = !!mine && mine.alpha >= 0.4 && mine.resid <= 14 && (!other || other.resid > 28);
     return { ok, mine, other };
   };
@@ -126,12 +133,20 @@ async function run({ label, hosted, extensions, lang, colorScheme, theme }) {
   const grid = await tools.painted(iconSel(ID.grid), want.grille, rgbOf(await tools.colourOf(`${rowSel(ID.grid)}`)));
   check(`${label} : l'icône d'une grille est peinte en ${want.grille.join(',')} (la couleur de GFS)`, grid.ok, grid);
 
-  // E-mail, macro-modèle et dossier : la couleur du texte de leur ligne.
-  for (const [name, selector, rowSelector] of [['un e-mail', iconSel(ID.email), rowSel(ID.email)], ['un macro-modèle', iconSel(ID.macro), rowSel(ID.macro)], ['un dossier', folderIconSel, '.tts-popup .tts-row-folder']]) {
-    const text = rgbOf(await tools.colourOf(rowSelector));
-    const neutral = await tools.painted(selector, text, want.document);
-    check(`${label} : l'icône d'${name} garde la couleur du texte (${text.join(',')}), pas celle d'un document`, neutral.ok, neutral);
-  }
+  // E-mail : violet. Macro-modèle : la feuille de devant bleue (celle du document), la feuille de derrière orange (celle de la présentation), chacune dans sa zone, avec pour contre-épreuve l'autre couleur.
+  const emailRowText = rgbOf(await tools.colourOf(rowSel(ID.email)));
+  const email = await tools.painted(iconSel(ID.email), want.email, emailRowText);
+  check(`${label} : l'icône d'un e-mail est peinte en ${want.email.join(',')} (le violet, que rien d'autre ne porte)`, email.ok, email);
+  const macro = {
+    devant: await tools.painted(iconSel(ID.macro), want.document, want.presentation, SHEET_ZONE.devant),
+    milieu: await tools.painted(iconSel(ID.macro), want.grille, want.document, SHEET_ZONE.milieu),
+    derriere: await tools.painted(iconSel(ID.macro), want.presentation, want.grille, SHEET_ZONE.derriere),
+  };
+  check(`${label} : l'icône d'un macro-modèle a sa feuille de devant bleue (${want.document.join(',')}), celle du milieu verte (${want.grille.join(',')}) et celle de derrière orange (${want.presentation.join(',')})`, macro.devant.ok && macro.milieu.ok && macro.derriere.ok, macro);
+  // Le dossier garde la couleur du texte de sa ligne.
+  const folderText = rgbOf(await tools.colourOf('.tts-popup .tts-row-folder'));
+  const folder = await tools.painted(folderIconSel, folderText, want.document);
+  check(`${label} : l'icône d'un dossier garde la couleur du texte (${folderText.join(',')}), pas celle d'un document`, folder.ok, folder);
 
   // La présentation : orange quand l'extension est active (hébergé), sans couleur - grisée avec sa raison - quand elle est éteinte (seul).
   const slidesRow = rgbOf(await tools.colourOf(rowSel(ID.slides)));
@@ -152,7 +167,7 @@ async function run({ label, hosted, extensions, lang, colorScheme, theme }) {
   await snap(page, `${label.replace(/\W+/g, '-')}-survol`);
   await tools.leave();
 
-  // Le déclencheur suit le modèle ouvert : le document ouvert au démarrage est bleu ; un clic sur l'e-mail, puis sur le macro-modèle, le rend neutre ; un clic sur le document le rend bleu.
+  // Le déclencheur suit le modèle ouvert : le document ouvert au démarrage est bleu ; un clic sur l'e-mail le rend violet, sur le macro-modèle bleu et orange (une feuille chacune) ; un clic sur le document le rend bleu.
   await page.keyboard.press('Escape'); await sleep(150);
   await tools.leave();
   const barIcon = '.tts-trigger .tts-icon';
@@ -160,13 +175,17 @@ async function run({ label, hosted, extensions, lang, colorScheme, theme }) {
   const trigger = {};
   trigger.start = await tools.painted(barIcon, want.document, await barText());
   await tools.openList(); await tools.click(rowSel(ID.email)); await tools.leave(); await sleep(250);
-  trigger.email = await tools.painted(barIcon, await barText(), want.document);
+  trigger.email = await tools.painted(barIcon, want.email, want.document);
+  await snap(page, `${label.replace(/\W+/g, '-')}-barre-email`);
   await tools.openList(); await tools.click(rowSel(ID.macro)); await tools.leave(); await sleep(250);
-  trigger.macro = await tools.painted(barIcon, await barText(), want.document);
+  trigger.macroDevant = await tools.painted(barIcon, want.document, want.presentation, SHEET_ZONE.devant);
+  trigger.macroMilieu = await tools.painted(barIcon, want.grille, want.document, SHEET_ZONE.milieu);
+  trigger.macroDerriere = await tools.painted(barIcon, want.presentation, want.grille, SHEET_ZONE.derriere);
+  await snap(page, `${label.replace(/\W+/g, '-')}-barre-macro`);
   await tools.openList(); await tools.click(rowSel(ID.doc)); await tools.leave(); await sleep(250);
   trigger.doc = await tools.painted(barIcon, want.document, await barText());
   await snap(page, `${label.replace(/\W+/g, '-')}-barre-document`);
-  check(`${label} : l'icône du déclencheur est bleue pour le document ouvert, neutre pour l'e-mail et le macro-modèle, bleue de nouveau pour le document`, trigger.start.ok && trigger.email.ok && trigger.macro.ok && trigger.doc.ok, trigger);
+  check(`${label} : l'icône du déclencheur est bleue pour le document ouvert, violette pour l'e-mail, bleue, verte et orange (une feuille chacune) pour le macro-modèle, bleue de nouveau pour le document`, trigger.start.ok && trigger.email.ok && trigger.macroDevant.ok && trigger.macroMilieu.ok && trigger.macroDerriere.ok && trigger.doc.ok, trigger);
 
   if (hosted && extensions.includes('diapositives')) {
     // Une présentation ouverte au clic colore le déclencheur ; GFS éteint l'extension en direct : le déclencheur perd la couleur, la ligne grisée aussi, rien n'est retiré ; rallumée, l'orange revient.
@@ -188,14 +207,23 @@ async function run({ label, hosted, extensions, lang, colorScheme, theme }) {
     check(`${label} : l'extension rallumée, le déclencheur redevient orange`, back.ok, back);
   }
 
-  // « Organiser mes documents » (même brique de ligne) reste monochrome : l'icône du document y a la couleur du texte de sa ligne.
+  // « Organiser mes documents » (même brique de ligne) reste monochrome : l'icône du document, celle de l'e-mail et les trois feuilles du macro-modèle y ont la couleur du texte de leur ligne.
   await tools.openList();
   const organize = await tools.centerOf('#btn-organize-templates');
   await page.mouse.move(organize.x - 10, organize.y); await page.mouse.move(organize.x, organize.y, { steps: 3 }); await sleep(80); await page.mouse.click(organize.x, organize.y); await sleep(400);
-  const windowRow = '#template-organize-list .tts-row-leaf[data-template-id="' + ID.doc + '"]';
-  const inWindow = await tools.painted(`${windowRow} .tts-icon`, rgbOf(await tools.colourOf(windowRow)), want.document);
+  const windowRow = id => '#template-organize-list .tts-row-leaf[data-template-id="' + id + '"]';
+  // La liste de la fenêtre défile dans 400 px de haut : chaque ligne mesurée est d'abord ramenée en vue (une ligne hors du cadre se capturerait vide).
+  const intoView = id => page.evaluate(sel => document.querySelector(sel).scrollIntoView({ block: 'center' }), windowRow(id)).then(() => sleep(120));
+  await intoView(ID.doc);
+  const inWindow = await tools.painted(`${windowRow(ID.doc)} .tts-icon`, rgbOf(await tools.colourOf(windowRow(ID.doc))), want.document);
+  await intoView(ID.email);
+  const emailInWindow = await tools.painted(`${windowRow(ID.email)} .tts-icon`, rgbOf(await tools.colourOf(windowRow(ID.email))), want.email);
+  await intoView(ID.macro);
+  const macroText = rgbOf(await tools.colourOf(windowRow(ID.macro)));
+  const macroInWindow = [];
+  for (const [zone, other] of [['devant', want.document], ['milieu', want.grille], ['derriere', want.presentation]]) macroInWindow.push(await tools.painted(`${windowRow(ID.macro)} .tts-icon`, macroText, other, SHEET_ZONE[zone]));
   await snap(page, `${label.replace(/\W+/g, '-')}-organiser`);
-  check(`${label} : dans « Organiser mes documents », l'icône du document garde la couleur du texte (la couleur ne vaut que dans la liste déroulante)`, inWindow.ok, inWindow);
+  check(`${label} : dans « Organiser mes documents », les icônes du document, de l'e-mail et du macro-modèle (ses trois feuilles) gardent la couleur du texte (la couleur ne vaut que dans la liste déroulante)`, inWindow.ok && emailInWindow.ok && macroInWindow.every(m => m.ok), { inWindow, emailInWindow, macroInWindow });
   await page.keyboard.press('Escape'); await sleep(200);
 }
 

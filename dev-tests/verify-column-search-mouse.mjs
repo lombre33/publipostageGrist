@@ -623,7 +623,7 @@ const SECTIONS = {
     check('macro : le clic choisit Responsable, l’indication de type s’affiche, la fenêtre reste ouverte', chosen.value === 'Responsable' && chosen.hint === 'référence' && chosen.modalOpen, chosen);
     const documents = ['Notification_base', 'Notification_bureau', 'Notification_projet'];
     const lists = [
-      { name: 'de la page de garde', trigger: '#macro-editor-slots .macro-doc-model + .ss-wrap .ss-trigger', select: '#macro-editor-slots .macro-doc-model', rows: ['— Choisir un modèle —'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
+      { name: 'du modèle d’un document', trigger: '#macro-editor-slots .macro-doc-model + .ss-wrap .ss-trigger', select: '#macro-editor-slots .macro-doc-model', rows: ['— Choisir un modèle —', 'Choisi selon la ligne'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
       { name: 'du modèle d’une règle', trigger: '.macro-rule-modele + .ss-wrap .ss-trigger', select: '.macro-rule-modele', rows: ['— Choisir un modèle —'].concat(documents), typed: 'bu', row: 'Notification_bureau', value: '12' },
       { name: '« Si aucune règle ne correspond »', trigger: '.macro-slot-default-select + .ss-wrap .ss-trigger', select: '.macro-slot-default-select', rows: ['Ne rien inclure'].concat(documents.map(nom => 'Utiliser « ' + nom + ' »')), typed: 'base', row: 'Utiliser « Notification_base »', value: '11' },
     ];
