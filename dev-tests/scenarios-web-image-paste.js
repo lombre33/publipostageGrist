@@ -1,25 +1,38 @@
-// Suite "webImagePaste" - les images d'une page web collée restent dans le document. Quand on copie une partie d'une page web (texte et photos) et qu'on la colle, le presse-papiers ne porte que
+// Suite "webImagePaste" - ce que le collage d'une page web fait de ses images. Quand on copie une partie d'une page web (texte et photos) et qu'on la colle, le presse-papiers ne porte que
 // du HTML (`text/html` + `text/plain`, aucune image « fichier » : seul « Copier l'image » du clic droit en joint une) et ses images y sont de simples `<img src="https://…">`. L'éditeur ne lit que ses
-// propres images (`img.editor-image`, js/editor-nodes.js) : ProseMirror écartait chaque `<img>` collée, en silence, et le texte arrivait sans aucune photo (relevé par l'étude de l'import HTML du
-// 13/11, essai : 0 image gardée sur 1 collée). `transformPastedHTML` de js/editor.js (`webImagesAsEditorImages`) remet maintenant l'image dans la forme de l'éditeur : son adresse, son texte
-// alternatif et sa largeur (la seule que le PDF et le Word lisent : en px). Ce qui est gardé ne l'est qu'à la façon de l'import Markdown (js/markdown-import.js) : une adresse web ou une image
-// `data:image/…`, jamais `javascript:`, `file:`, `blob:` ni un chemin relatif ; une image d'un autre site reste masquée jusqu'au clic « Afficher » (js/external-images.js), le collage ne fait
-// donc contacter aucun site. Ces cas jouent un vrai collage (un évènement `paste` portant un DataTransfer, que ProseMirror lit comme celui du navigateur), avec le HTML tel que Chromium l'écrit
-// (mesuré : chaque balise reçoit ses styles, l'adresse est rendue absolue, la largeur posée par une feuille de style devient un `style="width: …px"`) et enveloppé comme Windows le rend.
+// propres images (`img.editor-image`, js/editor-nodes.js) : ProseMirror écarte chaque `<img>` collée, en silence. Du 13/11 au 23/11, `transformPastedHTML` de js/editor.js (`webImagesAsEditorImages`)
+// les remettait dans la forme de l'éditeur avec leur adresse (masquées jusqu'au clic « Afficher »). DEPUIS LE 24/11 (« plus aucun appel vers un autre site », choix d'Antoine : importer une image par
+// copier-coller ou depuis une pièce jointe de Grist) l'adresse d'un site n'est plus reprise : le texte arrive SANS la photo, le coin d'état le dit (`pp:webImagesNotPasted`, `image.paste.external`) avec le
+// geste qui marche (« Copier l'image » du clic droit, puis coller), et rien n'est demandé à aucun site. Ne sont reprises que les images qui portent leurs octets (`data:image/…` : Word, LibreOffice,
+// un logiciel de courrier), avec leur texte alternatif et leur largeur - la seule que le PDF et le Word lisent : en px. Ces cas jouent un vrai collage (un évènement `paste` portant un DataTransfer, que
+// ProseMirror lit comme celui du navigateur), avec le HTML tel que Chromium l'écrit (mesuré : chaque balise reçoit ses styles, l'adresse est rendue absolue, la largeur posée par une feuille de style
+// devient un `style="width: …px"`) et enveloppé comme Windows le rend.
 (function () {
   const cases = [];
 
   const PHOTO = 'https://photos.example.org/media/photo.jpg';
   const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const PIXEL2 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   // Ce que Chromium recopie sur chaque balise d'une sélection copiée (relevé sur une vraie page : `color`, `font-family`, `orphans`…) : du bruit de style, jamais utile à l'image.
   const STYLE = 'color: rgb(0, 0, 0); font-family: serif; font-size: medium; font-style: normal; font-variant-ligatures: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; widows: 2; white-space: normal;';
   // La sélection d'une page : titre, paragraphe, une photo dont la feuille de style fixe la largeur (Chromium l'écrit en `style`), sa légende, puis une petite image de 20 px à texte alternatif vide.
-  const PAGE = `<h1 style="${STYLE}">Titre de la page</h1><p style="${STYLE}">Un paragraphe avant.</p>`
-    + `<figure style="${STYLE}"><img class="hero" src="${PHOTO}" alt="Une photo" style="width: 300px; border: 1px solid red;"><figcaption>Légende</figcaption></figure>`
+  // `PAGE` : les deux sont des adresses web ; `PAGE_WITH_DATA` : la photo de la figure porte ses octets (une data URI), la petite image reste une adresse web.
+  const page = (figureSrc) => `<h1 style="${STYLE}">Titre de la page</h1><p style="${STYLE}">Un paragraphe avant.</p>`
+    + `<figure style="${STYLE}"><img class="hero" src="${figureSrc}" alt="Une photo" style="width: 300px; border: 1px solid red;"><figcaption>Légende</figcaption></figure>`
     + `<p style="${STYLE}">Un paragraphe <a href="https://photos.example.org/rel">après</a> avec <img src="${PHOTO}?small" width="20" height="20" alt="">.</p>`;
+  const PAGE = page(PHOTO);
+  const PAGE_WITH_DATA = page(PIXEL);
   const WINDOWS = html => `<html>\r\n<body>\r\n<!--StartFragment-->${html}<!--EndFragment-->\r\n</body>\r\n</html>`;
 
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // Ce que le collage a dit : le nombre d'images d'une adresse web qu'il n'a pas reprises, une entrée par évènement `pp:webImagesNotPasted`.
+  function listenNotices() {
+    const heard = [];
+    const on = event => heard.push(event.detail && event.detail.count);
+    document.addEventListener('pp:webImagesNotPasted', on);
+    return { heard, stop() { document.removeEventListener('pp:webImagesNotPasted', on); } };
+  }
 
   async function paste(h, data) {
     await h.resetEditor();
@@ -43,21 +56,29 @@
   const countImages = () => imagesOf().length;
 
   cases.push({
-    id: 'web_page_images_stay_in_the_pasted_text',
-    description: 'Une sélection de page web collée (HTML de Chromium : styles recopiés, adresse absolue, largeur de la feuille de style), nue, enveloppée comme Windows la rend et avec un texte brut à côté, garde ses deux images dans l\'ordre (adresse, texte alternatif, largeur en px) et tout son texte',
+    id: 'web_page_photos_of_a_web_address_are_not_pasted_but_the_text_and_data_images_are',
+    description: 'Une sélection de page web collée (HTML de Chromium : styles recopiés, adresse absolue, largeur de la feuille de style), nue, enveloppée comme Windows la rend et avec un texte brut à côté : ses deux images d\'une adresse web ne sont PAS reprises (le texte, lui, arrive en entier) et le collage le dit une fois, avec leur nombre ; avec une photo qui porte ses octets, celle-là est gardée (adresse, texte alternatif, largeur) et seule l\'autre est comptée',
     run: async (h) => {
-      const want = [{ src: PHOTO, alt: 'Une photo', width: '300px' }, { src: PHOTO + '?small', alt: '', width: '20px' }];
       const plain = 'Titre de la page\nUn paragraphe avant.\n\nUne photo\nLégende\nUn paragraphe après avec .';
       const bad = [];
       const seen = {};
-      for (const [name, data] of Object.entries({ bare: { html: PAGE }, windows: { html: WINDOWS(PAGE) }, withPlain: { html: PAGE, plain }, windowsWithPlain: { html: WINDOWS(PAGE), plain } })) {
-        await paste(h, data);
-        const images = imagesOf();
-        const text = EditorCore.getEditor().state.doc.textContent;
-        seen[name] = images;
-        if (!same(images, want)) bad.push(name + ' images ' + JSON.stringify(images));
-        if (!/Titre de la page/.test(text) || !/Un paragraphe avant\./.test(text) || !/Légende/.test(text) || !/Un paragraphe après avec/.test(text)) bad.push(name + ' texte ' + JSON.stringify(text));
-      }
+      const listener = listenNotices();
+      try {
+        for (const [name, data] of Object.entries({ bare: { html: PAGE }, windows: { html: WINDOWS(PAGE) }, withPlain: { html: PAGE, plain }, windowsWithPlain: { html: WINDOWS(PAGE), plain } })) {
+          listener.heard.length = 0;
+          await paste(h, data);
+          const images = imagesOf();
+          const text = EditorCore.getEditor().state.doc.textContent;
+          seen[name] = { images: images.length, said: listener.heard.slice() };
+          if (images.length !== 0 || !same(listener.heard, [2])) bad.push(name + ' images ' + JSON.stringify(images) + ' dit ' + JSON.stringify(listener.heard));
+          if (!/Titre de la page/.test(text) || !/Un paragraphe avant\./.test(text) || !/Légende/.test(text) || !/Un paragraphe après avec/.test(text)) bad.push(name + ' texte ' + JSON.stringify(text));
+          if (Editor.getHTML().includes('photos.example.org/media')) bad.push(name + ' : l\'adresse du site est restée dans le document');
+        }
+        listener.heard.length = 0;
+        await paste(h, { html: WINDOWS(PAGE_WITH_DATA) });
+        const kept = imagesOf();
+        if (!same(kept, [{ src: PIXEL, alt: 'Une photo', width: '300px' }]) || !same(listener.heard, [1])) bad.push('avec une data URI : ' + JSON.stringify(kept) + ' dit ' + JSON.stringify(listener.heard));
+      } finally { listener.stop(); }
       return { pass: bad.length === 0, notes: bad.join(' ; ') || JSON.stringify(seen) };
     },
   });
@@ -72,22 +93,22 @@
         return images.length === 1 ? images[0].width : 'images:' + images.length;
       };
       const got = {
-        attr: await widthOf(`<img src="${PHOTO}" width="150">`),
-        attrPx: await widthOf(`<img src="${PHOTO}" width="150px">`),
-        decimal: await widthOf(`<img src="${PHOTO}" width="150.5">`),
-        style: await widthOf(`<img src="${PHOTO}" style="width: 220px; height: auto;">`),
-        styleBeatsNothing: await widthOf(`<img src="${PHOTO}" width="90" style="width: 220px">`),
-        percentAttr: await widthOf(`<img src="${PHOTO}" width="100%">`),
-        percentStyle: await widthOf(`<img src="${PHOTO}" style="width: 50%">`),
-        em: await widthOf(`<img src="${PHOTO}" style="width: 12em">`),
-        none: await widthOf(`<img src="${PHOTO}">`),
-        heightOnly: await widthOf(`<img src="${PHOTO}" height="80">`),
-        tinyButNotSpy: await widthOf(`<img src="${PHOTO}" width="3" height="3">`),
+        attr: await widthOf(`<img src="${PIXEL}" width="150">`),
+        attrPx: await widthOf(`<img src="${PIXEL}" width="150px">`),
+        decimal: await widthOf(`<img src="${PIXEL}" width="150.5">`),
+        style: await widthOf(`<img src="${PIXEL}" style="width: 220px; height: auto;">`),
+        styleBeatsNothing: await widthOf(`<img src="${PIXEL}" width="90" style="width: 220px">`),
+        percentAttr: await widthOf(`<img src="${PIXEL}" width="100%">`),
+        percentStyle: await widthOf(`<img src="${PIXEL}" style="width: 50%">`),
+        em: await widthOf(`<img src="${PIXEL}" style="width: 12em">`),
+        none: await widthOf(`<img src="${PIXEL}">`),
+        heightOnly: await widthOf(`<img src="${PIXEL}" height="80">`),
+        tinyButNotSpy: await widthOf(`<img src="${PIXEL}" width="3" height="3">`),
       };
       const spies = {
-        attrs: await widthOf(`<img src="${PHOTO}" width="1" height="1">`),
-        style: await widthOf(`<img src="${PHOTO}" style="width: 1px; height: 1px">`),
-        two: await widthOf(`<img src="${PHOTO}" width="2" height="2">`),
+        attrs: await widthOf(`<img src="${PIXEL}" width="1" height="1">`),
+        style: await widthOf(`<img src="${PIXEL}" style="width: 1px; height: 1px">`),
+        two: await widthOf(`<img src="${PIXEL}" width="2" height="2">`),
       };
       const want = { attr: '150px', attrPx: '150px', decimal: '150.5px', style: '220px', styleBeatsNothing: '220px', percentAttr: '320px', percentStyle: '320px', em: '320px', none: '320px', heightOnly: '320px', tinyButNotSpy: '3px' };
       const wantSpies = { attrs: 'images:0', style: 'images:0', two: 'images:0' };
@@ -96,18 +117,23 @@
   });
 
   cases.push({
-    id: 'web_page_image_address_is_a_web_address_or_an_image_data_uri_and_nothing_else',
-    description: 'Seules une adresse http(s) (ou « //hôte », prise pour https) et une data URI d\'image sont gardées ; javascript:, vbscript:, data:text/html, file:, blob:, ftp:, un chemin relatif, une adresse vide ou absente ne deviennent jamais une image, et le texte autour reste',
+    id: 'web_page_image_address_is_an_image_data_uri_and_nothing_else',
+    description: 'Seule une data URI d\'image est gardée ; une adresse http(s) (ou « //hôte »), javascript:, vbscript:, data:text/html, file:, blob:, ftp:, un chemin relatif, une adresse vide ou absente ne deviennent jamais une image, et le texte autour reste ; seules les adresses web sont COMPTÉES dans le dire du collage',
     run: async (h) => {
       const kept = {
-        https: [`https://photos.example.org/a.png`, `https://photos.example.org/a.png`],
-        http: [`http://photos.example.org/a.png`, `http://photos.example.org/a.png`],
-        protocolRelative: [`//cdn.example.org/a.png`, `https://cdn.example.org/a.png`],
-        upper: [`HTTPS://photos.example.org/A.png`, `HTTPS://photos.example.org/A.png`],
-        spaces: [`  https://photos.example.org/a.png  `, `https://photos.example.org/a.png`],
-        dataPng: [PIXEL, PIXEL],
+        dataGif: [PIXEL, PIXEL],
+        dataPng: [PIXEL2, PIXEL2],
         dataSvg: ['data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=', 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4='],
-        withQuery: [`https://photos.example.org/a.png?x=1&y=2`, `https://photos.example.org/a.png?x=1&y=2`],
+        upper: [PIXEL2.replace('data:image/png', 'DATA:IMAGE/png'), PIXEL2.replace('data:image/png', 'DATA:IMAGE/png')],
+        spaces: ['  ' + PIXEL + '  ', PIXEL],
+      };
+      const web = {
+        https: 'https://photos.example.org/a.png',
+        http: 'http://photos.example.org/a.png',
+        protocolRelative: '//cdn.example.org/a.png',
+        upper: 'HTTPS://photos.example.org/A.png',
+        spaces: '  https://photos.example.org/a.png  ',
+        withQuery: 'https://photos.example.org/a.png?x=1&y=2',
       };
       const refused = {
         javascript: 'javascript:alert(1)',
@@ -124,19 +150,34 @@
         hash: '#',
       };
       const bad = [];
-      for (const [name, [src, want]] of Object.entries(kept)) {
-        await paste(h, { html: `<p>avant <img src="${src}" alt="x"> après</p>` });
-        const images = imagesOf();
-        if (images.length !== 1 || images[0].src !== want) bad.push('gardée ' + name + ' -> ' + JSON.stringify(images));
-      }
-      for (const [name, src] of Object.entries(refused)) {
-        await paste(h, { html: `<p>avant <img src="${src}" alt="x"> après</p>` });
-        const text = EditorCore.getEditor().state.doc.textContent;
-        if (countImages() !== 0 || text !== 'avant après') bad.push('refusée ' + name + ' -> ' + countImages() + ' ' + JSON.stringify(text));
-      }
-      await paste(h, { html: '<p>avant <img alt="x"> après</p>' });
-      if (countImages() !== 0) bad.push('refusée sans adresse');
-      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'huit gardées, treize refusées' };
+      const listener = listenNotices();
+      try {
+        for (const [name, [src, want]] of Object.entries(kept)) {
+          listener.heard.length = 0;
+          await paste(h, { html: `<p>avant <img src="${src}" alt="x"> après</p>` });
+          const images = imagesOf();
+          if (images.length !== 1 || images[0].src !== want) bad.push('gardée ' + name + ' -> ' + JSON.stringify(images));
+          if (listener.heard.length) bad.push('gardée ' + name + ' : le collage a dit ' + JSON.stringify(listener.heard));
+        }
+        for (const [name, src] of Object.entries(web)) {
+          listener.heard.length = 0;
+          await paste(h, { html: `<p>avant <img src="${src}" alt="x"> après</p>` });
+          const text = EditorCore.getEditor().state.doc.textContent;
+          if (countImages() !== 0 || text !== 'avant après') bad.push('adresse web ' + name + ' -> ' + countImages() + ' ' + JSON.stringify(text));
+          if (!same(listener.heard, [1])) bad.push('adresse web ' + name + ' : le collage devait dire 1, dit ' + JSON.stringify(listener.heard));
+        }
+        for (const [name, src] of Object.entries(refused)) {
+          listener.heard.length = 0;
+          await paste(h, { html: `<p>avant <img src="${src}" alt="x"> après</p>` });
+          const text = EditorCore.getEditor().state.doc.textContent;
+          if (countImages() !== 0 || text !== 'avant après') bad.push('refusée ' + name + ' -> ' + countImages() + ' ' + JSON.stringify(text));
+          if (listener.heard.length) bad.push('refusée ' + name + ' : ce n\'est pas une adresse web, le collage ne devait rien dire : ' + JSON.stringify(listener.heard));
+        }
+        listener.heard.length = 0;
+        await paste(h, { html: '<p>avant <img alt="x"> après</p>' });
+        if (countImages() !== 0 || listener.heard.length) bad.push('refusée sans adresse');
+      } finally { listener.stop(); }
+      return { pass: bad.length === 0, notes: bad.join(' ; ') || 'cinq gardées, six adresses web écartées et dites, douze autres écartées sans rien dire' };
     },
   });
 
@@ -145,7 +186,7 @@
     description: 'Rien d\'une balise collée n\'entre dans le document que l\'adresse, le texte alternatif et la largeur : ni onerror/onload, ni srcset, ni style (url(), bordure, position), ni classe ; une adresse ou un texte alternatif qui porte des guillemets et des chevrons reste du texte, sans balise créée ; rien ne s\'exécute',
     run: async (h) => {
       window.__webImagePasteRan = 0;
-      const nasty = `<p>a <img class="hero evil" id="boom" src="${PHOTO}" alt="x" onerror="window.__webImagePasteRan = 1" onload="window.__webImagePasteRan = 2" `
+      const nasty = `<p>a <img class="hero evil" id="boom" src="${PIXEL}" alt="x" onerror="window.__webImagePasteRan = 1" onload="window.__webImagePasteRan = 2" `
         + `srcset="https://evil.example.net/x.png 2x" data-src="https://evil.example.net/lazy.png" `
         + `style="width: 200px; background: url(https://evil.example.net/b.png); position: fixed; left: 0; top: 0; z-index: 9999" `
         + `data-layer="front" data-var-table="Evil" crossorigin="anonymous" referrerpolicy="no-referrer" loading="lazy"> b</p>`;
@@ -153,7 +194,7 @@
       const [first] = EditorCore.getEditor().state.doc.content.content;
       let attrs = null;
       first.descendants(node => { if (node.type.name === 'editorImage') attrs = node.attrs; });
-      const odd = `https://photos.example.org/a.png?q="><b>bold</b>'&x=<i>`;
+      const odd = `data:image/png;base64,AAAA?q="><b>bold</b>'&x=<i>`;
       const alt = `Un "titre" <b>gras</b> & 'autre'`;
       const escaped = text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
       const html2 = await paste(h, { html: `<p>c <img src="${escaped(odd)}" alt="${escaped(alt)}"> d</p>` });
@@ -163,7 +204,7 @@
       doc2.descendants(node => { if (node.marks && node.marks.length) marks += 1; });
       const checks = {
         oneImage: !!attrs,
-        address: !!attrs && attrs.src === PHOTO,
+        address: !!attrs && attrs.src === PIXEL,
         width: !!attrs && attrs.width === '200px',
         notLayered: !!attrs && attrs.layer === 'normal' && !attrs.varTable && attrs.opacity === 1 && attrs.left == null,
         noHandlers: !/onerror|onload|srcset|data-src|url\(|evil|crossorigin|loading|boom/i.test(html),
@@ -177,25 +218,26 @@
   });
 
   cases.push({
-    id: 'web_page_image_of_another_site_is_not_loaded_by_the_paste',
-    description: 'Une image collée d\'un autre site reste masquée jusqu\'au clic « Afficher » (cadre avec le site, aucune adresse donnée au navigateur, aucune requête), son export le demande comme avant (ExternalImages.siteOf) ; une data URI collée s\'affiche tout de suite',
+    id: 'web_page_image_of_another_site_is_not_pasted_and_nothing_is_requested',
+    description: 'Une image collée d\'un autre site n\'entre pas dans le document (ni cadre « Afficher », ni adresse dans le modèle) et aucune requête ne part vers ce site ; le coin d\'état dit « image d\'une page web non collée » avec le geste qui marche ; une data URI collée à côté s\'affiche tout de suite',
     run: async (h) => {
       const before = performance.getEntriesByType('resource').length;
+      const status = document.getElementById('status-msg');
       await paste(h, { html: `<p>a <img src="${PHOTO}" alt="Une photo" width="120"> b <img src="${PIXEL}" alt="Un pixel" width="40"> c</p>` });
       await h.sleep(250);
       const wraps = Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
-      const [external, inline] = wraps;
       const requested = performance.getEntriesByType('resource').slice(before).map(entry => entry.name).filter(name => /photos\.example\.org/.test(name));
+      const sentence = I18n.t('image.paste.external', { n: 1 });
       const checks = {
-        twoViews: wraps.length === 2,
-        blocked: !!external && external.classList.contains('editor-image-blocked') && external.dataset.blockedSite === 'photos.example.org',
-        noAddressGiven: !!external && !external.querySelector('img').getAttribute('src'),
+        oneView: wraps.length === 1,
+        dataShown: wraps.length === 1 && !wraps[0].classList.contains('editor-image-blocked') && wraps[0].querySelector('img').getAttribute('src') === PIXEL,
+        noBlockedFrame: document.querySelectorAll('.tiptap .editor-image-blocked').length === 0,
         noRequest: requested.length === 0,
-        siteKnown: ExternalImages.siteOf(PHOTO) === 'photos.example.org',
-        dataShown: !!inline && !inline.classList.contains('editor-image-blocked') && inline.querySelector('img').getAttribute('src') === PIXEL,
-        modelKeepsAddress: Editor.getHTML().includes(PHOTO),
+        modelWithoutAddress: !Editor.getHTML().includes('photos.example.org'),
+        said: !!status && status.textContent.indexOf(sentence) === 0,
+        saidTheGesture: /Copier l’image|Copy image/.test(sentence) && /collez|paste/.test(sentence),
       };
-      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, requested }) };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify({ checks, requested, status: status && status.textContent }) };
     },
   });
 
@@ -204,12 +246,12 @@
     description: 'Une image collée dans un lien, une figure, une liste, une case de tableau et une case de grille est une image de l\'éditeur à sa place ; <picture> et ses <source> ne donnent qu\'une image',
     run: async (h) => {
       const forms = {
-        link: `<p><a href="https://photos.example.org/page"><img src="${PHOTO}" alt="L"></a></p>`,
-        figure: `<figure><img src="${PHOTO}" alt="F"><figcaption>Légende</figcaption></figure>`,
-        list: `<ul><li>un <img src="${PHOTO}" alt="P"></li><li>deux</li></ul>`,
-        picture: `<picture><source srcset="https://photos.example.org/a.webp" type="image/webp"><source srcset="https://photos.example.org/a.avif" type="image/avif"><img src="${PHOTO}" alt="Q"></picture>`,
-        alone: `<img src="${PHOTO}" alt="A">`,
-        two: `<p><img src="${PHOTO}" alt="1"><img src="${PHOTO}?b" alt="2"></p>`,
+        link: `<p><a href="https://photos.example.org/page"><img src="${PIXEL}" alt="L"></a></p>`,
+        figure: `<figure><img src="${PIXEL}" alt="F"><figcaption>Légende</figcaption></figure>`,
+        list: `<ul><li>un <img src="${PIXEL}" alt="P"></li><li>deux</li></ul>`,
+        picture: `<picture><source srcset="https://photos.example.org/a.webp" type="image/webp"><source srcset="https://photos.example.org/a.avif" type="image/avif"><img src="${PIXEL}" alt="Q"></picture>`,
+        alone: `<img src="${PIXEL}" alt="A">`,
+        two: `<p><img src="${PIXEL}" alt="1"><img src="${PIXEL2}" alt="2"></p>`,
       };
       const bad = [];
       for (const [name, html] of Object.entries(forms)) {
@@ -239,7 +281,7 @@
           editor.commands.focus();
           editor.commands.setTextSelection(firstCellInside() + 1);
           const dt = new DataTransfer();
-          dt.setData('text/html', WINDOWS(`<p>photo <img src="${PHOTO}" alt="C" width="80"></p>`));
+          dt.setData('text/html', WINDOWS(`<p>photo <img src="${PIXEL}" alt="C" width="80"></p>`));
           editor.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
           await h.sleep(250);
           let inside = 0;

@@ -83,14 +83,21 @@
     statusMsg.textContent = note && text && text.indexOf(note) !== 0 ? note + ' ' + text : text;
     statusMsg.className = isError ? 'error-msg' : '';
   }
-  document.addEventListener('pp:nativeFallback', (event) => {
-    const detail = (event && event.detail) || {};
-    const text = I18n.t(detail.raison === 'echec' ? 'native.fallback.echec' : 'native.fallback.ecart', { fonction: I18n.t('native.function.' + detail.fonction) });
-    // Ce que le coin d'état dit déjà, sans l'ancienne phrase qu'il portait en tête : la nouvelle passe devant.
+  // Une phrase en tête du coin d'état (NATIVE_NOTE_MS) : ce que le coin d'état dit déjà, sans l'ancienne phrase qu'il portait en tête, la nouvelle passe devant.
+  function noteInStatus(text) {
     const shown = statusMsg.textContent;
     const rest = nativeNote && shown.indexOf(nativeNote.text) === 0 ? shown.slice(nativeNote.text.length).replace(/^ /, '') : shown;
     nativeNote = { text, at: Date.now() };
     statusMsg.textContent = rest ? text + ' ' + rest : text;
+  }
+  document.addEventListener('pp:nativeFallback', (event) => {
+    const detail = (event && event.detail) || {};
+    noteInStatus(I18n.t(detail.raison === 'echec' ? 'native.fallback.echec' : 'native.fallback.ecart', { fonction: I18n.t('native.function.' + detail.fonction) }));
+  });
+  // Les images d'une page web qu'un collage n'a pas reprises (js/editor.js, webImagesAsEditorImages : plus aucun appel vers un autre site) : la phrase dit le geste qui marche, comme celle d'une copie figée.
+  document.addEventListener('pp:webImagesNotPasted', (event) => {
+    const count = Number(((event && event.detail) || {}).count) || 1;
+    noteInStatus(I18n.t('image.paste.external', { n: count }));
   });
 
   function getPdfFilenameTemplate() {

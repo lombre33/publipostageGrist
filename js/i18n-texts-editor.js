@@ -225,8 +225,8 @@ const I18nTextsEditor = {
   'twoColumns.widthMmLeftLabel': { fr: 'Gauche (mm)', en: 'Left (mm)' },
   'twoColumns.widthMmRightLabel': { fr: 'Droite (mm)', en: 'Right (mm)' },
   'image.moveHandle': { fr: 'Déplacer (flèches du clavier : 1 px, avec Maj : 10 px)', en: 'Move (arrow keys: 1 px, with Shift: 10 px)' },
-  'image.corsWarning': { fr: 'Cette image n’apparaîtra probablement pas dans le PDF : le site qui l’héberge ne semble pas autoriser ce widget à la télécharger. Elle s’affiche normalement ici et en mode lecture, mais le PDF la laissera de côté.\n\nPour l’éviter, copiez l’image depuis son emplacement d’origine (Ctrl+C), puis collez-la ici (Ctrl+V) au lieu d’en saisir l’adresse : une image collée n’est jamais bloquée.', en: 'This image probably won’t appear in the PDF: the site hosting it doesn’t seem to allow this widget to download it. It displays normally here and in Read mode, but the PDF will leave it out.\n\nTo avoid this, copy the image from where it is (Ctrl+C), then paste it here (Ctrl+V) instead of typing its address: a pasted image is never blocked.' },
-  'image.urlPrompt': { fr: 'Adresse de l’image', en: 'Image address' },
+  // Les images d'une page web collée ne sont pas reprises (js/editor.js, webImagesAsEditorImages) : le coin d'état le dit, avec le geste qui marche (« Copier l’image » du clic droit, puis coller).
+  'image.paste.external': { fr: '{n} {n|image d’une page web non collée|images d’une page web non collées} : copiez l’image seule (clic droit, « Copier l’image »), puis collez-la', en: '{n} web page {n|image|images} not pasted: copy the image on its own (right-click, “Copy image”), then paste it' },
 
   // --- Placeholder du corps de l'éditeur, document principal vide (@tiptap/extension-placeholder, cf. js/editor.js) - lu via une fonction plutôt
   // qu'une chaîne figée : ce n'est pas affiché en mode édition d'en-tête/pied (cf. js/header-footer-preview.js), une zone vide n'y montre aucun texte.

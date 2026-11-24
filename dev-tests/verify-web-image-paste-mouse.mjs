@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Les images d'une page web collée restent dans le document (relevé par l'étude de l'import HTML du 13/11 : « coller une page web fait disparaître les images »). Cause : copier une partie d'une
+// Les images d'une page web collée (relevé par l'étude de l'import HTML du 13/11 : « coller une page web fait disparaître les images ») : celles d'un autre site ne sont plus collées (24/11), celles en data URI le restent. Cause de la perte d'avant : copier une partie d'une
 // page web ne met dans le presse-papiers que du HTML (`text/html` et `text/plain`, aucune image « fichier ») ; chaque photo y est une `<img src="https://…">`, et l'éditeur ne lisait que ses propres
 // images (`img.editor-image`) : ProseMirror écartait les autres en silence (js/editor.js : `webImagesAsEditorImages`, appelé par `transformPastedHTML`).
 // dev-tests/scenarios-web-image-paste.js (groupe « webImagePaste ») vérifie ce que le collage écrit avec des évènements `paste` synthétiques ; ici tout est vrai, comme chez la personne : une VRAIE page
@@ -7,13 +7,13 @@
 // (le HTML que Chromium écrit : styles recopiés sur chaque balise, adresses rendues absolues, largeur de la feuille de style devenue `style="width: 300px"`), puis dans le widget, à la taille du panneau
 // Grist d'Antoine (~700x400), le VRAI Ctrl+V, d'abord tel que Chromium le rend, puis enveloppé comme Windows le rend (`<html><body><!--StartFragment-->…<!--EndFragment-->`) :
 //   - le HTML qui arrive à l'éditeur porte bien les `<img>` de la page (le test ne passe pas faute d'avoir joué le cas) ;
-//   - le document garde le texte et trois images, dans l'ordre : la photo (300 px, texte alternatif), la petite icône (20 px) et le dessin intégré (data URI, 40 px) ; le pixel espion de 1 px n'est pas collé ;
-//   - le collage ne fait contacter aucun site : AUCUNE requête vers l'autre site tant qu'on n'a pas cliqué ; les images de l'autre site sont des cadres « Afficher » qui nomment le site, entiers dans le
-//     panneau, que la souris atteint (le dessin intégré, lui, s'affiche tout de suite) ;
-//   - un VRAI clic sur « Afficher » charge les images de ce site (la photo se peint à sa taille, son contour en tirets dit qu'elle vient d'un autre site) ;
+//   - le document garde le texte et UNE image, le dessin intégré (data URI, 40 px) ; la photo, la petite icône et le pixel espion, qui sont des adresses d'un autre site, ne sont pas collés (demande
+//     d'Antoine du 24/11 : plus aucun appel externe, des images seulement par copier-coller ou depuis une pièce jointe de Grist) ;
+//   - le collage ne fait contacter aucun site : AUCUNE requête vers l'autre site, ni au collage ni après ; aucun cadre « Afficher » ; l'adresse du site n'est nulle part dans le document ;
+//     le coin d'état dit combien d'images n'ont pas été collées et comment faire (copier l'image seule) ;
 //   - un seul Ctrl+Z défait le collage entier, Ctrl+Maj+Z le rend ;
 //   - l'image « Copier l'image » (le clic droit : un fichier image dans le presse-papiers) se colle toujours comme avant, en data URI.
-// Les captures (variable `WEB_IMAGE_PASTE_SHOTS` : un dossier) montrent le collage puis les images affichées.
+// Les captures (variable `WEB_IMAGE_PASTE_SHOTS` : un dossier) montrent le collage.
 // Lancé par run-headless.mjs (groupe Node « webImagePasteMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-web-image-paste-mouse.mjs
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile, mkdir } from 'node:fs/promises';
@@ -267,49 +267,27 @@ async function flow(label, how, { wrap }) {
   const images = await imagesOf(page);
   const text = await textOf(page);
   check(`${label}, ${how} - le texte de l'article est là, après le début du document`, text.startsWith('Début du document') && /Le chantier avance/.test(text) && /La légende de la photo/.test(text) && /Dernier paragraphe de l'article\./.test(text), text);
-  check(`${label}, ${how} - trois images, dans l'ordre : la photo (300 px), l'icône (20 px), le dessin intégré (40 px) ; le pixel espion n'est pas collé`,
-    images.length === 3
-      && images[0].src === SITE + '/photo.png' && images[0].alt === 'Une photo du chantier' && images[0].width === '300px'
-      && images[1].src === SITE + '/small.png' && images[1].alt === '' && images[1].width === '20px'
-      && images[2].src === 'data:' && images[2].alt === 'Un dessin intégré' && images[2].width === '40px', images);
+  // Demande d'Antoine du 24/11 (« plus aucun appel externe, import image que par C/C ou depuis une PJ grist ») : les images d'un AUTRE site ne sont plus collées.
+  check(`${label}, ${how} - une seule image est collée : le dessin intégré (data URI, 40 px) ; la photo, l'icône et le pixel espion d'un autre site ne le sont pas`,
+    images.length === 1 && images[0].src === 'data:' && images[0].alt === 'Un dessin intégré' && images[0].width === '40px', images);
 
-  // Rien n'a contacté l'autre site : les cadres « Afficher » nomment le site, le dessin intégré est déjà peint.
-  await page.waitForTimeout(400);
+  // Rien n'a contacté l'autre site, ni au collage ni après : aucun cadre « Afficher », aucune adresse du site dans le document.
+  await page.waitForTimeout(900);
   check(`${label}, ${how} - le collage n'a fait aucune requête vers l'autre site (photo, icône, pixel)`, requestsFromWidget() === widgetRequestsBefore, siteRequests.slice(-6));
   const views = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .editor-image-view')).map(view => {
     const img = view.querySelector('img');
-    return {
-      blocked: view.classList.contains('editor-image-blocked'), site: view.dataset.blockedSite || '', src: img.getAttribute('src') ? (img.getAttribute('src').startsWith('data:') ? 'data:' : img.getAttribute('src')) : '',
-      loaded: !!img.getAttribute('src') && img.complete && img.naturalWidth > 0, label: (view.querySelector('.editor-image-blocked-site') || {}).textContent || '', button: !!view.querySelector('.editor-image-reveal'),
-    };
+    const reveal = view.querySelector('.editor-image-reveal');
+    return { blocked: view.classList.contains('editor-image-blocked'), button: !!reveal && !reveal.hidden && getComputedStyle(reveal).display !== 'none' && reveal.getBoundingClientRect().width > 0, src: img && img.getAttribute('src') ? (img.getAttribute('src').startsWith('data:') ? 'data:' : img.getAttribute('src')) : '', loaded: !!img && !!img.getAttribute('src') && img.complete && img.naturalWidth > 0 };
   }));
-  check(`${label}, ${how} - la photo et l'icône sont des cadres masqués qui nomment l'autre site, sans adresse donnée au navigateur`,
-    views.length === 3 && views[0].blocked && views[1].blocked && views[0].site === SITE_HOST && views[1].site === SITE_HOST && views[0].src === '' && views[1].src === '' && views[0].label === SITE_HOST && views[0].button, views);
-  check(`${label}, ${how} - le dessin intégré (data URI) s'affiche tout de suite`, views.length === 3 && !views[2].blocked && views[2].loaded, views[2]);
+  check(`${label}, ${how} - aucun cadre « Afficher » : le dessin intégré (data URI) s'affiche tout de suite, il n'y a rien d'autre`, views.length === 1 && !views[0].blocked && !views[0].button && views[0].loaded && views[0].src === 'data:', views);
+  const modelHtml = await page.evaluate(() => Editor.getHTML());
+  check(`${label}, ${how} - l'adresse de l'autre site n'est nulle part dans le document`, !modelHtml.includes(SITE_HOST) && !/photo\.png|small\.png|pixel\.gif/.test(modelHtml), modelHtml.slice(0, 200));
 
-  // Le bouton « Afficher » de la photo est entier dans le panneau 700x400 et la souris l'atteint (clic de Playwright : il refuse un bouton recouvert).
-  const reveal = page.locator('.tiptap .editor-image-view.editor-image-blocked .editor-image-reveal').first();
-  await reveal.scrollIntoViewIfNeeded().catch(() => {});
-  const box = (await reveal.count()) ? await reveal.boundingBox() : null;
-  check(`${label}, ${how} - le bouton « Afficher » est entier dans le panneau (${WIDTH}x${HEIGHT})`, !!box && box.x >= 0 && box.y >= 0 && box.x + box.width <= WIDTH && box.y + box.height <= HEIGHT, box);
-  await shot(page, `${wrap ? '2' : '1'}-bouton-afficher`);
-  const hits = !!box && await page.evaluate(([x, y]) => { const hit = document.elementFromPoint(x, y); return !!hit && !!hit.closest('.editor-image-reveal'); }, [box.x + box.width / 2, box.y + box.height / 2]);
-  check(`${label}, ${how} - la souris atteint le bouton (rien ne le recouvre)`, hits);
-  if (box) await reveal.click({ timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(900);
-  const after = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .editor-image-view')).map(view => {
-    const img = view.querySelector('img');
-    // La feuille est réduite dans un panneau de ~700 px (EditorCore.layoutZoom) : la largeur réglée est la largeur mesurée divisée par ce facteur.
-    const rect = img.getBoundingClientRect();
-    return { blocked: view.classList.contains('editor-image-blocked'), loaded: !!img.getAttribute('src') && img.complete && img.naturalWidth > 0, width: Math.round(rect.width / EditorCore.layoutZoom(view)), flagged: img.hasAttribute('data-external-site') };
-  }));
-  check(`${label}, ${how} - un vrai clic sur « Afficher » charge les images de ce site : la photo se peint à ses 300 px réglés, l'icône aussi (20 px)`,
-    after.length === 3 && after[0].loaded && !after[0].blocked && after[1].loaded && !after[1].blocked && Math.abs(after[0].width - 300) <= 2 && Math.abs(after[1].width - 20) <= 1, after);
-  check(`${label}, ${how} - c'est ce clic, et lui seul, qui a fait demander la photo à l'autre site`, requestsFromWidget() > widgetRequestsBefore && siteRequests.some(r => r.path === '/photo.png' && r.referer.startsWith(BASE)), siteRequests.slice(-6));
-  check(`${label}, ${how} - une image affichée d'un autre site reste signalée (contour en tirets : data-external-site)`, !!(after[0] && after[0].flagged), after);
-  const shown = page.locator('.tiptap .editor-image-view').first();
-  await shown.scrollIntoViewIfNeeded().catch(() => {});
-  await shot(page, `${wrap ? '2' : '1'}-images-affichees`);
+  // Le coin d'état dit combien d'images n'ont pas été collées et comment faire (copier l'image seule, ou le bouton « Image depuis une variable » pour une pièce jointe).
+  const said = await page.evaluate(() => (document.getElementById('status-msg') || {}).textContent || '');
+  const expected = await page.evaluate(() => I18n.t('image.paste.external', { n: 2 }));
+  check(`${label}, ${how} - le coin d'état dit que deux images d'une page web n'ont pas été collées (puis comment faire : copier l'image seule)`, said.startsWith(expected) && /clic droit/.test(said), { said, expected });
+  await shot(page, `${wrap ? '2' : '1'}-collage-sans-images-externes`);
 
   // Un seul Ctrl+Z défait le collage entier ; Ctrl+Maj+Z le rend.
   const filled = await docJson(page);

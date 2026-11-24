@@ -134,7 +134,8 @@ function tipRectInPage(id) {
 async function visibleTipHosts(page) {
   return page.evaluate((sel) => [...document.querySelectorAll(sel)].filter(el => {
     const r = el.getBoundingClientRect();
-    if (!r.width || !r.height || el.closest('.v2-hover-flyout') || el.disabled) return false;
+    // Un bouton grisé (`data-pp-lock-reason`) dit sa raison par son `title`, jamais par l'info-bulle `::after` (css/toolbar-v2.css : `display: none`) : « Insérer une image » l'est en tout mode depuis le 24/11.
+    if (!r.width || !r.height || el.closest('.v2-hover-flyout') || el.disabled || el.hasAttribute('data-pp-lock-reason')) return false;
     return r.bottom <= innerHeight && r.right <= innerWidth && r.left >= 0;
   }).map(el => { const r = el.getBoundingClientRect(); return { id: el.id, x: r.x + r.width / 2, y: r.y + r.height / 2 }; }).filter(o => o.id), TIP_HOSTS);
 }

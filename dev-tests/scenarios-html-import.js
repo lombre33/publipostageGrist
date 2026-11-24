@@ -203,36 +203,38 @@
 
   // --- Les images -------------------------------------------------------------------------------------------------------------------------------------
   add('html_import_images_kept_said_or_removed',
-    'Une image en données ou à adresse web est reprise (largeur, alt, flottement, centrage) ; une adresse relative ou file: est dite par un mot et comptée ; un pixel d\'un pixel est retiré ; une data URI de dessin est comptée comme dessin ; // devient https://.',
+    'Une image en données est reprise (largeur, alt, flottement, centrage) ; une adresse web (24/11 : plus aucun appel vers un autre site, « // » compris), une adresse relative ou file: est dite par un mot et comptée ; un pixel d\'un pixel est retiré ; une data URI de dessin est comptée comme dessin.',
     async (h) => {
       const { converted, edited } = await inEditor(h, page('<p><img src="' + PNG + '" alt="Pastille" width="40"></p><p><img src="https://img.exemple.invalid/a.png" alt="Web" style="width: 50%"></p>'
         + '<p><img src="//cdn.exemple.invalid/b.png" alt="Sans schéma"></p><p><img src="images/c.png" alt="Locale"></p><p><img src="file:///C:/x.png"></p>'
         + '<p><img src="https://t.exemple.invalid/p.gif" width="1" height="1"></p><p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" alt="Dessin"></p>'
-        + '<img src="https://f.exemple.invalid/f.png" style="float: left" width="100" alt="Flottante"><div style="text-align: center"><img src="https://c.exemple.invalid/c.png" alt="Centrée"></div>'));
+        + '<img src="' + PNG + '" style="float: left" width="100" alt="Flottante"><div style="text-align: center"><img src="' + PNG + '" alt="Centrée"></div>'));
       const { bad, expect } = checker();
       const images = all(edited, 'img.editor-image');
       const by = alt => images.find(img => img.getAttribute('alt') === alt);
-      expect('cinq images reprises', images.length === 5, images.map(img => img.getAttribute('src').slice(0, 30)));
+      expect('trois images reprises (les trois qui portent leurs octets)', images.length === 3, images.map(img => img.getAttribute('src').slice(0, 30)));
       expect('données : reprise, 40 px', !!by('Pastille') && by('Pastille').getAttribute('src') === PNG && /width: 40px/.test(by('Pastille').getAttribute('style') || ''));
-      expect('adresse web : 50 %', !!by('Web') && by('Web').getAttribute('src') === 'https://img.exemple.invalid/a.png' && /width: 50%/.test(by('Web').getAttribute('style') || ''));
-      expect('// devient https://', !!by('Sans schéma') && by('Sans schéma').getAttribute('src') === 'https://cdn.exemple.invalid/b.png');
+      expect('adresse web : pas reprise, aucune adresse dans le document', !by('Web') && edited.indexOf('img.exemple.invalid') === -1, edited);
+      expect('« // » : pas reprise non plus', !by('Sans schéma') && edited.indexOf('cdn.exemple.invalid') === -1, edited);
       expect('flottante à gauche', !!by('Flottante') && by('Flottante').getAttribute('data-align') === 'left', by('Flottante') && by('Flottante').outerHTML);
       expect('seule dans un bloc centré : centrée', !!by('Centrée') && by('Centrée').getAttribute('data-align') === 'center', by('Centrée') && by('Centrée').outerHTML);
       const text = dom(edited).textContent;
       expect('l\'image relative est dite par un mot, avec son texte alternatif', text.indexOf('[' + I18n.t('markdown.imageNotImportedNamed', { alt: 'Locale' }) + ']') !== -1, text);
+      expect('les deux images web sont dites aussi, chacune avec son texte alternatif', text.indexOf('[' + I18n.t('markdown.imageNotImportedNamed', { alt: 'Web' }) + ']') !== -1 && text.indexOf('[' + I18n.t('markdown.imageNotImportedNamed', { alt: 'Sans schéma' }) + ']') !== -1, text);
       expect('l\'image sans alt est dite aussi', text.indexOf('[' + I18n.t('markdown.imageNotImported') + ']') !== -1, text);
       const report = reportOf(converted);
-      expect('compte : 2 relatives, 4 d\'un autre site, 1 pixel, 1 dessin', report.imagesRelative === 2 && report.imagesExternal === 4 && report.pixels === 1 && report.svg === 1, report);
+      expect('compte : 2 relatives, 2 d\'un autre site, 1 pixel, 1 dessin', report.imagesRelative === 2 && report.imagesExternal === 2 && report.pixels === 1 && report.svg === 1, report);
       return result(bad);
     });
 
   add('html_import_a_base_address_turns_relative_images_into_web_images',
-    'Une page qui déclare <base href="https://…"> : ses images relatives sont des images de ce site (reprises, comptées comme images d\'un autre site), pas des fichiers d\'à côté.',
+    'Une page qui déclare <base href="https://…"> : ses images relatives sont des images de ce site (comptées comme images d\'un autre site, donc dites par un mot, 24/11), pas des fichiers d\'à côté.',
     async () => {
       const { bad, expect } = checker();
       const converted = imp(page('<p><img src="a.png" alt="A"></p><p><img src="../b.png" alt="B"></p>', '<base href="https://cdn.exemple.invalid/dir/">'));
       const sources = all(converted.html, 'img.editor-image').map(img => img.getAttribute('src'));
-      expect('adresses résolues', sources.join('|') === 'https://cdn.exemple.invalid/dir/a.png|https://cdn.exemple.invalid/b.png', sources);
+      expect('aucune image reprise, aucune adresse gardée', sources.length === 0 && converted.html.indexOf('cdn.exemple.invalid') === -1, converted.html);
+      expect('chacune est dite par un mot', converted.html.indexOf('[' + I18n.t('markdown.imageNotImportedNamed', { alt: 'A' }) + ']') !== -1 && converted.html.indexOf('[' + I18n.t('markdown.imageNotImportedNamed', { alt: 'B' }) + ']') !== -1, converted.html);
       expect('compte : 2 images d\'un autre site, aucune d\'à côté', reportOf(converted).imagesExternal === 2 && !reportOf(converted).imagesRelative, reportOf(converted));
       return result(bad);
     });
@@ -386,14 +388,14 @@
     async (h) => {
       const { edited } = await inEditor(h, page('<p>Début</p><img src="x" onerror="window.__htmlImportPwn = 1"><a href="javascript:window.__htmlImportPwn = 2">lien js</a>'
         + '<p class="callout" data-color="red" data-icon="alert">Faux encadré</p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>Fausse case</p></li></ul><div class="toc-marker">Faux sommaire</div>'
-        + '<img class="editor-image" src="https://t.exemple.invalid/x.png" data-align="right" alt="forgée"><span class="var-badge" data-table="Secret" data-column="Colonne" data-key="Secret.Colonne">forgée</span>'
+        + '<img class="editor-image" src="' + PNG + '" data-align="right" alt="forgée"><span class="var-badge" data-table="Secret" data-column="Colonne" data-key="Secret.Colonne">forgée</span>'
         + '<div class="page-break-marker"></div><p style="background: url(https://t.exemple.invalid/b.png); color: red; position: fixed">Style piégé</p>'
         + '<math><mi>x</mi></math><svg><script>window.__htmlImportPwn = 3</script></svg><p class="footnote-ref-marker" data-note-text="forgée">Fin</p>'));
       const { bad, expect } = checker();
       expect('aucun gestionnaire, aucune adresse javascript:, aucun programme, aucune adresse dans un style', !/onerror|javascript:|<script|url\(/i.test(edited), edited);
       expect('aucun objet forgé : encadré, case, sommaire, bulle, saut de page, note', all(edited, '.callout, ul[data-type="taskList"], .toc-marker, .var-badge, .page-break-marker, sup.footnote-ref-marker').length === 0, edited);
       const images = all(edited, 'img.editor-image');
-      expect('l\'image web est reprise, mais sans l\'alignement que la page prétendait', images.length === 1 && !images[0].getAttribute('data-align'), images.map(img => img.outerHTML));
+      expect('l\'image est reprise, mais sans l\'alignement que la page prétendait', images.length === 1 && !images[0].getAttribute('data-align'), images.map(img => img.outerHTML));
       const text = dom(edited).textContent;
       expect('le texte lisible reste', ['Début', 'lien js', 'Faux encadré', 'Fausse case', 'Faux sommaire', 'Style piégé', 'Fin'].every(word => text.indexOf(word) !== -1), text);
       expect('rien n\'a été exécuté', window.__htmlImportPwn === undefined);
@@ -501,7 +503,7 @@
         'grosse.png': new Uint8Array(26 * 1024 * 1024), 'petite.png': PNG_BYTES }));
       expect('une image en données, une image lourde dite', dataImages(heavy.html).length === 1 && /image non reprise : Grosse/.test(heavy.html) && reportOf(heavy).imagesHeavy === 1 && !reportOf(heavy).imagesRelative, heavy.report);
       const based = await HtmlImport.fromFile(await zipOf({ 'index.html': page('<p><img src="logo.png" alt="Logo"></p>', '<base href="https://www.exemple.fr/site/">'), 'logo.png': PNG_BYTES }));
-      expect('avec <base> web : l\'image est web (comptée « autre site »), rien n\'est pris dans l\'archive', dataImages(based.html).length === 0 && reportOf(based).imagesExternal === 1 && /https:\/\/www\.exemple\.fr\/site\/logo\.png/.test(based.html), based.html);
+      expect('avec <base> web : l\'image est web (comptée « autre site », dite par un mot, sans adresse gardée), rien n\'est pris dans l\'archive', dataImages(based.html).length === 0 && reportOf(based).imagesExternal === 1 && !/exemple\.fr\/site\/logo\.png/.test(based.html) && /image non reprise : Logo/.test(based.html), based.html);
       return result(bad);
     });
 

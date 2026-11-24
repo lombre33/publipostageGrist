@@ -258,6 +258,13 @@ window.TestHelpers = (function () {
     await sleep(30);
   }
 
+  // Pose une image dans le document comme le collage d'une image la pose (Editor.insertImageAtDefaultSize). Le bouton « Insérer une image » ne prend plus d'adresse :
+  // il est grisé (24/11, plus aucun appel vers un autre site), donc plus de fenêtre d'adresse à répondre pour poser une image dans un essai.
+  async function insertImage(src) {
+    await Editor.insertImageAtDefaultSize(src);
+    await sleep(30);
+  }
+
   // Sélectionne un nœud atome (image, badge...) comme le ferait un VRAI clic
   // souris - ProseMirror résout la position cliquée via posAtCoords(), qui a
   // besoin de VRAIES coordonnées clientX/clientY (un mousedown/click sans
@@ -962,7 +969,7 @@ window.TestHelpers = (function () {
 
   return {
     sleep, tiptap, resetEditor, stubDialogs, withRealChoose, choosePrompts, focusAtEnd, focusInElement, typeText, fieldEditor, fieldType, fieldKey, fieldSelect, fieldEnd,
-    selectAllInEditor, selectAllInElement, clickButton, selectAtomNode, openFlyout, clickRow,
+    selectAllInEditor, selectAllInElement, clickButton, insertImage, selectAtomNode, openFlyout, clickRow,
     dragFromTo, exportPdfContent, flattenPdfContent, findTextBlocks, findImages, blockPlainText,
     ensurePdfJsLoaded, extractPdfGroundTruth, extractPdfLinks, extractPdfLines, extractPdfBoxes, pdfColorRows, makeImage,
     exportDocxParts, docxDrawings, docxParagraphs, docxTables, docxSectionProps,

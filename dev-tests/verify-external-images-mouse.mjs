@@ -13,9 +13,8 @@
 // pas celles des autres, sans modifier le HTML du modèle ;
 // 6) l'AFFICHAGE d'une image affichée (contrôle de sécurité du 04/10, « Tout corriger ») : un contour en tirets rouges et une infobulle qui nomme le site, dans l'éditeur (au
 // repos, au survol, sélectionnée) puis dans la Lecture, mesuré sur une vraie capture ; l'image intégrée n'en a pas ; l'export ne redemande pas un site déjà affiché ;
-// 7) l'INSERTION par adresse (choix du 04/10, « Demander à l'insertion ») : « Insérer une image », l'adresse d'un autre site, puis la question « Intégrer l'image »
-// / « Garder le lien » à la vraie souris et au vrai clavier : Annuler, Échap, Tab, un lien gardé qui s'affiche tout de suite et reste en tirets rouges sur une vraie capture,
-// une image intégrée qui n'en a pas, un site dont le téléchargement échoue (fetch refusé), une adresse data: sans question ; clair, sombre et anglais ;
+// 7) l'INSERTION par adresse n'existe plus (demande d'Antoine du 24/11, « plus aucun appel externe dans le csp ») : le bouton « Insérer une image » est grisé, un vrai clic
+// n'ouvre aucune saisie, n'insère rien, n'envoie aucune requête et ouvre la bulle « Copiez l'image puis collez-la » ; clair, sombre et anglais ;
 // 8) l'affichage d'un site ne dure que la séance de la page : le vrai clic n'écrit rien (ni localStorage, ni sessionStorage, ni le document Grist) et, la page rechargée, le cadre est
 // de retour sans qu'aucune requête soit partie vers le site.
 // Lancé par run-headless.mjs (groupe Node "externalImagesMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-external-images-mouse.mjs
@@ -135,16 +134,6 @@ await page.route(url => url.hostname.endsWith('.test'), async route => {
   const request = route.request();
   (request.resourceType() === 'fetch' ? net.fetch : net.image).push(request.url());
   await route.fulfill({ status: 200, contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*' }, body: PNG });
-});
-
-// Un site dont le TÉLÉCHARGEMENT par le widget échoue (CORS refusé, réseau coupé) alors que l'éditeur affiche son image - la partie 6. `route.fulfill` ne fait pas respecter CORS
-// (une réponse sans l'en-tête passe quand même, vérifié) : le refus est un `route.abort` sur les requêtes `fetch`, que le navigateur rend comme un échec CORS (TypeError).
-const REFUSE_HOST = 'refuse.exemple.test';
-await page.route(url => url.hostname === REFUSE_HOST, async route => {
-  const request = route.request();
-  if (request.resourceType() === 'fetch') { net.fetch.push(request.url()); await route.abort('failed'); return; }
-  net.image.push(request.url());
-  await route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
 });
 
 // Ouvre (ou rouvre, `reload`) la page du widget et attend qu'elle soit prête.
@@ -846,198 +835,31 @@ async function runExportAfterReveal(T) {
     (await windowsOpened()) === windowsBefore && downloads.some(n => EXPORTS.pdf.file.test(n)) && JSON.stringify(fetchedHosts().sort()) === JSON.stringify(hosts.slice().sort()), { opened: (await windowsOpened()) - windowsBefore, downloads, fetched: fetchedHosts() });
 }
 
-// 7) L'insertion par adresse (js/main-toolbar.js:imageSourceFromUrl, choix d'Antoine du 04/10 « Demander à l'insertion ») : « Insérer une image », l'adresse d'un autre site, puis la
-// question « Intégrer l'image » (par défaut) / « Garder le lien » - un lien gardé s'affiche tout de suite (c'est l'accord de la personne pour ce site) et reste signalé en rouge, une
-// image intégrée n'a plus rien d'un autre site. Un site par passage : celui d'un lien gardé reste affiché pour la séance.
-let INSERT_HOST = '', INSERT_URL = '';
-function useInsertHost(T) { INSERT_HOST = `insere-${T}.exemple.test`; INSERT_URL = `https://${INSERT_HOST}/logo.png`; }
-const QUESTION_TITLE = () => tr('dialog.imageExternal.title');
-const insertedImages = () => page.evaluate(() => document.querySelectorAll('.tiptap img.editor-image').length);
-const insertedSrc = () => page.evaluate(() => { const i = document.querySelector('.tiptap img.editor-image'); return i ? i.getAttribute('src') : null; });
+// 7) L'insertion par adresse n'existe plus (demande d'Antoine du 24/11 : « plus aucun appel externe dans le csp, import image que par C/C ou depuis une PJ grist ») : le bouton
+// « Insérer une image » reste dans la barre, GRISÉ ; un vrai clic ne demande aucune adresse, n'insère rien, n'envoie aucune requête et ouvre la bulle qui dit comment faire
+// (copier l'image puis la coller) ; clair, sombre et anglais.
 const requestsTo = host => net.fetch.concat(net.image).filter(u => new URL(u).host === host).length;
-async function resetDocument() {
-  await page.evaluate(() => Editor.setHTML('<p>Texte</p>'));
-  net.fetch.length = 0; net.image.length = 0;
-  await page.waitForTimeout(150);
-}
-// L'adresse tapée au vrai clavier dans la fenêtre « Insérer une image », « Insérer » (clic réel ou Entrée) : la question s'ouvre.
-async function typeImageUrl(url, { enter = false } = {}) {
-  await realClick('#v2-btn-image', 300);
-  await page.keyboard.type(url);
-  if (enter) await page.keyboard.press('Enter'); else await click(OK);
-  const title = await QUESTION_TITLE();
-  await page.waitForFunction(t => { const ov = document.getElementById('pp-dialog-modal'); return !!ov && ov.style.display !== 'none' && ov.querySelector('h3').textContent === t; }, title, { timeout: 15000 });
-  await page.waitForTimeout(150);
-}
-// La question : titre, lignes du message, boutons visibles (le « Valider » des saisies est caché), où est le focus, et la place qu'elle prend.
-const questionState = () => page.evaluate(() => {
-  const ov = document.getElementById('pp-dialog-modal');
-  const box = ov.querySelector('.modal-content');
-  const message = ov.querySelector('.pp-dialog-message');
-  const a = document.activeElement;
-  const r = box.getBoundingClientRect();
-  const body = ov.querySelector('.pp-modal-body');
-  return {
-    open: ov.style.display !== 'none',
-    title: ov.querySelector('h3').textContent,
-    lines: (message.textContent || '').split('\n'),
-    buttons: Array.from(ov.querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).map(b => b.textContent),
-    focus: a && a.closest && a.closest('#pp-dialog-modal') ? a.textContent : 'hors de la fenêtre : ' + (a && (a.id || a.tagName)),
-    box: { l: r.left, t: r.top, r: r.right, b: r.bottom },
-    whiteSpace: getComputedStyle(message).whiteSpace,
-    scroll: { client: body.clientHeight, content: body.scrollHeight },
-  };
-});
-// Un bouton de la question, par son libellé : vrai déplacement puis vrai clic.
-async function clickChoice(label) {
-  const c = await page.evaluate(text => {
-    const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).find(x => !x.hidden && x.textContent === text);
-    if (!b) return null;
-    const r = b.getBoundingClientRect();
-    const x = r.x + r.width / 2, y = r.y + r.height / 2;
-    const top = document.elementFromPoint(x, y);
-    return { x, y, onTop: !!top && (top === b || b.contains(top)) };
-  }, label);
-  if (!c) throw new Error('bouton introuvable dans la question : ' + label);
-  await page.mouse.move(c.x - 12, c.y, { steps: 2 });
-  await page.mouse.move(c.x, c.y, { steps: 3 });
-  await page.mouse.click(c.x, c.y);
-  await page.waitForTimeout(300);
-  return c;
-}
-const buttonSeen = label => page.evaluate(text => {
-  const b = Array.from(document.querySelectorAll('#pp-dialog-modal .pp-modal-actions button')).find(x => !x.hidden && x.textContent === text);
-  if (!b) return false;
-  const r = b.getBoundingClientRect();
-  const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-  return r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 && !!top && (top === b || b.contains(top));
-}, label);
-async function waitInserted(n = 1) { await page.waitForFunction(count => document.querySelectorAll('.tiptap img.editor-image').length === count, n, { timeout: 15000 }); await page.waitForTimeout(250); }
-// Le curseur passe après l'image et la souris se gare : ni barre flottante ni survol ne couvrent son bord avant la mesure.
-async function leaveImage() {
-  await page.keyboard.press('ArrowRight');
-  await page.mouse.move(2, 2);
-  await page.waitForTimeout(250);
-}
-// Le haut de l'image au premier plan, amené en haut de la zone visible : l'image par défaut (320 px de côté, ~190 px à 700x400) est presque aussi haute que la zone.
-async function imageTop(selector) {
-  return page.evaluate(sel => {
-    const e = document.querySelector(sel);
-    if (!e) return null;
-    e.scrollIntoView({ block: 'start', inline: 'nearest' });
-    const r = e.getBoundingClientRect();
-    const top = document.elementFromPoint(r.left + r.width / 2, r.top + 3);
-    return { left: r.left, top: r.top, width: r.width, height: r.height, onTop: top === e };
-  }, selector);
-}
-
-async function checkQuestionWindow(T, { english = false } = {}) {
-  const [title, message, keep, embed, cancel] = await Promise.all([QUESTION_TITLE(), tr('dialog.imageExternal.message', { site: INSERT_HOST }), tr('dialog.imageExternal.keep'), tr('dialog.imageExternal.embed'), tr('common.cancel')]);
-  const s = await questionState();
-  const lines = message.split('\n');
-  check(`${T}, insertion : la question s'ouvre dans le panneau ${WIDTH}x${HEIGHT} sous le titre « ${title} », avec le site de l'adresse`, s.open && inPanel(s.box) && s.title === title && JSON.stringify(s.lines) === JSON.stringify(lines) && lines[0].includes(INSERT_HOST), s);
-  check(`${T}, insertion : trois boutons « ${cancel} », « ${keep} », « ${embed} », le focus est sur « ${embed} » (par défaut)`, JSON.stringify(s.buttons) === JSON.stringify([cancel, keep, embed]) && s.focus === embed, s);
-  check(`${T}, insertion : le message garde ses retours à la ligne et tient sans défiler`, s.whiteSpace === 'pre-line' && s.scroll.content <= s.scroll.client + 1, s);
-  const seenAll = (await Promise.all([hitTest('#pp-dialog-modal h3').then(seen), buttonSeen(cancel), buttonSeen(keep), buttonSeen(embed)]));
-  check(`${T}, insertion : le titre et les trois boutons sont visibles et au premier plan`, seenAll.every(Boolean), seenAll);
-  if (english) check(`${T}, insertion : les textes sont ceux de l'anglais`, s.title === 'Image from an external site' && JSON.stringify(s.buttons) === '["Cancel","Keep link","Embed image"]' && s.lines[0] === `This image is hosted on an external site (${INSERT_HOST}).`, s);
-  return { keep, embed, cancel };
-}
-
+const requestsAll = () => net.fetch.length + net.image.length;
 async function runInsert(T, { dark = false, english = false } = {}) {
-  useInsertHost(T);
   if (dark) await page.evaluate(() => Settings.setTheme('dark'));
   if (english) await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(200);
-  await resetDocument();
-
-  // L'adresse d'un autre site : la question, et rien n'est téléchargé ni inséré tant qu'elle est ouverte.
-  await typeImageUrl(INSERT_URL);
-  const { keep, embed, cancel } = await checkQuestionWindow(T, { english });
-  check(`${T}, insertion : rien n'est téléchargé ni inséré tant que la question est ouverte`, net.fetch.length === 0 && requestsTo(INSERT_HOST) === 0 && (await insertedImages()) === 0, { fetch: net.fetch, image: net.image });
-  await snap(`insertion-${T}-question`);
-  if (dark) {
-    const colors = await page.evaluate(() => {
-      const ov = document.getElementById('pp-dialog-modal');
-      const cs = e => getComputedStyle(e);
-      return { box: cs(ov.querySelector('.modal-content')).backgroundColor, text: cs(ov.querySelector('.pp-dialog-message')).color, title: cs(ov.querySelector('h3')).color };
-    });
-    check(`${T}, insertion : le texte et le titre de la question se lisent sur son fond (≥ 4,5:1)`, ratio(colors.text, colors.box) >= 4.5 && ratio(colors.title, colors.box) >= 4.5, { colors, text: ratio(colors.text, colors.box), title: ratio(colors.title, colors.box) });
-  }
-
-  // Annuler (clic réel) : aucune image, rien de téléchargé. Échap de même. Tab reste dans la question.
-  const inside = [];
-  for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); inside.push((await questionState()).focus.startsWith('hors') ? 'dehors' : 'dedans'); }
-  check(`${T}, insertion : six appuis sur Tab restent dans la question`, inside.every(x => x === 'dedans'), inside);
-  await clickChoice(cancel);
-  check(`${T}, insertion : « ${cancel} » (vrai clic) ferme la question sans rien insérer ni télécharger`, !(await isOpen()) && (await insertedImages()) === 0 && requestsTo(INSERT_HOST) === 0, { images: await insertedImages(), fetch: net.fetch, image: net.image });
-  await typeImageUrl(INSERT_URL);
-  await page.keyboard.press('Escape');
-  await waitClosed();
-  check(`${T}, insertion : Échap de même`, (await insertedImages()) === 0 && requestsTo(INSERT_HOST) === 0, { images: await insertedImages(), fetch: net.fetch, image: net.image });
-
-  // « Garder le lien » (clic réel) : l'adresse telle qu'elle a été tapée, aucun téléchargement par le widget, l'image reste signalée - sur une vraie capture aussi.
-  await typeImageUrl(INSERT_URL);
-  await clickChoice(keep);
-  await waitInserted(1);
-  check(`${T}, insertion : « ${keep} » (vrai clic) insère l'image avec l'adresse tapée, sans que le widget la télécharge`, !(await isOpen()) && (await insertedSrc()) === INSERT_URL && net.fetch.length === 0, { src: await insertedSrc(), fetch: net.fetch });
-  await leaveImage();
-  const keptState = await editorImages();
-  check(`${T}, insertion : le lien gardé s'affiche tout de suite, sans cadre « ${await tr('image.blocked.show')} » (l'accord pour ce site est donné) : l'image est chargée`, keptState.blocked === 0 && keptState.loaded === 1 && requestsTo(INSERT_HOST) >= 1, { keptState, image: net.image });
-  const kept = await outlineOf(`.tiptap img[src^="https://${INSERT_HOST}"]`);
-  const tip = await tr('image.externalSite', { site: INSERT_HOST });
-  const keptBox = await imageTop(`.tiptap img[src^="https://${INSERT_HOST}"]`);
-  const redKept = await redPixels(keptBox);
-  check(`${T}, insertion : le lien gardé reste signalé - hôte, infobulle, tirets rouges (${redKept} pixels rouges sur une vraie capture)`, !!kept && kept.site === INSERT_HOST && kept.title === tip && DASHED_RED(kept) && keptBox.onTop && redKept >= 25, { kept, redKept, keptBox });
-  await snap(`insertion-${T}-lien-garde`);
-
-  // « Intégrer l'image » (clic réel) : une image copiée dans le modèle, téléchargée une fois, sans rien d'un autre site.
-  await resetDocument();
-  await typeImageUrl(INSERT_URL);
-  await clickChoice(embed);
-  await waitInserted(1);
-  const embeddedSrc = await insertedSrc();
-  check(`${T}, insertion : « ${embed} » (vrai clic) télécharge l'image une fois et l'insère en data:, sans l'adresse du site`, !(await isOpen()) && !!embeddedSrc && embeddedSrc.startsWith('data:image/') && net.fetch.length === 1 && net.fetch[0] === INSERT_URL && !embeddedSrc.includes(INSERT_HOST), { src: embeddedSrc && embeddedSrc.slice(0, 40), fetch: net.fetch });
-  await leaveImage();
-  const embedded = await outlineOf('.tiptap img.editor-image');
-  const embeddedBox = await imageTop('.tiptap img.editor-image');
-  const redEmbedded = await redPixels(embeddedBox);
-  check(`${T}, insertion : l'image intégrée n'a ni hôte, ni infobulle, ni tirets (${redEmbedded} pixel rouge sur une vraie capture)`, !!embedded && embedded.site === null && !embedded.title && embedded.style !== 'dashed' && embeddedBox.onTop && redEmbedded === 0, { embedded, redEmbedded, embeddedBox });
-  await snap(`insertion-${T}-image-integree`);
+  await page.evaluate(() => Editor.setHTML('<p>Texte</p>'));
+  net.fetch.length = 0; net.image.length = 0;
+  await page.waitForTimeout(150);
+  const reason = await tr('lock.imagePaste');
+  const grey = await page.evaluate(() => { const b = document.getElementById('v2-btn-image'); return { locked: b.classList.contains('v2-hf-locked'), blocks: b.hasAttribute('data-pp-lock-blocks'), title: b.getAttribute('title') }; });
+  check(`${T}, image : le bouton « Insérer une image » est grisé, son info-bulle dit comment faire`, grey.locked && grey.blocks && grey.title === reason, grey);
+  await realClick('#v2-btn-image', 300);
+  const bubble = await page.evaluate(() => ({ open: LockBubble.isOpen(), onButton: LockBubble.current() === document.getElementById('v2-btn-image'), text: (document.querySelector('.pp-lockbubble-why') || {}).textContent || '' }));
+  check(`${T}, image : un clic réel n'ouvre aucune fenêtre de saisie, ne demande rien et n'insère rien`, !(await isOpen()) && (await page.evaluate(() => document.querySelectorAll('.tiptap img').length)) === 0, { open: await isOpen() });
+  check(`${T}, image : la bulle sous le bouton dit de copier l'image puis de la coller`, bubble.open && bubble.onButton && bubble.text === reason, bubble);
+  check(`${T}, image : aucune requête n'est partie vers un autre site`, requestsAll() === 0, { fetch: net.fetch, image: net.image });
+  await snap(`insertion-${T}-bouton-grise`);
+  await realClick('#v2-btn-image', 300);
+  check(`${T}, image : un second clic referme la bulle`, !(await page.evaluate(() => LockBubble.isOpen())));
   if (dark) await page.evaluate(() => Settings.setTheme('light'));
   if (english) await page.evaluate(() => I18n.setLang('fr'));
-}
-
-// Le reste, en clair : tout au clavier (Entrée dans la saisie puis Entrée sur le choix par défaut), une adresse data: sans question, un site dont le téléchargement échoue.
-async function runInsertMore(T) {
-  await resetDocument();
-  await typeImageUrl(INSERT_URL, { enter: true });
-  check(`${T}, insertion au clavier : Entrée dans la saisie ouvre la question, le focus est sur « ${await tr('dialog.imageExternal.embed')} »`, (await questionState()).focus === await tr('dialog.imageExternal.embed'), await questionState());
-  await page.keyboard.press('Enter');
-  await waitInserted(1);
-  const src = await insertedSrc();
-  check(`${T}, insertion au clavier : Entrée sur le choix par défaut intègre l'image (data:), rien d'autre à faire`, !!src && src.startsWith('data:image/') && net.fetch.length === 1 && !(await isOpen()), { src: src && src.slice(0, 40), fetch: net.fetch });
-
-  // Une adresse data: n'envoie personne ailleurs : aucune question.
-  await resetDocument();
-  await realClick('#v2-btn-image', 300);
-  await page.keyboard.type(DATA_PNG);
-  await click(OK);
-  await waitInserted(1);
-  check(`${T}, insertion : une adresse data: s'insère tout de suite, sans la question`, !(await isOpen()) && (await insertedSrc()) === DATA_PNG, { open: await isOpen(), src: (await insertedSrc() || '').slice(0, 30) });
-
-  // Un site dont le téléchargement échoue : l'alerte d'avant est gardée, le lien est gardé et signalé comme tout lien d'un autre site.
-  await resetDocument();
-  const REFUSE_URL = `https://${REFUSE_HOST}/logo.png`;
-  const alertsBefore = nativeDialogs.length;
-  await typeImageUrl(REFUSE_URL);
-  await clickChoice(await tr('dialog.imageExternal.embed'));
-  await waitInserted(1);
-  const alerts = nativeDialogs.splice(alertsBefore);
-  check(`${T}, insertion : un site dont le téléchargement échoue - une seule alerte (celle de toujours), le lien est gardé`, alerts.length === 1 && alerts[0] === 'alert : ' + await tr('image.corsWarning') && (await insertedSrc()) === REFUSE_URL, { alerts: alerts.map(a => a.slice(0, 60)), src: await insertedSrc() });
-  await leaveImage();
-  const refused = await outlineOf(`.tiptap img[src^="https://${REFUSE_HOST}"]`);
-  check(`${T}, insertion : ce lien gardé malgré lui est signalé en tirets rouges`, !!refused && refused.site === REFUSE_HOST && DASHED_RED(refused), refused);
 }
 
 // 8) L'affichage d'un site ne dure que la séance de la page : le vrai clic n'écrit rien, et la page rechargée remet le cadre (rien n'a été retenu, aucune requête vers le site).
@@ -1073,7 +895,6 @@ try {
   await runDisplay('sombre', { dark: true });
   await runDisplay('anglais', { english: true });
   await runInsert('clair');
-  await runInsertMore('clair');
   await runInsert('sombre', { dark: true });
   await runInsert('anglais', { english: true });
   await runReload('clair');

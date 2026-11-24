@@ -1,241 +1,89 @@
 // Suite "images" - insertion, position (en ligne aligné gauche/centre/
 // droite, calque devant/derrière), redimensionnement (poignées réelles),
 // zoom +/-/taille d'origine, opacité, bascule ligne/bloc, suppression.
-// Image en data: URI (1x1 PNG) - contourne toute dépendance réseau ET la
-// conversion en data URI (urlToDataUriOrWarn retourne immédiatement pour
-// un src data:, cf. main-toolbar.js), donc rien à attendre ni simuler côté
-// chargement réseau pour la plupart des cas ci-dessous. Deux cas dédiés
-// plus bas exercent la vraie conversion http(s) -> data: (retour Antoine,
-// 2026-09-28), via des chemins servis par le serveur de test lui-même
-// (même origine : intégrée sans question, pas de CORS réel à simuler).
-// Une adresse d'un AUTRE site pose la question « Intégrer l'image » / « Garder
-// le lien » (choix d'Antoine, 04/10) : les cas « img_insert_external_url_* »,
-// avec `fetch` remplacé pour les adresses en « .test ».
+// Image en data: URI (1x1 PNG), posée comme le collage d'une image la pose
+// (Editor.insertImageAtDefaultSize, via h.insertImage). Le bouton « Insérer une
+// image » ne prend plus d'adresse depuis le 24/11 (« plus aucun appel vers un autre
+// site », choix d'Antoine : « Coller seulement ») : il est grisé, son clic dit comment
+// faire (les deux cas « img_insert_button_* » ci-dessous), et les cas d'adresse
+// (conversion en data URI, question « Intégrer l'image » / « Garder le lien ») ont disparu avec lui.
 (function () {
   const DATA_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   const cases = [];
 
-  async function insertImageViaToolbar(h) {
-    const dialogs = h.stubDialogs({ prompt: DATA_PNG });
-    await h.clickButton('v2-btn-image');
-    dialogs.restore();
-    await h.sleep(80);
+  // Une image posée comme le collage la pose ; rend son <img> dans l'éditeur.
+  async function insertDataImage(h) {
+    await h.insertImage(DATA_PNG);
+    await h.sleep(50);
     return h.tiptap().querySelector('img.editor-image');
   }
 
   cases.push({
     id: 'img_insert_basic',
-    description: 'Insertion d\'une image via le bouton toolbar (invite URL)',
+    description: 'Insertion d\'une image comme le collage la pose (Editor.insertImageAtDefaultSize)',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       return { pass: !!img && img.getAttribute('src') === DATA_PNG, notes: Editor.getHTML() };
     },
   });
 
   cases.push({
-    id: 'img_insert_from_url_converts_to_data_uri',
-    description: 'Image insérée depuis une vraie URL http(s) : convertie en data: URI dès l\'insertion, l\'URL brute n\'est jamais stockée dans le modèle (retour Antoine, 2026-09-28)',
+    id: 'img_insert_button_is_greyed_and_says_how_to_paste',
+    description: 'Le bouton « Insérer une image » reste dans la barre, GRISÉ (jamais retiré) : sa raison - copier l\'image puis la coller, ou une pièce jointe par « Image depuis une variable » - est son info-bulle ; son menu au survol garde ses lignes (le groupe n\'est pas grisé)',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      // Chemin relatif servi par le serveur de test lui-même (même origine que la page) : un
-      // vrai fetch() a bien lieu, sans dépendre d'un hôte externe ni se heurter au CORS.
-      const dialogs = h.stubDialogs({ prompt: '/img/grist-factory-logo.jpg' });
-      await h.clickButton('v2-btn-image');
-      dialogs.restore();
-      await h.sleep(150);
-      const img = h.tiptap().querySelector('img.editor-image');
-      const src = img && img.getAttribute('src');
-      return {
-        pass: !!src && src.startsWith('data:image/') && !src.includes('grist-factory-logo'),
-        notes: src ? src.slice(0, 60) + '…' : '(aucune image)',
+      MainToolbar.syncToolbarState();
+      const button = document.getElementById('v2-btn-image');
+      const group = document.getElementById('v2-image-group');
+      const reason = I18n.t('lock.imagePaste');
+      const flyoutRows = Array.from(document.querySelectorAll('#v2-image-flyout .v2-hover-row, #v2-image-flyout .v2-menu-row')).map(row => row.id);
+      const checks = {
+        greyed: button.classList.contains('v2-hf-locked'),
+        stopsTheClick: button.hasAttribute('data-pp-lock-blocks'),
+        title: button.getAttribute('title') === reason,
+        saysPaste: /Ctrl\+V/.test(reason) && /Image depuis une variable|Image from a variable/.test(reason),
+        groupOpen: !group.classList.contains('v2-hf-locked') && !group.hasAttribute('data-pp-lock-blocks'),
+        flyoutKept: flyoutRows.includes('v2-btn-image-from-variable') && flyoutRows.includes('v2-btn-chart-make'),
+        // Le nom lu par un lecteur d'écran ne parle plus d'adresse.
+        ariaWithoutUrl: !/URL|adresse/i.test(button.getAttribute('aria-label') || ''),
       };
+      return { pass: Object.values(checks).every(Boolean), notes: JSON.stringify(checks) };
     },
   });
 
   cases.push({
-    id: 'img_insert_from_url_fetch_failure_keeps_raw_url_and_warns',
-    description: 'Image insérée depuis une URL introuvable (404) : conversion impossible, repli sur l\'URL brute + avertissement affiché (au lieu de bloquer l\'insertion)',
+    id: 'img_insert_button_click_asks_nothing_and_inserts_nothing',
+    description: 'Un clic sur le bouton grisé n\'ouvre ni fenêtre d\'adresse ni question et n\'insère rien : la bulle d\'une icône grisée dit la raison sous le bouton ; un second clic la referme',
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const dialogs = h.stubDialogs({ prompt: '/img/n-existe-pas-404.png' });
-      const origAlert = window.alert;
-      let alertShown = false;
-      window.alert = () => { alertShown = true; };
-      await h.clickButton('v2-btn-image');
-      // clickButton ne fait qu'un sleep(30) fixe - le bind() du bouton est async (fetch 404 puis
-      // insertion) et n'est pas attendu par le clic lui-même. Restaurer window.alert tout de suite
-      // gagnait la course la plupart du temps mais pas sous charge (flaky, signalé par le
-      // coordinateur, 2026-09-28) : on attend le vrai signal (alerte déclenchée OU image déjà
-      // insérée avec l'URL de repli) avant de rendre la main aux globals d'origine.
-      const deadline = Date.now() + 3000;
-      while (!alertShown && !h.tiptap().querySelector('img.editor-image') && Date.now() < deadline) {
-        await h.sleep(20);
+      MainToolbar.syncToolbarState();
+      const asked = [];
+      const dialogs = h.stubDialogs({ prompt: () => { asked.push('prompt'); return 'https://images.exemple.test/logo.png'; }, choose: () => { asked.push('choose'); return 'embed'; } });
+      const fetched = [];
+      const original = window.fetch;
+      window.fetch = function (input, init) { fetched.push(String(typeof input === 'string' ? input : input && input.url)); return original.call(window, input, init); };
+      let first;
+      let second;
+      try {
+        await h.clickButton('v2-btn-image');
+        await h.sleep(120);
+        first = { open: LockBubble.isOpen(), onButton: LockBubble.current() === document.getElementById('v2-btn-image'), text: (document.querySelector('.pp-lockbubble-why') || {}).textContent || '' };
+        await h.clickButton('v2-btn-image');
+        await h.sleep(60);
+        second = { open: LockBubble.isOpen() };
+      } finally {
+        LockBubble.close();
+        dialogs.restore();
+        window.fetch = original;
       }
-      dialogs.restore();
-      window.alert = origAlert;
-      await h.sleep(50);
-      const img = h.tiptap().querySelector('img.editor-image');
-      const src = img && img.getAttribute('src');
+      const images = h.tiptap().querySelectorAll('img.editor-image').length;
       return {
-        pass: alertShown && src === '/img/n-existe-pas-404.png',
-        notes: { alertShown, src },
-      };
-    },
-  });
-
-  // --- Image d'un AUTRE site : la question « Intégrer l'image » / « Garder le lien » (choix d'Antoine du 04/10, contrôle de sécurité) ---------------------------------
-  // Les adresses sont en « .test » (jamais résolues) et `fetch` est remplacé le temps d'un cas : les adresses « .test » sont notées et reçoivent une image (« refuse » dans
-  // le nom : le site refuse, comme un CORS), le reste passe aux vrais fichiers du harnais.
-  const EXTERNAL_URL = 'https://images.exemple.test/logo.png';
-  const EXTERNAL_HOST = 'images.exemple.test';
-  function stubFetch() {
-    const original = window.fetch;
-    const urls = [];
-    window.fetch = function (input, init) {
-      const url = String(typeof input === 'string' ? input : input && input.url);
-      if (!/^https?:\/\/[^/]*\.test(:\d+)?\//.test(url)) return original.call(window, input, init);
-      urls.push(url);
-      if (/refuse/.test(url)) return Promise.reject(new TypeError('Failed to fetch'));
-      const bytes = Uint8Array.from(atob(DATA_PNG.split(',')[1]), c => c.charCodeAt(0));
-      return Promise.resolve(new Response(new Blob([bytes], { type: 'image/png' }), { status: 200 }));
-    };
-    return { urls, restore() { window.fetch = original; } };
-  }
-  // Un clic sur « Insérer une image » avec l'adresse tapée et la réponse donnée à la question ; `choose` : 'keep', 'embed' ou null (annulée). On attend l'image (ou 400 ms
-  // quand aucune ne doit venir : le gestionnaire du bouton est asynchrone, le clic ne l'attend pas). Rend ce qui a été demandé, téléchargé et inséré.
-  async function insertByUrl(h, typed, choose, { expectImage = true, alert = false } = {}) {
-    const fetches = stubFetch();
-    const asked = [];
-    const dialogs = h.stubDialogs({ prompt: typed, choose: opts => { asked.push({ fetchesAtAsk: fetches.urls.length, opts }); return choose; } });
-    const origAlert = window.alert;
-    let alertShown = false;
-    window.alert = () => { alertShown = true; };
-    await h.clickButton('v2-btn-image');
-    const deadline = Date.now() + (expectImage ? 3000 : 400);
-    while (Date.now() < deadline && !(expectImage && h.tiptap().querySelector('img.editor-image') && (!alert || alertShown))) await h.sleep(20);
-    await h.sleep(120);
-    dialogs.restore(); fetches.restore(); window.alert = origAlert;
-    const image = h.tiptap().querySelector('img.editor-image');
-    return { asked, fetched: fetches.urls, alertShown, image, src: image && image.getAttribute('src') };
-  }
-
-  cases.push({
-    id: 'img_insert_external_url_asks_embed_or_keep',
-    description: 'Adresse d\'une image d\'un autre site : une question « Intégrer l\'image » (par défaut) / « Garder le lien », posée après l\'adresse et AVANT tout téléchargement, qui nomme le site',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const r = await insertByUrl(h, EXTERNAL_URL, 'embed');
-      const q = r.asked[0] && r.asked[0].opts;
-      const labels = q && q.choices.map(c => c.label);
-      return {
-        pass: r.asked.length === 1 && r.asked[0].fetchesAtAsk === 0 && q.title === I18n.t('dialog.imageExternal.title')
-          && q.message === I18n.t('dialog.imageExternal.message', { site: EXTERNAL_HOST }) && q.message.includes(EXTERNAL_HOST)
-          && JSON.stringify(q.choices.map(c => c.value)) === '["keep","embed"]' && q.choices[1].primary === true && !q.choices[0].primary
-          && JSON.stringify(labels) === JSON.stringify([I18n.t('dialog.imageExternal.keep'), I18n.t('dialog.imageExternal.embed')]),
-        notes: { asked: r.asked.length, fetchesAtAsk: r.asked[0] && r.asked[0].fetchesAtAsk, title: q && q.title, labels, primary: q && q.choices.filter(c => c.primary).map(c => c.value) },
-      };
-    },
-  });
-
-  cases.push({
-    id: 'img_insert_external_url_embed_converts_to_data_uri',
-    description: '« Intégrer l\'image » : l\'image est téléchargée une fois, insérée en data: URI, l\'adresse du site n\'est pas dans le modèle et l\'image n\'est pas signalée',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const r = await insertByUrl(h, EXTERNAL_URL, 'embed');
-      const html = Editor.getHTML();
-      return {
-        pass: !!r.src && r.src.startsWith('data:image/') && JSON.stringify(r.fetched) === JSON.stringify([EXTERNAL_URL]) && !html.includes(EXTERNAL_HOST)
-          && !r.image.hasAttribute('data-external-site') && !r.alertShown,
-        notes: { src: r.src && r.src.slice(0, 40), fetched: r.fetched, flagged: r.image && r.image.getAttribute('data-external-site'), alert: r.alertShown },
-      };
-    },
-  });
-
-  cases.push({
-    id: 'img_insert_external_url_keep_link_stays_flagged',
-    description: '« Garder le lien » : l\'adresse est gardée telle quelle, rien n\'est téléchargé à l\'insertion, et l\'image reste signalée (hôte, infobulle, contour en tirets rouges)',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const r = await insertByUrl(h, EXTERNAL_URL, 'keep');
-      const outline = r.image && getComputedStyle(r.image).outlineStyle;
-      return {
-        pass: r.src === EXTERNAL_URL && r.fetched.length === 0 && r.image.getAttribute('data-external-site') === EXTERNAL_HOST
-          && r.image.title === I18n.t('image.externalSite', { site: EXTERNAL_HOST }) && outline === 'dashed' && !r.alertShown && Editor.getHTML().includes(EXTERNAL_URL),
-        notes: { src: r.src, fetched: r.fetched, flagged: r.image && r.image.getAttribute('data-external-site'), outline, alert: r.alertShown },
-      };
-    },
-  });
-
-  cases.push({
-    id: 'img_insert_external_url_cancel_inserts_nothing',
-    description: 'Question annulée (Annuler, Échap) : aucune image, aucun téléchargement, le document est inchangé',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      await h.typeText('Avant');
-      const before = Editor.getHTML();
-      const r = await insertByUrl(h, EXTERNAL_URL, null, { expectImage: false });
-      return {
-        pass: r.asked.length === 1 && !r.image && r.fetched.length === 0 && !r.alertShown && Editor.getHTML() === before,
-        notes: { asked: r.asked.length, image: !!r.image, fetched: r.fetched, same: Editor.getHTML() === before },
-      };
-    },
-  });
-
-  cases.push({
-    id: 'img_insert_external_url_embed_failure_keeps_link_and_warns',
-    description: '« Intégrer l\'image » sur un site qui refuse le téléchargement : l\'alerte s\'affiche et le lien est gardé, signalé comme tout lien d\'un autre site',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const url = 'https://refuse.exemple.test/logo.png';
-      const r = await insertByUrl(h, url, 'embed', { alert: true });
-      return {
-        pass: r.alertShown && r.src === url && JSON.stringify(r.fetched) === JSON.stringify([url]) && r.image.getAttribute('data-external-site') === 'refuse.exemple.test',
-        notes: { alert: r.alertShown, src: r.src, fetched: r.fetched, flagged: r.image && r.image.getAttribute('data-external-site') },
-      };
-    },
-  });
-
-  cases.push({
-    id: 'img_insert_url_no_question_for_data_and_same_site',
-    description: 'Une adresse data: ou du même site que le widget n\'envoie personne ailleurs : intégrée comme avant, sans question',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const data = await insertByUrl(h, DATA_PNG, 'keep');
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const same = await insertByUrl(h, '/img/grist-factory-logo.jpg', 'keep');
-      return {
-        pass: data.asked.length === 0 && data.src === DATA_PNG && same.asked.length === 0 && !!same.src && same.src.startsWith('data:image/'),
-        notes: { dataAsked: data.asked.length, dataSrc: data.src && data.src.slice(0, 30), sameAsked: same.asked.length, sameSrc: same.src && same.src.slice(0, 30) },
-      };
-    },
-  });
-
-  cases.push({
-    id: 'img_insert_url_spaces_trimmed',
-    description: 'Une adresse collée avec des espaces ou un retour à la ligne autour : l\'adresse gardée et celle de la question sont nettoyées ; des espaces seuls ne demandent ni n\'insèrent rien',
-    run: async (h) => {
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const padded = await insertByUrl(h, '  ' + EXTERNAL_URL + ' \n', 'keep');
-      await h.resetEditor();
-      await h.focusAtEnd();
-      const blank = await insertByUrl(h, '   ', 'keep', { expectImage: false });
-      return {
-        pass: padded.src === EXTERNAL_URL && padded.asked.length === 1 && padded.asked[0].opts.message.includes('(' + EXTERNAL_HOST + ')')
-          && blank.asked.length === 0 && !blank.image && blank.fetched.length === 0,
-        notes: { paddedSrc: padded.src, blankAsked: blank.asked.length, blankImage: !!blank.image },
+        pass: asked.length === 0 && fetched.filter(url => /exemple\.test/.test(url)).length === 0 && images === 0 && first.open && first.onButton && first.text === I18n.t('lock.imagePaste') && second.open === false,
+        notes: JSON.stringify({ asked, images, first, second }),
       };
     },
   });
@@ -247,7 +95,7 @@
       run: async (h) => {
         await h.resetEditor();
         await h.focusAtEnd();
-        const img = await insertImageViaToolbar(h);
+        const img = await insertDataImage(h);
         await h.selectAtomNode(img);
         const btn = document.querySelector('.v2-floating-toolbar button[data-action="align-' + align + '"]');
         if (!btn) return { pass: false, notes: 'toolbar image non trouvée après sélection - html=' + h.tiptap().innerHTML };
@@ -268,7 +116,7 @@
         await h.resetEditor();
         await h.focusAtEnd();
         await h.typeText('Texte autour de l\'image');
-        const img = await insertImageViaToolbar(h);
+        const img = await insertDataImage(h);
         await h.selectAtomNode(img);
         const btn = document.querySelector('.v2-floating-toolbar button[data-action="layer-' + layer + '"]');
         if (!btn) return { pass: false, notes: 'toolbar image non trouvée' };
@@ -286,7 +134,7 @@
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       img.style.width = '100px';
       await h.sleep(30);
       await h.selectAtomNode(img);
@@ -307,7 +155,7 @@
       run: async (h) => {
         await h.resetEditor();
         await h.focusAtEnd();
-        const img = await insertImageViaToolbar(h);
+        const img = await insertDataImage(h);
         img.style.width = '150px';
         await h.sleep(30);
         await h.selectAtomNode(img);
@@ -329,7 +177,7 @@
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       img.style.width = '200px';
       await h.sleep(30);
       await h.selectAtomNode(img);
@@ -363,7 +211,7 @@
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       for (let i = 0; i < 3; i++) {
         const zoomBtn = document.querySelector('.v2-floating-toolbar button[data-action="zoom-in"]');
@@ -389,7 +237,7 @@
       await h.resetEditor();
       await h.focusAtEnd();
       await h.typeText('Autour');
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
       if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
@@ -412,7 +260,7 @@
       await h.resetEditor();
       await h.focusAtEnd();
       await h.typeText('Une phrase avec une image ');
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       const before = Editor.getHTML();
       const wrapBtn = document.querySelector('.v2-floating-toolbar button[data-action="wrap"]');
@@ -430,7 +278,7 @@
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       const delBtn = document.querySelector('.v2-floating-toolbar button[data-action="delete"]');
       if (!delBtn) return { pass: false, notes: 'toolbar image non trouvée' };
@@ -452,7 +300,7 @@
       await h.typeText('Second paragraphe');
       const paras = h.tiptap().querySelectorAll('p');
       await h.focusInElement(paras[paras.length - 1], true);
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
       if (!frontBtn) return { pass: false, notes: 'toolbar image non trouvée' };
@@ -471,7 +319,7 @@
       await h.resetEditor();
       await h.focusAtEnd();
       await h.typeText('Texte porteur');
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       const frontBtn = document.querySelector('.v2-floating-toolbar button[data-action="layer-front"]');
       frontBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -507,7 +355,7 @@
         ed.commands.setTextSelection(ed.view.posAtDOM(hostP, 0));
         ed.commands.focus();
         await h.sleep(50);
-        const img = await insertImageViaToolbar(h);
+        const img = await insertDataImage(h);
         const beforeRect = img.getBoundingClientRect();
         await h.selectAtomNode(img);
         await h.sleep(80);
@@ -612,7 +460,7 @@
     run: async (h) => {
       await h.resetEditor();
       await h.focusAtEnd();
-      const img = await insertImageViaToolbar(h);
+      const img = await insertDataImage(h);
       await h.selectAtomNode(img);
       const panel = Array.from(document.querySelectorAll('.v2-floating-toolbar')).find(b => b.querySelector('input[data-role="opacity"]'));
       if (!panel || !panel.classList.contains('visible')) return { pass: false, notes: 'barre image non affichée après la sélection de l\'image' };

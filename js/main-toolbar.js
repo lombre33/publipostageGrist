@@ -164,42 +164,6 @@ const MainToolbar = (function () {
     box.style.display = 'block';
     ViewportFit.placePopup(box, rect, { gap: 4 });
   }
-  // Image insérée par URL : convertie en data URI avant insertion (même fetch que js/pdf-export.js:inlineEditorImagesAsDataUri, avancé à l'import),
-  // pour que l'URL externe ne soit pas stockée dans le modèle. Si la conversion échoue (CORS, réseau), l'URL brute reste : l'image s'affiche dans
-  // l'éditeur et en Lecture, seul l'export PDF/DOCX peut échouer à l'inclure, avec l'avertissement.
-  async function urlToDataUriOrWarn(src) {
-    if (!src || src.startsWith('data:')) return src;
-    try {
-      return await ImageIo.toDataUri(await ImageIo.fetchBlob(src));
-    } catch (e) {
-      console.warn('[Editor] image par URL non convertible en data URI (CORS/réseau), URL brute conservée :', src, e);
-      window.alert(I18n.t('image.corsWarning'));
-      // La personne vient de taper cette adresse et de demander à la copier : le site n'a rien à apprendre d'un affichage de plus, l'image s'affiche
-      // (js/external-images.js ; à la prochaine ouverture du modèle, elle attendra un clic « Afficher »).
-      ExternalImages.allow(ExternalImages.siteOf(src));
-      return src;
-    }
-  }
-  // L'adresse d'une image d'un autre site (ExternalImages.siteOf) se choisit une fois, à l'insertion (contrôle de sécurité) : « Intégrer l'image »
-  // (par défaut) la copie dans le modèle, « Garder le lien » garde l'adresse - elle se charge alors depuis ce site (après un clic « Afficher » à chaque
-  // ouverture du modèle) et reste signalée en rouge (js/external-images.js). Une adresse data: ou du même site que le widget n'envoie personne ailleurs : elle est intégrée sans
-  // question. Renvoie null quand la question est annulée (Annuler, Échap) : rien ne s'insère.
-  async function imageSourceFromUrl(url) {
-    const site = ExternalImages.siteOf(url);
-    if (!site) return urlToDataUriOrWarn(url);
-    const choice = await Dialogs.choose({
-      title: I18n.t('dialog.imageExternal.title'),
-      message: I18n.t('dialog.imageExternal.message', { site }),
-      choices: [
-        { value: 'keep', label: I18n.t('dialog.imageExternal.keep') },
-        { value: 'embed', label: I18n.t('dialog.imageExternal.embed'), primary: true },
-      ],
-    });
-    // « Garder le lien » est l'accord de la personne pour ce site : l'image s'affiche tout de suite. À la prochaine ouverture du modèle, elle attendra
-    // un clic « Afficher » comme toute image d'un autre site.
-    if (choice === 'keep') { ExternalImages.allow(site); return url; }
-    return choice === 'embed' ? urlToDataUriOrWarn(url) : null;
-  }
   function applyToolbarIcons() {
     const set = (id, icon) => { const el = byId(id); if (el) Dom.setMarkup(el, Icons.svg(icon)); };
     set('v2-btn-bold', 'bold'); set('v2-btn-italic', 'italic');
@@ -415,6 +379,8 @@ const MainToolbar = (function () {
       // Le sommaire a la condition de ce groupe, plus l'en-tête et le pied de page : une zone n'a que 60 px de hauteur, aucune liste de titres n'y a sa
       // place (une condition par bouton : un second groupe lèverait le grisé du premier).
       [mailOrMacro || inEmlMode || inHfMode, ['v2-btn-toc'], () => (mailOrMacro ? plain() : inEmlMode ? eml() : zone())],
+      // Le bouton « Insérer une image » seul (son groupe, lui, reste ouvert : son menu au survol garde « Image depuis une variable » et « Créer un graphique ») : grisé en tout mode, il dit comment faire - copier l'image puis la coller.
+      [true, ['v2-btn-image'], () => I18n.t('lock.imagePaste')],
       // Dans une grille ou dans un tableau de document, le bouton pose ou retire le saut avant la ligne sélectionnée : grisé sur la première ligne, au
       // milieu d'une case fusionnée sur plusieurs lignes, dans un tableau qui n'est pas du premier niveau du document et sous le suivi des modifications.
       // Dans un en-tête ou un pied de page, il est grisé aussi : aucune page ne s'ouvre dans une bande de 60 px, pas même avant une ligne de tableau.
@@ -799,14 +765,8 @@ const MainToolbar = (function () {
     // Dans un en-tête ou un pied de page, une seule ligne : la zone a 60 px de contenu, une ligne de tableau en prend 29 et deux dépasseraient (le trait rouge de la zone).
     bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: HeaderFooterPreview.getHfMode() ? 1 : 2, cols: 2, withHeaderRow: false }).run());
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
-    bind('v2-btn-image', async () => {
-      // Espaces autour d'une adresse collée retirés : ni dans la question, ni dans l'adresse gardée ; une saisie d'espaces seuls vaut une saisie
-      // vide.
-      const url = ((await Dialogs.prompt({ title: I18n.t('dialog.imageUrl.title'), label: I18n.t('image.urlPrompt'), confirmLabel: I18n.t('common.insert') })) || '').trim();
-      if (!url) return;
-      const src = await imageSourceFromUrl(url);
-      if (src !== null) await Editor.insertImageAtDefaultSize(src);
-    });
+    // « Insérer une image » ne prend plus d'adresse (24/11 : plus aucun appel vers un autre site) : le bouton est grisé (syncLocks) et son clic dit comment faire, une image se colle (js/editor.js,
+    // handlePaste) ; une pièce jointe de Grist passe par la ligne « Image depuis une variable » de son menu au survol.
     bind('v2-btn-image-from-variable', () => openImageVariablePicker(byId('v2-btn-image-from-variable')));
     // Une grille n'a pas de page : le bouton y pose le saut de la ligne (le PDF y commence une page, l'Excel une feuille) ; un second clic le retire.
     bind('v2-btn-page-break', () => {

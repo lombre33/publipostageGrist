@@ -366,28 +366,31 @@ const Editor = (function () {
 
   // Les images d'une page web collée. Copier une partie d'une page (texte et photos) ne met dans le presse-papiers que du HTML : chaque photo y est une `<img src="https://…">` (Chromium rend
   // l'adresse absolue et recopie sur la balise le style qui fixe sa largeur), aucune image « fichier » n'accompagne - seul « Copier l'image » du clic droit en joint une, que `handlePaste` prend
-  // déjà. L'éditeur ne lit que ses propres images (`img.editor-image`, js/editor-nodes.js) : ProseMirror écartait chaque `<img>` collée en silence et le texte arrivait sans aucune photo. Ici
-  // chacune redevient une image de l'éditeur, à la façon de l'import Markdown (js/markdown-import.js, `images`) : une adresse web (« //hôte » est prise pour https) ou une data URI d'image, jamais
-  // `javascript:`, `file:`, `blob:` ni un chemin relatif (une image lue depuis un fichier de l'ordinateur ne s'ouvrirait pas : elle reste écartée, comme avant). Rien d'autre de la balise n'est
-  // repris que l'adresse, le texte alternatif et la largeur - ni gestionnaire (`onerror`), ni `srcset`, ni style, ni classe : l'image est écrite à neuf, et la balise est construite par le navigateur,
-  // une adresse ou un texte qui porte des guillemets et des chevrons reste du texte. La largeur est celle que le PDF et le Word lisent, en px (l'attribut `width`, ou le style qui prime sur lui) ; en
-  // pourcentage, en em, absente, ou donnée par la seule hauteur, l'image prend la largeur de l'éditeur (320 px), comme une image insérée. Une image dont les deux mesures déclarées ne dépassent
-  // pas 2 px est le pixel espion d'une infolettre : elle n'est pas collée (son cadre « Afficher » aurait la taille d'une vraie image). Une image d'un autre site garde la règle de js/external-images.js :
-  // masquée jusqu'au clic « Afficher », le collage ne fait contacter aucun site, et l'export demande avant de la télécharger. Ce qui n'est pas gardé garde ses octets (la balise reste telle quelle,
-  // ProseMirror l'écarte) ; une image de l'éditeur (`editor-image`) n'est pas touchée.
+  // déjà. L'éditeur ne lit que ses propres images (`img.editor-image`, js/editor-nodes.js) : ProseMirror écarte chaque `<img>` collée en silence.
+  // Depuis le 24/11 (« plus aucun appel vers un autre site » : la politique de contenu de la page n'en admettra plus), l'adresse d'un site n'est PLUS reprise : le texte arrive sans la photo, et le coin d'état le dit
+  // avec le geste qui marche (`pp:webImagesNotPasted`, js/main.js : « Copier l'image » du clic droit, puis coller). Ne sont reprises que les images qui portent leurs octets (`data:image/…` : ce que Word, LibreOffice
+  // ou un logiciel de courrier écrivent dans leur HTML), à la façon de l'import Markdown (js/markdown-import.js) ; jamais `javascript:`, `file:`, `blob:` ni un chemin relatif (une image lue depuis un fichier de
+  // l'ordinateur ne s'ouvrirait pas : elle reste écartée, comme avant). Rien d'autre de la balise n'est repris que l'adresse, le texte alternatif et la largeur - ni gestionnaire (`onerror`), ni `srcset`, ni style, ni
+  // classe : l'image est écrite à neuf, et la balise est construite par le navigateur, un texte qui porte des guillemets et des chevrons reste du texte. La largeur est celle que le PDF et le Word lisent, en px
+  // (l'attribut `width`, ou le style qui prime sur lui) ; en pourcentage, en em, absente, ou donnée par la seule hauteur, l'image prend la largeur de l'éditeur (320 px), comme une image insérée. Une image dont les
+  // deux mesures déclarées ne dépassent pas 2 px est le pixel espion d'une infolettre : elle n'est pas collée, et pas comptée. Ce qui n'est pas gardé garde ses octets (la balise reste telle quelle, ProseMirror
+  // l'écarte) ; une image de l'éditeur (`editor-image`) n'est pas touchée (le copier-coller d'un passage du document lui-même).
   const PASTED_IMG_TAG = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
   const PASTED_PX = /^(\d+(?:\.\d+)?)(?:px)?$/i;
   const TRACKING_PIXEL_PX = 2;
   const declaredPx = value => { const found = PASTED_PX.exec(String(value || '').trim()); return found ? parseFloat(found[1]) : null; };
-  function pastedImageAsEditorImage(img) {
+  // `left` (facultatif) compte les images d'une adresse web que ce collage n'a pas reprises : { count }.
+  function pastedImageAsEditorImage(img, left) {
     if (!img || img.classList.contains('editor-image')) return null;
-    let src = (img.getAttribute('src') || '').trim();
-    if (/^\/\//.test(src)) src = 'https:' + src;
-    if (!/^https?:\/\//i.test(src) && !/^data:image\//i.test(src)) return null;
+    const src = (img.getAttribute('src') || '').trim();
+    const isData = /^data:image\//i.test(src);
+    const isWeb = /^(?:https?:)?\/\//i.test(src);
+    if (!isData && !isWeb) return null;
     // Le style prime sur l'attribut, comme à l'écran.
     const width = declaredPx(img.style.width) ?? declaredPx(img.getAttribute('width'));
     const height = declaredPx(img.style.height) ?? declaredPx(img.getAttribute('height'));
     if (width !== null && height !== null && width <= TRACKING_PIXEL_PX && height <= TRACKING_PIXEL_PX) return null;
+    if (!isData) { if (left) left.count += 1; return null; }
     const made = Dom.inertTemplate('<img>').content.firstElementChild;
     made.setAttribute('class', 'editor-image');
     made.setAttribute('src', src);
@@ -397,7 +400,10 @@ const Editor = (function () {
   }
   function webImagesAsEditorImages(html) {
     if (typeof html !== 'string' || !/<img\b/i.test(html)) return html;
-    return html.replace(PASTED_IMG_TAG, tag => pastedImageAsEditorImage(Dom.inertTemplate(tag).content.firstElementChild) || tag);
+    const left = { count: 0 };
+    const out = html.replace(PASTED_IMG_TAG, tag => pastedImageAsEditorImage(Dom.inertTemplate(tag).content.firstElementChild, left) || tag);
+    if (left.count && typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('pp:webImagesNotPasted', { detail: { count: left.count } }));
+    return out;
   }
 
   // Un texte brut collé dans un document (Notepad++, le Bloc-notes, un terminal, un fichier .md ouvert dans un éditeur de texte : le presse-papiers ne porte alors que `text/plain`) : une ligne,

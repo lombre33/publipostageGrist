@@ -121,10 +121,8 @@ window.EditorTestSuites.pageFormat = (function () {
     ed.commands.setTextSelection(ed.view.posAtDOM(anchorP, 0) + 5);
     ed.commands.focus();
     await h.sleep(80);
-    const dialogs = h.stubDialogs({ prompt: TINY_PNG });
-    document.getElementById('v2-btn-image').click();
+    await h.insertImage(TINY_PNG);
     await h.sleep(200);
-    dialogs.restore();
     const img = anchorP.querySelector('img.editor-image') || h.tiptap().querySelector('img.editor-image');
     if (!img) return { error: 'image non insérée' };
     await h.selectAtomNode(img);
