@@ -62,11 +62,15 @@
      filets et icônes (3:1 suffit). En sombre : la valeur de `--danger` (5,3:1 au moins). */
   --danger-ink: #c53030;
   /* Couleur de la sorte de modèle (demande du 21/10, « coloré l'icône comme dans GFS ») : l'icône de la liste des modèles (css/template-tree-select.css) prend la teinte que
-     l'explorateur de Grist Factory Suite donne à la même sorte, avec les mêmes jetons : document bleu, grille verte, présentation orange (l'e-mail et le macro-modèle n'ont pas de
-     couleur). 3:1 au moins sur --surface, --surface-sunken et --accent-soft, le fond d'une ligne choisie : clair 3,59 à 5,13, sombre 4,17 à 7,34. Le vert ne dit jamais un état. */
+     l'explorateur de Grist Factory Suite donne à la même sorte, avec les mêmes jetons : document bleu, grille verte, présentation orange (le macro-modèle les porte toutes les trois, une par feuille ; l'e-mail a la
+     sienne, ci-dessous). 3:1 au moins sur --surface, --surface-sunken et --accent-soft, le fond d'une ligne choisie : clair 3,59 à 5,13, sombre 4,17 à 7,34. Le vert ne dit jamais un état. */
   --t-doc: #2f6fed;
   --t-grid: #2e7d32;
   --t-slides: #c7600a;
+  /* L'e-mail (demande du 24/11, « Mail aussi prendre l'une des couleurs non utilisées ») : le violet, la seule teinte que rien d'autre ne porte (le rouge est ce qui est cassé, l'ambre ce
+     qui est sans lien, le vert la grille, le bleu l'accent). Une valeur de cette app, pas encore celle de l'explorateur de GFS (à lui dire). 4,5:1 au moins (et non 3:1) sur --surface, --surface-sunken et --accent-soft :
+     clair 5,49 à 6,30, sombre 5,25 à 6,35. Le macro-modèle n'a pas de jeton à lui : ses trois feuilles prennent --t-doc, --t-grid et --t-slides (css/template-tree-select.css). */
+  --t-email: #7a3fc4;
   --radius-sm: 7px;
   --shadow-float: 0 14px 32px -8px rgba(9,16,35,.35), 0 2px 8px rgba(9,16,35,.12);
   --shadow-card: 0 1px 2px rgba(20,28,46,.05);
@@ -140,6 +144,7 @@
   --t-doc: #5b91f5;
   --t-grid: #6cc57a;
   --t-slides: #f0933e;
+  --t-email: #b794f6;
   --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
   --shadow-card: 0 1px 2px rgba(0,0,0,.45);
   --pp-page-gutter: #10141b;
@@ -178,6 +183,7 @@
     --t-doc: #5b91f5;
     --t-grid: #6cc57a;
     --t-slides: #f0933e;
+    --t-email: #b794f6;
     --shadow-float: 0 14px 32px -8px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.45);
     --shadow-card: 0 1px 2px rgba(0,0,0,.45);
     --pp-page-gutter: #10141b;

@@ -31,8 +31,9 @@
 .tts-icon-new { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
 .tts-icon-document { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M7 2h7l4 4v16H7z'/%3E%3Cpath d='M14 2v4h4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M7 2h7l4 4v16H7z'/%3E%3Cpath d='M14 2v4h4'/%3E%3C/svg%3E"); }
 .tts-icon-email { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M3 6l9 7 9-7'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M3 6l9 7 9-7'/%3E%3C/svg%3E"); }
-/* Macro-modèle : plusieurs pages assemblées (planning/feature-macro-modeles.md). */
-.tts-icon-macro { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='16' rx='1.5'/%3E%3Cpath d='M7 2h11a1.5 1.5 0 0 1 1.5 1.5V18'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='14' height='16' rx='1.5'/%3E%3Cpath d='M7 2h11a1.5 1.5 0 0 1 1.5 1.5V18'/%3E%3C/svg%3E"); }
+/* Macro-modèle : plusieurs pages assemblées (planning/feature-macro-modeles.md). Trois feuilles en escalier, celle de devant entière, les deux autres réduites à leur bord haut et droit : une pour
+   chaque sorte qu'un macro-modèle assemble (document, grille, présentation). Un seul masque porte les trois ; la liste déroulante les peint chacune de sa couleur (plus bas) par trois zones. */
+.tts-icon-macro { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='10' width='12' height='12' rx='1.5'/%3E%3Cpath d='M6 6.5h9.5a1.5 1.5 0 0 1 1.5 1.5V19'/%3E%3Cpath d='M10 3h9a1.5 1.5 0 0 1 1.5 1.5V15'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='2' y='10' width='12' height='12' rx='1.5'/%3E%3Cpath d='M6 6.5h9.5a1.5 1.5 0 0 1 1.5 1.5V19'/%3E%3Cpath d='M10 3h9a1.5 1.5 0 0 1 1.5 1.5V15'/%3E%3C/svg%3E"); }
 /* Grille : un tableau de cases (js/grid-editor.js, planning/feature-mode-grille-excel.md). */
 .tts-icon-grille { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='1.5'/%3E%3Cpath d='M3 9.3h18M3 14.6h18M9 4v16M15 4v16'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='1.5'/%3E%3Cpath d='M3 9.3h18M3 14.6h18M9 4v16M15 4v16'/%3E%3C/svg%3E"); }
 /* Présentation : un écran de diapositives (js/slides-entry.js), le dessin des maquettes du 12/10. */
@@ -43,14 +44,28 @@
 
 /* Couleur par sorte de modèle (demande du 21/10 : « coloré l'icône comme dans GFS ») : dans la liste déroulante seulement - l'icône du déclencheur et celle de chaque ligne -, les trois
    sortes que l'explorateur de Grist Factory Suite colore prennent sa teinte (document bleu, grille verte, présentation orange : jetons --t-doc, --t-grid et --t-slides de css/style.css, 3:1 au
-   moins sur le fond de la liste, d'une ligne survolée et d'une ligne choisie, en clair et en sombre). L'e-mail, le macro-modèle et les dossiers gardent la couleur du texte. Exception voulue à « un
+   moins sur le fond de la liste, d'une ligne survolée et d'une ligne choisie, en clair et en sombre). Les dossiers gardent la couleur du texte (l'e-mail et le macro-modèle ont la leur, voir plus bas). Exception voulue à « un
    seul éditeur, monochrome » (charte, §1) : la couleur s'ajoute à la forme de l'icône, qui dit toujours la sorte, jamais l'inverse. Un modèle grisé (.is-unavailable : extension éteinte, type
    inconnu) n'a aucune couleur, comme dans GFS ; le déclencheur le dit par la même classe, posée sur son icône (syncTriggerLabel). « Organiser mes modèles », qui réutilise ces lignes, reste
-   monochrome : seule la liste déroulante a la demande. */
+   monochrome : seule la liste déroulante a la demande.
+   Demande du 24/11 (« icône macro modèle colorée avec chaque segment de la couleur de l'une des autres ; mail aussi prendre l'une des couleurs non utilisées », version B de la carte) : le
+   macro-modèle, qui assemble des documents, des grilles et des présentations, peint sa feuille de devant du bleu du document (--t-doc), celle du milieu du vert de la grille (--t-grid) et celle de
+   derrière de l'orange de la présentation (--t-slides) ; l'e-mail prend le violet (--t-email), que rien d'autre ne porte. Les dossiers gardent la couleur du texte.
+   Une icône en masque ne porte qu'une couleur : les trois feuilles sont donc trois zones d'un même fond (quatre aplats posés l'un sur l'autre, sans JS). Les feuilles ne se touchent pas : chaque
+   frontière passe au milieu du vide entre deux tracés (dans le carré de 24 : la feuille de devant est à gauche de x = 15,5 et sous y = 8,25 ; celle de derrière au-dessus de y = 4,75 ou à droite de
+   x = 18,75 ; celle du milieu est le reste). Ailleurs (« Organiser mes modèles », ligne grisée), le fond reste currentColor : le tracé est le même, d'une seule couleur. */
 .tts-trigger .tts-icon-document, .tts-popup .tts-icon-document { color: var(--t-doc); }
 .tts-trigger .tts-icon-grille, .tts-popup .tts-icon-grille { color: var(--t-grid); }
 .tts-trigger .tts-icon-presentation, .tts-popup .tts-icon-presentation { color: var(--t-slides); }
+.tts-trigger .tts-icon-email, .tts-popup .tts-icon-email { color: var(--t-email); }
+.tts-trigger .tts-icon-macro, .tts-popup .tts-icon-macro {
+  background-image: linear-gradient(var(--t-slides), var(--t-slides)), linear-gradient(var(--t-slides), var(--t-slides)), linear-gradient(var(--t-doc), var(--t-doc)), linear-gradient(var(--t-grid), var(--t-grid));
+  background-size: 100% 19.792%, 21.875% 100%, 64.583% 65.625%, 100% 100%;
+  background-position: 0 0, 100% 0, 0 100%, 0 0;
+  background-repeat: no-repeat;
+}
 .tts-trigger .tts-icon.is-unavailable, .tts-popup .tts-row.is-unavailable .tts-icon { color: inherit; }
+.tts-trigger .tts-icon-macro.is-unavailable, .tts-popup .tts-row.is-unavailable .tts-icon-macro { background-image: none; }
 
 .tts-caret { display: inline-block; width: 10px; height: 10px; flex: none; background-color: currentColor; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
 

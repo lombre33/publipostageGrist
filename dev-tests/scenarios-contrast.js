@@ -1082,6 +1082,55 @@
     },
   });
 
+  // Demande d'Antoine du 24/11 (icônes de l'e-mail et du macro-modèle, css/template-tree-select.css) : l'e-mail est violet (--t-email) et fait 4,5:1 au moins - plus que les 3:1 qu'une icône exige -, sur chaque
+  // fond où il se pose (la liste, une ligne survolée, une ligne choisie, le déclencheur et son survol) ; les trois feuilles du macro-modèle reprennent le bleu du document, le vert de la grille et l'orange de la présentation,
+  // donc la même exigence qu'eux : 3:1. Le macro est peint par les aplats de son fond (trois zones, dont deux pour la feuille de derrière) : on lit leurs couleurs, pas celle de l'élément.
+  cases.push({
+    id: 'contrast_email_icon_reaches_4_5_and_macro_sheets_3_on_every_list_background_in_light_and_dark',
+    description: 'Icône de l’e-mail (violet) : 4,5:1 au moins ; feuilles du macro-modèle (bleue, verte et orange) : 3:1 au moins ; sur le fond de la liste, d’une ligne survolée, d’une ligne choisie, du déclencheur et de son survol, en clair et en sombre',
+    run: async () => {
+      const wrap = document.querySelector('.tts-wrap');
+      const line = (type, attrs) => '<div class="tts-popup is-open" style="position:static;"><div class="tts-row tts-row-leaf" ' + attrs + '><span class="tts-icon tts-icon-' + type + '"></span><span class="tts-row-label">Bail</span></div></div>';
+      const hover = 'style="background:var(--surface-sunken)"';
+      // Les couleurs de l'icône : celle de l'élément (e-mail) ou la couleur de chacune de ses trois feuilles (macro).
+      const layersOf = icon => getComputedStyle(icon).backgroundImage.split('linear-gradient(').slice(1).map(g => (g.match(/rgb\([^)]*\)/) || [''])[0]);
+      const paints = (icon, type) => {
+        if (type !== 'macro') return { icône: getComputedStyle(icon).color };
+        const layers = layersOf(icon);   // derrière (haut), derrière (droite), devant, milieu
+        return { 'feuille de devant': layers[2], 'feuille du milieu': layers[3], 'feuille de derrière': layers[0] };
+      };
+      const ratioOver = (css, behind) => { const bg = backgroundOf(behind); return round2(ratio(over(parseColor(css), bg), bg)); };
+      const inList = (type, attrs) => withProbe(line(type, attrs), host => { const icon = host.querySelector('.tts-icon'); const row = host.querySelector('.tts-row'); const out = {}; Object.entries(paints(icon, type)).forEach(([k, css]) => { out[k] = ratioOver(css, row); }); return out; });
+      const inBar = (type, hovered) => {
+        const button = document.createElement('button');
+        button.className = 'tts-trigger';
+        button.innerHTML = '<span class="tts-icon tts-icon-' + type + '"></span>';
+        if (hovered) button.style.background = 'var(--surface-sunken)';
+        wrap.appendChild(button);
+        try { const out = {}; Object.entries(paints(button.querySelector('.tts-icon'), type)).forEach(([k, css]) => { out[k] = ratioOver(css, button); }); return out; } finally { button.remove(); }
+      };
+      const flat = (type, where, ratios) => Object.fromEntries(Object.entries(ratios).map(([k, v]) => [type + ' ' + k + ' ' + where, v]));
+      const readings = type => inBothThemes(() => Object.assign({},
+        flat(type, 'sur la liste', inList(type, '')), flat(type, 'sur une ligne survolée', inList(type, hover)), flat(type, 'sur la ligne choisie', inList(type, 'aria-selected="true"')),
+        flat(type, 'dans le déclencheur', inBar(type, false)), flat(type, 'dans le déclencheur survolé', inBar(type, true))));
+      const email = readings('email');
+      const macro = readings('macro');
+      // Une icône qui n'a pas reçu sa couleur retomberait sur celle du texte : on vérifie que le violet et les trois feuilles sont bien posés (ni la couleur du texte, ni la même pour deux feuilles).
+      const posed = inBothThemes(() => {
+        const mail = withProbe(line('email', ''), host => ({ colour: getComputedStyle(host.querySelector('.tts-icon')).color, text: getComputedStyle(host.querySelector('.tts-row')).color }));
+        const mac = withProbe(line('macro', ''), host => ({ layers: layersOf(host.querySelector('.tts-icon')), text: getComputedStyle(host.querySelector('.tts-row')).color }));
+        const sheets = [mac.layers[2], mac.layers[3], mac.layers[0]];
+        return {
+          'e-mail colorée': mail.colour !== mail.text ? 1 : 0,
+          'macro : trois feuilles de trois couleurs différentes': mac.layers.length === 4 && new Set(sheets).size === 3 && !sheets.includes('') ? 1 : 0,
+          'macro : aucune feuille n’a la couleur du texte': sheets.every(c => c !== mac.text) ? 1 : 0,
+        };
+      });
+      const bad = failing(email, 4.5).concat(failing(macro, 3), failing(posed, 1));
+      return { pass: bad.length === 0 && !!wrap, notes: JSON.stringify({ bad, email, macro }) };
+    },
+  });
+
   // Le repère « Saut de page » de l'éditeur (css/style.css, `.page-break-marker`) : axe-core l'a relevé à 3,18:1 (texte ambre #d97706 de 11,9 px sur la page blanche) au balayage du 10/11. Le texte
   // prend l'ambre foncé, le filet pointillé garde l'ambre vif (un filet n'est pas un texte : 3:1 lui suffit). La page de l'éditeur reste blanche dans les deux thèmes ; un saut qui tourne la page
   // (data-page-orientation) est le même repère, plus bas, avec la même couleur.
