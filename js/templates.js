@@ -512,7 +512,66 @@ const Templates = (function () {
     });
   }
 
-  async function loadAll() {
+  // LE CACHE PARTIEL (24/11, « ne lire que le document qu'on ouvre » : la table entière pèse des dizaines de Mo chez une personne, des présentations pour la plupart, et sa lecture tient le démarrage 4,6 s sur 7,3). Quand GFS
+  // désigne un document, js/early-open.js lit sa seule ligne (et celle des réglages) par l'interface REST de Grist et la pose ici (seedPartial) : le document s'ouvre depuis ce cache, la table entière se lit ensuite, en
+  // fond (loadAll, lancée par js/main.js à la fin du démarrage), et prend sa place. Tant que le cache est partiel (`partial`), il ne dit RIEN des autres documents : tout geste qui s'en sert l'attend (whenComplete) ;
+  // une écriture aussi (le nom pris, le ★, le jeton, la date que Grist garde : tout se lit dans la table entière).
+  let partial = false;
+  let fullRead = null;                 // la lecture entière en cours, que tous ceux qui la demandent se partagent tant que le cache est partiel
+  const completeHandlers = [];
+  const isComplete = () => !partial;
+
+  // Pose la ligne du document (`record`, au format REST : { id, fields }) et celles des réglages du document (`settingsRecords`) comme cache partiel. Rend faux, sans rien poser, au moindre doute : un cache déjà lu
+  // ou déjà partiel, une ligne qui n'a pas les colonnes d'un document à jour (une table d'avant les noms anglais : le texte et le nom y manquent, et il faut passer par la migration de loadAll).
+  function seedPartial(record, settingsRecords) {
+    if (partial || cacheArrivedAt > 0 || templatesCache.length) return false;
+    const fields = record && record.fields;
+    if (!record || !Number.isInteger(record.id) || !fields || typeof fields.Name !== 'string' || typeof fields.Content !== 'string' || !('TemplateType' in fields)) return false;
+    const rows = [record].concat(Array.isArray(settingsRecords) ? settingsRecords : []);
+    const columns = { id: rows.map(row => row.id) };
+    rows.forEach((row) => { Object.keys(row.fields || {}).forEach((column) => { if (!columns[column]) columns[column] = new Array(rows.length).fill(null); }); });
+    rows.forEach((row, at) => { Object.keys(row.fields || {}).forEach((column) => { columns[column][at] = row.fields[column]; }); });
+    const found = [];
+    let settingsAt = -1;
+    columns.id.forEach((id, at) => {
+      if (!isSettingsRow(columns, at)) found.push(templateFromRow(columns, at));
+      else if (settingsAt === -1) settingsAt = at;
+    });
+    // Comme la lecture de loadAll : les migrations dont les colonnes sont toutes là sont faites, la prochaine écriture n'a pas à relire la table pour le vérifier.
+    columnMigrations.forEach((migration) => { if (migration.satisfiedBy(columns)) migration.markDone(); });
+    templatesCache = found;
+    adoptDocumentSettings(columns, settingsAt, settingsEpoch);
+    partial = true;
+    traceStep('modèles : cache partiel', { lignes: found.length });
+    return true;
+  }
+
+  function markComplete() {
+    if (!partial) return;
+    partial = false;
+    fullRead = null;
+    traceStep('modèles : liste complète');
+    completeHandlers.splice(0).forEach((handler) => { try { handler(templatesCache); } catch (e) { console.error('[Templates] suite de la liste complète', e); } });
+  }
+  // `handler(liste)` est appelée une fois, quand la table entière prend la place du cache partiel (js/main.js y redessine la liste).
+  function onCompleted(handler) { if (typeof handler === 'function') completeHandlers.push(handler); }
+  // Rend la main quand le cache est complet (la lecture entière est lancée si elle ne l'est pas encore) ; jamais rejetée : Grist injoignable, le geste suit avec ce que le cache sait, comme hors ligne.
+  function whenComplete() { return partial ? loadAll().then(() => undefined, () => undefined) : Promise.resolve(); }
+
+  // La lecture de la table entière. Tant que le cache est partiel, une seule se fait à la fois (celle du démarrage, celle de l'enregistrement automatique, celle d'un geste qui attend la liste : la même) ; une lecture qui
+  // échoue laisse le cache partiel, et la demande suivante relit.
+  function loadAll() {
+    if (!partial) return readAll();
+    if (!fullRead) {
+      const run = readAll();
+      fullRead = run;
+      const forget = () => { if (fullRead === run) fullRead = null; };
+      run.then(forget, forget);
+    }
+    return fullRead;
+  }
+
+  async function readAll() {
     const settingsEpochAtStart = settingsEpoch;
     const writtenAtStart = cacheWrites;
     const readStartedAt = Date.now();
@@ -541,6 +600,7 @@ const Templates = (function () {
       if (!GristAPI.isTablesDeclined(e)) throw e;
       templatesCache = [];
       loadedChars = 0;
+      markComplete();
       return templatesCache;
     }
     try {
@@ -566,10 +626,11 @@ const Templates = (function () {
       cacheArrivedAt = Date.now();
       adoptDocumentSettings(tableData, settingsAt, settingsEpochAtStart);
       traceStep('modèles : en cache', { rowsMs: loadWeights.rowsMs });
+      markComplete();
     } catch (e) {
       console.error('Erreur chargement modèles', e);
-      templatesCache = [];
-      loadedChars = 0;
+      // Le cache partiel garde le document ouvert : une lecture qui échoue ne le vide pas (la suivante relira).
+      if (!partial) { templatesCache = []; loadedChars = 0; }
     }
     return templatesCache;
   }
@@ -693,6 +754,7 @@ const Templates = (function () {
     // id = null retire le modèle par défaut sans en redéfinir un autre. Un seul modèle par défaut à la fois : les autres sont explicitement repassés
     // à false, pour ne jamais avoir deux « par défaut » après un enchaînement d'appels. Une ligne d'un type inconnu n'est ni marquée ni démarquée : elle reste ce qu'une autre
     // version ou une extension y a écrit (getDefaultId l'ignore déjà).
+    if (partial) await whenComplete();
     const target = id == null ? null : byId(id);
     if (target && !isOpenableType(target.typeModele)) return;
     await ensureTableExists();
@@ -855,6 +917,7 @@ const Templates = (function () {
     // `versionOptions` : { force, genre } de l'historique des versions (cf. prepareVersionCopy) ; l'état que l'enregistrement remplace s'y garde dans le même lot, quand les règles de VersionsStore le demandent.
     refuseUnwritable(id, typeModele);
     (alsoWrite || []).forEach(other => refuseUnwritable(other.id));
+    if (partial) await whenComplete();
     await ensureTableExists();
     await ensureHeaderFooterColumn();
     await ensureMarginsColumn();
@@ -935,6 +998,7 @@ const Templates = (function () {
   // (js/main.js compare les deux). Pas pour un macro-modèle, dont le contenu est la liste de ses emplacements. Rend { id, dateModif }.
   async function saveContent(id, contenuHtml) {
     refuseUnwritable(id);
+    if (partial) await whenComplete();
     await ensureTableExists();
     await ensureDateModifColumn();
     const now = new Date().toISOString();
@@ -959,6 +1023,7 @@ const Templates = (function () {
   // `fresh` : l'appelant vient de relire la table (loadAll) ; si le cache n'y voit pas de jeton pour ce modèle, il n'y en a pas, et la première relecture de la table entière (des dizaines de Mo pour un gros
   // PowerPoint) n'apprendrait rien : seul le jeton écrit est relu, pour la course ci-dessous.
   async function ensureToken(id, { fresh = false } = {}) {
+    if (partial) await whenComplete();
     await ensureTableExists();
     await ensureTokenColumn();
     async function read() {
@@ -986,6 +1051,7 @@ const Templates = (function () {
     return writes.track(async () => {
       refuseUnwritable(id);
       const value = typeof html === 'string' ? html : '';
+      if (partial) await whenComplete();
       await ensureTableExists();
       if (!(await ensureNoticeColumn())) throw new Error('La colonne des notices ne peut pas être créée : rien n’a été enregistré.');
       await SchemaColumns.docApi.applyUserActions([['UpdateRecord', TABLE_NAME, id, { [NOTICE_COLUMN]: value }]]);
@@ -1002,6 +1068,7 @@ const Templates = (function () {
   // qui se lie : rien n'est écrit. Rend le jeton écrit ('' pour un lien retiré).
   function setLinkedEmail(id, emailId) {
     return writes.track(async () => {
+      if (partial) await whenComplete();
       const wantsLink = emailId != null && emailId !== '';
       const row = byId(id);
       if (!row) throw new Error('Document introuvable : rien n’a été lié.');
@@ -1178,7 +1245,7 @@ const Templates = (function () {
     loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail, saveNotice,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
-    sameDateModif, verifyStored, getLoadedChars, getLoadWeights, templateFromRecord, hasLoaded, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
+    sameDateModif, verifyStored, getLoadedChars, getLoadWeights, templateFromRecord, hasLoaded, SETTINGS_TYPE, seedPartial, isComplete, whenComplete, onCompleted, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();

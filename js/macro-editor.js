@@ -291,6 +291,8 @@ const MacroEditor = (function () {
   }
 
   function openModal(tpl) {
+    // La composition choisit parmi tous les documents : la fenêtre attend la liste entière quand le document s'est ouvert avant elle (js/early-open.js).
+    if (!Templates.isComplete()) { Templates.whenComplete().then(() => openModal(tpl)); return; }
     editingId = tpl ? tpl.id : null;
     const existingSlots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
     // Copie profonde : la modale ne doit jamais muter tpl.macroSlots tant que "Enregistrer" n'a pas été cliqué (Annuler doit tout jeter). Un macro-modèle neuf s'ouvre sur un

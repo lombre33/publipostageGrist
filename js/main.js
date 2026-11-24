@@ -154,9 +154,11 @@
     // Un modèle email ou macro ne devient jamais le ★ du document (planning/feature-macro-modeles.md) : l'email est une action ponctuelle sur une ligne
     // et le macro-modèle un mode spécialisé, pas des états où le widget doit démarrer dans toutes les vues. Pour UNE vue, ils le peuvent (Réglages > Vue,
     // js/view-template.js). Le bouton est grisé (même traitement que « aucun modèle chargé »), jamais masqué.
-    btn.disabled = currentId == null || !Templates.canBeDocumentDefault(currentTypeModele);
+    // Le ★ se pose sur UN document et se retire des autres : tant que la liste n'est lue qu'en partie (le document s'ouvre avant elle, js/early-open.js), il attend.
+    const listLoading = !Templates.isComplete();
+    btn.disabled = currentId == null || !Templates.canBeDocumentDefault(currentTypeModele) || listLoading;
     // Grisé, il dit pourquoi en info-bulle (cause « state » de js/lock-reasons.js : un bouton `disabled` ne reçoit pas le clic).
-    const defaultKey = currentId == null ? 'lock.defaultNone' : 'lock.defaultType';
+    const defaultKey = listLoading ? 'lock.listLoading' : (currentId == null ? 'lock.defaultNone' : 'lock.defaultType');
     LockReasons.set(btn, 'state', btn.disabled ? I18n.t(defaultKey) : '', defaultKey);
     // Le bouton « email lié » qui le suit dans la rangée du nom se règle sur le même modèle ouvert, aux mêmes moments (js/main-email-link.js).
     syncLinkedEmailButton();
@@ -200,6 +202,8 @@
   }
 
   async function toggleDefaultTemplate(id) {
+    // Une ligne du panneau peut porter l'étoile avant que la liste soit lue en entier : le ★ d'un autre document ne se voit pas dans un cache partiel.
+    if (!Templates.isComplete()) await Templates.whenComplete();
     const tpl = Templates.byId(id);
     if (!tpl || isReadOnly() || defaultTemplateWriting || !Templates.canBeDocumentDefault(tpl.typeModele)) return;
     defaultTemplateWriting = true;
@@ -564,6 +568,8 @@
   // question « Enregistrer / Abandonner / Annuler » quand des modifications attendent. true : ce modèle est ouvert ; false : il ne l'est pas
   // (introuvable, ou « Annuler » : la personne garde le sien).
   async function openTemplateForRow(id) {
+    // Le document que la ligne désigne peut être un autre que celui ouvert avant la fin de la lecture de la liste (js/early-open.js) : il n'est pas encore dans le cache.
+    if (!Templates.isComplete() && !Templates.isCurrent(id)) await Templates.whenComplete();
     if (!Templates.openableById(id) || Templates.isCurrent(id)) return false;
     templateSelect.value = String(id);
     await onTemplateSelectChange();
@@ -1264,7 +1270,14 @@
       .catch(e => console.warn('[main] vérification des tables en double impossible', e));
   }
 
+  // La table des modèles entière vient d'être lue, après l'ouverture du document (js/early-open.js) : la liste, le ★, l'e-mail lié et l'arbre se redessinent d'après elle, le document ouvert reste sélectionné.
+  function onTemplatesCompleted(templates) {
+    showTemplateList(templates).then(() => { TemplateTreeSelect.refresh(); ExportChoices.refresh(); })
+      .catch(e => console.error('[main] liste des documents non redessinée', e));
+  }
+
   async function init() {
+    Templates.onCompleted(onTemplatesCompleted);
     FirstContact.start(); // widget ouvert hors de Grist, adresse bloquée par le réseau, démarrage trop long : js/first-contact.js
     syncSaveButtonLook();
     // Hébergé par GFS, le réglage vient de l'espace de l'app, qui arrive avec le contexte : l'aspect du bouton se remet à l'heure à ce moment-là (js/person-store.js).
@@ -1331,7 +1344,7 @@
     // par défaut qu'une ligne de la liste et de « Organiser » porte (toggleDefaultTemplate).
     try {
       TemplateTreeSelect.attach(templateSelect, {
-        onOrganize: () => { if (!isReadOnly()) TemplateOrganizeModal.open(); },
+        onOrganize: async () => { if (isReadOnly()) return; if (!Templates.isComplete()) await Templates.whenComplete(); TemplateOrganizeModal.open(); },
         onToggleDefault: toggleDefaultTemplate,
         isLocked: isReadOnly,
       });
@@ -1399,6 +1412,8 @@
     await switchMode(startMode({ blank: gfsBlankOpened || gfsBlankType !== null, importing: !!opening && (opening.raison === 'importer' || opening.raison === 'modele'), hasTemplate: startupTemplateId !== undefined }));
     FirstContact.ready();
     PerfTrace.mark('démarrage : widget prêt');
+    // Le document s'est ouvert depuis sa seule ligne : la table entière se lit maintenant, en fond (js/early-open.js).
+    EarlyOpen.finish();
     setStatus(I18n.t(isReadOnly() ? 'status.readyReadOnly' : 'status.ready'));
     // Juste après « Widget prêt. » : la phrase qui dit pourquoi ce modèle s'est ouvert (GFS) la remplace ; les avertissements de checkAfterOpen passent après elle, et l'import que GFS demande (« Nouveau > Importer ») puis les appels `ouvrir` reçus pendant le démarrage sont traités à la fin de ce tour.
     GfsOpen.startupDone();

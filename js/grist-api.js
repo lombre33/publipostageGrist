@@ -1338,8 +1338,11 @@ const GristAPI = (function () {
   // `only` : d'autres colonnes que le filtre de Grist impose en plus du numéro de ligne (`{ TemplateType: ['document', ''] }` : la ligne n'est rendue que si elle est de ce type, sans que son texte soit envoyé sinon).
   async function lightRecords(table, ids, timeoutMs, only) {
     const some = Array.isArray(ids);
-    const filter = some ? '&filter=' + encodeURIComponent(JSON.stringify(Object.assign({ id: ids }, only || {}))) : '';
-    const { body, bytes, parseMs } = await lightGet('/tables/' + encodeURIComponent(table) + '/records' + (some ? '?limit=' + ids.length + filter : ''), timeoutMs);
+    // `ids` nul avec `only` : les lignes dont ces colonnes ont ces valeurs (la ligne des réglages du document, js/early-open.js) ; sans l'un ni l'autre, la table entière.
+    const byColumns = !some && only && Object.keys(only).length ? only : null;
+    const query = some ? '?limit=' + ids.length + '&filter=' + encodeURIComponent(JSON.stringify(Object.assign({ id: ids }, only || {})))
+      : (byColumns ? '?filter=' + encodeURIComponent(JSON.stringify(byColumns)) : '');
+    const { body, bytes, parseMs } = await lightGet('/tables/' + encodeURIComponent(table) + '/records' + query, timeoutMs);
     if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightRecords : forme'), { reason: 'forme' });
     return { records: body.records, bytes, parseMs };
   }

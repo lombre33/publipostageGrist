@@ -27,6 +27,8 @@ const MainEmailLink = (function () {
     function describe() {
       const open = openTemplate();
       if (!open) return { mode: 'none', open: null, target: null, reason: I18n.t('emailLink.button.unsaved') };
+      // Le document s'est ouvert avant la fin de la lecture de la liste (js/early-open.js) : l'e-mail qu'il a pour compagnon n'est pas encore dans le cache. Grisé un instant, la liste complète le rallume (js/main.js:onTemplatesCompleted).
+      if (!Templates.isComplete()) return { mode: 'none', open, target: null, reason: I18n.t('lock.listLoading') };
       if (EmailLink.canLink(open)) return { mode: 'document', open, target: EmailLink.emailOf(open) };
       if (EmailLink.isEmail(open)) {
         const came = origin && same(origin.to, open.id) ? Templates.byId(origin.from) : null;

@@ -931,6 +931,8 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   // true : la prochaine lecture de la table des modèles faite APRÈS une écriture dans cette table échoue une fois (réseau coupé), cf. failReadBackOnce.
   state.failNextModelsFetchAfterWrite = false;
   state.modelsWriteSeen = false;
+  // true : TOUTES les lectures de la table des modèles échouent (réseau coupé) tant qu'il reste vrai (verify-early-open.mjs : la lecture entière qui suit l'ouverture du document seul).
+  state.failModelsFetches = false;
   function setLatency(spec) {
     if (typeof spec === 'number') spec = { fetchTable: spec, applyUserActions: spec };
     state.latency = Object.assign({ fetchTable: 0, applyUserActions: 0 }, spec || {});
@@ -954,6 +956,7 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   // Ce que rend fetchTable : une copie de la table, ou - une seule fois, quand failReadBackOnce l'a armé et qu'une écriture de la table des modèles a eu lieu depuis - une panne
   // de réseau simulée. Synchrone : l'appelant (une fonction async) garde les mêmes tours de microtâche qu'avant.
   function readTable(tableId) {
+    if (tableId === NAMES.models && state.failModelsFetches) throw new Error('Réseau coupé (simulé par failModelsFetches)');
     if (tableId === NAMES.models && state.failNextModelsFetchAfterWrite && state.modelsWriteSeen) {
       state.failNextModelsFetchAfterWrite = false; state.modelsWriteSeen = false;
       throw new Error('Réseau coupé (simulé par failReadBackOnce)');

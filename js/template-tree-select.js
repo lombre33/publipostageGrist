@@ -224,8 +224,11 @@ const TemplateTreeSelect = (function () {
     const templates = searching ? Templates.getCached().filter((t) => matchesName(String(t.nom ?? ''))) : Templates.getCached();
     const view = TemplateOrganizer.buildView(templates, TemplatePreferences.getCached(), searching ? [] : TemplatePreferences.listStateFolders());
 
-    if (!view.pinned.length && !view.tree.length) popup.appendChild(el('div', 'tts-empty', I18n.t(searching ? 'templateTree.noMatch' : 'templateTree.empty')));
+    const listLoading = !Templates.isComplete();
+    if (!view.pinned.length && !view.tree.length && !listLoading) popup.appendChild(el('div', 'tts-empty', I18n.t(searching ? 'templateTree.noMatch' : 'templateTree.empty')));
     appendSections(popup, view, p => makeLeafRow(p, 0), n => makeRow(n, 0));
+    // Le document ouvert s'affiche avant que la liste des autres soit lue (js/early-open.js) : l'arbre le dit, et se redessine à son arrivée.
+    if (listLoading) { const waiting = el('div', 'tts-empty tts-loading', I18n.t('templateTree.loading')); waiting.setAttribute('role', 'status'); popup.appendChild(waiting); }
 
     syncTriggerLabel();
     syncDisabledState();

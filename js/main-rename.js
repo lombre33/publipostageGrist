@@ -62,6 +62,11 @@ const MainRename = (function () {
       // Pas encore enregistré (id nul : nouveau modèle, copie, galerie) : le nom est toujours vérifié.
       const previous = id == null ? null : (nameBeforeEdit != null ? nameBeforeEdit : (getTitleNameBase() !== null ? getTitleNameBase() : (stored ? stored.nom : null)));
       if (previous != null && Templates.sameName(typed, previous)) return typed;
+      // Le document s'est ouvert avant la fin de la lecture de la liste (js/early-open.js) : un nom pris par un autre ne se voit pas encore. Le nom tapé reste, et se vérifie à l'arrivée de la liste.
+      if (!Templates.isComplete()) {
+        Templates.whenComplete().then(() => { if (templateNameInput && templateNameInput.value.trim() === typed) settleTemplateName(); });
+        return typed;
+      }
       const unique = Templates.uniqueName(typed, id);
       if (unique !== typed) {
         templateNameInput.value = unique;

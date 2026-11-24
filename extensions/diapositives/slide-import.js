@@ -376,6 +376,8 @@ const SlideImport = (function () {
     SearchSelect.sync(select);
     field.hidden = !found.length;
     empty.hidden = found.length > 0;
+    // Le document s'est ouvert avant la fin de la lecture de la liste (js/early-open.js) : les autres présentations n'y sont pas encore, le volet se remplit à son arrivée.
+    if (!Templates.isComplete()) Templates.whenComplete().then(() => { if (open) reload(); });
   }
   function choose(value) {
     const tpl = value ? Templates.getCached().find(t => String(t.id) === value) : null;

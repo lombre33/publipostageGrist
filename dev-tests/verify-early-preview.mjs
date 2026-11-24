@@ -10,6 +10,7 @@
 //     un format de page libre, une table des modèles qui arrive d'abord ; et le démarrage se fait comme avant dans tous ces cas ;
 //  7. la page de la feuille suit le sens et le format du document (portrait / paysage, A4 / A3) et ses marges ;
 //  8. le rapport de fluidité (js/perf-trace.js) dit chaque étape (`aperçu : …`).
+//  Les réglages du document partent avec la ligne (js/early-open.js) : une demande de plus, qui ne change rien à l'aperçu.
 // Lancé par run-headless.mjs (groupe Node « earlyPreview », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-early-preview.mjs
 import { start, seedModels } from './gfs-page.mjs';
 
@@ -23,7 +24,9 @@ const PREVIEW_TEXT = 'Aperçu rapide du compte rendu';
 const rowsOf = (extra = {}) => [
   { id: 2, fields: Object.assign({
     Name: 'Départ B', TemplateType: 'document', Margins: JSON.stringify({ top: 20, right: 25, bottom: 20, left: 30 }),
-    Content: '<h1>' + PREVIEW_TEXT + '</h1><p>Bonjour <a href="https://exemple.test/lien">un lien</a></p><img src="x" onerror="window.__xss=1"><script>window.__xss=2</script>',
+    // Le texte porte une diapositive liée (`data-link-mode`) : l'ouverture depuis la seule ligne (js/early-open.js, essai « earlyOpen ») ne s'applique pas à un document qui parle d'un autre modèle, la table entière se lit
+    // comme avant et l'aperçu tient l'attente - c'est ce que cet essai regarde.
+    Content: '<h1>' + PREVIEW_TEXT + '</h1><p data-link-mode="push">Bonjour <a href="https://exemple.test/lien">un lien</a></p><img src="x" onerror="window.__xss=1"><script>window.__xss=2</script>',
   }, extra) },
   { id: 6, fields: { Name: 'Futur', TemplateType: 'presentation', Content: '<p>PRESENTATION LOURDE</p>' } },
   { id: 4, fields: { Name: 'Départ E', TemplateType: 'email', Content: '<p>EMAIL</p>' } },
@@ -75,10 +78,12 @@ await sleep(2500);
 const mid = await look(slow.app || slow.page);
 check('la feuille du document est à l\'écran pendant que la table des modèles se lit encore (2,5 s sur 4 s) : son texte y est', mid.shown && mid.text.includes(PREVIEW_TEXT), mid);
 check('la table des modèles n\'est pas arrivée, l\'éditeur n\'a pas encore de texte : l\'aperçu n\'a rien emprunté à l\'éditeur', mid.loaded === false && !mid.editorText, mid);
-const rest = slow.seen.filter(entry => /\/tables\//.test(entry.url));
+const rest = slow.seen.filter(entry => /\/tables\//.test(entry.url) && /limit=1/.test(entry.url));
+const settingsRest = slow.seen.filter(entry => /\/tables\//.test(entry.url) && !/limit=1/.test(entry.url));
 const restUrl = rest[0] ? new URL(rest[0].url) : null;
 const asked = restUrl ? JSON.parse(restUrl.searchParams.get('filter')) : null;
 check('UNE seule demande REST est partie, un GET simple (ni corps ni en-tête qui appelle une pré-requête), avec le jeton en lecture seule dans `auth`', rest.length === 1 && rest[0].method === 'GET' && restUrl.searchParams.get('auth') === 'stub-token' && !rest[0].headers.authorization && restUrl.searchParams.get('limit') === '1', rest.map(entry => entry.url));
+check('une demande de plus, pour la ligne des réglages du document (filtre sur son type, jamais la table entière)', settingsRest.length === 1 && JSON.stringify(JSON.parse(new URL(settingsRest[0].url).searchParams.get('filter'))) === JSON.stringify({ TemplateType: ['reglages'] }), settingsRest.map(entry => entry.url));
 check('elle vise la ligne du document ET son type : les lignes de type présentation, e-mail, grille ou macro ne sont pas envoyées', !!asked && JSON.stringify(asked.id) === '[2]' && JSON.stringify(asked.TemplateType) === JSON.stringify(['document', '']) && /\/tables\/Publipostage_Templates\/records$/.test(restUrl.pathname), asked);
 const tokenAt = mid.order.indexOf('getAccessToken');
 const modelsAt = mid.order.findIndex(call => /^fetchTable Publipostage_Modeles/.test(call));
@@ -116,7 +121,7 @@ async function noSheet(label, options, extra) {
   const run = await openSlow(Object.assign({ slowMs: 2500 }, options));
   await sleep(1700);
   const during = await look(run.app || run.page);
-  const requests = run.seen.filter(entry => /\/tables\//.test(entry.url)).length;
+  const requests = run.seen.filter(entry => /\/tables\//.test(entry.url) && /limit=1/.test(entry.url)).length;
   await waitReady(run.app || run.page);
   const after = await look(run.app || run.page);
   check(label, !during.shown && !after.shown && (extra ? extra(requests, during, after) : true), { during: { shown: during.shown, state: during.state }, requests, after: { shown: after.shown, editorText: after.editorText } });

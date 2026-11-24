@@ -91,6 +91,9 @@ const I18nTextsTemplates = {
   'templateTree.noMatch': { fr: 'Aucun document ne correspond à cette recherche.', en: 'No document matches this search.' },
   'templateTree.organize': { fr: 'Organiser', en: 'Organize' },
   'templateTree.empty': { fr: 'Aucun document enregistré.', en: 'No saved document yet.' },
+  // Le document ouvert s'affiche avant que la liste des autres soit lue (js/early-open.js) : l'arbre le dit, et ce qui a besoin de la liste est grisé avec cette phrase tant qu'elle n'est pas là.
+  'templateTree.loading': { fr: 'La liste des autres documents se charge…', en: 'The list of other documents is loading…' },
+  'lock.listLoading': { fr: 'Indisponible un instant : la liste des documents est en train de se charger', en: 'Unavailable for a moment: the document list is still loading' },
   // --- Modale "Organiser mes modèles" (créer des dossiers, y ranger des modèles), js/template-organize-modal.js ---
   'organize.modal.title': { fr: 'Organiser mes documents', en: 'Organize my documents' },
   'organize.modal.intro': { fr: 'Ce rangement est personnel : les autres personnes qui utilisent ce document Grist ne le voient pas.', en: 'This organization is personal: other people using this Grist document don’t see it.' },

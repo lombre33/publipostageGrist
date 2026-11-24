@@ -71,6 +71,8 @@ const MainSave = (function () {
     // écraserait sa composition par un contenu vide. « Enregistrer » rouvre donc la fenêtre au lieu d'enregistrer.
     async function runSave() {
       if (isReadOnly()) return; // Ctrl+S compris (wireSaveShortcut) : le bouton, lui, est déjà grisé
+      // Le nom pris et le ★ se lisent dans la liste entière : un document ouvert avant elle (js/early-open.js) l'attend avant d'écrire.
+      if (!Templates.isComplete()) await Templates.whenComplete();
       // Un gros modèle qui se remplit par morceaux (js/main.js:fillOpenedPresentation) n'a pas encore tout son texte : l'écrire maintenant remplacerait le modèle par son début. L'enregistrement attend la fin.
       if (ImportPlacing.isFilling()) await ImportPlacing.whenFilled();
       if (getCurrentTypeModele() === 'macro') {
@@ -174,6 +176,7 @@ const MainSave = (function () {
     // d'une frappe.
     async function onSaveAs() {
       if (isReadOnly()) return;
+      if (!Templates.isComplete()) await Templates.whenComplete(); // le nom proposé est le premier libre de la liste entière
       const currentName = templateNameInput ? templateNameInput.value.trim() : '';
       const asked = await Dialogs.prompt({ title: I18n.t('toolbar.saveAs'), label: I18n.t('prompt.newTemplateName'), value: Templates.uniqueName(currentName), confirmLabel: I18n.t('common.save') });
       if (!asked) return;

@@ -195,6 +195,8 @@ const GfsOpen = (function () {
       if (opened) pendingFolder = folderOf(opening);
       return opened;
     }
+    // Un autre document que celui ouvert avant la fin de la lecture de la liste (js/early-open.js) n'est pas encore dans le cache : on l'attend.
+    if (opening && opening.fichier && !Templates.isComplete() && !Templates.isCurrent(opening.fichier.id)) await Templates.whenComplete();
     const id = designated(opening);
     if (id === null) return false;
     if (Templates.isCurrent(id)) return true;

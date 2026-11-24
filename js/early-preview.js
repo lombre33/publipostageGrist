@@ -20,6 +20,10 @@ const EarlyPreview = (function () {
   let state = 'idle';
   let host = null;
   let beganAt = 0;
+  // La ligne que cette lecture rapporte, pour js/early-open.js (qui ouvre le document depuis elle, sans attendre la table entière) : { record, tpl, settings } - `settings` : la promesse des lignes de réglages du document,
+  // lues en même temps (jamais rejetée : null quand elle échoue) -, ou null quand rien n'est sûr (pas de fichier désigné, jeton ou ligne refusés, ce n'est pas un document, la table entière est arrivée la première).
+  let settleRow = () => {};
+  const rowRead = new Promise((resolve) => { settleRow = resolve; });
 
   const trace = (label, extra) => { if (typeof PerfTrace !== 'undefined') { try { PerfTrace.mark(label, extra); } catch (e) { /* le rapport ne doit rien casser */ } } };
   const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
@@ -93,6 +97,8 @@ const EarlyPreview = (function () {
     if (!token) return end('jeton refusé');
     trace('aperçu : jeton reçu', { ms: Math.round(now() - beganAt) });
     let read;
+    // Les réglages du document partent avec la ligne (la même attente) : ils sont dans la même table, une ligne à part.
+    const settings = GristAPI.lightRecords(Templates.TABLE_NAME, null, READ_TIMEOUT_MS, { TemplateType: [Templates.SETTINGS_TYPE] }).then(result => result.records, () => null);
     try {
       read = await GristAPI.lightRecords(Templates.TABLE_NAME, [id], READ_TIMEOUT_MS, { TemplateType: TYPES });
     } catch (e) {
@@ -104,6 +110,7 @@ const EarlyPreview = (function () {
     const tpl = record ? Templates.templateFromRecord(record) : null;
     if (!tpl || (tpl.typeModele !== 'document')) return end('ce n’est pas un document');
     trace('aperçu : ligne lue', { Ko: Math.round(read.bytes / 1024), ms: Math.round(now() - beganAt) });
+    settleRow({ record, tpl, settings });
     if (!show(tpl)) return end('rien à montrer');
     state = 'shown';
     trace('aperçu : affiché', { ms: Math.round(now() - beganAt) });
@@ -111,6 +118,7 @@ const EarlyPreview = (function () {
   }
 
   function end(reason) {
+    settleRow(null);
     if (state === 'done') return;
     state = 'done';
     removeHost();
@@ -135,5 +143,5 @@ const EarlyPreview = (function () {
   // Le document est ouvert dans l'éditeur (ou le démarrage est fini, ou échoué) : la feuille s'efface.
   function opened(reason) { end(reason || 'document ouvert'); }
 
-  return { begin, opening, opened, isShown: () => state === 'shown', state: () => state };
+  return { begin, opening, opened, row: () => rowRead, isShown: () => state === 'shown', state: () => state };
 })();

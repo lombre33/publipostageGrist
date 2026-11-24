@@ -60,7 +60,7 @@
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-c/RaE/NMLwhbIqtrdmjl9RCu79OAuzu3vCnqyiaF9Zs='
     'sha256-T5mKluScfRtuj0P/t6/XPNGRtl1KicJ00NJXmuWrmxk=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
-    'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-O2zv+sPJvUfYXOt2U+m33BNokMPFvAZ265U/OpsoQWs=';
+    'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-Ju+vNoncsiRhUbNSxr1nwqCkvJGIjcELvN5FaeZc+xw=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none'">
 <!-- Enregistrement automatique coupé (pp_autosave_enabled = 'false', cf. js/main.js:isAutosaveEnabled) : le bouton Enregistrer est noir et blanc dès le PREMIER affichage, pas bleu le temps que
      les scripts finissent de se charger puis en fondu vers le noir. La classe est posée ICI, sur <html>, avant les feuilles de style et le corps : un script placé après le bouton attend que les
@@ -335,14 +335,15 @@
 <link rel="preload" as="script" href="js/html-sanitize.js?v=0.10">
 <link rel="preload" as="script" href="js/page-tree.js?v=0.6">
 <link rel="preload" as="script" href="js/schema-columns.js?v=0.5">
-<link rel="preload" as="script" href="js/grist-api.js?v=0.131">
-<link rel="preload" as="script" href="js/templates.js?v=0.119">
+<link rel="preload" as="script" href="js/grist-api.js?v=0.132">
+<link rel="preload" as="script" href="js/templates.js?v=0.120">
 <link rel="preload" as="script" href="js/table-consent.js?v=0.2">
-<link rel="preload" as="script" href="js/early-preview.js?v=0.1">
+<link rel="preload" as="script" href="js/early-preview.js?v=0.2">
+<link rel="preload" as="script" href="js/early-open.js?v=0.1">
 <link rel="preload" as="script" href="js/space-gap.js?v=0.3">
 <link rel="preload" as="script" href="js/reader-mode.js?v=0.215">
 <link rel="preload" as="script" href="js/reader-guide.js?v=0.8">
-<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.19">
+<link rel="preload" as="script" href="js/i18n-texts-templates.js?v=0.20">
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.43">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.9">
@@ -496,7 +497,7 @@
 <link rel="preload" as="script" href="js/typing-style.js?v=0.6">
 <link rel="preload" as="script" href="js/anchors.js?v=0.8">
 <link rel="preload" as="script" href="js/qr-code.js?v=0.12">
-<link rel="preload" as="script" href="js/gfs-open.js?v=0.11">
+<link rel="preload" as="script" href="js/gfs-open.js?v=0.12">
 <link rel="preload" as="script" href="js/extensions.js?v=0.98">
 <link rel="preload" as="script" href="js/pdf-reading.js?v=0.3">
 <link rel="preload" as="script" href="js/chart-entry.js?v=0.5">
@@ -534,7 +535,7 @@
 <link rel="preload" as="script" href="js/conditional-style.js?v=0.4">
 <link rel="preload" as="script" href="js/conditional-style-window.js?v=0.6">
 <link rel="preload" as="script" href="js/macro-templates.js?v=0.17">
-<link rel="preload" as="script" href="js/macro-editor.js?v=0.59">
+<link rel="preload" as="script" href="js/macro-editor.js?v=0.60">
 <link rel="preload" as="script" href="js/view-template.js?v=0.13">
 <link rel="preload" as="script" href="js/export-date.js?v=0.4">
 <link rel="preload" as="script" href="js/row-attachment.js?v=0.8">
@@ -544,7 +545,7 @@
 <link rel="preload" as="script" href="js/template-preferences.js?v=0.15">
 <link rel="preload" as="script" href="js/export-choices.js?v=0.5">
 <link rel="preload" as="script" href="js/template-organize-modal.js?v=0.16">
-<link rel="preload" as="script" href="js/template-tree-select.js?v=0.29">
+<link rel="preload" as="script" href="js/template-tree-select.js?v=0.30">
 <link rel="preload" as="script" href="js/template-arrangement.js?v=0.3">
 <link rel="preload" as="script" href="js/link-rule-history.js?v=0.1">
 <link rel="preload" as="script" href="js/settings-history.js?v=0.4">
@@ -592,20 +593,20 @@
 <link rel="preload" as="script" href="js/email-drafts.js?v=0.1">
 <link rel="preload" as="script" href="js/main-export.js?v=0.15">
 <link rel="preload" as="script" href="js/main-autosave.js?v=0.6">
-<link rel="preload" as="script" href="js/main-save.js?v=0.5">
+<link rel="preload" as="script" href="js/main-save.js?v=0.6">
 <link rel="preload" as="script" href="js/main-leave.js?v=0.1">
 <link rel="preload" as="script" href="js/email-link.js?v=0.1">
 <link rel="preload" as="script" href="js/email-link-panel.js?v=0.1">
 <link rel="preload" as="script" href="js/main-email.js?v=0.4">
 <link rel="preload" as="script" href="js/main-page-zoom.js?v=0.1">
-<link rel="preload" as="script" href="js/main-rename.js?v=0.2">
+<link rel="preload" as="script" href="js/main-rename.js?v=0.3">
 <link rel="preload" as="script" href="js/main-macro-return.js?v=0.2">
-<link rel="preload" as="script" href="js/main-email-link.js?v=0.1">
+<link rel="preload" as="script" href="js/main-email-link.js?v=0.2">
 <link rel="preload" as="script" href="js/main-access.js?v=0.7">
 <link rel="preload" as="script" href="js/main-reader.js?v=0.2">
 <link rel="preload" as="script" href="js/main-live.js?v=0.6">
 <link rel="preload" as="script" href="js/main-slides.js?v=0.2">
-<link rel="preload" as="script" href="js/main.js?v=0.276">
+<link rel="preload" as="script" href="js/main.js?v=0.277">
 <!-- précharge des scripts : fin -->
 </head>
 <body>
@@ -1523,10 +1524,11 @@
 <script src="js/html-sanitize.js?v=0.10"></script>
 <script src="js/page-tree.js?v=0.6"></script>
 <script src="js/schema-columns.js?v=0.5"></script>
-<script src="js/grist-api.js?v=0.131"></script>
-<script src="js/templates.js?v=0.119"></script>
+<script src="js/grist-api.js?v=0.132"></script>
+<script src="js/templates.js?v=0.120"></script>
 <script src="js/table-consent.js?v=0.2"></script>
-<script src="js/early-preview.js?v=0.1"></script>
+<script src="js/early-preview.js?v=0.2"></script>
+<script src="js/early-open.js?v=0.1"></script>
 <script>
   // Démarrage anticipé (mesure d'ouverture du 2026-10-02) : Grist et la lecture des modèles ne dépendent d'aucun des scripts qui suivent, ils partent ici pendant que ceux-ci
   // arrivent et s'exécutent. js/main.js reprend ces promesses (window.__earlyStart) ; sans elles (échec ici), il les lance lui-même.
@@ -1535,7 +1537,8 @@
     // L'aperçu du document que GFS désigne (js/early-preview.js) : son jeton de lecture doit partir AVANT la lecture de la table des modèles, que Grist traite en plusieurs secondes sans rien laisser passer devant les appels
     // qui la suivent. Sans effet, ni erreur, quand rien n'est désigné.
     try { EarlyPreview.begin(); } catch (e) { /* l'aperçu n'est qu'un plus : le démarrage est celui d'avant */ }
-    const templatesLoaded = Templates.loadAll();
+    // La liste des modèles : le document que GFS désigne s'ouvre depuis sa seule ligne (js/early-open.js) quand rien ne s'y oppose, et la table entière se lit ensuite, en fond ; sinon elle se lit tout de suite, comme avant.
+    const templatesLoaded = EarlyOpen.startupTemplates();
     gristInit.catch(() => {}); // l'échec se lit à l'attente, dans js/main.js
     templatesLoaded.catch(() => {});
     window.__earlyStart = { grist: gristInit, templates: templatesLoaded };
@@ -1554,7 +1557,7 @@
 <script src="js/space-gap.js?v=0.3"></script>
 <script src="js/reader-mode.js?v=0.215"></script>
 <script src="js/reader-guide.js?v=0.8"></script>
-<script src="js/i18n-texts-templates.js?v=0.19"></script>
+<script src="js/i18n-texts-templates.js?v=0.20"></script>
 <script src="js/i18n-texts-export.js?v=0.43"></script>
 <script src="js/i18n-texts-format.js?v=0.6"></script>
 <script src="js/i18n-texts-blocks.js?v=0.9"></script>
@@ -1735,7 +1738,7 @@
 <script src="js/typing-style.js?v=0.6"></script>
 <script src="js/anchors.js?v=0.8"></script>
 <script src="js/qr-code.js?v=0.12"></script>
-<script src="js/gfs-open.js?v=0.11"></script>
+<script src="js/gfs-open.js?v=0.12"></script>
 <script src="js/extensions.js?v=0.98"></script>
 <script src="js/pdf-reading.js?v=0.3"></script>
 <script src="js/chart-entry.js?v=0.5"></script>
@@ -1773,7 +1776,7 @@
 <script src="js/conditional-style.js?v=0.4"></script>
 <script src="js/conditional-style-window.js?v=0.6"></script>
 <script src="js/macro-templates.js?v=0.17"></script>
-<script src="js/macro-editor.js?v=0.59"></script>
+<script src="js/macro-editor.js?v=0.60"></script>
 <script src="js/view-template.js?v=0.13"></script>
 <script src="js/export-date.js?v=0.4"></script>
 <script src="js/row-attachment.js?v=0.8"></script>
@@ -1783,7 +1786,7 @@
 <script src="js/template-preferences.js?v=0.15"></script>
 <script src="js/export-choices.js?v=0.5"></script>
 <script src="js/template-organize-modal.js?v=0.16"></script>
-<script src="js/template-tree-select.js?v=0.29"></script>
+<script src="js/template-tree-select.js?v=0.30"></script>
 <script src="js/template-arrangement.js?v=0.3"></script>
 <script src="js/link-rule-history.js?v=0.1"></script>
 <script src="js/settings-history.js?v=0.4"></script>
@@ -1831,19 +1834,19 @@
 <script src="js/email-drafts.js?v=0.1"></script>
 <script src="js/main-export.js?v=0.15"></script>
 <script src="js/main-autosave.js?v=0.6"></script>
-<script src="js/main-save.js?v=0.5"></script>
+<script src="js/main-save.js?v=0.6"></script>
 <script src="js/main-leave.js?v=0.1"></script>
 <script src="js/email-link.js?v=0.1"></script>
 <script src="js/email-link-panel.js?v=0.1"></script>
 <script src="js/main-email.js?v=0.4"></script>
 <script src="js/main-page-zoom.js?v=0.1"></script>
-<script src="js/main-rename.js?v=0.2"></script>
+<script src="js/main-rename.js?v=0.3"></script>
 <script src="js/main-macro-return.js?v=0.2"></script>
-<script src="js/main-email-link.js?v=0.1"></script>
+<script src="js/main-email-link.js?v=0.2"></script>
 <script src="js/main-access.js?v=0.7"></script>
 <script src="js/main-reader.js?v=0.2"></script>
 <script src="js/main-live.js?v=0.6"></script>
 <script src="js/main-slides.js?v=0.2"></script>
-<script src="js/main.js?v=0.276"></script>
+<script src="js/main.js?v=0.277"></script>
 </body>
 </html>
