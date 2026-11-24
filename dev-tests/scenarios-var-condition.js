@@ -1331,7 +1331,7 @@
 
   cases.push({
     id: 'varcond_affix_attrs_roundtrip',
-    description: 'Le texte « Avant » / « Après » d’une bulle survit à l’aller-retour HTML (data-before, data-after) avec ses espaces ; borné à 40 signes, sans saut de ligne ; une bulle qui n’en a pas ne porte rien ; l’éditeur le montre dans la bulle sans l’ajouter à son texte',
+    description: 'Le texte « Avant » / « Après » d’une bulle survit à l’aller-retour HTML (data-before, data-after) avec ses espaces ; borné à 40 signes, un retour à la ligne gardé (« \\n »), tout autre signe de contrôle remplacé par une espace ; une bulle qui n’en a pas ne porte rien ; l’éditeur le montre dans la bulle sans l’ajouter à son texte',
     run: async (h) => {
       await seed(h);
       const long = 'x'.repeat(60);
@@ -1342,23 +1342,23 @@
       box.innerHTML = Editor.getHTML();
       const saved = Array.from(box.querySelectorAll('span.var-badge')).map(s => [s.getAttribute('data-before'), s.getAttribute('data-after')]);
       const chips = Array.from(document.querySelectorAll('.tiptap .var-badge .var-badge-affix'));
-      const expected = [['(', ', '], [null, null], [null, null], ['a b c', 'x'.repeat(40)]];
+      const expected = [['(', ', '], [null, null], [null, null], ['a b\nc', 'x'.repeat(40)]];
       const pass = JSON.stringify(attrs) === JSON.stringify(expected) && JSON.stringify(saved) === JSON.stringify(expected)
-        && JSON.stringify(chips.map(c => c.getAttribute('data-text'))) === JSON.stringify(['(', ', ', 'a b c', 'x'.repeat(40)]) && chips.every(c => c.textContent === '');
+        && JSON.stringify(chips.map(c => c.getAttribute('data-text'))) === JSON.stringify(['(', ', ', 'a b↵c', 'x'.repeat(40)]) && chips.every(c => c.textContent === '');
       return { pass, notes: JSON.stringify({ attrs, saved, chips: chips.map(c => c.getAttribute('data-text')) }) };
     },
   });
 
   cases.push({
     id: 'varcond_affix_helpers_keep_spaces_and_skip_blank_values',
-    description: 'VariableFormat.affix / affixes / withAffixes : espaces gardées (une espace seule compte), 40 signes au plus, caractères de contrôle remplacés, entrée qui n’est pas du texte ignorée ; rien n’entoure une valeur vide ou faite d’espaces',
+    description: 'VariableFormat.affix / affixes / withAffixes : espaces gardées (une espace seule compte), 40 signes au plus, un retour à la ligne gardé, tout autre caractère de contrôle remplacé, entrée qui n’est pas du texte ignorée ; rien n’entoure une valeur vide ou faite d’espaces',
     run: async () => {
       const VF = VariableFormat;
       const around = VF.affixes('(', ')');
       const checks = {
         spaceKept: VF.affix(' ') === ' ' && VF.affix(', ') === ', ',
         empty: VF.affix('') === null && VF.affix(null) === null && VF.affix(undefined) === null && VF.affix(5) === null && VF.affix({}) === null,
-        control: VF.affix('a\r\nb\u0000') === 'a  b ',
+        control: VF.affix('a\r\nb\u0000') === 'a\nb ' && VF.affix('a\tb') === 'a b' && VF.affix('a\nb') === 'a\nb',
         max: VF.affix('y'.repeat(41)) === 'y'.repeat(40) && VF.AFFIX_MAX === 40,
         pair: JSON.stringify(VF.affixes('(', null)) === '{"before":"(","after":null}' && VF.affixes('', undefined) === null && VF.affixes(null, ' ') !== null,
         around: VF.withAffixes('Dossier A', around) === '(Dossier A)' && VF.withAffixes('x', null) === 'x',
@@ -1501,7 +1501,7 @@
       await h.sleep(80);
       const cleared = { around: affixOf(badgeNodes(ed)[0].node), html: Editor.getHTML() };
       const around = ['(', '), '];
-      const pass = opened.shown && opened.labels.join('|') === 'Texte avant|Texte après' && opened.empty && opened.max.join() === '40,40' && opened.hint === 'Écrits seulement si la variable s’affiche avec une valeur.'
+      const pass = opened.shown && opened.labels.join('|') === 'Texte avant|Texte après' && opened.empty && opened.max.join() === '40,40' && opened.hint === 'Écrits seulement si la variable s’affiche avec une valeur. Maj+Entrée : retour à la ligne.'
         && debug[0] === I18n.t('varCond.debug.currentMet', { id: 1, value: '(Dossier A), ' }) && debug[1].includes('2 lignes sur 3 remplissent la condition')
         && saved.closed && JSON.stringify(saved.condition) === JSON.stringify(COND_URGENT) && JSON.stringify(saved.around) === JSON.stringify(around)
         && saved.html.includes('data-before="("') && saved.html.includes('data-after="), "') && saved.html.includes('data-condition')
@@ -1648,9 +1648,9 @@
         I18n.setLang(lang);
       }
       const pass = untranslated.length === 0 && english.labels.join('|') === 'Text before|Text after'
-        && english.titles[0] === 'Text written right before the value, for example a comma or a parenthesis. Spaces count.'
-        && english.titles[1] === 'Text written right after the value, for example a comma or a parenthesis. Spaces count.'
-        && english.hint === 'Only written if the variable is shown with a value.' && english.line === 'Selected row (#1): the variable shows “(Dossier A)”.';
+        && english.titles[0] === 'Text written right before the value, for example a comma or a parenthesis. Spaces count. Shift+Enter adds a line break.'
+        && english.titles[1] === 'Text written right after the value, for example a comma or a parenthesis. Spaces count. Shift+Enter adds a line break.'
+        && english.hint === 'Only written if the variable is shown with a value. Shift+Enter: line break.' && english.line === 'Selected row (#1): the variable shows “(Dossier A)”.';
       return { pass, notes: JSON.stringify({ untranslated, english }) };
     },
   });

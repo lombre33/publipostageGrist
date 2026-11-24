@@ -209,7 +209,8 @@ const PivotZones = (function () {
     const opts = { keepZero: !!(format && format.zero === 'show') };
     // Un nombre de lignes ou de valeurs compte des unités : entier, zéro écrit, seuls les séparateurs du format choisi y servent.
     if (def.agg === 'count') return Variables.formatValue(value, { type: 'number', style: format && format.style ? format.style : 'none', decimals: 0, zero: 'show' }, null, null, Object.assign({ colType: 'Int' }, opts));
-    if (def.value && def.value.kind === 'column') return Variables.formatValue(value, format, def.source.table, def.value.path, opts);
+    // Une case du tableau tient sur une ligne : le retour à la ligne d'un séparateur de liste (VariableFormat.LINE_BREAK) y est une espace.
+    if (def.value && def.value.kind === 'column') return VariableFormat.flatBreaks(Variables.formatValue(value, format, def.source.table, def.value.path, opts));
     return Variables.formatValue(value, format, null, null, Object.assign({ colType: 'Numeric' }, opts));
   }
 

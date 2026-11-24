@@ -26,12 +26,15 @@ const VariableModal = (function () {
     'var-list': { row: 'var-loop-seps var-list-seps', last: 'var-list-last-input' },
   };
   // Les deux séparateurs d'une suite de valeurs - boucle en ligne (`scope` 'var-loop') ou liste (`scope` 'var-list') : « Séparateur », « Avant la
-  // dernière valeur » et leur indication. `onInput(clé, texte)` reçoit chaque frappe, sous la clé `separator` ou `lastSeparator`.
+  // dernière valeur » et leur indication. `onInput(clé, texte)` reçoit chaque frappe, sous la clé `separator` ou `lastSeparator`. Un retour à la ligne y est un « \n » du texte.
   function separatorFields(scope, onInput) {
     const classes = SEPARATOR_CLASSES[scope];
     const row = el('div', classes.row);
-    const sep = labelledInput(scope + '-sep', 'var-loop-sep-input');
-    const last = labelledInput(scope + '-last', classes.last);
+    // Des zones de texte d'une ligne (js/grow-text.js) : Maj+Entrée y pose un retour à la ligne - un séparateur peut mettre chaque valeur sur sa ligne.
+    const sep = labelledInput(scope + '-sep', 'var-loop-sep-input', 'textarea');
+    const last = labelledInput(scope + '-last', classes.last, 'textarea');
+    GrowText.attach(sep.input, { lines: true });
+    GrowText.attach(last.input, { lines: true });
     const hint = el('span', 'var-loop-hint');
     row.append(sep.label, sep.input, last.label, last.input, hint);
     sep.input.addEventListener('input', () => onInput('separator', sep.input.value));
@@ -161,7 +164,8 @@ const VariableModal = (function () {
       Dom.setMarkup(icon, Icons.svg('acceptAll'));
       line.appendChild(icon);
     }
-    line.appendChild(el('span', null, text));
+    // Le retour à la ligne d'un séparateur ou d'un texte « Avant » / « Après » (VariableFormat.LINE_BREAK) se lit « ↵ » : l'aperçu tient sur une ligne.
+    line.appendChild(el('span', null, String(text).replace(/\u2028/g, '\u21b5')));
     syncDetail(line, true);
   }
   // Le bouton « Détail » vit dans la première ligne (son texte est remplacé à chaque calcul : il est reposé à chaque fois) ; il n'y a que s'il y a un détail à montrer.

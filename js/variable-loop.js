@@ -1056,6 +1056,7 @@ const VariableLoop = (function () {
     r.separators.hint.textContent = I18n.t('varLoop.separatorHint');
     r.separators.sepInput.value = state.working.separator;
     r.separators.lastInput.value = state.working.lastSeparator;
+    GrowText.refresh(r.separators.sepInput); GrowText.refresh(r.separators.lastInput);
     r.filterLabel.textContent = I18n.t('varLoop.section.filter');
     r.pickLabel.textContent = I18n.t('varLoop.section.pick');
     r.sortLabel.textContent = I18n.t('varLoop.section.sort');

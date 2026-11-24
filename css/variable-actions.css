@@ -240,8 +240,10 @@
 .var-condition-affix { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-condition-affix[hidden] { display: none; }
 .var-fold-body .var-condition-affix { margin-top: 0; }
-.var-condition-affix input { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-condition-affix :is(input, textarea) { width: 120px; height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-condition-affix .var-loop-hint { grid-column: 2; }
+/* L'indication (« … Maj+Entrée : retour à la ligne ») passe à la ligne dans les colonnes qu'elle couvre au lieu de les élargir : `width: 0` ne compte pas dans leur largeur, `min-width: 100%` la lui rend. */
+.var-condition-affix .var-loop-hint { width: 0; min-width: 100%; }
 /* « Sinon afficher » (js/variable-otherwise.js) : une seconde grille de même classe, sous l'aperçu - un champ à variables (js/field-editor.js, celui de l'objet d'un e-mail) à la
    place des champs « Avant » / « Après » ; 288 px au plus, moins quand la fenêtre est étroite : son conteneur peut alors rétrécir sous la largeur du champ. Mêmes bordure, police et fond
    que les champs d'une ligne (`.var-condition-affix input`), pour une bulle, une valeur (une ligne) et un bloc (plusieurs). Grisé sans règle complète : il laisse passer la souris,
@@ -265,7 +267,7 @@
 @media (min-width: 520px) {
   .var-condition-affix { grid-template-columns: repeat(4, max-content); }
   .var-condition-affix .var-condition-affix-after { padding-left: 12px; }
-  .var-condition-affix input { width: 96px; }
+  .var-condition-affix :is(input, textarea) { width: 96px; }
   .var-condition-affix .var-loop-hint { grid-column: 2 / -1; }
 }
 .var-condition-debug { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
@@ -349,10 +351,13 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 .var-loop-row-note[hidden] { display: none; }
 .var-loop-seps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-loop-seps[hidden] { display: none; }
-.var-loop-seps label + input { margin-right: 6px; }
-.var-loop-seps input { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.var-loop-seps label + :is(input, textarea) { margin-right: 6px; }
+.var-loop-seps :is(input, textarea) { height: 26px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-family: var(--font-ui); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
 .var-loop-seps .var-loop-sep-input { width: 44px; }
 .var-loop-seps .var-loop-last-input { width: 52px; }
+/* Les champs « Texte avant / après » et les séparateurs sont des zones de texte d'une ligne (js/grow-text.js, `lines`) : Maj+Entrée y pose un retour à la ligne. Fermées, elles ont la hauteur et la
+   police de l'<input> d'avant ; avec un retour à la ligne elles s'ouvrent sur leurs lignes (au plus cinq, puis elles défilent), la hauteur est posée par le script. */
+.var-condition-affix textarea.pp-grow-text, .var-loop-seps textarea.pp-grow-text { height: 26px; padding: 3px 6px; line-height: 18px; resize: none; font-weight: 400; }
 .var-loop-hint { font-size: 11.5px; font-weight: 500; color: var(--text-muted); }
 .var-loop-filter-empty { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .var-loop-filter-empty .var-condition-add { margin-top: 0; }

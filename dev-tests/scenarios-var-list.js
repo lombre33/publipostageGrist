@@ -589,7 +589,7 @@
         enWindow: !!en && en.title === 'List' && en.intro === '#VlProjets.Themes holds several choices. Say which ones the document writes, and how.'
           && same(en.picks.map(p => p[1]), ['All values', 'The first', 'The last', 'By number']) && en.picks[2][2] === 'true'
           && en.sepLabel === 'Separator' && en.lastLabel === 'Before the last value' && en.numberLabel === 'Number' && en.placeholder === 'same as separator'
-          && same(en.hints, ['spaces included', '1 = the first value. With no value at that position, nothing is written.',
+          && same(en.hints, ['spaces included; Shift+Enter: line break', '1 = the first value. With no value at that position, nothing is written.',
             'PDF, Word, Excel, Markdown and HTML exports; Read mode shows one value at a time.'])
           && en.splitLabel === 'One document per value' && !en.splitChecked
           && en.resetText === 'Reset to default' && en.cancelText === 'Cancel' && en.saveText === 'Save'

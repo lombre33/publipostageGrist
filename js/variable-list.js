@@ -236,6 +236,7 @@ const VariableList = (function () {
     separators.hint.textContent = I18n.t('varList.separatorHint');
     separators.sepInput.value = state.working.separator;
     separators.lastInput.value = state.working.lastSeparator;
+    GrowText.refresh(separators.sepInput); GrowText.refresh(separators.lastInput);
     number.label.textContent = I18n.t('varList.number');
     numberHint.textContent = I18n.t('varList.numberHint');
     number.input.value = String(state.working.index);

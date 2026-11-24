@@ -740,6 +740,12 @@ const VariableFormat = (function () {
   }
   // Les valeurs d'une liste à plat : une liste de listes (une colonne Choix multiple lue sur plusieurs lignes liées) n'en fait qu'une.
   function flattenList(value) { return Array.isArray(value) ? value.flat(Infinity) : [value]; }
+  // Le retour à la ligne d'un texte que la personne écrit (« Avant » / « Après », séparateurs : Maj+Entrée dans leur champ) : « \n » dans ce qui se garde, mais « \u2028 » une fois
+  // mêlé à la valeur d'une bulle. La valeur d'une cellule porte ses propres « \n », que chaque export lit à sa façon (js/xlsx-export.js, js/docx-export.js) et qui ne doivent pas changer :
+  // seul ce signe-ci est un retour posé exprès. ReaderMode.valueNode en fait un vrai retour (<br>), les aperçus un « ↵ » (VariableModal.setLine), les champs texte une espace.
+  const LINE_BREAK = '\u2028';
+  const breaksOf = text => String(text).replace(/\r\n?|\n/g, LINE_BREAK);
+  const flatBreaks = text => String(text).replace(/\u2028/g, ' ');
   function listText(texts, raw) {
     // Le texte d'une liste dont les valeurs sont déjà écrites (`texts`) : les valeurs vides sont sautées, puis le choix de `list` s'applique.
     const list = normalizeList(raw);
@@ -749,7 +755,7 @@ const VariableFormat = (function () {
     if (list.pick === 'nth') return list.index <= shown.length ? shown[list.index - 1] : '';
     if (shown.length < 2) return shown.join('');
     const last = list.lastSeparator === '' ? list.separator : list.lastSeparator;
-    return shown.slice(0, -1).join(list.separator) + last + shown[shown.length - 1];
+    return shown.slice(0, -1).join(breaksOf(list.separator)) + breaksOf(last) + shown[shown.length - 1];
   }
 
   // === Texte autour de la valeur === « Avant » et « Après » d'une bulle (fenêtre de js/variable-condition.js) : un texte collé à la valeur, par exemple
@@ -759,9 +765,9 @@ const VariableFormat = (function () {
   // de la fenêtre, un champ de texte brut qui résout une bulle).
   const AFFIX_MAX = 40;
   function affix(raw) {
-    // Un de ces textes tel qu'il se garde : au plus AFFIX_MAX caractères, espaces compris - une espace seule est un vrai choix -, sans caractère de
-    // contrôle (un retour à la ligne ferait une ligne de plus dans le PDF) ; null quand il est vide ou n'est pas du texte.
-    const text = typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, AFFIX_MAX) : '';
+    // Un de ces textes tel qu'il se garde : au plus AFFIX_MAX caractères, espaces compris - une espace seule est un vrai choix, un retour à la ligne aussi
+    // (Maj+Entrée dans le champ : « \n », un signe) -, sans autre caractère de contrôle (une tabulation ferait une lacune dans le PDF) ; null quand il est vide ou n'est pas du texte.
+    const text = typeof raw === 'string' ? raw.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f\u2028\u2029]/g, ' ').slice(0, AFFIX_MAX) : '';
     return text === '' ? null : text;
   }
   function affixes(before, after) {
@@ -773,7 +779,7 @@ const VariableFormat = (function () {
     // La valeur écrite d'une bulle avec son texte autour. Rien n'est ajouté à une valeur vide (ou d'espaces seules) : la virgule ne s'écrit que pour
     // une variable qui montre quelque chose.
     if (!around || text == null || String(text).trim() === '') return text;
-    return (around.before || '') + text + (around.after || '');
+    return breaksOf(around.before || '') + text + breaksOf(around.after || '');
   }
 
   return {
@@ -781,6 +787,6 @@ const VariableFormat = (function () {
     currencyGap, decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,
-    AFFIX_MAX, affix, affixes, withAffixes,
+    AFFIX_MAX, affix, affixes, withAffixes, LINE_BREAK, breaksOf, flatBreaks,
   };
 })();
