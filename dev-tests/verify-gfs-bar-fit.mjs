@@ -16,7 +16,7 @@
 //     touchait pas reste où elle était.
 //  6) LA BARRE CHANGE, MENU OUVERT AU CLAVIER (focus du bouton) : le menu reste ouvert, se recale à chaque bord, puis rend tout ce qu'il avait posé quand la barre part.
 //  7) UN CADRE BAS (700 × 260) : posée une barre, tout menu reste dans le cadre et hors de la zone (un menu plus haut que la place défile, 8 px avant le bas du cadre au moins, descendu sous une barre en haut compris).
-//  8) UN MENU DÉCALÉ DE CÔTÉ (600 × 400, barre à gauche : « Exporter » passe à la deuxième ligne, tout à gauche, et son menu glisse à droite de la barre, sans recouvrement horizontal avec son bouton) : du bouton au menu, à la vraie
+//  8) UN MENU DÉCALÉ DE CÔTÉ (630 × 400, barre à gauche : « Exporter » passe à la deuxième ligne, tout à gauche, et son menu glisse à droite de la barre, sans recouvrement horizontal avec son bouton) : du bouton au menu, à la vraie
 //     souris, par plusieurs chemins (vers le haut, le milieu et le bas du menu, d'un saut et en 3 à 30 pas, au pas lent d'une main), le menu reste ouvert et sous le pointeur ; un menu qui garde le pointeur ne se referme pas
 //     tout seul ; laissé sans geste, ou quitté pour un autre menu, il se referme ; un menu qui recouvre son bouton (sans barre, ou au bord de la page) se referme tout de suite, comme avant.
 //  9) LE VOLET « MODIFICATIONS » (js/track-changes-pane.js, collé au bord droit du cadre ; `GfsBar.bite`) : trois modifications, volet ouvert, la barre passe par les quatre bords puis s'en va (le volet ne se rouvre pas) : ni lui ni
@@ -290,7 +290,23 @@ if (wanted(4)) {
   check('barre à gauche : le menu « Titre » a glissé vers la droite (sans barre, il touchait la zone)', slid('gauche', 'v2-heading-flyout') && moved('gauche', 'v2-heading-flyout').flyout.left > reference['v2-heading-flyout'].flyout.left, moved('gauche', 'v2-heading-flyout') && showRect(moved('gauche', 'v2-heading-flyout').flyout));
   check('barre à droite : le menu « Qualité » a glissé vers la gauche (sans barre, il touchait la zone)', slid('droite', 'v2-quality-flyout') && moved('droite', 'v2-quality-flyout').flyout.left < reference['v2-quality-flyout'].flyout.left, moved('droite', 'v2-quality-flyout') && showRect(moved('droite', 'v2-quality-flyout').flyout));
   const plusDown = moved('haut', 'v2-new-template-flyout');
-  check('barre en haut : le menu « + » s\'ouvre plus bas (écart du pont de survol agrandi), sans quitter son bouton', plusDown && plusDown.gap !== '' && plusDown.flyout.top >= bars.haut.zone.y + bars.haut.zone.hauteur - 0.5, plusDown && { menu: showRect(plusDown.flyout), ecart: plusDown.gap });
+  // À 700 px, la barre d'outils elle-même se range hors de la zone depuis l'e-mail lié (23/11) : « + » est poussé à droite d'elle (bouton à 416 px, zone de 284 à 416), son menu ne la touche plus et n'a aucun besoin de
+  // descendre. Le menu qui descend sous la barre se vérifie donc là où il en a besoin (plus bas, à 800 px) ; ici, ce qui doit rester vrai : menu hors zone et sans écart posé quand rien ne le touche.
+  const plusTrigger = plusDown && plusDown.trigger;
+  const plusClear = plusTrigger && (plusTrigger.left >= bars.haut.zone.x + bars.haut.zone.largeur - 0.5 || plusTrigger.right <= bars.haut.zone.x + 0.5);
+  check('barre en haut : le menu « + » s\'ouvre plus bas (écart du pont de survol agrandi) quand son bouton est sur la zone, sinon il reste où il était, sans quitter son bouton',
+    plusDown && (plusClear ? plusDown.gap === '' && plusDown.flyout.top >= plusDown.group.bottom - 1 : plusDown.gap !== '' && plusDown.flyout.top >= bars.haut.zone.y + bars.haut.zone.hauteur - 0.5), plusDown && { menu: showRect(plusDown.flyout), ecart: plusDown.gap, bouton: showRect(plusDown.trigger) });
+  {
+    // Un cadre de 800 × 400 : la barre en haut (zone de 334 à 466) couvre le dessous de « + » (bouton à 259 px, menu de 259 à 463) : le menu s'ouvre plus bas que la zone, sous son bouton, et se rejoint à la souris.
+    const wide = await t.openPage({ framed: true, seed: SEED, lang: 'fr', stub: { barre: null }, width: 800, height: 400 });
+    const bar800 = await showBar(wide.page, wide.app, 'haut', 800, 400);
+    const plus800 = await hoverMenu(wide, 'v2-new-template-flyout');
+    check('barre en haut, cadre de 800 × 400 : le menu « + » s\'ouvre plus bas que la zone (écart du pont de survol agrandi), sans quitter son bouton',
+      !!plus800 && plus800.shown && plus800.gap !== '' && plus800.flyout.top >= bar800.zone.y + bar800.zone.hauteur - 0.5 && plus800.flyout.top - plus800.group.bottom <= 12 && !hits(plus800.flyout, bar800), plus800 && { menu: showRect(plus800.flyout), zone: bar800.zone, ecart: plus800.gap });
+    const reached800 = plus800 && plus800.shown ? await reachMenu(wide, plus800) : null;
+    check('barre en haut, cadre de 800 × 400 : du bouton « + » au menu descendu, à la vraie souris, le menu reste ouvert et sous le pointeur', !!reached800 && reached800.open && reached800.under && reached800.hover, reached800);
+    await wide.page.context().close();
+  }
   for (const id of ['v2-heading-flyout', 'v2-blocks-flyout']) {
     const m = moved('bas', id);
     check(`barre en bas : le menu ${id} défile dans la place qui reste (plafonné, contenu plus haut que lui)`, m && m.shown && m.scrollHeight > m.clientHeight + 1 && (m.scrollable || m.capped), m && { clientHeight: m.clientHeight, scrollHeight: m.scrollHeight, capped: m.capped, scrollable: m.scrollable });
@@ -478,8 +494,9 @@ if (wanted(7)) {
 // Un menu que la barre de GFS a fait glisser de côté ne touche plus son bouton que par un coin : la souris qui va de l'icône au menu sort du groupe en chemin, et le menu se ferme sous elle (« Exporter », passé à la deuxième
 // ligne d'un petit panneau, tout à gauche contre la barre). Le menu ne reste ouvert qu'un court instant après la sortie de son bouton (`GRACE_MS` de js/editor-core.js, 400 ms) ; un menu qui recouvre son bouton n'est pas concerné.
 if (wanted(8)) {
-  console.log('\n8) Un menu décalé de côté, du bouton au menu, 600 × 400');
-  const size = [600, 400];
+  console.log('\n8) Un menu décalé de côté, du bouton au menu, 630 × 400');
+  // 630 et non 600 : depuis l'e-mail lié (23/11), la barre d'outils a une ligne de plus à 600 px et « Exporter » ne passe plus en tête de la deuxième ligne ; 620 à 640 le remettent là où ce scénario le veut.
+  const size = [630, 400];
   const GRACE_WAIT = 400 + 350;   // le délai du menu décalé, plus une marge pour la minuterie
   const ctx = await t.openPage({ framed: true, seed: SEED, lang: 'fr', stub: { barre: null }, width: size[0], height: size[1] });
   const { page, app } = ctx;
