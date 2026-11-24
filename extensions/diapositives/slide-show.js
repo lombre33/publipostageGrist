@@ -352,10 +352,9 @@ const SlideShow = (function () {
     launching = true;
     let handed = false;   // un départ a pris le rendu : c'est lui (ou `stop`) qui libère les images
     try {
-      // Une image d'un autre site se montre au diaporama comme dans un export : la même question d'abord (ExternalImages), « Annuler » ne lance rien.
-      try { await ExternalImages.confirmExport(html, headerFooter); } catch (e) { return; }
+      // Une image d'un autre site se montre au diaporama comme à la Lecture : son cadre (js/external-images.js), jamais l'image : le diaporama ne la télécharge pas.
       if (run) return;
-      // La fenêtre à part s'ouvre ICI, tout de suite après le geste (le départ, ou le bouton de la question ci-dessus, un geste neuf) et avant le rendu, qui prend du temps : le navigateur n'accorde plus la fenêtre environ 5 s après le geste ; refusée, le panneau la remplace, avec une ligne qui le dit.
+      // La fenêtre à part s'ouvre ICI, tout de suite après le geste (le départ) et avant le rendu, qui prend du temps : le navigateur n'accorde plus la fenêtre environ 5 s après le geste ; refusée, le panneau la remplace, avec une ligne qui le dit.
       // Avec la vue intervenant, c'est une vraie fenêtre (non un onglet, qui cacherait le panneau) et le panneau devient la console ; une seule fenêtre s'ouvre, jamais deux au même geste.
       const route = routeOf();
       const link = route === 'panel' ? null : SlideWindow.open(windowInfo(route === 'speaker'), route === 'speaker' ? SPEAKER_WINDOW : undefined);

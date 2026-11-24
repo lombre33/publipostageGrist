@@ -48,16 +48,12 @@ const MainExport = (function () {
         const keyboardFocus = keyboardFocusedElement();
         OrientationToggle.setBusy(true);
         controls.forEach(el => setExportControlLocked(el, true));
-        // Un clic = un lancement (un lot entier compris) : les sites d'images déjà acceptés ne sont pas redemandés, un refus arrête tout
-        // (js/external-images.js).
-        ExternalImages.beginRun();
         // Réglage « Accessibilité » : le rappel des images sans texte alternatif ne se pose qu'une fois par lancement (js/alt-reminder.js).
         AltReminder.beginRun();
         ExportCommon.resetUnreadImages();
         try {
           await fn(...args);
         } finally {
-          ExternalImages.endRun();
           AltReminder.endRun();
           exportOperationInProgress = false;
           OrientationToggle.setBusy(false);
@@ -67,12 +63,14 @@ const MainExport = (function () {
       };
     }
 
-    // L'état de fin d'un export réussi : son texte, précédé - quand des images n'ont pas pu être lues et manquent dans le fichier
-    // (ExportCommon.noteUnreadImage) - de leur nombre, en tête : le coin d'état coupe ce qui dépasse, à droite. Le fichier est bien produit : ce n'est
+    // L'état de fin d'un export réussi : son texte, précédé - quand des images n'ont pas pu être lues (ExportCommon.noteUnreadImage) ou sont d'un autre site, que l'export ne télécharge jamais
+    // (ExportCommon.noteImageWithoutSource) - de leur nombre, en tête : le coin d'état coupe ce qui dépasse, à droite. Le fichier est bien produit : ce n'est
     // pas une erreur (pas de rouge), mais la personne n'a plus à ouvrir le fichier pour s'en apercevoir.
     function setExportDoneStatus(text, note) {
       const unread = ExportCommon.unreadImageCount();
-      const done = unread ? I18n.t('status.imagesUnread', { n: unread }) + ' ' + text : text;
+      const outside = ExportCommon.outsideImageCount();
+      const missing = [outside ? I18n.t('status.imagesOutside', { n: outside }) : '', unread ? I18n.t('status.imagesUnread', { n: unread }) : ''].filter(Boolean);
+      const done = missing.length ? missing.join(' ') + ' ' + text : text;
       // `note` : ce qui n'a pas pu se faire après l'export (stampExportDate), en tête et en rouge - le coin d'état coupe à droite, et le fichier, lui, est bien produit.
       setStatus(note ? note + ' ' + done : done, !!note);
     }

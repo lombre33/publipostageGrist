@@ -442,10 +442,18 @@ const ExportCommon = (function () {
     return src.length > 200 ? src.slice(0, 200) + '#' + src.length : src;
   }
   function noteUnreadImage(img) { unreadImages.add(unreadImageKey(img)); }
-  // Une image sans adresse n'a rien d'illisible, sauf une pièce jointe dont l'adresse n'a pas pu être posée : seule celle-là compte.
-  function noteImageWithoutSource(img) { if (img.getAttribute('data-attachment-id')) noteUnreadImage(img); }
+  // Les images d'un autre site, que l'export ne télécharge jamais (ReaderMode.preview range leur adresse dans data-external-src : js/external-images.js:setAside) : laissées de côté, elles manquent dans le
+  // fichier, et la personne doit le savoir comme pour une image illisible. Comptées à part (le message dit comment les garder : les coller dans le document) et sans doublon, comme les autres.
+  const outsideImages = new Set();
+  const outsideImageKey = src => (src.length > 200 ? src.slice(0, 200) + '#' + src.length : src);
+  // Une image sans adresse n'a rien d'illisible, sauf une pièce jointe dont l'adresse n'a pas pu être posée (comptée comme illisible) et une image d'un autre site (comptée à part) : seules celles-là comptent.
+  function noteImageWithoutSource(img) {
+    if (img.getAttribute('data-attachment-id')) noteUnreadImage(img);
+    else if (img.hasAttribute('data-external-src')) outsideImages.add(outsideImageKey((img.getAttribute('data-external-src') || '').trim()));
+  }
   function unreadImageCount() { return unreadImages.size; }
-  function resetUnreadImages() { unreadImages.clear(); }
+  function outsideImageCount() { return outsideImages.size; }
+  function resetUnreadImages() { unreadImages.clear(); outsideImages.clear(); }
 
   // Une image que le modèle lie à une donnée au lieu de lui donner une adresse : une pièce jointe de la ligne (data-var-*), un graphique de la page (data-chart-*), une vidéo (data-video, js/video-frame.js : son identifiant, sans adresse) ou un code QR dont le
   // texte cite une colonne (data-qr-text, sans adresse). La Lecture et les exports la dessinent pour la ligne (js/reader-mode.js). Partagé par l'export Markdown d'un modèle, qui l'écrit
@@ -895,5 +903,5 @@ const ExportCommon = (function () {
   })();
 
   return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
-    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
+    resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, outsideImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();

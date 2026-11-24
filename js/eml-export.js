@@ -422,8 +422,6 @@ const EmlExport = (function () {
   async function getEmlBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, fields) {
     // Le moteur de l'export HTML, dont le .eml reprend le document, se charge au premier besoin (js/export-engines.js).
     await ExportEngines.ensure(['html']);
-    // Les images d'un autre site sont téléchargées pendant la préparation du document : la même fenêtre que pour tout export les liste (js/external-images.js).
-    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     await AltReminder.confirmExport(htmlContent, headerFooterData);
     const { resolvedHtml, filename, resolved, files } = await GristAPI.withReadPass(async () => {
       const document = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, null);

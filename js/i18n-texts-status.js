@@ -253,18 +253,26 @@ const I18nTextsStatus = {
   'confirm.mergedExportGrid': { fr: 'Générer un PDF par valeur de « {table} » ({count} {count|valeur|valeurs}) et les réunir dans un seul fichier PDF, chaque valeur commençant sur une nouvelle page ?', en: 'Generate one PDF per value of “{table}” ({count} {count|value|values}) and combine them into a single PDF file, each value starting on a new page?' },
   'confirm.batchExportXlsx': { fr: 'Générer un classeur Excel par valeur de « {table} » ({count} {count|valeur|valeurs}) et les regrouper dans une archive ZIP ?', en: 'Generate one Excel workbook per value of “{table}” ({count} {count|value|values}) and bundle them into a ZIP archive?' },
   'confirm.singleWorkbookExport': { fr: 'Générer un seul classeur Excel, avec une feuille par valeur de « {table} » ({count} {count|valeur|valeurs}) ?', en: 'Generate a single Excel workbook with one sheet per value of “{table}” ({count} {count|value|values})?' },
-  // Images d'un site externe à l'export (js/external-images.js) : la fenêtre qui liste les sites avant le PDF ou le Word, et le message quand on
-  // l'annule.
-  'dialog.externalImages.title': { fr: 'Images d’un site externe', en: 'Images from an external site' },
-  'confirm.externalImages': { fr: 'Pour cet export, le widget doit télécharger des images hébergées {count|sur un site externe|sur des sites externes} :\n{sites}\n\nAnnuler arrête l’export.', en: 'For this export, the widget has to download images hosted {count|on an external site|on external sites}:\n{sites}\n\nCancel stops the export.' },
   // Image d'un site externe à l'affichage (js/external-images.js) : l'infobulle de toute image qui charge depuis un autre site que le widget et
   // Grist (contour en tirets, css/external-images.css).
   'image.externalSite': { fr: 'Image hébergée sur un site externe ({site}) : chaque affichage la télécharge depuis ce site.', en: 'Image hosted on an external site ({site}): every display downloads it from that site.' },
-  // Image d'un site externe pas encore affichée (js/external-images.js, cadre « Afficher » de l'éditeur, de la Lecture, des en-têtes et pieds) : le texte
-  // du bouton, le texte alternatif qu'un lecteur d'écran lit, et l'infobulle qui dit ce que le clic fait.
-  'image.blocked.show': { fr: 'Afficher', en: 'Show' },
-  'image.blocked.alt': { fr: 'Afficher l’image de {site}', en: 'Show the image from {site}' },
-  'image.blocked.hint': { fr: 'Image hébergée sur un site externe ({site}), pas encore chargée. Un clic sur « Afficher » la télécharge depuis ce site, qui saura alors que le document est ouvert. Les autres images de ce site s’affichent aussi.', en: 'Image hosted on an external site ({site}), not loaded yet. Clicking “Show” downloads it from that site, which will then know the document is open. The other images from that site are shown too.' },
+  // Image d'un autre site (js/external-images.js : le cadre de l'éditeur, de la Lecture, des en-têtes et pieds, de la galerie) : la ligne sous le site, le texte alternatif qu'un lecteur d'écran lit, et l'infobulle qui dit
+  // qu'elle ne s'affiche pas et qu'un clic explique comment la remettre. Plus de bouton « Afficher » depuis le 24/11 : le widget n'appelle plus aucun autre site.
+  'image.blocked.note': { fr: 'Image non affichée', en: 'Image not shown' },
+  'image.blocked.alt': { fr: 'Image de {site} non affichée', en: 'Image from {site} not shown' },
+  'image.blocked.hint': { fr: 'Image hébergée sur un site externe ({site}) : elle n’est ni affichée ni exportée. Cliquez pour savoir comment la remettre.', en: 'Image hosted on an external site ({site}): it is neither shown nor exported. Click to see how to put it back.' },
+  'image.blocked.action': { fr: 'Image de {site} non affichée : savoir comment la remettre', en: 'Image from {site} not shown: how to put it back' },
+  // La fenêtre qui explique (js/external-images.js : explain, noticeOnOpen), à l'ouverture d'un document qui porte des images d'un autre site et au clic sur leur cadre (demande du 24/11 : « une pop-up qui explique le pourquoi et la manip »).
+  'image.explain.title': { fr: 'Images d’un autre site non affichées', en: 'Images from another site not shown' },
+  'image.explain.intro': { fr: 'Ce document contient {n} {n|image hébergée sur un autre site. Par sécurité, Publipostage+ n’appelle plus aucun autre site : elle n’est ni affichée ni exportée, un cadre la remplace.|images hébergées sur d’autres sites. Par sécurité, Publipostage+ n’appelle plus aucun autre site : elles ne sont ni affichées ni exportées, un cadre les remplace.}', en: 'This document contains {n} {n|image hosted on another site. For security, Publipostage+ no longer calls any other site: it is neither shown nor exported, and a frame takes its place.|images hosted on other sites. For security, Publipostage+ no longer calls any other site: they are neither shown nor exported, and a frame takes their place.}' },
+  'image.explain.sites': { fr: '{n|Site concerné|Sites concernés} : {sites}', en: '{n|Affected site|Affected sites}: {sites}' },
+  'image.explain.more': { fr: 'et {n} {n|autre|autres}', en: 'and {n} more' },
+  'image.explain.how': { fr: 'Pour remettre une image :', en: 'To put an image back:' },
+  'image.explain.step1': { fr: 'Ouvrez l’image sur son site, faites un clic droit, puis « Copier l’image ».', en: 'Open the image on its site, right-click it, then choose “Copy image”.' },
+  'image.explain.step2': { fr: 'Cliquez sur le cadre de l’image dans le document, fermez cette fenêtre (Échap), puis collez (Ctrl+V) : l’image prend la place du cadre.', en: 'Click the image’s frame in the document, close this window (Esc), then paste (Ctrl+V): the image takes the frame’s place.' },
+  'image.explain.step3': { fr: 'Une image enregistrée dans une colonne Pièces jointes de Grist se pose par le menu du bouton « Insérer une image » : « Image depuis une variable (colonne PJ)… ».', en: 'An image stored in a Grist attachments column goes in through the menu of the “Insert an image” button: “Image from a variable (attachment column)…”.' },
+  'image.explain.kept': { fr: 'Le document garde l’adresse de chaque image : rien n’est perdu tant que vous n’avez pas remplacé le cadre.', en: 'The document keeps each image’s address: nothing is lost until you replace the frame.' },
+  'image.explain.close': { fr: 'Compris', en: 'Got it' },
   'status.exportCancelled': { fr: 'Export annulé.', en: 'Export canceled.' },
   // Après un export PDF réussi dont la date n'a pas pu s'écrire (js/export-date.js:stamp, js/main.js:stampExportDate) : en tête du coin d'état, avant « 12 PDF générés. ».
   'status.exportDate.missing': { fr: 'Date non écrite : la colonne « {column} » n’existe plus.', en: 'Date not written: the column “{column}” no longer exists.' },

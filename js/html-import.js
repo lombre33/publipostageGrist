@@ -10,7 +10,7 @@
 //  - le menu, la colonne latérale, l'en-tête et le pied du site : gardés comme du texte (choix du 13/11 : tout garder), et dits dans le compte rendu ;
 //  - les listes de Word « Page web » (les puces `mso-list:Ignore` redeviennent de vraies listes, avec leurs niveaux) ;
 //  - ce que l'export HTML du widget (js/html-export.js, classes `pp-*`) a écrit : encadrés, listes à cases, sommaire, notes de bas de page, colonnes, légendes, signets, en-tête et pied, images alignées ;
-//  - les images : une adresse web (gardée telle quelle : js/external-images.js ne la charge qu'après « Afficher ») ou une data URI ; une adresse relative (le fichier d'à côté n'est pas envoyé avec le texte) est dite par
+//  - les images : seule une data URI est reprise (24/11 : plus aucun appel vers un autre site) ; une adresse web ou relative (le fichier d'à côté n'est pas envoyé avec le texte) est dite par
 //    un mot à la place, comme l'import Markdown ; les pixels d'un pixel (suivi) sont retirés ;
 //  - {{Table.Colonne}} dans le texte : la bulle de la variable quand la colonne existe dans ce document, du texte (et un compte) sinon.
 // Ce qu'il ne garde pas : les programmes, les cadres et médias intégrés, les dessins SVG, les champs de formulaire (les intitulés restent), les liens vers une autre page du site (leur texte reste), les polices.

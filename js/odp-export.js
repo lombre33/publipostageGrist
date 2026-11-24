@@ -719,8 +719,7 @@ const OdpExport = (function () {
   // --- Les exports ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   async function getOdpBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
     await ExportEngines.ensure('pptx');
-    // Comme le PowerPoint : une image d'un site externe est téléchargée pour ce fichier (la fenêtre la liste et peut tout arrêter), et les images sans texte alternatif sont signalées une fois si le réglage l'est.
-    await ExternalImages.confirmExport(htmlContent, null);
+    // Comme le PowerPoint : les images sans texte alternatif sont signalées une fois si le réglage l'est.
     await AltReminder.confirmExport(htmlContent, null);
     const { resolvedHtml, filename } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     const built = await fromHtml(resolvedHtml, { marginsPt, title: filename });

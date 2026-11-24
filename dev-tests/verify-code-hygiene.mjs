@@ -41,9 +41,10 @@
 //      modèles (la table que la personne nomme elle-même) et dans l'installateur des modèles à pack (js/template-pack.js, que seule la galerie appelle, APRÈS la question « Créer les tables du modèle ? » qui
 //      nomme chaque table), la question qui n'est plus posée avant l'écriture, ou js/table-consent.js qui n'est plus branché avant le démarrage anticipé d'index.html
 //      (choix d'Antoine du 05/10 : « demander une fois, mais si la personne refuse, lui redemander à chaque action de sa part sur le widget »).
-//  20. une image d'un autre site qui charge sans le clic « Afficher » : une surface (Lecture, en-têtes et pieds, galerie, vue d'image de l'éditeur) qui écrit le HTML d'un modèle dans la page sans passer par
-//      ExternalImages (block, blockIn, blockedSiteOf), ou la Lecture avec commentaires qui sérialise le document dans celui de la page (une <img> créée là charge son adresse même détachée)
-//      (choix d'Antoine du 05/10 : « Bloquer jusqu'à un clic »).
+//  20. une image d'un autre site qui charge ou se télécharge (demande d'Antoine du 24/11 : « plus aucun appel externe dans le csp ») : une surface (Lecture, en-têtes et pieds, galerie, vue d'image de
+//      l'éditeur, aperçu d'ouverture) qui écrit le HTML d'un document dans la page sans passer par ExternalImages (block, blockIn, blockedSiteOf), un export (ReaderMode.expandedWrapper) qui lit le HTML
+//      sans ExternalImages.setAside, une lecture d'image (ImageIo) qui n'interroge pas ExternalImages.mayRead, la fenêtre « images d'un autre site » ou le clic « Afficher » qui reviennent, ou la
+//      Lecture avec commentaires qui sérialise le document dans celui de la page (une <img> créée là charge son adresse même détachée).
 //  21. un fichier ou un dossier de ce que le widget charge (css, js, img, templates-gallery, templates-gallery-dev) dont le nom commence par « _ » ou « . » : GitHub Pages (Jekyll) ne le sert pas, il se lit en
 //      local et répond 404 en ligne (le dossier des tables de famille, templates-gallery/_tables, a fait ouvrir 17 modèles de la galerie sur une erreur le 09/10 ; il s'appelle `families/`).
 //  22. la feuille de route du README public qui promet encore ce que le widget livre (« Export PDF : impression full HD, PDF compressé (V1) » : l'impression par le navigateur et le PDF « Léger » sont livrés
@@ -1020,11 +1021,12 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 }
 
 // ============================================================================
-// 20. Une image d'un autre site ne charge qu'après un clic « Afficher » (choix d'Antoine du 05/10, « Bloquer jusqu'à un clic »)
+// 20. Une image d'un autre site ne charge jamais et ne se télécharge jamais (demande d'Antoine du 24/11, « plus aucun appel externe dans le csp »)
 // ============================================================================
-// Une <img> dont l'adresse est un autre site télécharge cette adresse dès que le navigateur la voit : le site apprend alors que le document est ouvert. Les surfaces qui écrivent le HTML du modèle dans la page
-// passent donc par js/external-images.js (block, blockIn : le cadre « Afficher » à la place de l'adresse) ; la vue d'image de l'éditeur ne donne pas d'adresse à son <img> (blockedSiteOf). dev-tests/
-// scenarios-external-images.js et verify-external-images-mouse.mjs gardent le comportement, requêtes du navigateur comprises ; ce contrôle garde les points d'entrée qu'un nouveau code oublierait.
+// Une <img> dont l'adresse est un autre site télécharge cette adresse dès que le navigateur la voit : le site apprend alors que le document est ouvert. Les surfaces qui écrivent le HTML du document dans la page
+// passent donc par js/external-images.js (block, blockIn : le cadre « Image non affichée » à la place de l'adresse) ; la vue d'image de l'éditeur ne donne pas d'adresse à son <img> (blockedSiteOf) ; les exports
+// rangent l'adresse à part (setAside) et ImageIo refuse de lire un autre site (mayRead). dev-tests/scenarios-external-images.js et verify-external-images-mouse.mjs gardent le comportement, requêtes du
+// navigateur comprises ; ce contrôle garde les points d'entrée qu'un nouveau code oublierait.
 {
   // Le corps d'une fonction : de sa ligne de déclaration à la première ligne qui ferme à la même indentation.
   const bodyOf = (code, needle) => {
@@ -1050,7 +1052,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     /Dom\.setMarkup\(previewTiptap,\s*ExternalImages\.block\(/.test(noCommentsJs(read('js/template-gallery-modal.js'))), 'Dom.setMarkup(previewTiptap');
   const nodes = noCommentsJs(read('js/editor-nodes.js'));
   const apply = bodyOf(nodes, 'function applyImageAttrs');
-  check('images externes : la vue d\'image de l\'éditeur (applyImageAttrs) ne donne pas d\'adresse à son <img> tant que le site n\'est pas affiché (ExternalImages.blockedSiteOf)',
+  check('images externes : la vue d\'image de l\'éditeur (applyImageAttrs) ne donne jamais d\'adresse d\'un autre site à son <img> (ExternalImages.blockedSiteOf)',
     /ExternalImages\.blockedSiteOf\(/.test(apply) && /const shownSrc\s*=\s*\(isVarBox \|\| blockedSite\)\s*\?\s*''/.test(apply) && /img\.src\s*=\s*shownSrc/.test(apply), apply.length + ' caractères');
   const comments = noCommentsJs(read('js/comments.js'));
   // buildReaderHtml garde le dernier résultat (une entrée en Lecture sans frappe ne resérialise pas le modèle) et sérialise par serializeReaderHtml, où est le document inerte.
@@ -1065,7 +1067,21 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       && (page.match(/<link[^>]*href="css\/external-images\.css\?v=/g) || []).length === 1, `external-images ${at('js/external-images.js?v=')}, main ${at('js/main.js?v=')}`);
   const ext = noCommentsJs(read('js/external-images.js'));
   check('images externes : js/external-images.js lit le HTML dans un <template> inerte (Dom.inertTemplate : jamais innerHTML sur un nœud de la page) et ne garde rien nulle part (ni localStorage, ni sessionStorage, ni appel à Grist)',
-    /Dom\.inertTemplate\(/.test(ext) && !/\.innerHTML\s*=/.test(ext) && !/localStorage|sessionStorage|applyUserActions|GristAPI\.(?!getAttachmentDownloadUrl)/.test(ext), 'external-images.js');
+    /Dom\.inertTemplate\(/.test(ext) && !/\.innerHTML\s*=/.test(ext) && !/localStorage|sessionStorage|applyUserActions|GristAPI\.(?!getAttachmentDownloadUrl|getServerOrigin)/.test(ext), 'external-images.js');
+  // Les exports : l'adresse d'une image d'un autre site est rangée à part AVANT que le HTML n'entre dans la page (un nœud qui y entre charge son image, même détaché).
+  const expanded = bodyOf(reader, 'async function expandedWrapper');
+  check('images externes : les exports (ReaderMode.expandedWrapper) rangent l\'adresse des images d\'un autre site (ExternalImages.setAside) AVANT d\'écrire le HTML dans la page',
+    before(expanded, 'ExternalImages.setAside(', 'Dom.setMarkup(wrapper'), expanded.length + ' caractères');
+  const io = noCommentsJs(read('js/image-io.js'));
+  check('images externes : ImageIo (fetchBlob, load) n\'ouvre une adresse qu\'après ExternalImages.mayRead : data:, blob:, le widget et le serveur de Grist, jamais un autre site',
+    /ExternalImages\.mayRead\(/.test(bodyOf(io, 'async function fetchBlob')) && /ExternalImages\.mayRead\(/.test(bodyOf(io, 'function load')), 'image-io.js');
+  const early = noCommentsJs(read('js/early-preview.js'));
+  check('images externes : l\'aperçu d\'ouverture (js/early-preview.js, chargé avant js/external-images.js) ne pose que des images qui portent leurs octets : withoutLinkedImages AVANT Dom.setMarkup',
+    before(bodyOf(early, 'function show'), 'withoutLinkedImages(', 'Dom.setMarkup(sheet') && /\^data:image\\\//.test(bodyOf(early, 'function withoutLinkedImages')), 'early-preview.js');
+  // Plus de question ni de clic « Afficher » : l'interface qu'ils utilisaient n'existe plus, aucun code ne doit la rappeler.
+  const dead = /ExternalImages\.(confirmExport|beginRun|endRun|allow|isAllowed|onReveal|unblockIn)\b|editor-image-reveal|dialog\.externalImages|confirm\.externalImages|image\.blocked\.show/;
+  const stillThere = ['js', 'extensions'].flatMap(dir => listFiles(dir, /\.js$/)).filter(rel => dead.test(noCommentsJs(read(rel))));
+  check('images externes : plus aucun code ne rappelle la fenêtre « images d\'un autre site » ni le clic « Afficher » (confirmExport, allow, onReveal, editor-image-reveal, textes retirés)', stillThere.length === 0, stillThere.join(', '));
 }
 
 // ============================================================================

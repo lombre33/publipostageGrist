@@ -3,7 +3,7 @@
 // de Grist (une demande, le jeton en lecture seule de GristAPI.prefetchAccessToken), le texte passe par HtmlSanitize comme tout HTML qui ne vient pas de l'éditeur, et la feuille se pose par-dessus le plan de travail.
 // Quand le widget a ouvert le document pour de bon (js/main.js:loadTemplateIntoEditor), l'aperçu s'efface : rien d'autre n'a été touché, ni l'éditeur, ni le document, ni l'enregistrement.
 //
-// Ce que cet aperçu ne fait JAMAIS : écrire quoi que ce soit, ouvrir le moindre lien (la feuille est `inert`), toucher à l'éditeur (il n'a ni texte ni événement de ce côté), lire une présentation, un e-mail, une grille ou un
+// Ce que cet aperçu ne fait JAMAIS : écrire quoi que ce soit, ouvrir le moindre lien (la feuille est `inert`), charger une image qui ne porte pas ses octets (withoutLinkedImages), toucher à l'éditeur (il n'a ni texte ni événement de ce côté), lire une présentation, un e-mail, une grille ou un
 // macro-modèle (le filtre de la demande ne rend que les lignes de type document : une autre ligne n'est même pas envoyée). Au moindre doute (pas de fichier désigné, GFS qui demande un import, une lecture de PDF ou un modèle du
 // catalogue, ligne illisible ou refusée, jeton refusé, texte vide, document suivi par « suivi des modifications », format de page libre, table des modèles déjà arrivée), rien ne se pose : le démarrage est celui d'avant.
 //
@@ -57,6 +57,24 @@ const EarlyPreview = (function () {
     host = null;
   }
 
+  // Une image 1×1 transparente : l'image garde la place que dit son style (largeur, hauteur), sans rien charger.
+  const BLANK_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+  // Demande du 24/11 (« plus aucun appel vers un autre site ») : l'aperçu ne charge que les images qui portent leurs octets (`data:image/`). Une adresse web, ou l'adresse d'une pièce jointe que le document
+  // garde avec son jeton périmé, n'est jamais donnée au navigateur ; l'éditeur, qui ouvre le document pour de bon, montre ensuite l'image (le cadre pour un autre site, la pièce jointe à neuf). Lu dans un
+  // <template>, inerte : rien ne charge pendant la lecture ni quand le texte rentre dans le nœud de la page. Ce fichier part avant js/external-images.js et js/i18n.js : il se suffit.
+  function withoutLinkedImages(html) {
+    if (!/<img\b/i.test(html)) return html;
+    const holder = Dom.inertTemplate(html);
+    let changed = false;
+    holder.content.querySelectorAll('img').forEach((img) => {
+      if (/^data:image\//i.test((img.getAttribute('src') || '').trim())) return;
+      img.setAttribute('src', BLANK_PIXEL);
+      changed = true;
+    });
+    return changed ? holder.innerHTML : html;
+  }
+
   // Pose la feuille. Rien ne s'y fait que du texte nettoyé et des mesures : aucun script, aucun lien actif.
   function show(tpl) {
     const container = document.getElementById('editor-container');
@@ -64,7 +82,7 @@ const EarlyPreview = (function () {
     if (!container || !page || !tpl.contenu) return false;
     const hasChanges = tpl.suiviModifications && Object.keys(tpl.suiviModifications).length > 0;
     if (hasChanges) return false;
-    const html = HtmlSanitize.clean(tpl.contenu);
+    const html = withoutLinkedImages(HtmlSanitize.clean(tpl.contenu));
     if (!html) return false;
     host = document.createElement('div');
     host.id = HOST_ID;

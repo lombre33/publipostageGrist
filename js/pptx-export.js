@@ -1376,8 +1376,6 @@ const PptxExport = (function () {
   }
 
   async function getPptxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt) {
-    // Une image d'un site externe est téléchargée pour ce fichier (mediaFor) : la fenêtre la liste et peut tout arrêter (js/external-images.js).
-    await ExternalImages.confirmExport(htmlContent, null);
     // Réglage « Accessibilité » allumé : les images sans texte alternatif, que ce fichier écrit, sont signalées une fois (js/alt-reminder.js). Le PowerPoint n'écrit pas l'en-tête ni le pied.
     await AltReminder.confirmExport(htmlContent, null);
     const { resolvedHtml, filename } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);

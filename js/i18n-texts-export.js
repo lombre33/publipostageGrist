@@ -711,4 +711,5 @@ const I18nTextsExport = {
   'native.fallback.ecart': { fr: '{fonction} : la copie de GFS n’est pas à la version de l’app, le CDN a servi.', en: '{fonction}: GFS’s copy is not the app’s version, the CDN was used.' },
   // --- Images qu'un export n'a pas pu lire : leur nombre s'écrit avant l'état de fin d'export (js/main.js:setExportDoneStatus) ---
   'status.imagesUnread': { fr: '{n} {n|image introuvable|images introuvables} (voir la console).', en: '{n} missing {n|image|images} (see console).' },
+  'status.imagesOutside': { fr: '{n} {n|image d’un autre site non reprise|images d’un autre site non reprises}.', en: '{n} {n|image from another site left out|images from other sites left out}.' },
 };

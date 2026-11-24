@@ -167,7 +167,7 @@ const TemplateGalleryModal = (function () {
     previewCaptures.hidden = true;
     previewCaptureNote.hidden = true;
     previewSheet.hidden = false;
-    // Un aperçu s'affiche : une image d'un autre site (la vitrine de ?dev en a) y prend son cadre « Afficher » ; le modèle enregistré garde son HTML.
+    // Un aperçu s'affiche : une image d'un autre site (la vitrine de ?dev en a) y prend son cadre ; le modèle enregistré garde son HTML.
     Dom.setMarkup(previewTiptap, ExternalImages.block(HtmlSanitize.clean(currentHtml), { zoom: 1 })); // pas de feuille réduite dans cette fenêtre
   }
 

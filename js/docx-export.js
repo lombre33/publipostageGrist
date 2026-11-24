@@ -2279,9 +2279,6 @@ const DocxExport = (function () {
   }
 
   async function getDocxBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsTwip) {
-    // Une image d'un site externe est téléchargée pour ce Word (docxImageDataFrom) : la fenêtre la liste et peut tout arrêter
-    // (js/external-images.js). Un seul passage pour l'export d'une ligne comme pour chaque ligne d'un lot (exportCurrentRecord passe par ici).
-    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     // Réglage « Accessibilité » allumé : les images sans texte alternatif, que ce Word écrit, sont signalées une fois (js/alt-reminder.js).
     await AltReminder.confirmExport(htmlContent, headerFooterData);
     setPageMarginsTwip(marginsTwip);

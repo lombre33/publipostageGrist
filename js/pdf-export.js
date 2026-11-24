@@ -5440,15 +5440,12 @@ const PdfExport = (function () {
     return definition;
   }
 
-  // Ce que l'export d'une ligne lit avant d'écrire : la fenêtre des images externes (js/external-images.js : une image d'un autre site est
-  // téléchargée pour ce PDF, la fenêtre la liste et peut tout arrêter ; dans un lot, un site déjà accepté n'est pas redemandé et un refus arrête tout
-  // le lot, cf. ExternalImages.beginRun), les marges et les bibliothèques, puis le HTML, le nom du fichier et l'en-tête et le pied résolus pour la
-  // ligne. `gridModel` : le modèle de la ligne est une grille ; absent, c'est le modèle ouvert (un lot « Modèle selon la ligne » peut mêler les deux
+  // Ce que l'export d'une ligne lit avant d'écrire : les marges et les bibliothèques, puis le HTML, le nom du fichier et l'en-tête et le pied résolus pour la
+  // ligne (une image d'un autre site n'y est pas téléchargée : ReaderMode.preview range son adresse à part, js/external-images.js:setAside). `gridModel` : le modèle de la ligne est une grille ; absent, c'est le modèle ouvert (un lot « Modèle selon la ligne » peut mêler les deux
   // genres, js/main.js). `quality` : 'light' ramène les images à LIGHT_IMAGE_PPI points par pouce ; absent, le PDF reprend les images telles quelles.
   // `docFields` : les champs de document à poser sur le document fini (mot de passe, droits et propriétés d'un « PDF protégé », js/pdf-protection.js:docFields), ou `{ archive: true }`
   // pour un PDF/A (js/pdf-archive.js) ; absent, le PDF est ordinaire.
   async function prepareRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, marginsPt, gridModel, quality, docFields) {
-    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     setPageMarginsPt(marginsPt);
     exportsGridModel = gridModel === undefined ? (typeof GridEditor !== 'undefined' && GridEditor.isActive()) : !!gridModel;
     lightImagePpi = quality === 'light' ? LIGHT_IMAGE_PPI : 0;

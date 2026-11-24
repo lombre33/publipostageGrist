@@ -3,7 +3,7 @@
 //
 // La liste commence par « Version actuelle » (l'état du modèle tel que Grist le garde : rien à restaurer), puis une ligne par version : sa date et sa personne. La table
 // des versions est lue à l'ouverture de cette fenêtre, jamais avant (VersionsStore.open) ; chaque version n'est décompressée qu'au moment où on la choisit. Un document,
-// un e-mail ou une grille montre son texte sur une feuille (les images d'un autre site restent bloquées jusqu'au clic « Afficher », comme partout), un e-mail y ajoute son
+// un e-mail ou une grille montre son texte sur une feuille (les images d'un autre site y prennent leur cadre, comme partout), un e-mail y ajoute son
 // objet et ses destinataires, un macro-modèle sa composition.
 //
 // « Comparer » (bouton à gauche, éteint à chaque ouverture) montre la version choisie avec, en vert, ce qu'elle a en plus de la version actuelle et, en rouge barré, ce que la version actuelle
@@ -262,7 +262,7 @@ const VersionsHistory = (function () {
       summary.formatOnly = compare.result.formatOnly;
       summary.skipped = compare.result.skipped;
     }
-    // Un aperçu s'affiche : une image d'un autre site y prend son cadre « Afficher » (le modèle enregistré garde son HTML).
+    // Un aperçu s'affiche : une image d'un autre site y prend son cadre (le modèle enregistré garde son HTML).
     Dom.setMarkup(tiptap, ExternalImages.block(HtmlSanitize.clean(html), { zoom: 1 }));
     // Une image de pièce jointe ne garde que son identifiant : son adresse (un jeton qui expire) est demandée à Grist.
     Promise.resolve(GristAPI.hydrateAttachmentImages(tiptap)).catch(() => {});

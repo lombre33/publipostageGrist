@@ -244,8 +244,8 @@
   });
 
   cases.push({
-    id: 'bprint_reading_view_without_tint_and_with_the_other_site_images_shown',
-    description: 'La Lecture montre une modification en attente teintée et une image d’un autre site derrière son cadre « Afficher » ; l’impression montre le texte comme accepté SANS teinte et l’image affichée, et ne laisse rien derrière : la Lecture garde sa teinte et son cadre, aucun site n’est affiché pour la séance',
+    id: 'bprint_reading_view_without_tint_and_the_other_site_images_framed',
+    description: 'La Lecture montre une modification en attente teintée et une image d’un autre site derrière son cadre « Image non affichée » ; l’impression montre le texte comme accepté SANS teinte et le même cadre (l’image n’est jamais demandée à son site), et ne laisse rien derrière : la Lecture garde sa teinte et son cadre',
     run: async (h) => {
       const url = 'https://bprint-site.test/photo.png';
       const html = '<p>Avant <ins data-id="a1" data-author="x">ajouté</ins> et <del data-id="a2" data-author="x">retiré</del> après.</p><p><img class="editor-image" src="' + url + '" alt="" style="width: 120px;"></p>';
@@ -262,10 +262,9 @@
           seen.printSrc = Array.from(copy.querySelectorAll('.reader-content img')).map(img => img.getAttribute('src'));
         });
         seen.readerAfter = [rc.querySelectorAll('.pp-tc-changed').length, rc.querySelectorAll('img[data-blocked-src="' + url + '"]').length];
-        seen.allowed = ExternalImages.isAllowed('bprint-site.test');
       } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.readerTint >= 1 && seen.readerBlocked === 1 && seen.printTint === 0 && seen.printText === 'Avant ajouté et après.' && seen.printBlocked === 0
-        && seen.printSrc.length === 1 && seen.printSrc[0] === url && seen.readerAfter[0] >= 1 && seen.readerAfter[1] === 1 && seen.allowed === false;
+      const pass = seen.readerTint >= 1 && seen.readerBlocked === 1 && seen.printTint === 0 && seen.printText === 'Avant ajouté et après.' && seen.printBlocked === 1
+        && seen.printSrc.length === 1 && /^data:image\/svg\+xml/.test(seen.printSrc[0]) && !decodeURIComponent(seen.printSrc[0]).includes(url) && seen.readerAfter[0] >= 1 && seen.readerAfter[1] === 1;
       return { pass, notes: JSON.stringify(seen) };
     },
   });

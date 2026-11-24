@@ -9,7 +9,7 @@
 //   - le HTML qui arrive à l'éditeur porte bien les `<img>` de la page (le test ne passe pas faute d'avoir joué le cas) ;
 //   - le document garde le texte et UNE image, le dessin intégré (data URI, 40 px) ; la photo, la petite icône et le pixel espion, qui sont des adresses d'un autre site, ne sont pas collés (demande
 //     d'Antoine du 24/11 : plus aucun appel externe, des images seulement par copier-coller ou depuis une pièce jointe de Grist) ;
-//   - le collage ne fait contacter aucun site : AUCUNE requête vers l'autre site, ni au collage ni après ; aucun cadre « Afficher » ; l'adresse du site n'est nulle part dans le document ;
+//   - le collage ne fait contacter aucun site : AUCUNE requête vers l'autre site, ni au collage ni après ; aucun cadre « Image non affichée » ; l'adresse du site n'est nulle part dans le document ;
 //     le coin d'état dit combien d'images n'ont pas été collées et comment faire (copier l'image seule) ;
 //   - un seul Ctrl+Z défait le collage entier, Ctrl+Maj+Z le rend ;
 //   - l'image « Copier l'image » (le clic droit : un fichier image dans le presse-papiers) se colle toujours comme avant, en data URI.
@@ -271,15 +271,14 @@ async function flow(label, how, { wrap }) {
   check(`${label}, ${how} - une seule image est collée : le dessin intégré (data URI, 40 px) ; la photo, l'icône et le pixel espion d'un autre site ne le sont pas`,
     images.length === 1 && images[0].src === 'data:' && images[0].alt === 'Un dessin intégré' && images[0].width === '40px', images);
 
-  // Rien n'a contacté l'autre site, ni au collage ni après : aucun cadre « Afficher », aucune adresse du site dans le document.
+  // Rien n'a contacté l'autre site, ni au collage ni après : aucun cadre « Image non affichée », aucune adresse du site dans le document.
   await page.waitForTimeout(900);
   check(`${label}, ${how} - le collage n'a fait aucune requête vers l'autre site (photo, icône, pixel)`, requestsFromWidget() === widgetRequestsBefore, siteRequests.slice(-6));
   const views = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .editor-image-view')).map(view => {
     const img = view.querySelector('img');
-    const reveal = view.querySelector('.editor-image-reveal');
-    return { blocked: view.classList.contains('editor-image-blocked'), button: !!reveal && !reveal.hidden && getComputedStyle(reveal).display !== 'none' && reveal.getBoundingClientRect().width > 0, src: img && img.getAttribute('src') ? (img.getAttribute('src').startsWith('data:') ? 'data:' : img.getAttribute('src')) : '', loaded: !!img && !!img.getAttribute('src') && img.complete && img.naturalWidth > 0 };
+    return { blocked: view.classList.contains('editor-image-blocked'), src: img && img.getAttribute('src') ? (img.getAttribute('src').startsWith('data:') ? 'data:' : img.getAttribute('src')) : '', loaded: !!img && !!img.getAttribute('src') && img.complete && img.naturalWidth > 0 };
   }));
-  check(`${label}, ${how} - aucun cadre « Afficher » : le dessin intégré (data URI) s'affiche tout de suite, il n'y a rien d'autre`, views.length === 1 && !views[0].blocked && !views[0].button && views[0].loaded && views[0].src === 'data:', views);
+  check(`${label}, ${how} - aucun cadre « Image non affichée » : le dessin intégré (data URI) s'affiche tout de suite, il n'y a rien d'autre`, views.length === 1 && !views[0].blocked && views[0].loaded && views[0].src === 'data:', views);
   const modelHtml = await page.evaluate(() => Editor.getHTML());
   check(`${label}, ${how} - l'adresse de l'autre site n'est nulle part dans le document`, !modelHtml.includes(SITE_HOST) && !/photo\.png|small\.png|pixel\.gif/.test(modelHtml), modelHtml.slice(0, 200));
 

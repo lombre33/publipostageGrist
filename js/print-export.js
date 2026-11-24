@@ -28,7 +28,7 @@
 // (js/html-sanitize.js) comme pour l'écran, et par la politique de sécurité de index.html (aucun script en ligne) : l'ancien bac à sable du cadre n'existe plus.
 //
 //   PrintExport.printRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, options?) -> Promise<void>
-//     L'impression d'une ligne : la fenêtre des images d'un autre site (ExternalImages.confirmExport, comme les exports), le rendu, puis la fenêtre
+//     L'impression d'une ligne : le rendu (une image d'un autre site y garde son cadre : js/external-images.js), puis la fenêtre
 //     d'impression du navigateur. Rend la main quand l'impression est lancée (dans Chrome : à la fermeture de la fenêtre d'impression). Rejette
 //     (isTooLong) un document de plus de MAX_PAGES feuilles.
 //     `options.print(fenêtre)` remplace `window.print()` (les tests : un navigateur sans écran n'ouvre pas de fenêtre) ; `fenêtre` est celle de l'app.
@@ -424,7 +424,6 @@ const PrintExport = (function () {
   }
 
   async function printRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, options) {
-    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     const filename = await ReaderMode.resolveFilename(filenameTemplate, tableId, record);
     const job = await prepare(htmlContent, tableId, record, headerFooterData, filename || 'publipostage');
     if (!(await ensureGesture())) { job.dispose(); return; }

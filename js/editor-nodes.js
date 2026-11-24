@@ -1843,18 +1843,17 @@ const EditorNodes = (function () {
       varLabel.className = 'editor-image-var-label';
       wrap.appendChild(varLabel);
 
-      // Image d'un autre site pas encore affichée (js/external-images.js) : l'<img> n'a pas d'adresse, le cadre montre le site et le vrai bouton
-      // « Afficher » (le clic affiche toutes les images de ce site, pour la session). Caché tant que l'image n'est pas bloquée.
+      // Image d'un autre site (js/external-images.js) : l'<img> n'a pas d'adresse, le cadre montre le site et dit que l'image n'est pas affichée (aucun bouton : le widget n'appelle aucun autre site, rien ne
+      // l'afficherait). Caché tant que l'image n'est pas écartée ; il se clique comme l'image (sélection, poignées, déplacement), et ce même clic ouvre la fenêtre qui explique comment la remettre
+      // (js/external-images.js : watchFrames, un écouteur de la page : ni cette vue ni la sélection n'y changent).
       const blockedBox = document.createElement('span');
       blockedBox.className = 'editor-image-blocked-box';
       const blockedSiteLabel = document.createElement('span');
       blockedSiteLabel.className = 'editor-image-blocked-site';
-      const revealButton = document.createElement('button');
-      revealButton.type = 'button';
-      revealButton.className = 'editor-image-reveal';
-      revealButton.addEventListener('click', () => ExternalImages.allow(wrap.dataset.blockedSite));
+      const blockedNoteLabel = document.createElement('span');
+      blockedNoteLabel.className = 'editor-image-blocked-note';
       blockedBox.appendChild(blockedSiteLabel);
-      blockedBox.appendChild(revealButton);
+      blockedBox.appendChild(blockedNoteLabel);
       wrap.appendChild(blockedBox);
 
       const moveHandle = document.createElement('span');
@@ -1874,7 +1873,7 @@ const EditorNodes = (function () {
         wrap.appendChild(h);
         corners[corner] = h;
       });
-      return { wrap, img, varLabel, blockedSiteLabel, revealButton, moveHandle, playButton, corners };
+      return { wrap, img, varLabel, blockedBox, blockedSiteLabel, blockedNoteLabel, moveHandle, playButton, corners };
     }
 
     function imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox, isVideoBox) {
@@ -1928,7 +1927,7 @@ const EditorNodes = (function () {
       const posterSrc = isVideoBox ? VideoFrame.poster(attrs.video) : '';
       const drawn = isChartBox ? ChartEntry.paintFrame(view, attrs, () => applyImageAttrs(view, attrs)) : '';
       if (!isChartBox) ChartEntry.releaseFrame(view);
-      // Une image d'un autre site que la personne n'a pas affiché : pas d'adresse donnée au navigateur (le modèle, lui, la garde), un cadre à la place.
+      // Une image d'un autre site : pas d'adresse donnée au navigateur (le document, lui, la garde), un cadre à la place.
       const blockedSite = isVarBox ? '' : ExternalImages.blockedSiteOf(attrs.src);
       const shownSrc = (isVarBox || blockedSite) ? '' : (attrs.src || drawn || posterSrc);
       // Le dessin d'un graphique change (il arrive après coup, une autre ligne le change, l'extension part) : à la fin, l'éditeur le dit (ChartEntry.PAINTED_EVENT), pour que la bande des diapositives recopie sa miniature.
@@ -1938,9 +1937,10 @@ const EditorNodes = (function () {
       if (blockedSite) {
         wrap.dataset.blockedSite = blockedSite;
         view.blockedSiteLabel.textContent = blockedSite;
-        view.revealButton.textContent = I18n.t('image.blocked.show');
-        view.revealButton.title = ExternalImages.hintOf(blockedSite);
-        view.revealButton.setAttribute('aria-label', I18n.t('image.blocked.alt', { site: blockedSite }));
+        view.blockedNoteLabel.textContent = I18n.t('image.blocked.note');
+        view.blockedBox.setAttribute('role', 'img');
+        view.blockedBox.setAttribute('aria-label', I18n.t('image.blocked.alt', { site: blockedSite }));
+        view.blockedBox.title = ExternalImages.hintOf(blockedSite);
       } else delete wrap.dataset.blockedSite;
       img.alt = attrs.alt || '';
       img.setAttribute('style', imageInnerStyle(attrs, isVarBox, isQrBox, isChartBox, isVideoBox));
@@ -2103,17 +2103,6 @@ const EditorNodes = (function () {
       return { start: startMove, release: () => document.removeEventListener('mousemove', onMoveMove) };
     }
 
-    // Les vues d'image qui attendent peut-être le clic « Afficher » d'un site : chacune se redessine d'après ses attributs quand un site est affiché
-    // (js/external-images.js). L'abonnement est pris à la première vue : le module de l'éditeur se charge avant celui des images d'un autre site.
-    const revealHooks = new Set();
-    let revealHooked = false;
-    function hookReveal() {
-      if (revealHooked) return;
-      revealHooked = true;
-      const redrawAll = () => revealHooks.forEach(hook => hook());
-      ExternalImages.onReveal(redrawAll);
-    }
-
     function imageNodeView({ node, editor: nodeEditor, getPos }) {
       const view = imageViewDom();
       const { wrap, img, moveHandle } = view;
@@ -2122,11 +2111,7 @@ const EditorNodes = (function () {
         onClick: () => { const at = getPos(); if (typeof at === 'number') { nodeEditor.commands.setNodeSelection(at); nodeEditor.view.focus(); } },
         onEscape: () => nodeEditor.view.focus(),
       };
-      let shown = node.attrs;
-      const applyAttrs = attrs => { shown = attrs; applyImageAttrs(view, attrs); };
-      const redraw = () => applyImageAttrs(view, shown);
-      hookReveal();
-      revealHooks.add(redraw);
+      const applyAttrs = attrs => applyImageAttrs(view, attrs);
       applyAttrs(node.attrs);
       const resize = imageResizeGesture(view, node, nodeEditor, getPos);
       const move = imageMoveGesture(view, node, nodeEditor, getPos, applyAttrs);
@@ -2149,12 +2134,10 @@ const EditorNodes = (function () {
         // Le clic sur un graphique refait son dessin d'après les données d'aujourd'hui (js/chart-entry.js).
         selectNode: () => { wrap.classList.add('editor-image-selected'); ChartEntry.refreshFrame(view); },
         deselectNode: () => wrap.classList.remove('editor-image-selected'),
-        // Le bouton « Afficher » d'une image bloquée est à lui : ni sélection de l'image, ni glissé, ni autre geste de l'éditeur sur son clic.
         // Les mots invisibles d'une diapositive en bloc (js/slide-words.js) ont leur propre sélection de texte : l'éditeur n'en traite ni la souris, ni le clavier, ni la copie.
-        stopEvent: event => (!!event.target.closest && !!event.target.closest('.editor-image-blocked-box, .editor-image-video-play')) || SlideWords.owns(event),
+        stopEvent: event => (!!event.target.closest && !!event.target.closest('.editor-image-video-play')) || SlideWords.owns(event),
         destroy: () => {
           SlideWords.drop(wrap);
-          revealHooks.delete(redraw);
           behindImageViews.delete(wrap);
           VideoFrame.stop(wrap);
           ChartEntry.releaseFrame(view);

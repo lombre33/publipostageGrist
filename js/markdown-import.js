@@ -11,8 +11,8 @@
 // Les variables : l'export « Markdown (modèle) » écrit une bulle sans réglage {{Table.Colonne}} et le reste de ses éléments de fusion (bulle réglée, calcul, puce, numéro de page,
 // valeur et bloc conditionnels, image liée à une colonne) en HTML en ligne ; l'un et l'autre redeviennent ce qu'ils étaient. Une paire d'accolades dont la clé n'est pas une
 // variable de ce document reste du texte.
-// Ce qu'il ne garde pas, volontairement : une image dont l'adresse n'est pas une adresse web ni une data URI (le fichier d'à côté n'est pas envoyé avec le texte : un
-// mot le dit à sa place), le titre d'une image ou d'un lien, la numérotation des titres écrite dans le texte (elle reste du texte), l'en-tête YAML d'un fichier Jekyll ou
+// Ce qu'il ne garde pas, volontairement : une image dont l'adresse n'est pas une data URI (une adresse web : le widget n'appelle aucun autre site ; un chemin relatif : le fichier d'à côté n'est pas
+// envoyé avec le texte ; un mot le dit à sa place), le titre d'une image ou d'un lien, la numérotation des titres écrite dans le texte (elle reste du texte), l'en-tête YAML d'un fichier Jekyll ou
 // Hugo, les définitions de notes que rien n'appelle.
 const MarkdownImport = (function () {
   // Au-delà, la page ne tiendrait pas le document (marked, puis l'éditeur, lisent tout en mémoire).

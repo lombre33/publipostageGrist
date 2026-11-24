@@ -276,6 +276,9 @@ const HtmlExport = (function () {
       if (ctx.template && !img.hasAttribute('data-pdf-skip') && ExportCommon.isMergeImage(img)) { ctx.images.set(img, { merge: true }); continue; }
       if (img.hasAttribute('data-pdf-skip') || isOffText(img)) { ctx.images.set(img, { skip: true }); continue; }
       const src = (img.getAttribute('src') || '').trim();
+      // Une image d'un autre site (son adresse est rangée à part : ReaderMode.preview, js/external-images.js:setAside) garde son adresse dans ce fichier : le widget ne l'appelle jamais, il n'écrit que le lien.
+      const outside = (img.getAttribute('data-external-src') || '').trim();
+      if (!src && outside) { ctx.images.set(img, { src: outside }); continue; }
       if (!src) { ExportCommon.noteImageWithoutSource(img); ctx.images.set(img, { skip: true }); continue; }
       const isAttachment = img.hasAttribute('data-attachment-id') || img.dataset.source === 'attachment' || /\/attachments\/\d+\/download/.test(src);
       if (/^data:image\//i.test(src) || (/^https?:\/\//i.test(src) && !isAttachment)) { ctx.images.set(img, { src }); continue; }
@@ -977,10 +980,6 @@ const HtmlExport = (function () {
   }
 
   async function getHtmlBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, options) {
-    // Le fichier garde l'adresse d'une image d'un autre site, mais le navigateur la télécharge pendant la préparation du document (ReaderMode.preview écrit son HTML dans un
-    // nœud de la page) : la fenêtre liste ces sites et peut tout arrêter (js/external-images.js), comme pour le PDF, le Word, l'Excel et le Markdown. Un seul passage pour l'export
-    // d'une ligne comme pour chaque ligne d'un lot (exportCurrentRecord passe par ici).
-    await ExternalImages.confirmExport(htmlContent, headerFooterData);
     // Réglage « Accessibilité » allumé : les images sans texte alternatif, que ce fichier écrit, sont signalées une fois (js/alt-reminder.js).
     await AltReminder.confirmExport(htmlContent, headerFooterData);
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);

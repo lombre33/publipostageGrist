@@ -9,7 +9,8 @@
 //  6. aucune feuille quand elle ne peut pas être sûre : pas de fichier désigné, un import, une lecture de PDF, un modèle du catalogue, une ligne refusée (HTTP 403), une présentation, un texte suivi par « suivi des modifications »,
 //     un format de page libre, une table des modèles qui arrive d'abord ; et le démarrage se fait comme avant dans tous ces cas ;
 //  7. la page de la feuille suit le sens et le format du document (portrait / paysage, A4 / A3) et ses marges ;
-//  8. le rapport de fluidité (js/perf-trace.js) dit chaque étape (`aperçu : …`).
+//  8. le rapport de fluidité (js/perf-trace.js) dit chaque étape (`aperçu : …`) ;
+//  9. (24/11, « plus aucun appel vers un autre site ») une image du document qui vient d'un autre site n'est jamais demandée à son site : l'aperçu la montre vide, garde les images qui portent leurs octets, et l'éditeur qui ouvre ensuite le document n'envoie rien non plus.
 //  Les réglages du document partent avec la ligne (js/early-open.js) : une demande de plus, qui ne change rien à l'aperçu.
 // Lancé par run-headless.mjs (groupe Node « earlyPreview », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-early-preview.mjs
 import { start, seedModels } from './gfs-page.mjs';
@@ -36,12 +37,16 @@ const rowsOf = (extra = {}) => [
 const opening = (fichier = { id: 2, type: 'document' }, raison = 'explorateur') => ({ contextDelayMs: 400, ouverture: { fichier, type: 'document', dossier: '', raison } });
 
 // Ouvre le widget avec une table des modèles lente (4 s), comme chez une personne dont la table pèse 42 Mo, et la route REST que « Grist » sert. `mode` : ce que la route répond.
-async function openSlow({ stub, rows = rowsOf(), status = 200, slowMs = 4000, ready = false } = {}) {
+async function openSlow({ stub, rows = rowsOf(), status = 200, slowMs = 4000, ready = false, outside = null, content = null } = {}) {
   const seen = [];
   const opened = await t.openPage({
     hosted: true, stub: stub || opening(), lang: 'fr', colorScheme: 'light', ready,
-    seed: seedModels() + `\nstub.state.tokenBaseUrl = ${JSON.stringify(BASE)}; stub.state.slowTable = 'Publipostage_Modeles'; stub.state.slowMs = ${slowMs};`,
+    seed: seedModels() + `\nstub.state.tokenBaseUrl = ${JSON.stringify(BASE)}; stub.state.slowTable = 'Publipostage_Modeles'; stub.state.slowMs = ${slowMs};`
+      // `content` : le texte que la table du faux Grist (le document ouvert pour de bon) donne au document 2 ; sans lui, c'est « Contenu B », sans image.
+      + (content ? `\n{ const m = stub.state.rows.Publipostage_Modeles; m.Contenu[m.id.indexOf(2)] = ${JSON.stringify(content)}; }` : ''),
     before: async (p) => {
+      // Le site d'une image du document (cas 9) : toute demande qui y part est notée, et refusée.
+      if (outside) await p.route('https://images.exemple.test/**', (route) => { outside.push(route.request().url()); return route.abort(); });
       await p.route('http://grist.test/**', async (route) => {
         const request = route.request();
         const asked = new URL(request.url());
@@ -115,6 +120,26 @@ await sleep(1800);
 const normal = await look(portrait.app || portrait.page);
 check('un A4 portrait (par défaut) prend 210 mm', normal.shown && mm(normal.width) === 210 && JSON.stringify(normal.margins.map(mm)) === JSON.stringify([20, 25, 20, 30]), normal);
 await portrait.context.close();
+
+// --- 9. Les images d'un autre site : jamais demandées à leur site ---
+const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const asked9 = [];
+// Le même document pour l'aperçu (la ligne que Grist rend par REST) et pour l'ouverture pour de bon (la table du faux Grist).
+// (La diapositive liée du texte garde l'ouverture d'avant, comme dans les autres cas de cet essai : js/early-open.js ne s'applique pas à un document qui parle d'un autre modèle.)
+const IMAGES_HTML = '<p data-link-mode="push">Texte avec images</p><img class="editor-image" src="https://images.exemple.test/logo.png" alt="Logo" style="width: 60px;"><img class="editor-image" src="' + PIXEL + '" alt="Pastille" style="width: 40px;">';
+const withImages = await openSlow({ outside: asked9, slowMs: 3000, content: IMAGES_HTML, rows: rowsOf({ Content: IMAGES_HTML }) });
+await sleep(1800);
+const images9 = await (withImages.app || withImages.page).evaluate(() => {
+  const sheet = document.querySelector('#pp-early-preview .pp-early-sheet');
+  return sheet ? Array.from(sheet.querySelectorAll('img')).map(img => ({ src: img.getAttribute('src'), alt: img.getAttribute('alt'), width: img.style.width })) : null;
+});
+check('l\'aperçu est posé avec ses deux images : celle d\'un autre site n\'a plus son adresse, celle qui porte ses octets est telle quelle', !!images9 && images9.length === 2 && /^data:image\/gif/.test(images9[0].src) && !/exemple\.test/.test(images9[0].src) && images9[0].alt === 'Logo' && images9[0].width === '60px' && images9[1].src === PIXEL, images9);
+check('aucune demande n\'est partie vers le site de l\'image pendant l\'aperçu', asked9.length === 0, asked9);
+await waitReady(withImages.app || withImages.page);
+await sleep(600);
+const editorImages9 = await (withImages.app || withImages.page).evaluate(() => Array.from(document.querySelectorAll('#editor-container .editor-image-blocked')).map(wrap => wrap.dataset.blockedSite));
+check('le document ouvert pour de bon ne la demande pas non plus : son image montre le cadre « image non affichée » (site nommé) et rien n\'est parti', asked9.length === 0 && editorImages9.includes('images.exemple.test'), { asked9, editorImages9 });
+await withImages.context.close();
 
 // --- 6. Rien ne se pose quand on n'est pas sûr, et le démarrage est celui d'avant ---
 async function noSheet(label, options, extra) {

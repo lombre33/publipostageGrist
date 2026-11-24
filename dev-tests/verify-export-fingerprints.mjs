@@ -192,12 +192,12 @@ if (isMain) {
     port: Number(process.env.EXPORT_FINGERPRINT_PORT || 9215),
     onPage: async page => {
       await page.clock.setFixedTime(new Date('2026-01-15T10:00:00Z'));
-      // Les images d'un autre site (le document « vitrine » en a quatre, picsum.photos) ne se chargent pas dans un conteneur sans réseau et l'export les attend : toutes rendent la même petite image.
+      // Les images d'un autre site (le document « vitrine » en a quatre, picsum.photos) : depuis le 24/11 aucun export ne les télécharge (js/external-images.js:setAside), cette route ne devrait plus servir ; elle reste pour qu'un export fautif ne reste pas à attendre un réseau absent (toutes rendraient la même petite image).
       await page.route(/^https?:\/\/(?!127\.0\.0\.1)[^/]*\/.*\.(png|jpe?g|gif|webp)(\?.*)?$|picsum\.photos/, route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(PIXEL, 'base64') }));
     },
   });
-  // Les images d'un autre site restent bloquées jusqu'à un clic (js/external-images.js) : l'export attendrait pour rien ; on les montre, elles rendent toutes la même petite image.
-  await w.page.evaluate(async () => { ExternalImages.allow('picsum.photos'); await ExportEngines.loadAll(); });
+  // Les images d'un autre site (« vitrine ») sortent sans leur image depuis le 24/11 : un relevé gelé avant cette date n'est plus comparable sur ces quatre images, il se gèle de nouveau sur le code d'origin/main.
+  await w.page.evaluate(async () => { await ExportEngines.loadAll(); });
   const targetDir = freeze ? baselineDir : lastDir;
   rmSync(targetDir, { recursive: true, force: true });
   mkdirSync(targetDir, { recursive: true });

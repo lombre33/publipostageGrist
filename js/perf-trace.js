@@ -124,7 +124,7 @@ const PerfTrace = (function () {
     ReaderMode: [typeof ReaderMode !== 'undefined' ? ReaderMode : null, ['render', 'renderInto']],
     HtmlSanitize: [typeof HtmlSanitize !== 'undefined' ? HtmlSanitize : null, ['clean', 'parseInert']],
     FrameAnim: [typeof FrameAnim !== 'undefined' ? FrameAnim : null, ['stampSlides', 'stampIn']],
-    ExternalImages: [typeof ExternalImages !== 'undefined' ? ExternalImages : null, ['confirmExport', 'blockIn', 'unblockIn']],
+    ExternalImages: [typeof ExternalImages !== 'undefined' ? ExternalImages : null, ['setAside', 'blockIn']],
   });
   let watchesAt = 0;
   function installWatches() {

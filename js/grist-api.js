@@ -1359,6 +1359,13 @@ const GristAPI = (function () {
     try { return new URL((await getAccessTokenCached()).baseUrl).hostname.toLowerCase(); } catch (e) { return ''; }
   }
 
+  // L'origine (schéma, hôte, port) du serveur de Grist qui sert le document : celle de l'adresse de l'interface que donne le jeton d'accès, '' quand Grist ne donne rien de lisible ; ne lève jamais.
+  // Les pièces jointes viennent de là, et d'aucun autre site : js/external-images.js (mayRead) s'en sert pour ne laisser lire que cette adresse-là parmi celles du web (24/11 : plus aucun appel vers un
+  // autre site). Jamais devinée d'après l'adresse d'une image.
+  async function getServerOrigin() {
+    try { return new URL((await getAccessTokenCached()).baseUrl).origin; } catch (e) { return ''; }
+  }
+
   // Un jeton d'accès capable d'ÉCRIRE, pour envoyer un fichier en pièce jointe (js/row-attachment.js, le seul à s'en servir) : { token, baseUrl, expiresAt }. Le seul de tout le widget qui puisse écrire par
   // l'adresse de l'interface de programmation. Il n'est JAMAIS gardé ici : pas de cache comme getAccessTokenCached (un jeton capable d'écrire ne reste pas en mémoire plus longtemps que l'export qui
   // l'a demandé), l'appelant le tient pour la durée d'un export et le jette à la fin ; un export plus long que `expiresAt` en redemande un autre. Rejette quand Grist refuse d'en donner un.
@@ -1550,5 +1557,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

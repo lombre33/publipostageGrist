@@ -406,7 +406,7 @@ const ReaderMode = (function () {
     // Les #Variable d'un fragment d'en-tête ou de pied, résolues comme celles du corps (bulles remplacées par leur valeur) avec l'enregistrement
     // Grist affiché en Lecture. `acceptedOptions` : celles de la vue « comme acceptée » (applyAcceptedView).
     if (!html) return html;
-    // Cette zone s'affiche (aperçu paginé de la Lecture) : ses images d'un autre site pas encore affichées prennent leur cadre avant la lecture du HTML.
+    // Cette zone s'affiche (aperçu paginé de la Lecture) : ses images d'un autre site prennent leur cadre avant la lecture du HTML.
     html = ExternalImages.block(html);
     const wrapper = document.createElement('div'); Dom.setMarkup(wrapper, html);
     // Comme le corps : les suggestions du suivi acceptées, avec la teinte légère.
@@ -1120,7 +1120,7 @@ const ReaderMode = (function () {
     // peignent sur les autres feuilles à la même place de page. Un macro-modèle (js/macro-templates.js) assemble plusieurs courriers : une image n'est répétée que sur les pages de son
     // courrier (js/pdf-export.js:slotPageRange), du saut de page qui l'ouvre à celui qui suit. Appelée une fois les images décalées par slot (rebaseLayerImagesBySlot) : l'original est
     // alors à sa vraie place, d'où se lit sa page.
-    // Une image encore bloquée (son cadre « Afficher ») n'est pas répétée : ses copies se peindraient le cadre sur chaque feuille.
+    // Une image d'un autre site (son cadre, js/external-images.js) n'est pas répétée : ses copies peindraient le cadre sur chaque feuille.
     const images = PageLayer.collect(wrapper).filter(img => img.getAttribute('src') && !img.hasAttribute('data-blocked-src'));
     const children = Array.from(wrapper.children);
     const markers = [];
@@ -1200,13 +1200,11 @@ const ReaderMode = (function () {
   const GEOMETRY_DEBOUNCE_MS = 40;
   const GEOMETRY_CHECKS_MS = [300, 1500];
   const GEOMETRY_DRIFT_MS = 400;
-  // Un site vient d'être affiché (js/external-images.js) : ses images, remises à leur adresse dans la page, changent la hauteur des feuilles et ce que
-  // les copies d'image répétées peignent. La mise en page se refait par le chemin des images qui arrivent tard (sans effet si la Lecture est masquée).
-  let revealHooked = false;
-  function hookReveal() {
-    if (revealHooked) return;
-    revealHooked = true;
-    ExternalImages.onReveal(() => { if (geometryWatch && geometryWatch.schedule) geometryWatch.schedule(); });
+  // Les clics de la Lecture (liens du document, objets à lien, vidéos), pris une fois pour toutes à la première Lecture.
+  let clicksHooked = false;
+  function hookClicks() {
+    if (clicksHooked) return;
+    clicksHooked = true;
     document.addEventListener('click', followInternalLink);
     document.addEventListener('click', followFrameLink);
     document.addEventListener('click', followVideoImage);
@@ -1349,7 +1347,7 @@ const ReaderMode = (function () {
     // ce qui relit des tables : l'appel se fait donc dans les lectures partagées de ce rendu, cf. GristAPI.withReadPass).
     const renderId = ++renderGeneration;
     const container = document.getElementById('reader-container'); if (!container) return;
-    hookReveal();
+    hookClicks();
     // Le contenu affiché est sur le point d'être remplacé : sa mise en page n'a plus à être suivie.
     stopGeometryWatch();
     // Sans ligne (js/main-reader.js:renderReader appelle render() avec record=null quand aucune ligne n'est choisie) : la Lecture montre le document tout de même - un document ou des
@@ -1414,8 +1412,8 @@ const ReaderMode = (function () {
     // .reader-content : le parent direct des titres de premier niveau, celui qui porte data-heading-style (#reader-container ne peut pas jouer ce
     // rôle, ce <div> s'intercale toujours entre les deux).
     const wrapper = document.createElement('div'); wrapper.className = 'reader-content';
-    // Ce HTML s'affiche : une image d'un autre site que la personne n'a pas affichée y prend son cadre « Afficher » (js/external-images.js) avant d'entrer
-    // dans la page, sans quoi le navigateur la télécharge dès que le HTML y est lu. Les exports (expandedWrapper) lisent le HTML du modèle tel quel.
+    // Ce HTML s'affiche : une image d'un autre site y prend son cadre (js/external-images.js) avant d'entrer dans la page, sans quoi le navigateur la télécharge
+    // dès que le HTML y est lu. Les exports (expandedWrapper) rangent l'adresse de ces images à part (ExternalImages.setAside) : ils ne la téléchargent pas non plus.
     const cleanHtml = ExternalImages.block(HtmlSanitize.clean(htmlContent));
     Dom.setMarkup(wrapper, cleanHtml);
     // La Lecture montre le document comme si les suggestions du suivi en attente étaient toutes acceptées, avec une légère teinte là où quelque
@@ -1529,8 +1527,8 @@ const ReaderMode = (function () {
   // === Le même rendu, dans un autre document : l'impression par le navigateur (js/print-export.js) ===
   // `container` est le #reader-container du conteneur caché de l'impression (l'arbre ombre de #pp-print-host). Le document y est résolu, mis en page et paginé comme render() le fait pour la Lecture (mêmes
   // fonctions, mêmes mesures, mêmes coutures), sans rien suivre ensuite - le conteneur est jetable, rien n'est à rafraîchir - et sans ce que la Lecture ne
-  // montre que pour la personne qui lit : ni teinte du suivi des modifications, ni cadre « Afficher » sur une image d'un autre site (la fenêtre de
-  // ExternalImages.confirmExport a précédé : ces sites sont acceptés pour cette impression), ni phrase d'avertissement sur les variables non résolues.
+  // montre que pour la personne qui lit : ni teinte du suivi des modifications, ni phrase d'avertissement sur les variables non résolues. Une image d'un autre site y garde son cadre, comme à la Lecture
+  // (elle ne se télécharge nulle part : js/external-images.js).
   // Rend `{ paged, hasError }` : `paged` est ce que renderPaginationPreview mesure (les pages, la place de la feuille), `null` sans pagination.
   const PRINT_VIEW = { tint: false };
   const PRINT_SETTLE_MS = 8000;
@@ -1553,7 +1551,6 @@ const ReaderMode = (function () {
         if (id) a.setAttribute('data-link-anchor', id);
         a.removeAttribute('href');
       });
-      ExternalImages.unblockIn(container);
       const zones = await resolvePaginationZones(headerFooterData, tableId, record, PRINT_VIEW);
       // Un macro-modèle aux sens mêlés : une feuille de lecture par section, comme à l'écran (splitIntoSections). La pile est aussi large que sa feuille la plus large
       // (css/print.css lit la largeur du conteneur sur --pp-page-width) : une section plus étroite s'y centre, et sa page dit où est son bord gauche (`sheetLeft`).
@@ -1596,8 +1593,6 @@ const ReaderMode = (function () {
       // en page se refait alors (comme watchGeometry à l'écran) jusqu'à ce qu'elles ne bougent plus.
       const sizes = () => wrappers.concat(Array.from(container.querySelectorAll('img'))).map(el => { const r = el.getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height); }).join('|');
       let paged = layOutChecked();
-      // Les en-têtes et pieds des coutures sont écrits par la pagination : leurs images d'un autre site reprennent leur adresse, puis chargent.
-      ExternalImages.unblockIn(container);
       for (let round = 0; round < PRINT_RELAYOUTS_MAX; round++) {
         const before = sizes();
         await settle();
@@ -1605,7 +1600,6 @@ const ReaderMode = (function () {
         if (sizes() === before) break;
         clearPagination(container, wrappers);
         paged = layOutChecked();
-        ExternalImages.unblockIn(container);
       }
       const ms = (from, to) => Math.round(to - from);
       traceMark('rendu d\u2019impression : résolution ' + ms(phases.from, phases.resolved) + ' ms, pose dans la page ' + ms(phases.resolved, phases.placed) + ' ms, images et polices ' + ms(phases.placed, phases.settled) + ' ms, mise en page ' + Math.round(layOutMs) + ' ms (' + layOuts + ' fois), le reste (tailles relues, images en attente) '
@@ -2001,7 +1995,8 @@ const ReaderMode = (function () {
   async function expandedWrapper(htmlContent, tableId, record, onPivot) {
     // Le document tel que preview() le déroule avant de remplacer les bulles : les zones répétées (leurs copies comprises) et les conditions de bloc,
     // de valeur et de case résolues, le sinon des bulles basculé. Partagé avec splitBadges.
-    const cleanHtml = HtmlSanitize.clean(htmlContent);
+    // Une image d'un autre site perd son `src` avant d'entrer dans la page (js/external-images.js:setAside) : un nœud qui y entre charge son image, même détaché, et aucun export ne télécharge plus ces images.
+    const cleanHtml = await ExternalImages.setAside(HtmlSanitize.clean(htmlContent));
     const wrapper = document.createElement('div'); Dom.setMarkup(wrapper, cleanHtml);
     // Le PDF, le Word et l'Excel sortent le document comme la Lecture, suggestions du suivi acceptées, mais sans teinte : le texte supprimé n'y est
     // plus, le texte ajouté s'y écrit comme le reste. Le modèle garde ses suggestions en attente.

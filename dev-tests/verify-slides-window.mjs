@@ -15,8 +15,8 @@
 //   une copie de toute la présentation), l'effet se joue pour de bon, la copie de la page quittée est la même d'un effet à l'autre (faite une fois, garée hors de l'écran entre deux) et montre la page quittée telle
 //   qu'elle était, la barre du bas reste devant la page qui arrive, et passer d'une diapositive à l'autre ne lit pas la taille de l'écran (calcul forcé de la mise en page de toute la copie).
 //  LE DÉPART ABANDONNÉ (20/11 : « j'ai refermé l'onglet et ça lag toujours ») : la fenêtre fermée (ou le diaporama quitté, ou la vue intervenant fermée) pendant que l'app prépare le rendu : le rendu s'abandonne au lieu d'aller au bout page figée, rien n'est envoyé ni laissé dans la page.
-//  ROUVRIR : ▶ pendant que la fenêtre est ouverte la remplace au lieu d'en empiler une deuxième (même nom) ; une fenêtre rechargée redemande son rendu ; une image d'un autre site pose sa question AVANT
-//   la fenêtre (Annuler n'ouvre rien, Continuer l'ouvre : le geste est celui du bouton de la question) ; un rendu qui échoue ferme la fenêtre et le dit.
+//  ROUVRIR : ▶ pendant que la fenêtre est ouverte la remplace au lieu d'en empiler une deuxième (même nom) ; une fenêtre rechargée redemande son rendu ; une image d'un autre site (24/11) ne pose aucune question : la fenêtre
+//   s'ouvre dans le geste du bouton, la page y montre le cadre de l'image et rien n'est demandé à son site ; un rendu qui échoue ferme la fenêtre et le dit.
 //  LE DÉLAI DU GESTE : un rendu de 6,5 s n'empêche pas la fenêtre de s'ouvrir tout de suite (elle s'ouvre avant le rendu) ; une attente de 6,5 s avant l'ouverture la fait refuser par le navigateur : le panneau, avec
 //   la ligne qui le dit, puis le lancement suivant ouvre la fenêtre.
 //  SÛRETÉ : la page n'écoute que son ouvreur (un message d'elle-même ou d'un autre est ignoré), l'app n'écoute que la fenêtre qu'elle a ouverte ; du HTML piégé dans le rendu ne s'exécute pas (script,
@@ -224,7 +224,9 @@ async function run(lang, colorScheme) {
   // Les erreurs de page de chaque fenêtre ouverte (la page de l'app est suivie par l'essai lui-même).
   const errors = [];
   context.on('page', p => p.on('pageerror', e => errors.push(String(e.message).slice(0, 200))));
-  await context.route('**://pp-window.test/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(TINY_PNG, 'base64') }));
+  // Les demandes vers ce site sont notées (le cas de l'image d'un autre site n'en attend aucune) ; elles sont servies comme avant pour les cas qui n'y regardent pas.
+  const outsideAsked = [];
+  await context.route('**://pp-window.test/**', route => { outsideAsked.push(route.request().url()); return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(TINY_PNG, 'base64') }); });
   await open(A, 8, 3);
   await cursorIn(a, 1);
   const htmlBefore = await app.evaluate(() => Editor.getHTML());
@@ -516,30 +518,36 @@ async function run(lang, colorScheme) {
     await closedWithin(fx, 3000);
   } else check(tag + 'effets, fenêtre à part : la fenêtre s’ouvre', false, 'pas de fenêtre');
 
-  // --- Une image d'un autre site : la question d'abord ; Annuler n'ouvre rien, Continuer ouvre la fenêtre (le geste est celui du bouton).
+  // --- Une image d'un autre site (24/11 : « plus aucun appel externe ») : aucune question ; la fenêtre s'ouvre tout de suite (le geste est celui du bouton), la page y montre le CADRE de l'image, jamais l'image,
+  // et rien n'est demandé à son site, ni par l'app ni par la fenêtre.
   await open(A, 9, 2);
-  const cancelled = await playAndCatch(A, a, 2500);
+  outsideAsked.length = 0;
+  // À l'ouverture du document (enregistré, pas en lecture seule), la fenêtre qui explique s'ouvre : une seule, le site nommé. « Compris » (vrai clic) la ferme ; sans cela elle couvrirait le ▶.
+  const explained = await app.evaluate(() => {
+    const ov = document.getElementById('pp-external-images-modal');
+    return ov && ov.style.display !== 'none' ? { count: document.querySelectorAll('#pp-external-images-modal').length, text: ov.textContent || '' } : null;
+  });
+  check(tag + 'à l’ouverture du document, la fenêtre explique les images d’un autre site (une seule, le site nommé)', !!explained && explained.count === 1 && /pp-window\.test/.test(explained.text), explained && { count: explained.count, text: explained.text.slice(0, 160) });
+  if (explained) { await a.click('#pp-external-images-modal .pp-modal-actions button:not([hidden])', 0, 300); await sleep(200); }
+  const framed = await playAndCatch(A, a);
   const asked = await app.evaluate(() => { const modal = document.getElementById('pp-dialog-modal'); return !!modal && getComputedStyle(modal).display !== 'none' ? (modal.textContent || '') : ''; });
-  await page.keyboard.press('Escape');
-  await sleep(700);
-  check(tag + 'une image d’un autre site : la question précède la fenêtre (et nomme le site) ; Annuler n’ouvre rien', !cancelled && /pp-window\.test/.test(asked) && context.pages().length === 1, { opened: !!cancelled, asked: asked.slice(0, 120), pages: context.pages().length });
-  const confirmed = A.page.waitForEvent('popup', { timeout: 15000 }).catch(() => null);
-  await a.click('.pp-slide-show-open', 0, 900);
-  await a.click('#pp-dialog-modal .var-modal-primary', 0, 200);
-  const afterAsk = await confirmed;
-  check(tag + 'Continuer ouvre la fenêtre (la fenêtre s’ouvre dans le geste du bouton, après la question)', !!afterAsk, null);
-  if (afterAsk) {
-    await waitCounter(afterAsk);
+  check(tag + 'une image d’un autre site : aucune question ne précède la fenêtre, elle s’ouvre dans le geste du bouton', !!framed && !/pp-window\.test/.test(asked), { opened: !!framed, asked: asked.slice(0, 120) });
+  if (framed) {
+    await waitCounter(framed);
     await sleep(800);
-    const image = await afterAsk.evaluate(() => {
+    const shown = await framed.evaluate(() => {
       const host = document.getElementById('pp-slide-show-stage');
-      const img = host && host.shadowRoot ? host.shadowRoot.querySelector('img[src*="pp-window.test"]') : null;
-      return img ? { src: img.getAttribute('src'), loaded: img.complete && img.naturalWidth > 0 } : null;
+      const root = host && host.shadowRoot;
+      const frame = root ? root.querySelector('img[data-blocked-src*="pp-window.test"]') : null;
+      // L'image elle-même : une adresse web (le cadre, lui, est une image « data: » qui écrit le nom du site).
+      const raw = root ? root.querySelector('img[src^="http"][src*="pp-window.test"], img[src^="//"][src*="pp-window.test"]') : null;
+      return { frame: !!frame && /^data:image\/svg\+xml/.test(frame.getAttribute('src') || ''), site: frame && frame.getAttribute('data-blocked-site'), raw: !!raw };
     });
-    check(tag + 'l’image de l’autre site y est, chargée', !!image && image.loaded, image);
-    await closing(afterAsk.keyboard.press('Escape'));
-    await closedWithin(afterAsk, 3000);
-  }
+    check(tag + 'la page y montre le cadre de l’image d’un autre site (le site nommé), pas l’image', shown.frame && shown.site === 'pp-window.test' && !shown.raw, shown);
+    check(tag + 'rien n’a été demandé à ce site, ni par l’app ni par la fenêtre', outsideAsked.length === 0, outsideAsked);
+    await closing(framed.keyboard.press('Escape'));
+    await closedWithin(framed, 3000);
+  } else check(tag + 'la page y montre le cadre de l’image d’un autre site (le site nommé), pas l’image', false, 'pas de fenêtre');
 
   // --- Un rendu qui échoue : la fenêtre se ferme et l'app le dit ; le lancement suivant n'est pas bloqué.
   await open(A, 8, 3);
@@ -574,13 +582,14 @@ async function run(lang, colorScheme) {
       await closedWithin(early, 3000);
     }
     await app.evaluate(() => { PrintExport.stage = window.__stage; });
-    await app.evaluate(() => { window.__confirm = ExternalImages.confirmExport; ExternalImages.confirmExport = async (...args) => { await new Promise(resolve => setTimeout(resolve, 6500)); return window.__confirm(...args); }; });
-    const late = await playAndCatch(A, a, 9500);
+    // Un départ qui se fait longtemps après le geste (avant le 24/11, la question des images d'un autre site pouvait faire attendre ; elle n'existe plus) : il est lancé 6,5 s après cet `evaluate` (un geste pour le navigateur), sans clic.
+    const caughtLate = A.page.waitForEvent('popup', { timeout: 9500 }).catch(() => null);
+    await app.evaluate(() => { setTimeout(() => { SlideShow.start(true); }, 6500); });
+    const late = await caughtLate;
     const lateState = await shownIn(app);
     check(tag + 'une attente de 6,5 s avant l’ouverture : le navigateur refuse la fenêtre, le diaporama prend le panneau avec la ligne qui le dit', !late && lateState.show && lateState.note === T.blocked && context.pages().length === 1, { opened: !!late, show: lateState.show, note: lateState.note, pages: context.pages().length });
     await page.keyboard.press('Escape');
     await sleep(700);
-    await app.evaluate(() => { ExternalImages.confirmExport = window.__confirm; });
     const after = await playAndCatch(A, a);
     check(tag + 'le lancement suivant, sans attente, ouvre la fenêtre', !!after, null);
     if (after) {

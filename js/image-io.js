@@ -1,9 +1,13 @@
-// Lecture des images, pour l'insertion (collage, adresse) comme pour les exports PDF, Word et Excel : un fichier, un Blob ou une adresse (data:,
-// blob:, http) devient un Blob, une data URI, une image décodée ou un PNG redessiné. Script classique : les modules qui l'appellent le font à
-// l'exécution, son rang dans index.html n'a pas d'importance.
+// Lecture des images, pour l'insertion (collage) comme pour les exports PDF, Word et Excel : un fichier, un Blob ou une adresse (data:,
+// blob:, http) devient un Blob, une data URI, une image décodée ou un PNG redessiné. Jamais l'image d'un autre site (demande du 24/11, « plus aucun appel
+// vers un autre site ») : une adresse que ExternalImages.mayRead ne laisse pas passer (hors data:, blob:, le widget et le serveur de Grist) est refusée,
+// sans qu'aucune requête parte. Script classique : les modules qui l'appellent le font à l'exécution, son rang dans index.html n'a pas d'importance.
 const ImageIo = (function () {
-  // Le contenu de `src` (data:, blob:, adresse de pièce jointe ou d'un autre site) en Blob.
+  const refused = () => new Error('adresse d’un autre site refusée');
+
+  // Le contenu de `src` (data:, blob: ou adresse de pièce jointe de Grist) en Blob ; une autre adresse est refusée.
   async function fetchBlob(src) {
+    if (!(await ExternalImages.mayRead(src))) throw refused();
     const response = await fetch(src);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     return response.blob();
@@ -24,6 +28,12 @@ const ImageIo = (function () {
   // `decode()` fait décoder l'image HORS du fil principal : sans lui, le premier `drawImage` d'une photo de 12 Mpx la décode sur place et fige la page (un import PowerPoint de 150 diapositives
   // photographiques en faisait des arrêts de plusieurs centaines de millisecondes). Un refus de `decode()` (SVG sans dimensions...) ne change rien : l'image est rendue comme avant.
   function load(source) {
+    if (typeof source === 'string' && !/^(data|blob):/i.test(source.trim())) {
+      return ExternalImages.mayRead(source).then(allowed => (allowed ? readImage(source) : Promise.reject(refused())));
+    }
+    return readImage(source);
+  }
+  function readImage(source) {
     return new Promise((resolve, reject) => {
       const url = typeof source === 'string' ? source : URL.createObjectURL(source);
       const release = () => { if (url !== source) URL.revokeObjectURL(url); };

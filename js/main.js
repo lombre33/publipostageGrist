@@ -433,6 +433,9 @@
     followLinkedModels(true);
     EarlyPreview.opened('document ouvert');
     traceOpened(tpl, currentTypeModele, openedAt);
+    // Un document qui porte des images d'un autre site : la fenêtre qui dit pourquoi elles ne s'affichent plus et comment les remettre (js/external-images.js), une fois par document et par session, après l'ouverture,
+    // et seulement pour qui peut modifier le document (une personne en lecture n'a rien à y remettre ; le clic sur un cadre la rouvre quand même).
+    if (!isReadOnly()) setTimeout(() => ExternalImages.noticeOnOpen(tpl), 0);
     if (openPlan) fillOpenedPresentation(tpl, openPlan);
   }
 

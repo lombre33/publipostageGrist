@@ -700,8 +700,7 @@ const OdtExport = (function () {
 
   // Le document d'une ligne : le HTML résolu pour elle (variables remplacées), son nom de fichier, puis le fichier.
   async function getOdtBlobForRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData, margins) {
-    // Comme le Word : les images d'un autre site et les images sans texte alternatif se confirment une fois, avant tout (js/external-images.js, js/alt-reminder.js).
-    await ExternalImages.confirmExport(htmlContent, headerFooterData);
+    // Comme le Word : les images sans texte alternatif se confirment une fois, avant tout (js/alt-reminder.js).
     await AltReminder.confirmExport(htmlContent, headerFooterData);
     const { resolvedHtml, filename, resolvedHeaderFooterData } = await ExportCommon.resolveRecord(htmlContent, tableId, record, filenameTemplate, headerFooterData);
     const built = await build(resolvedHtml, { margins, headerFooterData: resolvedHeaderFooterData });

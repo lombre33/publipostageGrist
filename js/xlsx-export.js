@@ -1021,9 +1021,6 @@ const XlsxExport = (function () {
 
   async function getXlsxBlobForRecord(htmlContent, tableId, record, filenameTemplate, options) {
     // Un classeur d'une feuille pour un enregistrement : un export seul, ou un fichier de l'archive ZIP d'un lot.
-    // Une image d'un site externe est téléchargée à l'écriture du classeur : la fenêtre passe avant tout, comme pour le PDF et le Word
-    // (js/external-images.js).
-    await ExternalImages.confirmExport(htmlContent, null);
     await ensureExcelLibLoaded();
     const { resolvedHtml, filename, pivots } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
     const workbook = newWorkbook();
@@ -1051,7 +1048,6 @@ const XlsxExport = (function () {
     // cette feuille quand son modèle n'est pas celui de l'écran (« Modèle selon la ligne », js/main.js:onExportBatch). Rend le nom du fichier et le nombre de tableaux croisés du document.
     const usedNames = new Set();
     return async function appendRecord(htmlContent, tableId, record, filenameTemplate, valueName, pageOptions) {
-      await ExternalImages.confirmExport(htmlContent, null);
       const { resolvedHtml, filename, pivots } = await resolveRecord(htmlContent, tableId, record, filenameTemplate);
       const before = workbook.worksheets.length;
       const chartsBefore = chartListOf(workbook).length;

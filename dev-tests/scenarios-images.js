@@ -856,7 +856,7 @@
 
   cases.push({
     id: 'image_view_builds_its_dom',
-    description: 'La vue de l\'image : le cadre, l\'<img>, le libellé, le cadre « Afficher » d\'une image d\'un autre site pas encore affichée (masqué sinon), la poignée de déplacement, le bouton ▶ d\'une vidéo (caché pour une image) puis les quatre poignées de coin',
+    description: 'La vue de l\'image : le cadre, l\'<img>, le libellé, le cadre « Image non affichée » d\'une image d\'un autre site (masqué sinon), la poignée de déplacement, le bouton ▶ d\'une vidéo (caché pour une image) puis les quatre poignées de coin',
     run: async (h) => {
       const wrap = await imageSetup(h, imageHtml(' data-layer="normal" data-wrap="inline"', 'width: 120px'));
       const kids = Array.from(wrap.children);

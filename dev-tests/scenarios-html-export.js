@@ -698,22 +698,20 @@
       return result(bad);
     });
 
-  add('html_lists_the_external_sites_first_like_the_other_exports',
-    'Comme le PDF, le Word, l\'Excel et le Markdown, l\'export HTML liste d\'abord les sites externes dont le document (ou son en-tête, son pied) porte des images - le navigateur les télécharge pendant la préparation - : « Annuler » arrête l\'export, sans fichier, avec l\'erreur que le bouton reconnaît ; « Continuer » écrit le fichier avec l\'adresse inchangée ; sans image externe (data:, même origine) la fenêtre ne s\'ouvre pas',
+  add('html_keeps_the_address_of_an_image_of_another_site_and_asks_nothing',
+    'L\'export HTML n\'écrit que du texte : une image d\'un autre site (dans le document, son en-tête ou son pied) garde son adresse dans le fichier, sans fenêtre ni question - le widget ne télécharge plus rien d\'un autre site (24/11) - ; une image qui porte ses octets et une image du widget restent telles quelles',
     async (h) => {
       await h.resetEditor();
       const bad = [];
       const source = '<p><img class="editor-image" src="https://photos.exemple.fr/a.png" alt="A"></p>';
       const header = { enabled: true, differentFirstPage: false, header: { default: '<p><img class="editor-image" src="https://logos.exemple.fr/l.png" alt="L"></p>', first: '' }, footer: { default: '', first: '' } };
-      const refused = h.stubDialogs({ confirm: false });
-      let error = null;
-      try { await h.exportHtml(source, header); } catch (e) { error = e; } finally { refused.restore(); }
-      if (!ExternalImages.isCancel(error)) bad.push('refus : ' + error);
-      if (refused.asked.length !== 1 || !/photos\.exemple\.fr/.test(refused.asked[0].message) || !/logos\.exemple\.fr/.test(refused.asked[0].message)) bad.push('fenêtre=' + JSON.stringify(refused.asked.map(a => a.message)));
-      const accepted = h.stubDialogs({ confirm: true });
-      let text = '';
-      try { text = markup(await h.exportHtml(source)); } finally { accepted.restore(); }
-      if (accepted.asked.length !== 1 || text !== '<p><img src="https://photos.exemple.fr/a.png" alt="A"></p>') bad.push('acceptée : ' + accepted.asked.length + ' fenêtre, texte ' + JSON.stringify(text));
+      const dialogs = h.stubDialogs({ confirm: false });
+      let text = '', withHeader = '', error = null;
+      try { text = markup(await h.exportHtml(source)); withHeader = markup(await h.exportHtml(source, header)); } catch (e) { error = e; } finally { dialogs.restore(); }
+      if (error) bad.push('erreur : ' + error);
+      if (dialogs.asked.length) bad.push('fenêtre=' + JSON.stringify(dialogs.asked.map(a => a.message)));
+      if (text !== '<p><img src="https://photos.exemple.fr/a.png" alt="A"></p>') bad.push('texte : ' + JSON.stringify(text));
+      if (!withHeader.includes('https://photos.exemple.fr/a.png') || !withHeader.includes('https://logos.exemple.fr/l.png') || /data-external-src|data-blocked/.test(withHeader)) bad.push('avec en-tête : ' + JSON.stringify(withHeader.slice(0, 400)));
       const quiet = h.stubDialogs({ confirm: false });
       let quietText = '';
       try { quietText = markup(await h.exportHtml(`<p><img class="editor-image" src="${PX}" alt="D"></p><p><img class="editor-image" src="${location.origin}/img/none.png" alt="O"></p>`, null, null, null, null, { fragment: true })); } finally { quiet.restore(); }

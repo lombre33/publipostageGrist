@@ -219,7 +219,7 @@
 
   cases.push({
     id: 'web_page_image_of_another_site_is_not_pasted_and_nothing_is_requested',
-    description: 'Une image collée d\'un autre site n\'entre pas dans le document (ni cadre « Afficher », ni adresse dans le modèle) et aucune requête ne part vers ce site ; le coin d\'état dit « image d\'une page web non collée » avec le geste qui marche ; une data URI collée à côté s\'affiche tout de suite',
+    description: 'Une image collée d\'un autre site n\'entre pas dans le document (ni cadre « Image non affichée », ni adresse dans le modèle) et aucune requête ne part vers ce site ; le coin d\'état dit « image d\'une page web non collée » avec le geste qui marche ; une data URI collée à côté s\'affiche tout de suite',
     run: async (h) => {
       const before = performance.getEntriesByType('resource').length;
       const status = document.getElementById('status-msg');

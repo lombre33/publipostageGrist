@@ -10,8 +10,7 @@
 //      rastérisé pareil), sans écart marqué - un fond coloré de case s'imprime avec « printBackground: false » - ; en paysage A5 aussi ;
 //   3) une page de la Lecture plus haute qu'une feuille (une liste longue) : le PDF a une page de plus, les soixante éléments y sont une fois chacun ;
 //   4) le thème sombre du widget : l'impression reste en clair (fond blanc, texte sombre) ;
-//   5) une image d'un autre site : la fenêtre « images d'un autre site » précède l'impression (Annuler n'imprime rien, Continuer imprime), l'image est chargée dans l'impression et le site n'est
-//      pas affiché pour la séance ;
+//   5) une image d'un autre site : aucune fenêtre ne précède l'impression (24/11 : elle n'existe plus), l'impression montre le cadre de l'image (jamais l'image) et rien n'est demandé à son site ;
 //   6) un document de plus de 60 pages : le vrai clic ne prépare rien et le message dit quoi choisir, en français et en anglais ;
 //   7) le widget dans un cadre à bac à sable comme celui d'un document Grist : le VRAI print() (aucun remplaçant) est accepté par le navigateur, qui annonce beforeprint puis afterprint
 //      à la fenêtre du widget, laquelle retrouve sa page telle qu'elle était.
@@ -402,22 +401,16 @@ await scenario('4) Thème du widget : l\'impression est la même en thème clair
   });
 }, { theme: 'dark' });
 
-await scenario('5) Une image d\'un autre site : la fenêtre d\'abord, puis l\'image dans l\'impression', async w => {
+await scenario('5) Une image d\'un autre site : ni fenêtre, ni demande à son site, son cadre dans l\'impression', async w => {
   const { page } = w;
-  await w.context.route('**://pp-print.test/**', route => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(TINY_PNG, 'base64') }));
+  const asked = [];
+  await w.context.route('**://pp-print.test/**', route => { asked.push(route.request().url()); return route.abort(); });
   await setDocument(page, '<p>Avant</p><p><img class="editor-image" src="https://pp-print.test/a.png" alt="" style="width: 120px;"></p><p>Après</p>', NO_HF);
   await clickHoverRow(page, '#v2-btn-quality', QUALITY_ROW('browser-print'));
-  const windowOpen = () => page.evaluate(() => { const modal = document.getElementById('pp-dialog-modal'); return !!modal && getComputedStyle(modal).display !== 'none' ? (modal.textContent || '') : ''; });
   await click(page, '#btn-export-pdf');
   await sleep(900);
-  const listed = await windowOpen();
-  check('la fenêtre « images d\'un autre site » précède l\'impression et nomme le site', /pp-print\.test/.test(listed), listed.slice(0, 160));
-  await page.keyboard.press('Escape');
-  await sleep(500);
-  check('Annuler : rien n\'est imprimé, rien n\'est posé dans la page, « Export annulé. »', (await printsOf(page)) === 0 && await pageClean(page) && /annulé|cancel/i.test(await status(page)), await status(page));
-  await click(page, '#btn-export-pdf');
-  await sleep(900);
-  await click(page, '#pp-dialog-modal .var-modal-primary');
+  const windowShown = await page.evaluate(() => { const modal = document.getElementById('pp-dialog-modal'); return !!modal && getComputedStyle(modal).display !== 'none' ? (modal.textContent || '') : ''; });
+  check('aucune fenêtre « images d\'un autre site » ne précède l\'impression (elle n\'existe plus)', !/pp-print\.test/.test(windowShown), windowShown.slice(0, 160));
   await waitPrints(page, 1);
   await acceptReadyIfAsked(page);
   await waitPrints(page, 1, 15000);
@@ -426,10 +419,10 @@ await scenario('5) Une image d\'un autre site : la fenêtre d\'abord, puis l\'im
     if (!shot) return null;
     const doc = new DOMParser().parseFromString(shot.html, 'text/html');
     const img = doc.querySelector('.reader-content img');
-    return { src: img && img.getAttribute('src'), blocked: doc.querySelectorAll('[data-blocked-src]').length, allowed: ExternalImages.isAllowed('pp-print.test') };
+    return { src: img && (img.getAttribute('src') || '').slice(0, 40), blockedSrc: img && img.getAttribute('data-blocked-src'), site: img && img.getAttribute('data-blocked-site') };
   });
-  check('Continuer : l\'impression part, l\'image est à son adresse dans les feuilles, sans cadre « Afficher »', !!print && print.src === 'https://pp-print.test/a.png' && print.blocked === 0, print);
-  check('et le site n\'est pas affiché pour la séance (la Lecture et l\'éditeur gardent leur cadre)', !!print && print.allowed === false, print);
+  check('l\'impression part : l\'image y est un cadre dessiné (data:image/svg+xml) qui nomme le site, son adresse n\'est gardée que dans data-blocked-src', !!print && /^data:image\/svg\+xml/.test(print.src) && print.blockedSrc === 'https://pp-print.test/a.png' && print.site === 'pp-print.test', print);
+  check('rien n\'a été demandé à ce site : ni par la Lecture, ni par l\'impression', asked.length === 0, asked);
 });
 
 await scenario('6) Plus de 60 pages : le message dit quoi choisir (français, puis anglais)', async w => {

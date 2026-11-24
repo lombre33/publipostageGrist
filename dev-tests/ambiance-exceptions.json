@@ -29,7 +29,6 @@
     {"fichier": "css/print.css", "selecteur": ".*", "categorie": "papier"},
     {"fichier": "css/callout.css", "selecteur": ".*", "categorie": "papier"},
     {"fichier": "css/caption.css", "selecteur": ".*", "categorie": "papier"},
-    {"fichier": "css/external-images.css", "selecteur": ".*", "categorie": "papier"},
     {"fichier": "css/grid.css", "selecteur": ".*", "categorie": "papier"},
     {"fichier": "extensions/graphique/chart-block.css", "selecteur": ".*", "categorie": "papier"},
     {"fichier": "extensions/diapositives/slide-background.css", "selecteur": ".*", "categorie": "papier"},

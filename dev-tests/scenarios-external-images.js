@@ -1,16 +1,18 @@
-// Suite "externalImages" - la fenêtre qui précède un export dont le modèle contient une image d'un site externe (js/external-images.js, choix d'Antoine du
-// 2026-10-01 « Fenêtre avant l'export », AUDIT_CODE.md §2.3). Trois étages :
-//  1) le module seul : quels sites sont listés (http(s) hors widget, hors serveur de Grist ; data:, blob:, adresse relative, ftp: jamais), en-tête et pied
-//     comptés seulement quand ils sont exportés, un site accepté n'est pas redemandé dans un même lancement, un refus arrête tout, une seule fenêtre à la fois ;
-//  2) les vrais exports (PDF et Word d'une ligne) : la fenêtre s'ouvre AVANT tout téléchargement, « Annuler » ne télécharge rien et ne produit rien ;
-//  3) les vraies lignes du menu Exporter (un PDF, un Word, tout en un seul PDF) : un lot ne pose la question qu'une fois, « Annuler » arrête le lot entier et
-//     écrit « Export annulé. » (pas une erreur).
-// Puis, en dernier (contrôle de sécurité du 04/10, « Tout corriger ») : l'AFFICHAGE. Toute image qui charge depuis un autre site que le widget et Grist est signalée en permanence - hôte,
-// infobulle, contour en tirets - dans l'éditeur, la Lecture, ses en-têtes et ses pieds, y compris une image brute que l'éditeur n'écrit pas ; le signalement ne prend aucune place et
-// n'entre jamais dans le HTML enregistré.
-// Enfin, depuis le choix du 05/10 (« Bloquer jusqu'à un clic ») : une image d'un autre site ne charge qu'après un clic « Afficher ». Le cadre dans un HTML qui va s'afficher
-// (ExternalImages.block : Lecture, en-têtes et pieds, galerie), dans la vue de l'éditeur, son bouton, l'adresse qui reste dans le modèle, le clic et le clavier, ce que la fenêtre
-// d'export ne redemande plus, les copies d'une image répétée.
+// Suite "externalImages" - les images d'un autre site (js/external-images.js). Depuis la demande du 24/11 (« plus aucun appel vers un autre site » : la politique de contenu de la
+// page n'en admettra plus), le widget ne télécharge JAMAIS une image d'un autre site : ni à l'affichage, ni à l'export, ni pour une miniature. L'adresse reste dans le document (rien n'est
+// modifié ni perdu), mais le navigateur ne la reçoit jamais. Sept étages :
+//  1) le module seul : ce qui se lit (data:, blob:, adresse relative, le widget, le serveur de Grist) et ce qui ne se lit plus ; plus de « Afficher », plus de fenêtre avant l'export ;
+//  2) setAside : le HTML d'un export perd l'adresse de ses images d'un autre site (data-external-src) et, entré dans la page, ne charge rien (les requêtes sont mesurées, avec un témoin
+//     qui prouve que la mesure voit un chargement) ;
+//  3) les vrais exports (PDF, Word, Excel, HTML, Markdown) : aucune image téléchargée, aucune fenêtre, le nombre d'images laissées de côté dit dans le coin d'état ; le HTML et le Markdown,
+//     fichiers de texte, gardent le lien ;
+//  4) les vraies lignes du menu Exporter (un PDF, un Word, tout en un seul PDF) : le même état, un lot compte la même image une seule fois ;
+//  5) l'AFFICHAGE : toute image de la page qui charge quand même depuis un autre site est signalée en permanence (hôte, infobulle, contour en tirets) ;
+//  6) le cadre : dans un HTML qui va s'afficher (ExternalImages.block : Lecture, en-têtes et pieds, galerie), dans la vue de l'éditeur, avec l'adresse gardée dans le document ; les copies d'une
+//     image répétée ; un clic sur le cadre de l'éditeur ou de la Lecture ouvre la fenêtre qui explique, l'ailleurs reste inerte ;
+//  7) la FENÊTRE QUI EXPLIQUE (demande du 24/11 : « une pop-up qui s'ouvre et explique le pourquoi et la manip ; ensuite les images en place holder, et au clic la pop-up revient ») : le décompte
+//     (survey), l'ouverture d'un vrai document (une fois par document et par session, pas en lecture seule), le contenu en français et en anglais, la fermeture et le focus, le clic sur un cadre de
+//     l'éditeur, le cadre de la Lecture comme bouton, le collage qui prend la place du cadre en un seul « Annuler ».
 // Les adresses sont en « .test » (jamais résolues) et `fetch` est remplacé le temps d'un cas : rien ne part sur le réseau.
 (function () {
   const cases = [];
@@ -18,11 +20,13 @@
   const DATA_PNG = 'data:image/png;base64,' + PNG_B64;
   const TABLE = 'ExtImgTable';
   const NAMES = ['Alpha Durand', 'Bravo Martin', 'Charlie Petit'];
+  const RECORD = { id: 1, Nom: NAMES[0] };
   const NO_HF = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
   const img = src => `<img class="editor-image" src="${src}" alt="Image" style="width: 120px;">`;
-  const WINDOW_TITLE = () => I18n.t('dialog.externalImages.title');
-  const isImagesWindow = opts => opts.title === WINDOW_TITLE();
-  const sitesOf = message => String(message).split('\n').filter(line => line.startsWith('• ')).map(line => line.slice(2));
+  const EXTERNAL = 'https://images.exemple.test/logo.png';
+  const DOC_HTML = '<p>Bonjour</p>' + img(EXTERNAL) + '<p>Merci.</p>';
+  const HEADER = 'https://entete.test/h.png';
+  const HF_WITH_IMAGE = { enabled: true, differentFirstPage: false, header: { default: img(HEADER), first: '' }, footer: { default: '', first: '' } };
 
   // fetch remplacé : une adresse en « .test » est notée et reçoit une image, le reste passe (les fichiers du harnais).
   function stubFetch() {
@@ -37,6 +41,9 @@
     };
     return { urls, restore() { window.fetch = original; } };
   }
+
+  // Les requêtes d'image que le navigateur a faites vers ces sites : les chargements ratés comptent aussi (Chromium les note), c'est ce qui prouve qu'une <img> a essayé.
+  const requestsTo = hosts => performance.getEntriesByType('resource').filter(e => hosts.some(host => e.name.indexOf('//' + host + '/') >= 0)).length;
 
   // Message d'état affiché pendant et après une action (le dernier suffit pour une annulation, la suite complète sert aux lots).
   function watchStatus() {
@@ -93,464 +100,316 @@
     await h.sleep(60); // le message d'état final est posé juste après
   }
 
+  const parse = html => { const t = document.createElement('template'); t.innerHTML = html; return Array.from(t.content.querySelectorAll('img')); };
+
+  // La fenêtre qui explique (js/external-images.js:explain) : son voile, ce qu'elle montre, son seul bouton visible (« Compris »). Un cas qui l'ouvre la ferme à la fin (closeExplain) : une fenêtre restée
+  // ouverte garderait le clavier et couvrirait la page des cas qui suivent.
+  const explainWindow = () => document.getElementById('pp-external-images-modal');
+  const explainOpen = () => { const w = explainWindow(); return !!w && getComputedStyle(w).display !== 'none'; };
+  const explainButtons = () => Array.from(document.querySelectorAll('#pp-external-images-modal .pp-modal-actions button')).filter(b => !b.hidden);
+  const explainText = () => { const body = document.querySelector('#pp-external-images-modal .pp-external-images-body'); return body ? body.textContent : ''; };
+  async function closeExplain(h) {
+    if (!explainOpen()) return;
+    explainButtons()[0].click();
+    await h.sleep(40);
+  }
+
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
   // 1) Le module seul
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  cases.push({
-    id: 'extimg_lists_external_sites_only_in_page_order',
-    description: 'La fenêtre liste les sites http(s) extérieurs au widget et à Grist, une fois chacun, dans l’ordre de la page (corps, puis en-tête et pied exportés) ; data:, blob:, adresse relative, même origine, ftp: et image sans adresse ne sont jamais listés',
-    run: async (h) => {
-      const dialogs = h.stubDialogs({ confirm: () => true });
-      const body = '<p>Bonjour</p>' + img('https://images.exemple.test/a.png') + img('https://images.exemple.test/b.png') + img('https://cdn.autre.test:8443/c.png')
-        + img(DATA_PNG) + img('blob:' + location.origin + '/0b1c') + img('images/relatif.png') + img(location.origin + '/meme-origine.png') + img('//cdn3.test/d.png')
-        + img('ftp://fichiers.test/e.png') + img('');
-      const hf = { enabled: true, differentFirstPage: true, header: { default: img('https://entete.test/h.png'), first: img('https://premiere.test/f.png') }, footer: { default: '', first: '' } };
-      let error = null;
-      try { await ExternalImages.confirmExport(body, hf); } catch (e) { error = e; }
-      dialogs.restore();
-      const asked = dialogs.asked;
-      const expected = ['images.exemple.test', 'cdn.autre.test:8443', 'cdn3.test', 'entete.test', 'premiere.test'];
-      const pass = !error && asked.length === 1 && asked[0].kind === 'confirm' && asked[0].title === WINDOW_TITLE() && asked[0].confirmLabel === I18n.t('common.continue')
-        && JSON.stringify(sitesOf(asked[0].message)) === JSON.stringify(expected);
-      return { pass, notes: JSON.stringify({ error: error && error.message, asked: asked.map(a => ({ title: a.title, sites: sitesOf(a.message) })) }) };
-    },
-  });
+  const SHOWN = [['https://affiche.test/logo.png', 'affiche.test'], ['https://autre.test:8443/c.png', 'autre.test:8443'], ['//cdn3.test/d.png', 'cdn3.test'], ['http://clair.test/e.png', 'clair.test']];
+  const QUIET = [DATA_PNG, 'blob:' + location.origin + '/0b1c', 'images/relatif.png', location.origin + '/meme-origine.png', 'ftp://fichiers.test/e.png'];
 
   cases.push({
-    id: 'extimg_header_footer_counted_only_when_exported',
-    description: 'Une image externe d’un en-tête ou d’un pied désactivé, ou d’une première page qui ne diffère pas, n’est pas exportée : aucune fenêtre ; sans image externe nulle part, la promesse se résout sans rien demander',
-    run: async (h) => {
-      const dialogs = h.stubDialogs({ confirm: () => true });
-      const ext = img('https://silencieux.test/x.png');
-      const body = img(DATA_PNG) + img('images/relatif.png');
-      const disabled = { enabled: false, differentFirstPage: true, header: { default: ext, first: ext }, footer: { default: ext, first: ext } };
-      const sameFirst = { enabled: true, differentFirstPage: false, header: { default: '', first: ext }, footer: { default: '', first: ext } };
-      let error = null;
-      try { await ExternalImages.confirmExport(body, disabled); await ExternalImages.confirmExport(body, sameFirst); await ExternalImages.confirmExport(body, null); await ExternalImages.confirmExport('', undefined); }
-      catch (e) { error = e; }
-      dialogs.restore();
-      return { pass: !error && dialogs.asked.length === 0, notes: JSON.stringify({ error: error && error.message, asked: dialogs.asked.length }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_refusal_rejects_with_cancel_error',
-    description: '« Annuler » fait échouer confirmExport avec une erreur que isCancel reconnaît (et seulement elle)',
-    run: async (h) => {
-      const dialogs = h.stubDialogs({ confirm: () => false });
-      let error = null;
-      try { await ExternalImages.confirmExport(img('https://refus.test/x.png'), null); } catch (e) { error = e; }
-      dialogs.restore();
-      const pass = !!error && ExternalImages.isCancel(error) && !ExternalImages.isCancel(new Error('autre')) && !ExternalImages.isCancel(null) && dialogs.asked.length === 1;
-      return { pass, notes: JSON.stringify({ error: error && error.name, asked: dialogs.asked.length }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_message_wording_one_or_several_sites_in_both_languages',
-    description: 'Le texte de la fenêtre, en français et en anglais : titre, « sur un site externe » / « sur des sites externes » (pluriel par {count|…|…}), un site par ligne à puce, « Annuler arrête l’export. » ; le bouton principal est « Continuer » / « Continue »',
-    run: async (h) => {
-      const original = I18n.getLang();
-      const expected = {
-        fr: {
-          title: 'Images d’un site externe', label: 'Continuer',
-          one: 'Pour cet export, le widget doit télécharger des images hébergées sur un site externe :\n• un.test\n\nAnnuler arrête l’export.',
-          several: 'Pour cet export, le widget doit télécharger des images hébergées sur des sites externes :\n• un.test\n• deux.test\n\nAnnuler arrête l’export.',
-        },
-        en: {
-          title: 'Images from an external site', label: 'Continue',
-          one: 'For this export, the widget has to download images hosted on an external site:\n• un.test\n\nCancel stops the export.',
-          several: 'For this export, the widget has to download images hosted on external sites:\n• un.test\n• deux.test\n\nCancel stops the export.',
-        },
-      };
-      const seenTexts = {};
-      try {
-        for (const lang of ['fr', 'en']) {
-          I18n.setLang(lang);
-          const dialogs = h.stubDialogs({ confirm: () => true });
-          await ExternalImages.confirmExport(img('https://un.test/a.png'), null);
-          await ExternalImages.confirmExport(img('https://un.test/a.png') + img('https://deux.test/b.png'), null);
-          dialogs.restore();
-          seenTexts[lang] = { title: dialogs.asked[0].title, label: dialogs.asked[0].confirmLabel, one: dialogs.asked[0].message, several: dialogs.asked[1].message };
-        }
-      } finally { I18n.setLang(original); }
-      const pass = JSON.stringify(seenTexts) === JSON.stringify(expected);
-      return { pass, notes: JSON.stringify(seenTexts) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_run_remembers_sites_and_a_refusal_stops_it',
-    description: 'Dans un lancement (beginRun), un site accepté n’est pas redemandé, un nouveau site n’est demandé que lui, un refus arrête la suite sans nouvelle fenêtre ; un nouveau lancement redemande tout',
-    run: async (h) => {
-      const page = (...hosts) => hosts.map(host => img('https://' + host + '/x.png')).join('');
-      let answer = true;
-      const dialogs = h.stubDialogs({ confirm: () => answer });
-      const log = [];
-      const attempt = async html => { try { await ExternalImages.confirmExport(html, null); log.push('ok'); } catch (e) { log.push(ExternalImages.isCancel(e) ? 'annulé' : 'erreur ' + e.message); } };
-      ExternalImages.beginRun();
-      await attempt(page('un.test'));
-      await attempt(page('un.test'));
-      await attempt(page('un.test', 'deux.test'));
-      const askedAfterAccepted = dialogs.asked.map(a => sitesOf(a.message));
-      answer = false;
-      await attempt(page('trois.test'));
-      await attempt(page('un.test', 'quatre.test'));
-      const askedAfterRefusal = dialogs.asked.length;
-      ExternalImages.endRun();
-      answer = true;
-      ExternalImages.beginRun();
-      await attempt(page('un.test'));
-      ExternalImages.endRun();
-      dialogs.restore();
-      const pass = JSON.stringify(askedAfterAccepted) === JSON.stringify([['un.test'], ['deux.test']]) && askedAfterRefusal === 3
-        && JSON.stringify(log) === JSON.stringify(['ok', 'ok', 'ok', 'annulé', 'annulé', 'ok']) && dialogs.asked.length === 4;
-      return { pass, notes: JSON.stringify({ log, askedAfterAccepted, askedAfterRefusal, total: dialogs.asked.length }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_two_requests_at_once_open_one_window',
-    description: 'Deux demandes qui se croisent pour le même site (dans un lancement) ne font ouvrir qu’une fenêtre : la seconde attend la première, puis voit le site déjà accepté',
-    run: async (h) => {
-      const dialogs = h.stubDialogs({ confirm: async () => { await h.sleep(120); return true; } });
-      ExternalImages.beginRun();
-      const html = img('https://double.test/x.png');
-      const results = await Promise.allSettled([ExternalImages.confirmExport(html, null), ExternalImages.confirmExport(html, null)]);
-      ExternalImages.endRun();
-      dialogs.restore();
-      return { pass: dialogs.asked.length === 1 && results.every(r => r.status === 'fulfilled'), notes: JSON.stringify({ asked: dialogs.asked.length, results: results.map(r => r.status) }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_grist_server_is_trusted_by_its_token_origin_only',
-    description: 'Une image de pièce jointe servie par le serveur de Grist (origine du jeton) n’est pas listée ; une image marquée « pièce jointe » mais pointant ailleurs l’est',
-    run: async (h) => {
-      const dialogs = h.stubDialogs({ confirm: () => true });
+    id: 'extimg_may_read_only_data_blob_the_widget_and_the_grist_server',
+    description: 'ExternalImages.mayRead : data:, blob:, une adresse relative, le widget et le serveur de Grist (l’origine du jeton) se lisent ; tout autre site (« // » compris), un protocole qui n’est pas http(s), une adresse vide ou illisible non',
+    run: async () => {
       const gristUrl = await GristAPI.getAttachmentDownloadUrl(7);
-      const attachment = src => `<img class="editor-image" data-source="attachment" data-attachment-id="7" src="${src}">`;
-      await ExternalImages.confirmExport(attachment(gristUrl) + img('https://tiers.test/x.png'), null);
-      await ExternalImages.confirmExport(attachment('https://faux-gist.test/api/docs/stub/attachments/7/download'), null);
-      dialogs.restore();
-      const asked = dialogs.asked.map(a => sitesOf(a.message));
-      const pass = /^https?:\/\/[^/]+\/api\/docs\//.test(gristUrl) && JSON.stringify(asked) === JSON.stringify([['tiers.test'], ['faux-gist.test']]);
-      return { pass, notes: JSON.stringify({ gristUrl, asked }) };
+      const origin = await GristAPI.getServerOrigin();
+      const allowed = [DATA_PNG, 'blob:' + location.origin + '/0b1c', 'images/relatif.png', location.origin + '/meme-origine.png', gristUrl, ' ' + gristUrl + ' '];
+      const refused = ['https://tiers.test/x.png', 'http://tiers.test/x.png', '//cdn.test/x.png', 'HTTPS://MAJ.test/x.png', 'https://faux-gist.test/api/docs/stub/attachments/7/download', 'ftp://fichiers.test/e.png',
+        'javascript:alert(1)', 'file:///etc/passwd', '', '   ', null, undefined, 'https://[invalide'];
+      const answers = async list => Promise.all(list.map(src => ExternalImages.mayRead(src)));
+      const seen = { origin, allowed: await answers(allowed), refused: await answers(refused) };
+      const pass = /^https?:\/\/[^/]+$/.test(origin) && origin === new URL(gristUrl).origin && seen.allowed.every(Boolean) && seen.refused.every(answer => answer === false);
+      return { pass, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
-    id: 'extimg_html_is_read_without_loading_images',
-    description: 'Lire le HTML pour y chercher les images ne fait charger aucune image au navigateur (document inerte) : avant la réponse de la fenêtre, aucune requête image n’est partie vers le site',
+    id: 'extimg_there_is_no_way_left_to_show_a_site_or_to_ask_before_an_export',
+    description: 'Plus de « Afficher » ni de fenêtre avant l’export : ExternalImages n’a plus allow, isAllowed, onReveal, unblockIn, confirmExport, beginRun ni endRun, et un export qui garde la porte ouverte (isCancel, cancelError, fragmentsOf) sert encore au rappel des textes alternatifs',
+    run: async () => {
+      const gone = ['allow', 'isAllowed', 'onReveal', 'unblockIn', 'confirmExport', 'beginRun', 'endRun'].filter(name => typeof ExternalImages[name] !== 'undefined');
+      const kept = ['isCancel', 'cancelError', 'fragmentsOf', 'siteOf', 'blockedSiteOf', 'block', 'blockIn', 'setAside', 'mayRead', 'hintOf'].filter(name => typeof ExternalImages[name] !== 'function');
+      const cancel = ExternalImages.cancelError();
+      const pass = gone.length === 0 && kept.length === 0 && ExternalImages.isCancel(cancel) && !ExternalImages.isCancel(new Error('autre'));
+      return { pass, notes: JSON.stringify({ gone, missing: kept }) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_site_of_and_blocked_site_of_read_the_host_of_external_addresses_only',
+    description: 'ExternalImages.siteOf et blockedSiteOf donnent l’hôte (port compris) des adresses qui partent vers un autre site, « // » compris, et rien pour data:, blob:, une adresse relative, la même origine, ftp:, une adresse vide ou illisible ; plus aucun site ne fait exception',
+    run: async () => {
+      const urls = SHOWN.map(pair => pair[0]).concat(QUIET, ['', '   ', 'https://exotique.test/ a.png', 'https://[invalide']);
+      const sites = urls.map(src => ExternalImages.siteOf(src));
+      const blocked = urls.map(src => ExternalImages.blockedSiteOf(src));
+      const want = SHOWN.map(pair => pair[1]).concat(QUIET.map(() => ''), ['', '', 'exotique.test', '']);
+      const pass = JSON.stringify(sites) === JSON.stringify(want) && JSON.stringify(blocked) === JSON.stringify(want);
+      return { pass, notes: JSON.stringify({ sites, blocked }) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_image_io_refuses_other_sites_and_reads_the_rest',
+    description: 'ImageIo.fetchBlob et ImageIo.load refusent l’adresse d’un autre site sans qu’aucune requête parte ; une data URI, une adresse relative du widget et une pièce jointe du serveur de Grist passent',
+    run: async () => {
+      const net = stubFetch();
+      const seen = { refused: [], read: [] };
+      try {
+        for (const src of ['https://tiers1.test/a.png', '//tiers2.test/a.png', 'http://tiers3.test:81/a.png']) {
+          let blobError = null; let loadError = null;
+          try { await ImageIo.fetchBlob(src); } catch (e) { blobError = e.message; }
+          try { await ImageIo.load(src); } catch (e) { loadError = e.message; }
+          seen.refused.push({ src, blobError, loadError });
+        }
+        const blob = await ImageIo.fetchBlob(DATA_PNG);
+        const image = await ImageIo.load(DATA_PNG);
+        seen.read.push({ blobType: blob.type, width: image.naturalWidth });
+        const grist = await GristAPI.getAttachmentDownloadUrl(7);
+        const fetched = [];
+        const original = window.fetch;
+        window.fetch = (input, init) => { fetched.push(String(input)); return Promise.resolve(new Response(new Blob([new Uint8Array(4)], { type: 'image/png' }), { status: 200 })); };
+        try { await ImageIo.fetchBlob(grist); } finally { window.fetch = original; }
+        seen.read.push({ grist: fetched });
+        const pass = seen.refused.every(r => r.blobError && r.loadError) && net.urls.length === 0 && seen.read[0].blobType === 'image/png' && seen.read[0].width === 1
+          && JSON.stringify(seen.read[1].grist) === JSON.stringify([grist]);
+        return { pass, notes: JSON.stringify(Object.assign({ downloads: net.urls }, seen)) };
+      } finally { net.restore(); }
+    },
+  });
+
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
+  // 2) setAside : le HTML d'un export
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  cases.push({
+    id: 'extimg_set_aside_removes_the_address_of_external_images_only',
+    description: 'ExternalImages.setAside(html) : une image d’un autre site (http(s), « // », majuscules, espaces, adresse écrite avec des entités) perd son src et garde l’adresse dans data-external-src ; data:, blob:, adresse relative, même origine, pièce jointe de Grist et ftp: gardent le leur ; la chaîne est rendue telle quelle quand rien ne change',
+    run: async () => {
+      const gristUrl = await GristAPI.getAttachmentDownloadUrl(7);
+      const external = ['https://aside1.test/a.png', '//aside2.test/b.png', 'HTTP://ASIDE3.test/c.png'];
+      const html = '<p>Texte</p>' + external.map(src => '<img class="editor-image" src="' + src + '" alt="Logo" style="width: 80px;">').join('')
+        + '<img id="e" src="&#104;ttps://aside4.test/d.png"><img id="s" src=" https://aside5.test/e.png ">'
+        + QUIET.map(src => '<img src="' + src + '">').join('') + '<img id="pj" data-attachment-id="7" src="' + gristUrl + '"><img id="serveur" src="' + gristUrl + '">';
+      const out = await ExternalImages.setAside(html);
+      const images = parse(out);
+      const problems = [];
+      const aside = images.filter(i => !i.hasAttribute('src'));
+      if (aside.length !== 5) problems.push('images mises de côté : ' + aside.length);
+      const addresses = aside.map(i => i.getAttribute('data-external-src'));
+      const want = external.concat(['https://aside4.test/d.png', 'https://aside5.test/e.png']);
+      if (JSON.stringify(addresses) !== JSON.stringify(want)) problems.push('adresses gardées : ' + JSON.stringify(addresses));
+      const first = aside[0];
+      if (first.getAttribute('alt') !== 'Logo' || !/width: 80px/.test(first.getAttribute('style') || '') || !first.classList.contains('editor-image')) problems.push('alt, style ou classe perdus');
+      const kept = images.filter(i => i.hasAttribute('src')).map(i => i.getAttribute('src'));
+      if (JSON.stringify(kept) !== JSON.stringify(QUIET.concat([gristUrl, gristUrl]))) problems.push('adresses touchées à tort : ' + JSON.stringify(kept));
+      const plain = '<p>Rien</p>' + QUIET.map(src => '<img src="' + src + '">').join('');
+      if ((await ExternalImages.setAside(plain)) !== plain) problems.push('un HTML sans image d’un autre site n’est pas rendu tel quel');
+      if ((await ExternalImages.setAside('<p>Pas d\'image</p>')) !== '<p>Pas d\'image</p>' || (await ExternalImages.setAside('')) !== '' || (await ExternalImages.setAside(null)) !== null) problems.push('chaîne sans image ou vide modifiée');
+      const twice = await ExternalImages.setAside(out);
+      if (twice !== out) problems.push('un second passage change encore le HTML');
+      return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_set_aside_html_loads_nothing_when_it_enters_the_page',
+    description: 'Le HTML d’un export, entré dans un nœud de la page (comme le font tous les exports), ne fait charger aucune image d’un autre site : aucune requête, alors que le même HTML sans setAside en fait partir une (témoin : la mesure voit un chargement)',
     run: async (h) => {
-      const probe = 'https://sonde-' + Date.now() + '.test/pixel.png';
-      const requested = () => performance.getEntriesByType('resource').filter(e => e.name === probe).length;
-      let during = -1;
-      const dialogs = h.stubDialogs({ confirm: async () => { await h.sleep(250); during = requested(); return false; } });
-      try { await ExternalImages.confirmExport(img(probe), null); } catch (e) { /* refus attendu */ }
-      dialogs.restore();
-      return { pass: during === 0, notes: JSON.stringify({ requestsWhileWindowOpen: during }) };
+      const stamp = Date.now();
+      const asideHost = 'sonde-a-' + stamp + '.test'; const rawHost = 'sonde-b-' + stamp + '.test'; const fragmentHost = 'sonde-c-' + stamp + '.test';
+      const make = host => '<p>Texte</p><img src="https://' + host + '/pixel.png" alt="">';
+      const asideHtml = await ExternalImages.setAside(make(asideHost));
+      const moveInto = html => { const t = document.createElement('template'); t.innerHTML = html; const div = document.createElement('div'); div.appendChild(document.importNode(t.content, true)); return div; };
+      const wrapper = document.createElement('div'); Dom.setMarkup(wrapper, asideHtml);
+      const fragment = moveInto(await ExternalImages.setAside(make(fragmentHost)));
+      const control = document.createElement('div'); Dom.setMarkup(control, make(rawHost));
+      await h.sleep(700);
+      const seen = { aside: requestsTo([asideHost]), fragment: requestsTo([fragmentHost]), control: requestsTo([rawHost]), kept: wrapper.querySelector('img').getAttribute('data-external-src') };
+      return { pass: seen.aside === 0 && seen.fragment === 0 && seen.control >= 1 && seen.kept === 'https://' + asideHost + '/pixel.png' && !fragment.querySelector('img[src]'), notes: JSON.stringify(seen) };
+    },
+  });
+
+  cases.push({
+    id: 'extimg_preview_sets_external_images_aside_in_the_body_and_in_the_header_and_footer',
+    description: 'ExportCommon.resolveRecord (le point de passage de tous les exports) rend le corps et les zones d’en-tête et de pied sans l’adresse de leurs images d’un autre site : data-external-src seulement, rien n’est téléchargé',
+    run: async (h) => {
+      await seed(h, '<p>x</p>');
+      const net = stubFetch();
+      const hf = { enabled: true, differentFirstPage: true, header: { default: img(HEADER), first: img('https://premiere.test/p.png') }, footer: { default: img('https://pied.test/f.png'), first: '' } };
+      let resolved = null; let error = null;
+      try { resolved = await ExportCommon.resolveRecord(DOC_HTML + img(DATA_PNG), TABLE, RECORD, '', hf); } catch (e) { error = e; }
+      net.restore();
+      const zone = html => parse(html || '').map(i => ({ src: i.getAttribute('src'), aside: i.getAttribute('data-external-src') }));
+      const seen = resolved && {
+        body: zone(resolved.resolvedHtml).map(i => (i.src || '').slice(0, 22) + '|' + i.aside),
+        header: zone(resolved.resolvedHeaderFooterData.header.default), first: zone(resolved.resolvedHeaderFooterData.header.first), footer: zone(resolved.resolvedHeaderFooterData.footer.default),
+      };
+      const pass = !error && !!seen && seen.body[0] === '|' + EXTERNAL && seen.body[1].startsWith('data:image/png;base64') && seen.header[0].src === null && seen.header[0].aside === HEADER
+        && seen.first[0].aside === 'https://premiere.test/p.png' && seen.footer[0].aside === 'https://pied.test/f.png' && net.urls.length === 0;
+      return { pass, notes: JSON.stringify({ error: error && error.message, seen, downloads: net.urls }) };
     },
   });
 
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-  // 2) Les vrais exports d'une ligne
+  // 3) Les vrais exports d'une ligne
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  const EXTERNAL = 'https://images.exemple.test/logo.png';
-  const DOC_HTML = '<p>Bonjour</p>' + img(EXTERNAL) + '<p>Merci.</p>';
+  const outsideCount = () => ExportCommon.outsideImageCount();
+  const noWindow = dialogs => dialogs.asked.length === 0;
 
   cases.push({
-    id: 'extimg_pdf_window_comes_before_any_download',
-    description: 'PDF d’une ligne : la fenêtre s’ouvre avant le moindre téléchargement ; une fois acceptée, l’image est téléchargée et le PDF produit',
+    id: 'extimg_pdf_export_downloads_nothing_asks_nothing_and_counts_the_images_left_out',
+    description: 'PDF d’une ligne : l’image du corps et celle de l’en-tête ne sont pas téléchargées, aucune fenêtre ne s’ouvre, le PDF est produit sans elles et les deux images sont comptées (laissées de côté, pas « introuvables »)',
     run: async (h) => {
       const net = stubFetch();
-      const events = [];
-      const dialogs = h.stubDialogs({ confirm: opts => { events.push({ downloadsSoFar: net.urls.length, sites: sitesOf(opts.message) }); return true; } });
+      const dialogs = h.stubDialogs({ confirm: () => true });
+      ExportCommon.resetUnreadImages();
       let result = null; let error = null;
-      try { result = await PdfExport.getNativePdfBlobForRecord(DOC_HTML, null, {}, '', null, undefined); } catch (e) { error = e; }
+      try { result = await PdfExport.getNativePdfBlobForRecord(DOC_HTML, null, {}, '', HF_WITH_IMAGE, undefined); } catch (e) { error = e; }
       dialogs.restore(); net.restore();
       const head = result && result.blob ? new TextDecoder().decode(new Uint8Array(await result.blob.slice(0, 5).arrayBuffer())) : '';
-      const pass = !error && events.length === 1 && events[0].downloadsSoFar === 0 && JSON.stringify(events[0].sites) === JSON.stringify(['images.exemple.test'])
-        && net.urls.includes(EXTERNAL) && head === '%PDF-';
-      return { pass, notes: JSON.stringify({ error: error && error.message, events, downloads: net.urls, head }) };
+      const seen = { error: error && error.message, head, downloads: net.urls, asked: dialogs.asked.length, outside: outsideCount(), unread: ExportCommon.unreadImageCount(), requests: requestsTo(['images.exemple.test', 'entete.test']) };
+      return { pass: !error && head === '%PDF-' && net.urls.length === 0 && noWindow(dialogs) && seen.outside === 2 && seen.unread === 0 && seen.requests === 0, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
-    id: 'extimg_pdf_refusal_downloads_nothing',
-    description: 'PDF d’une ligne : « Annuler » arrête l’export (erreur d’annulation), l’image n’est pas téléchargée et aucun PDF n’est produit',
+    id: 'extimg_pdf_without_external_image_counts_nothing',
+    description: 'PDF d’un document sans image d’un autre site (data:, relative) : produit comme avant, aucune image comptée',
     run: async (h) => {
-      const net = stubFetch();
       const dialogs = h.stubDialogs({ confirm: () => false });
+      ExportCommon.resetUnreadImages();
       let result = null; let error = null;
-      try { result = await PdfExport.getNativePdfBlobForRecord(DOC_HTML, null, {}, '', null, undefined); } catch (e) { error = e; }
-      dialogs.restore(); net.restore();
-      return { pass: !result && ExternalImages.isCancel(error) && net.urls.length === 0 && dialogs.asked.length === 1, notes: JSON.stringify({ error: error && error.name, downloads: net.urls }) };
+      try { result = await PdfExport.getNativePdfBlobForRecord('<p>Bonjour</p>' + img(DATA_PNG), null, {}, '', null, undefined); } catch (e) { error = e; }
+      dialogs.restore();
+      return { pass: !error && !!result && !!result.blob && noWindow(dialogs) && outsideCount() === 0 && ExportCommon.unreadImageCount() === 0, notes: JSON.stringify({ error: error && error.message, outside: outsideCount() }) };
     },
   });
 
   cases.push({
-    id: 'extimg_pdf_header_footer_images_are_listed_too',
-    description: 'PDF : l’image externe d’un en-tête de page est listée avec celles du corps, dans la même fenêtre',
+    id: 'extimg_docx_export_downloads_nothing_and_leaves_the_image_out',
+    description: 'Word d’une ligne : aucune image d’un autre site téléchargée, aucune fenêtre, le fichier est produit sans elle (rien dans word/media) et elle est comptée ; une image intégrée du même document est écrite',
     run: async (h) => {
       const net = stubFetch();
       const dialogs = h.stubDialogs({ confirm: () => true });
-      const hf = { enabled: true, differentFirstPage: false, header: { default: img('https://entete.test/h.png'), first: '' }, footer: { default: '', first: '' } };
-      let error = null;
-      try { await PdfExport.getNativePdfBlobForRecord(DOC_HTML, null, {}, '', hf, undefined); } catch (e) { error = e; }
-      dialogs.restore(); net.restore();
-      const pass = !error && dialogs.asked.length === 1 && JSON.stringify(sitesOf(dialogs.asked[0].message)) === JSON.stringify(['images.exemple.test', 'entete.test'])
-        && net.urls.includes('https://entete.test/h.png');
-      return { pass, notes: JSON.stringify({ error: error && error.message, asked: dialogs.asked.map(a => sitesOf(a.message)), downloads: net.urls }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_pdf_without_external_image_asks_nothing',
-    description: 'PDF d’un modèle sans image externe (data:, relative) : aucune fenêtre, le PDF est produit comme avant',
-    run: async (h) => {
-      const dialogs = h.stubDialogs({ confirm: () => false });
-      let result = null; let error = null;
-      try { result = await PdfExport.getNativePdfBlobForRecord('<p>Bonjour</p>' + img(DATA_PNG) + img('images/relatif.png'), null, {}, '', null, undefined); } catch (e) { error = e; }
-      dialogs.restore();
-      return { pass: !error && !!result && !!result.blob && dialogs.asked.length === 0, notes: JSON.stringify({ error: error && error.message, asked: dialogs.asked.length }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_docx_window_comes_before_any_download',
-    description: 'Word d’une ligne : la fenêtre s’ouvre avant le moindre téléchargement ; une fois acceptée, l’image est téléchargée et se retrouve dans word/media',
-    run: async (h) => {
-      const net = stubFetch();
-      const events = [];
-      const dialogs = h.stubDialogs({ confirm: opts => { events.push({ downloadsSoFar: net.urls.length, sites: sitesOf(opts.message) }); return true; } });
+      ExportCommon.resetUnreadImages();
       let parts = null; let error = null;
-      try { parts = await h.exportDocxParts(DOC_HTML, null, null); } catch (e) { error = e; }
+      try { parts = await h.exportDocxParts(DOC_HTML + img(DATA_PNG), null, null); } catch (e) { error = e; }
       dialogs.restore(); net.restore();
       const media = parts ? parts.names.filter(n => n.startsWith('word/media/')) : [];
-      const pass = !error && events.length === 1 && events[0].downloadsSoFar === 0 && JSON.stringify(events[0].sites) === JSON.stringify(['images.exemple.test'])
-        && net.urls.includes(EXTERNAL) && media.length === 1;
-      return { pass, notes: JSON.stringify({ error: error && error.message, events, downloads: net.urls, media }) };
+      const seen = { error: error && error.message, media, downloads: net.urls, outside: outsideCount(), requests: requestsTo(['images.exemple.test']) };
+      return { pass: !error && media.length === 1 && net.urls.length === 0 && noWindow(dialogs) && seen.outside === 1 && seen.requests === 0, notes: JSON.stringify(seen) };
+    },
+  });
+
+  const GRID_HTML = `<table style="width: 200px;"><colgroup><col style="width: 200px;"></colgroup><tbody><tr data-row-height="60" style="height: 60px"><td colwidth="200"><p>Logo ${img(EXTERNAL)}</p></td></tr></tbody></table>`;
+
+  cases.push({
+    id: 'extimg_xlsx_export_downloads_nothing_and_leaves_the_image_out',
+    description: 'Excel d’une ligne : l’image d’un autre site d’une case n’est pas téléchargée, aucune fenêtre, le classeur est produit sans image (rien dans xl/media) et elle est comptée',
+    run: async (h) => {
+      await seed(h, '<p>x</p>');
+      const net = stubFetch();
+      const dialogs = h.stubDialogs({ confirm: () => true });
+      ExportCommon.resetUnreadImages();
+      let result = null; let error = null; let media = null;
+      try {
+        result = await XlsxExport.getXlsxBlobForRecord(GRID_HTML, TABLE, RECORD, '');
+        await ExportCommon.ensureJsZipLoaded();
+        media = Object.keys((await JSZip.loadAsync(result.blob)).files).filter(n => n.startsWith('xl/media/') && !n.endsWith('/'));
+      } catch (e) { error = e; }
+      dialogs.restore(); net.restore();
+      const seen = { error: error && error.message, media, downloads: net.urls, outside: outsideCount() };
+      return { pass: !error && !!result && media.length === 0 && net.urls.length === 0 && noWindow(dialogs) && seen.outside === 1, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
-    id: 'extimg_docx_refusal_downloads_nothing',
-    description: 'Word d’une ligne : « Annuler » arrête l’export (erreur d’annulation), l’image n’est pas téléchargée et aucun fichier n’est produit',
+    id: 'extimg_html_and_markdown_exports_keep_the_link_without_downloading',
+    description: 'Les exports HTML et Markdown, des fichiers de texte, gardent l’adresse d’une image d’un autre site telle que le document la porte (le widget n’écrit que le lien : « src » en HTML, lien ou balise <img> en Markdown) : rien n’est téléchargé, aucune fenêtre, aucune image comptée comme laissée de côté',
     run: async (h) => {
       const net = stubFetch();
-      const dialogs = h.stubDialogs({ confirm: () => false });
-      let parts = null; let error = null;
-      try { parts = await h.exportDocxParts(DOC_HTML, null, null); } catch (e) { error = e; }
+      const dialogs = h.stubDialogs({ confirm: () => true });
+      ExportCommon.resetUnreadImages();
+      let html = null; let markdown = null; let error = null;
+      try {
+        html = await h.exportHtml(DOC_HTML + img(DATA_PNG), HF_WITH_IMAGE, {}, null, '', { fragment: false });
+        markdown = await h.exportMarkdown(DOC_HTML, null, {}, null, '');
+      } catch (e) { error = e; }
       dialogs.restore(); net.restore();
-      return { pass: !parts && ExternalImages.isCancel(error) && net.urls.length === 0 && dialogs.asked.length === 1, notes: JSON.stringify({ error: error && error.name, downloads: net.urls }) };
+      const seen = { error: error && error.message, htmlHasLink: !!html && html.text.includes('src="' + EXTERNAL + '"'), htmlHasHeaderLink: !!html && html.text.includes('src="' + HEADER + '"'), htmlHasData: !!html && html.text.includes('data:image/png;base64'),
+        markdownHasLink: !!markdown && markdown.text.includes(EXTERNAL), downloads: net.urls, outside: outsideCount(), requests: requestsTo(['images.exemple.test', 'entete.test']) };
+      return { pass: !error && seen.htmlHasLink && seen.htmlHasHeaderLink && seen.htmlHasData && seen.markdownHasLink && net.urls.length === 0 && noWindow(dialogs) && seen.outside === 0 && seen.requests === 0, notes: JSON.stringify(seen) };
     },
   });
 
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-  // 3) Les vraies lignes du menu Exporter
+  // 4) Les vraies lignes du menu Exporter
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  // Clique la ligne ou le bouton d'export. La fenêtre des images répond `imagesAnswer` ; toute autre confirmation (« Générer N PDF ? ») est acceptée et notée.
-  async function clickExport(h, id, imagesAnswer, until) {
+  // Clique la ligne ou le bouton d'export. Toute confirmation (« Générer N PDF ? ») est acceptée et notée : aucune ne doit être celle des images.
+  async function clickExport(h, id, until) {
     const net = stubFetch();
     const dl = interceptDownloads();
     const status = watchStatus();
-    const imageWindows = []; const otherConfirms = [];
-    const dialogs = h.stubDialogs({ confirm: opts => {
-      if (isImagesWindow(opts)) { imageWindows.push({ downloadsSoFar: net.urls.length, sites: sitesOf(opts.message) }); return imagesAnswer; }
-      otherConfirms.push(opts.message);
-      return true;
-    } });
+    const confirms = [];
+    const dialogs = h.stubDialogs({ confirm: opts => { confirms.push(opts.title + ' | ' + String(opts.message).split('\n')[0]); return true; } });
     try {
       document.getElementById(id).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await waitFor(h, () => until({ net, dl, status }), 60000);
     } finally { status.stop(); dialogs.restore(); dl.restore(); net.restore(); }
-    return { downloads: dl.downloads, imageWindows, otherConfirms, fetched: net.urls, statuses: status.seen, finalStatus: document.getElementById('status-msg').textContent };
+    return { downloads: dl.downloads, confirms, fetched: net.urls, statuses: status.seen, finalStatus: document.getElementById('status-msg').textContent };
   }
-  const cancelledStatus = () => I18n.t('status.exportCancelled');
+  const outsideStatus = n => I18n.t('status.imagesOutside', { n });
 
   cases.push({
-    id: 'extimg_pdf_button_refusal_says_export_cancelled',
-    description: '« Exporter en PDF » : « Annuler » sur la fenêtre des images écrit « Export annulé. » (pas « Erreur génération PDF. »), ne télécharge rien et ne produit aucun PDF',
+    id: 'extimg_pdf_button_exports_and_says_how_many_images_were_left_out',
+    description: '« Exporter en PDF » : le PDF est créé sans télécharger l’image d’un autre site, aucune fenêtre n’est posée et le coin d’état dit « 1 image d’un autre site non reprise. PDF généré. »',
     run: async (h) => {
       await seed(h, DOC_HTML);
       const pdf = await interceptCreatePdf();
-      const res = await clickExport(h, 'btn-export-pdf', false, c => c.status.seen.includes(cancelledStatus()));
+      const res = await clickExport(h, 'btn-export-pdf', c => c.status.seen.some(s => s.includes(I18n.t('status.pdfGenerated')) || s.includes(I18n.t('status.pdfGenerationError'))));
       pdf.restore();
-      const pass = res.imageWindows.length === 1 && res.imageWindows[0].downloadsSoFar === 0 && res.fetched.length === 0 && pdf.calls.length === 0
-        && res.finalStatus === cancelledStatus() && !res.statuses.includes(I18n.t('status.pdfGenerationError'));
-      return { pass, notes: JSON.stringify({ windows: res.imageWindows, fetched: res.fetched, created: pdf.calls, statuses: res.statuses }) };
+      const pass = pdf.calls.length === 1 && res.fetched.length === 0 && res.confirms.length === 0 && res.finalStatus === outsideStatus(1) + ' ' + I18n.t('status.pdfGenerated');
+      return { pass, notes: JSON.stringify({ created: pdf.calls, fetched: res.fetched, confirms: res.confirms, statuses: res.statuses }) };
     },
   });
 
   cases.push({
-    id: 'extimg_pdf_button_acceptance_exports',
-    description: '« Exporter en PDF » : « Continuer » sur la fenêtre des images télécharge l’image et crée le PDF, état « PDF généré. »',
+    id: 'extimg_docx_button_exports_and_says_how_many_images_were_left_out',
+    description: '« Exporter en DOCX » : le fichier est téléchargé sans télécharger l’image d’un autre site, aucune fenêtre, le coin d’état dit « 1 image d’un autre site non reprise. DOCX généré. »',
     run: async (h) => {
       await seed(h, DOC_HTML);
-      const pdf = await interceptCreatePdf();
-      const res = await clickExport(h, 'btn-export-pdf', true, c => c.status.seen.includes(I18n.t('status.pdfGenerated')) || c.status.seen.includes(I18n.t('status.pdfGenerationError')));
-      pdf.restore();
-      const pass = res.imageWindows.length === 1 && res.imageWindows[0].downloadsSoFar === 0 && res.fetched.includes(EXTERNAL) && pdf.calls.length === 1
-        && res.finalStatus === I18n.t('status.pdfGenerated');
-      return { pass, notes: JSON.stringify({ windows: res.imageWindows, fetched: res.fetched, created: pdf.calls, statuses: res.statuses }) };
+      const res = await clickExport(h, 'v2-btn-export-docx', c => c.dl.downloads.length > 0);
+      const pass = res.downloads.length === 1 && /\.docx$/.test(res.downloads[0].name) && res.fetched.length === 0 && res.confirms.length === 0 && res.finalStatus === outsideStatus(1) + ' ' + I18n.t('status.docxGenerated');
+      return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), fetched: res.fetched, confirms: res.confirms, statuses: res.statuses }) };
     },
   });
 
   cases.push({
-    id: 'extimg_docx_button_refusal_says_export_cancelled',
-    description: '« Exporter en DOCX » : « Annuler » sur la fenêtre des images écrit « Export annulé. », ne télécharge rien et ne produit aucun fichier',
-    run: async (h) => {
-      await seed(h, DOC_HTML);
-      const res = await clickExport(h, 'v2-btn-export-docx', false, c => c.status.seen.includes(cancelledStatus()));
-      const pass = res.imageWindows.length === 1 && res.fetched.length === 0 && res.downloads.length === 0 && res.finalStatus === cancelledStatus()
-        && !res.statuses.includes(I18n.t('status.docxGenerationError'));
-      return { pass, notes: JSON.stringify({ windows: res.imageWindows, fetched: res.fetched, downloads: res.downloads.map(d => d.name), statuses: res.statuses }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_batch_asks_once_for_all_rows',
-    description: '« Exporter les lignes en un seul PDF » : une seule fenêtre des images pour les trois lignes (le site accepté n’est pas redemandé), les trois lignes sont exportées dans un seul PDF',
+    id: 'extimg_batch_counts_the_same_image_once_for_all_rows',
+    description: '« Exporter les lignes en un seul PDF » : la même image d’un autre site sur les trois lignes n’est comptée qu’une fois, rien n’est téléchargé, aucune fenêtre des images (seule la confirmation du lot) et les trois lignes sont exportées',
     run: async (h) => {
       await seed(h, '<p>Bonjour</p>' + img(EXTERNAL));
-      const res = await clickExport(h, 'v2-btn-export-pdf-merged', true, c => c.dl.downloads.length > 0);
+      const res = await clickExport(h, 'v2-btn-export-pdf-merged', c => c.dl.downloads.length > 0);
       const dl = res.downloads[0];
-      const pass = res.imageWindows.length === 1 && res.imageWindows[0].downloadsSoFar === 0 && res.otherConfirms.length === 1
-        && res.fetched.filter(u => u === EXTERNAL).length >= NAMES.length && res.downloads.length === 1 && dl.name === TABLE + '-export.pdf'
-        && res.finalStatus === I18n.t('status.mergedExportDone', { ok: NAMES.length });
-      return { pass, notes: JSON.stringify({ windows: res.imageWindows, otherConfirms: res.otherConfirms.length, fetched: res.fetched.length, downloads: res.downloads.map(d => d.name), status: res.finalStatus }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_batch_refusal_stops_the_whole_batch',
-    description: 'Un lot (ZIP de PDF) : « Annuler » sur la fenêtre des images arrête tout le lot sur la première ligne : une seule fenêtre, rien de téléchargé, aucune archive, « Export annulé. » et aucune ligne comptée en échec',
-    run: async (h) => {
-      await seed(h, '<p>Bonjour</p>' + img(EXTERNAL));
-      const res = await clickExport(h, 'v2-btn-export-pdf-batch', false, c => c.status.seen.includes(cancelledStatus()));
-      const pass = res.imageWindows.length === 1 && res.fetched.length === 0 && res.downloads.length === 0 && res.finalStatus === cancelledStatus()
-        && !res.statuses.some(s => /échec|failure/i.test(s));
-      return { pass, notes: JSON.stringify({ windows: res.imageWindows, fetched: res.fetched.length, downloads: res.downloads.map(d => d.name), statuses: res.statuses }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_docx_batch_refusal_stops_the_whole_batch',
-    description: 'Un lot DOCX (ZIP) : « Annuler » arrête tout le lot de la même façon : une fenêtre, rien de téléchargé, aucune archive, « Export annulé. »',
-    run: async (h) => {
-      await seed(h, '<p>Bonjour</p>' + img(EXTERNAL));
-      const res = await clickExport(h, 'v2-btn-export-docx-batch', false, c => c.status.seen.includes(cancelledStatus()));
-      const pass = res.imageWindows.length === 1 && res.fetched.length === 0 && res.downloads.length === 0 && res.finalStatus === cancelledStatus();
-      return { pass, notes: JSON.stringify({ windows: res.imageWindows, fetched: res.fetched.length, downloads: res.downloads.map(d => d.name), statuses: res.statuses }) };
-    },
-  });
-
-  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-  // 4) L'export Excel d'une grille (js/xlsx-export.js) : même téléchargement d'images, même fenêtre
-  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-
-  const GRID_HTML = `<table style="width: 200px;"><colgroup><col style="width: 200px;"></colgroup><tbody><tr data-row-height="60" style="height: 60px"><td colwidth="200"><p>Logo ${img(EXTERNAL)}</p></td></tr></tbody></table>`;
-  const RECORD = { id: 1, Nom: NAMES[0] };
-  async function enterGrid(h, html) {
-    await seed(h, '<p>x</p>');
-    await h.resetEditor();
-    h.openFlyout('#v2-new-template-group');
-    await h.clickButton('v2-btn-new-grid');
-    await h.sleep(250);
-    GridEditor.setActive(false);
-    Editor.setHTML(html);
-    GridEditor.setActive(true);
-    await h.sleep(250);
-  }
-  async function leaveGrid(h) {
-    h.openFlyout('#v2-new-template-group');
-    await h.clickButton('v2-btn-new-document');
-    await h.sleep(250);
-    GridEditor.setActive(false);
-  }
-
-  cases.push({
-    id: 'extimg_xlsx_window_comes_before_any_download',
-    description: 'Excel d’une ligne : la fenêtre s’ouvre avant le moindre téléchargement ; acceptée, l’image est téléchargée et se retrouve dans xl/media ; refusée, erreur d’annulation, rien de téléchargé et aucun classeur',
-    run: async (h) => {
-      await seed(h, '<p>x</p>');
-      const net = stubFetch();
-      const events = [];
-      let accepted = null; let error = null; let refused = null; let refusedError = null; let media = [];
-      try {
-        const yes = h.stubDialogs({ confirm: opts => { events.push({ downloadsSoFar: net.urls.length, sites: sitesOf(opts.message) }); return true; } });
-        try { accepted = await XlsxExport.getXlsxBlobForRecord(GRID_HTML, TABLE, RECORD, ''); } catch (e) { error = e; }
-        yes.restore();
-        if (accepted) { await ExportCommon.ensureJsZipLoaded(); media = Object.keys((await JSZip.loadAsync(accepted.blob)).files).filter(n => n.startsWith('xl/media/') && !n.endsWith('/')); }
-        net.urls.length = 0;
-        const no = h.stubDialogs({ confirm: () => false });
-        try { refused = await XlsxExport.getXlsxBlobForRecord(GRID_HTML, TABLE, RECORD, ''); } catch (e) { refusedError = e; }
-        no.restore();
-      } finally { net.restore(); }
-      const pass = !error && events.length === 1 && events[0].downloadsSoFar === 0 && JSON.stringify(events[0].sites) === JSON.stringify(['images.exemple.test']) && media.length === 1
-        && !refused && ExternalImages.isCancel(refusedError) && net.urls.length === 0;
-      return { pass, notes: JSON.stringify({ error: error && error.message, events, media, refused: !!refused, refusedError: refusedError && refusedError.name, downloadsAfterRefusal: net.urls }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_xlsx_single_workbook_refusal_downloads_nothing',
-    description: 'Un seul classeur pour toutes les valeurs : la fenêtre s’ouvre avant le moindre téléchargement, un site accepté n’est pas redemandé pour la feuille suivante (même lancement) ; refusée, erreur d’annulation et rien de téléchargé',
-    run: async (h) => {
-      await seed(h, '<p>x</p>');
-      const net = stubFetch();
-      const events = [];
-      let answer = true; let log = [];
-      try {
-        const dialogs = h.stubDialogs({ confirm: opts => { events.push({ downloadsSoFar: net.urls.length, sites: sitesOf(opts.message) }); return answer; } });
-        ExternalImages.beginRun();
-        const workbook = await XlsxExport.createSingleWorkbook();
-        const append = async () => { try { await workbook.appendRecord(GRID_HTML, TABLE, RECORD, ''); log.push('ok'); } catch (e) { log.push(ExternalImages.isCancel(e) ? 'annulé' : 'erreur ' + e.message); } };
-        await append(); await append();
-        const askedWhileAccepted = events.length;
-        net.urls.length = 0;
-        ExternalImages.endRun();
-        answer = false;
-        ExternalImages.beginRun();
-        const refusing = await XlsxExport.createSingleWorkbook();
-        try { await refusing.appendRecord(GRID_HTML, TABLE, RECORD, ''); log.push('ok'); } catch (e) { log.push(ExternalImages.isCancel(e) ? 'annulé' : 'erreur ' + e.message); }
-        ExternalImages.endRun();
-        dialogs.restore();
-        const pass = askedWhileAccepted === 1 && events[0].downloadsSoFar === 0 && JSON.stringify(log) === JSON.stringify(['ok', 'ok', 'annulé']) && net.urls.length === 0 && events.length === 2;
-        return { pass, notes: JSON.stringify({ log, events, downloadsAfterRefusal: net.urls }) };
-      } finally { net.restore(); }
-    },
-  });
-
-  cases.push({
-    id: 'extimg_xlsx_buttons_refusal_says_export_cancelled_and_acceptance_exports',
-    description: 'Les trois lignes Excel du menu Exporter (une valeur, ZIP de classeurs, classeur unique) : « Annuler » sur la fenêtre des images écrit « Export annulé. » (pas une erreur), ne télécharge rien et ne produit aucun fichier, un lot s’arrête sur la première valeur ; « Continuer » exporte avec UNE seule fenêtre pour toutes les valeurs',
-    run: async (h) => {
-      await enterGrid(h, GRID_HTML);
-      const bad = [];
-      try {
-        for (const id of ['v2-btn-export-xlsx', 'v2-btn-export-xlsx-batch', 'v2-btn-export-xlsx-single']) {
-          const res = await clickExport(h, id, false, c => c.status.seen.includes(cancelledStatus()));
-          const wrong = res.statuses.filter(t => /erreur|error|échec|failure/i.test(t));
-          if (res.imageWindows.length !== 1 || res.imageWindows[0].downloadsSoFar !== 0 || res.fetched.length || res.downloads.length || res.finalStatus !== cancelledStatus() || wrong.length)
-            bad.push(id + ' refus : ' + JSON.stringify({ windows: res.imageWindows, fetched: res.fetched.length, downloads: res.downloads.map(d => d.name), status: res.finalStatus, wrong }));
-        }
-        const single = await clickExport(h, 'v2-btn-export-xlsx-single', true, c => c.dl.downloads.length > 0);
-        if (single.imageWindows.length !== 1 || single.downloads.length !== 1 || !/\.xlsx$/.test(single.downloads[0].name) || single.fetched.filter(u => u === EXTERNAL).length < NAMES.length
-          || single.finalStatus !== I18n.t('status.singleWorkbookDone', { ok: NAMES.length }))
-          bad.push('classeur unique accepté : ' + JSON.stringify({ windows: single.imageWindows.length, downloads: single.downloads.map(d => d.name), fetched: single.fetched.length, status: single.finalStatus }));
-        const zip = await clickExport(h, 'v2-btn-export-xlsx-batch', true, c => c.dl.downloads.length > 0);
-        if (zip.imageWindows.length !== 1 || zip.downloads.length !== 1 || !/\.zip$/.test(zip.downloads[0].name) || zip.finalStatus !== I18n.t('status.batchExportDoneXlsx', { ok: NAMES.length }))
-          bad.push('ZIP accepté : ' + JSON.stringify({ windows: zip.imageWindows.length, downloads: zip.downloads.map(d => d.name), status: zip.finalStatus }));
-        const one = await clickExport(h, 'v2-btn-export-xlsx', true, c => c.dl.downloads.length > 0);
-        if (one.imageWindows.length !== 1 || one.downloads.length !== 1 || !/\.xlsx$/.test(one.downloads[0].name) || one.finalStatus !== I18n.t('status.xlsxGenerated'))
-          bad.push('une valeur acceptée : ' + JSON.stringify({ windows: one.imageWindows.length, downloads: one.downloads.map(d => d.name), status: one.finalStatus }));
-      } finally { await leaveGrid(h); }
-      return { pass: !bad.length, notes: bad.length ? bad.join(' | ') : 'ok' };
+      const pass = res.downloads.length === 1 && dl.name === TABLE + '-export.pdf' && res.fetched.length === 0 && res.confirms.length === 1
+        && res.finalStatus === outsideStatus(1) + ' ' + I18n.t('status.mergedExportDone', { ok: NAMES.length });
+      return { pass, notes: JSON.stringify({ downloads: res.downloads.map(d => d.name), fetched: res.fetched.length, confirms: res.confirms, status: res.finalStatus }) };
     },
   });
 
@@ -558,94 +417,31 @@
   // 5) L'affichage : toute image qui charge depuis un autre site est signalée en permanence (contour en tirets, infobulle), sans rien changer à la mise en page
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  const SHOWN = [['https://affiche.test/logo.png', 'affiche.test'], ['https://autre.test:8443/c.png', 'autre.test:8443'], ['//cdn3.test/d.png', 'cdn3.test'], ['http://clair.test/e.png', 'clair.test']];
-  const QUIET = [DATA_PNG, 'blob:' + location.origin + '/0b1c', 'images/relatif.png', location.origin + '/meme-origine.png', 'ftp://fichiers.test/e.png'];
   const tipOf = site => I18n.t('image.externalSite', { site });
-  const dashedRed = img => { const css = getComputedStyle(img); return css.outlineStyle === 'dashed' && css.outlineWidth === '3px' && css.outlineColor === 'rgb(197, 48, 48)'; };
-  const stateOf = img => ({ src: (img.getAttribute('src') || '').slice(0, 40), site: img.getAttribute('data-external-site'), tip: img.title, dashed: dashedRed(img) });
-  // Ce que l'affichage doit montrer : les adresses de SHOWN signalées (hôte, infobulle, contour), les autres ni signalées ni cernées.
-  function displayProblems(images) {
-    const problems = [];
-    const byUrl = new Map(images.map(img => [img.getAttribute('src'), img]));
-    SHOWN.forEach(([src, site]) => {
-      const img = byUrl.get(src);
-      if (!img) { problems.push('absente : ' + src); return; }
-      const state = stateOf(img);
-      if (state.site !== site || state.tip !== tipOf(site) || !state.dashed) problems.push('non signalée : ' + JSON.stringify(state));
-    });
-    QUIET.forEach(src => {
-      const img = byUrl.get(src);
-      if (!img) { problems.push('absente : ' + src.slice(0, 30)); return; }
-      const state = stateOf(img);
-      if (state.site !== null || state.tip || state.dashed) problems.push('signalée à tort : ' + JSON.stringify(state));
-    });
-    return problems;
-  }
-  const showAllHtml = () => '<p>Affichage</p>' + SHOWN.concat(QUIET.map(src => [src])).map(([src]) => img(src)).join('');
-  function restoreContainers() {
-    document.getElementById('reader-container').style.display = '';
-    document.getElementById('editor-container').style.display = '';
-  }
-
-  // Depuis le choix du 05/10 (« Bloquer jusqu'à un clic »), une image d'un autre site ne charge qu'une fois son site affiché : ces scénarios d'affichage regardent
-  // le signalement des images AFFICHÉES, leurs sites sont donc affichés d'abord (les cadres sont l'objet de la partie 6).
-  const showSites = sites => sites.forEach(site => ExternalImages.allow(site));
+  const dashedRed = image => { const css = getComputedStyle(image); return css.outlineStyle === 'dashed' && css.outlineWidth === '3px' && css.outlineColor === 'rgb(197, 48, 48)'; };
+  const stateOf = image => ({ src: (image.getAttribute('src') || '').slice(0, 40), site: image.getAttribute('data-external-site'), tip: image.title, dashed: dashedRed(image) });
 
   cases.push({
-    id: 'extimg_display_editor_flags_external_images_only',
-    description: 'Éditeur : une image d’un autre site (http(s) hors du widget, « // » compris) porte son hôte et une infobulle et est cernée de tirets rouges ; data:, blob:, adresse relative, même origine et ftp: ne sont pas signalées ; rien de cela n’entre dans le HTML enregistré',
+    id: 'extimg_display_flags_a_raw_image_that_loads_from_another_site_and_only_that_one',
+    description: 'Une <img> brute de la page (une surface qui n’aurait pas pensé à block) qui charge depuis un autre site porte son hôte, une infobulle et un contour en tirets rouges ; data:, blob:, adresse relative, même origine et ftp: ne sont pas signalées ; rien de cela n’entre dans un HTML enregistré',
     run: async (h) => {
-      showSites(SHOWN.map(pair => pair[1]));
-      await h.resetEditor();
-      Editor.setHTML(showAllHtml());
-      await h.sleep(250);
-      const images = Array.from(document.querySelectorAll('.tiptap img.editor-image'));
-      const problems = displayProblems(images);
-      const saved = Editor.getHTML();
-      if (/data-external-site|Image hébergée sur un site externe|Image hosted on an external site/.test(saved)) problems.push('le signalement est entré dans le HTML enregistré');
-      await h.resetEditor();
-      return { pass: images.length === SHOWN.length + QUIET.length && problems.length === 0, notes: JSON.stringify({ images: images.length, problems }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_display_reader_flags_every_image_even_without_the_editor_class',
-    description: 'Lecture : même signalement, y compris pour une image brute écrite à la main dans le modèle (sans la classe de l’éditeur), la seule que l’éditeur ne montrerait pas',
-    run: async (h) => {
-      showSites(SHOWN.map(pair => pair[1]).concat('brut.test'));
-      await h.resetEditor();
-      const raw = '<p><img src="https://brut.test/pixel.png" alt=""></p>';
-      let content = null; let problems = [];
+      const host = document.createElement('div');
       try {
-        content = await h.renderReaderMode(showAllHtml() + raw, NO_HF);
+        host.innerHTML = SHOWN.concat(QUIET.map(src => [src])).map(([src]) => '<img src="' + src + '" style="width: 20px;">').join('');
+        document.body.appendChild(host);
         await h.sleep(250);
-        const images = Array.from(content.querySelectorAll('img'));
-        problems = displayProblems(images);
-        const rawImg = images.find(i => i.getAttribute('src') === 'https://brut.test/pixel.png');
-        if (!rawImg || rawImg.getAttribute('data-external-site') !== 'brut.test' || !dashedRed(rawImg)) problems.push('image brute non signalée : ' + JSON.stringify(rawImg && stateOf(rawImg)));
-      } finally { restoreContainers(); }
-      return { pass: !!content && problems.length === 0, notes: JSON.stringify({ problems }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_display_reader_flags_header_and_footer_images',
-    description: 'Lecture en pages (Aperçu A4) : l’image d’un autre site posée dans l’en-tête ou dans le pied de page l’est aussi - toute la page est surveillée, pas seulement le corps',
-    run: async (h) => {
-      showSites(['entete.test', 'pied.test']);
-      await h.resetEditor();
-      const hf = { enabled: true, differentFirstPage: false, header: { default: img('https://entete.test/h.png'), first: '' }, footer: { default: img('https://pied.test/f.png'), first: '' } };
-      const seen = {};
-      try {
-        h.setA4Preview(true);
-        await h.renderReaderMode('<p>Corps</p>', hf);
-        await h.sleep(300);
-        const top = document.querySelector('#reader-container .v2-page-edge-top img');
-        const bottom = document.querySelector('#reader-container .v2-page-edge-bottom img');
-        seen.header = top && stateOf(top); seen.footer = bottom && stateOf(bottom);
-      } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = !!seen.header && seen.header.site === 'entete.test' && seen.header.dashed && !!seen.footer && seen.footer.site === 'pied.test' && seen.footer.dashed;
-      return { pass, notes: JSON.stringify(seen) };
+        const problems = [];
+        const byUrl = new Map(Array.from(host.querySelectorAll('img')).map(i => [i.getAttribute('src'), i]));
+        SHOWN.forEach(([src, site]) => {
+          const state = stateOf(byUrl.get(src));
+          if (state.site !== site || state.tip !== tipOf(site) || !state.dashed) problems.push('non signalée : ' + JSON.stringify(state));
+        });
+        QUIET.forEach(src => {
+          const state = stateOf(byUrl.get(src));
+          if (state.site !== null || state.tip || state.dashed) problems.push('signalée à tort : ' + JSON.stringify(state));
+        });
+        return { pass: problems.length === 0, notes: JSON.stringify(problems) };
+      } finally { host.remove(); }
     },
   });
 
@@ -673,7 +469,7 @@
   // L'infobulle d'une image signalée est écrite dans la langue de la page : le même parcours en français, puis dans une page qui démarre en anglais.
   const displayCase = {
     id: 'extimg_display_follows_src_changes_and_language',
-    description: 'Une image qui change d’adresse suit : signalée quand elle part vers un autre site, plus signalée (hôte, infobulle, contour retirés) quand elle revient à une image intégrée, nouvel hôte quand elle change de site ; l’infobulle est écrite dans la langue de la page, en français ici, en anglais dans la page qui démarre en anglais',
+    description: 'Une image qui change d’adresse suit : signalée quand elle part vers un autre site, plus signalée (hôte, infobulle, contour retirés) quand elle revient à une image intégrée, nouvel hôte quand elle change de site ; l’infobulle est écrite dans la langue de la page',
     run: async (h) => {
       const host = document.createElement('div');
       const seen = {};
@@ -738,30 +534,10 @@
     },
   });
 
-  cases.push({
-    id: 'extimg_site_of_matches_the_export_window',
-    description: 'ExternalImages.siteOf donne l’hôte (port compris) des seules adresses que la fenêtre d’export liste : mêmes sites, mêmes exclusions',
-    run: async () => {
-      // Des sites à part (« cmp- ») : ceux de SHOWN sont déjà affichés par les scénarios d'affichage, et la fenêtre ne liste pas un site affiché.
-      const fresh = src => src.replace(/^((?:https?:)?\/\/)/i, '$1cmp-');
-      const urls = SHOWN.map(pair => fresh(pair[0])).concat(QUIET, ['', '   ', 'https://exotique.test/ a.png', 'https://[invalide']);
-      const fromDisplay = urls.map(src => ExternalImages.siteOf(src)).filter(Boolean);
-      const dialogs = { asked: [] };
-      const original = Dialogs.confirm;
-      Dialogs.confirm = async opts => { dialogs.asked.push(opts); return true; };
-      try { await ExternalImages.confirmExport(urls.map(img).join(''), null); } finally { Dialogs.confirm = original; }
-      const fromExport = dialogs.asked.length ? sitesOf(dialogs.asked[0].message) : [];
-      const pass = JSON.stringify(fromDisplay) === JSON.stringify(fromExport) && fromDisplay.length >= SHOWN.length;
-      return { pass, notes: JSON.stringify({ fromDisplay, fromExport }) };
-    },
-  });
-
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-  // 6) Le blocage jusqu'au clic « Afficher » (choix du 05/10, « Bloquer jusqu'à un clic »)
+  // 6) Le cadre à la place de l'image
   // ---------------------------------------------------------------------------------------------------------------------------------------------------------
-  // Chaque scénario a ses propres sites « .test » : un site affiché le reste pour toute la session de la page, il ne doit pas déteindre sur le suivant.
 
-  const parse = html => { const t = document.createElement('template'); t.innerHTML = html; return Array.from(t.content.querySelectorAll('img')); };
   const frameState = image => ({
     src: image.getAttribute('src'), site: image.getAttribute('data-blocked-site'), original: image.getAttribute('data-blocked-src'), role: image.getAttribute('role'),
     tab: image.getAttribute('tabindex'), alt: image.getAttribute('alt'), title: image.getAttribute('title'), keptAlt: image.getAttribute('data-blocked-alt'),
@@ -771,7 +547,7 @@
 
   cases.push({
     id: 'extimg_block_html_replaces_external_images_with_frames',
-    description: 'ExternalImages.block(html) : une image d’un autre site prend un cadre dessiné (SVG en data:) qui nomme le site et dit « Afficher », garde son adresse, son alt et son titre dans data-blocked-*, devient un bouton (role, tabindex) et garde son style ; data:, blob:, adresse relative, même origine, ftp: et pièce jointe restent telles quelles ; un HTML sans rien à bloquer est rendu tel quel (même chaîne)',
+    description: 'ExternalImages.block(html) : une image d’un autre site prend un cadre dessiné (SVG en data:) qui nomme le site et dit « Image non affichée », garde son adresse, son alt et son titre dans data-blocked-*, n’est ni un bouton ni focalisable et garde son style ; data:, blob:, adresse relative, même origine, pièce jointe de Grist et ftp: gardent la leur ; un HTML sans rien à changer est rendu tel quel',
     run: async () => {
       const external = '<img class="editor-image" src="https://bloc1.test/a.png" alt="Logo" title="Titre" style="width: 90px;">';
       const quiet = [DATA_PNG, 'blob:' + location.origin + '/0b1c', 'images/relatif.png', location.origin + '/meme.png', 'ftp://fichiers.test/e.png'];
@@ -786,9 +562,9 @@
       if (first) {
         if (!/^data:image\/svg\+xml;charset=utf-8,/.test(first.src)) problems.push('pas un cadre SVG : ' + first.src.slice(0, 50));
         const svg = svgOf(first.src);
-        if (!svg.includes('bloc1.test') || !svg.includes(I18n.t('image.blocked.show'))) problems.push('le cadre ne dit pas le site et « Afficher »');
+        if (!svg.includes('bloc1.test') || !svg.includes(I18n.t('image.blocked.note')) || /rect|Afficher|Show</.test(svg)) problems.push('le cadre ne dit pas le site et « Image non affichée », ou porte encore un bouton : ' + svg.slice(0, 200));
         if (first.original !== 'https://bloc1.test/a.png' || first.site !== 'bloc1.test') problems.push('adresse ou site perdus : ' + JSON.stringify(first));
-        if (first.role !== 'button' || first.tab !== '0') problems.push('pas un bouton : ' + JSON.stringify(first));
+        if (first.role !== null || first.tab !== null) problems.push('le cadre est encore un bouton : ' + JSON.stringify(first));
         if (first.alt !== I18n.t('image.blocked.alt', { site: 'bloc1.test' }) || first.title !== ExternalImages.hintOf('bloc1.test')) problems.push('alt ou titre : ' + JSON.stringify(first));
         if (first.keptAlt !== 'Logo' || first.keptTitle !== 'Titre') problems.push('alt et titre d\'origine non gardés : ' + JSON.stringify(first));
         if (!/width: 90px/.test(blocked[0].getAttribute('style') || '') || !blocked[0].classList.contains('editor-image')) problems.push('style ou classe perdus');
@@ -819,12 +595,12 @@
 
   const blockFrameCase = {
     id: 'extimg_block_frame_is_drawn_against_the_sheet_zoom_and_follows_the_language',
-    description: 'Le cadre dessiné ne grandit ni ne rétrécit avec la boîte de l’image et est à l’envers du facteur de la feuille : à 0,5 le texte et le bouton sont dessinés deux fois plus grands (11 px et 64 × 22 px d’écran), à 1 à leur taille ; sans option, le facteur est celui de la page (--pp-fit-zoom) ; le cadre écrit son texte, son alt et son titre dans la langue de la page, en gardant son facteur',
+    description: 'Le cadre dessiné ne grandit ni ne rétrécit avec la boîte de l’image et est à l’envers du facteur de la feuille : à 0,5 son texte est dessiné deux fois plus grand (11 px d’écran), à 1 à sa taille ; sans option, le facteur est celui de la page ; son texte, son texte alternatif et son titre sont dans la langue de la page',
     run: async (h) => {
       const one = '<img id="z" src="https://zoom1.test/a.png">';
       const sizes = html => {
         const svg = svgOf(parse(html)[0].getAttribute('src'));
-        return { font: Number((svg.match(/font-size='([\d.]+)'/) || [])[1]), button: (svg.match(/<rect x='-?[\d.]+' y='-?[\d.]+' width='([\d.]+)' height='([\d.]+)'/) || []).slice(1).map(Number), viewBox: /viewBox/.test(svg), show: (svg.match(/>(Afficher|Show)<\/text>/) || [])[1] };
+        return { font: Number((svg.match(/font-size='([\d.]+)'/) || [])[1]), viewBox: /viewBox/.test(svg), note: (svg.match(/>(Image non affichée|Image not shown)<\/text>/) || [])[1], site: /zoom1\.test/.test(svg) };
       };
       const half = sizes(ExternalImages.block(one, { zoom: 0.5 }));
       const full = sizes(ExternalImages.block(one, { zoom: 1 }));
@@ -839,141 +615,104 @@
       const seen = { half, full, ofPage };
       try {
         const frame = host.querySelector('#l');
-        seen.frame = { show: sizes(host.innerHTML).show, font: sizes(host.innerHTML).font, alt: frame.getAttribute('alt'), title: frame.getAttribute('title'), kept: frame.getAttribute('data-blocked-alt') };
+        seen.frame = { note: sizes(host.innerHTML).note, font: sizes(host.innerHTML).font, alt: frame.getAttribute('alt'), title: frame.getAttribute('title'), kept: frame.getAttribute('data-blocked-alt') };
       } finally { host.remove(); }
       const want = I18n.getLang() === 'en'
-        ? { show: 'Show', alt: 'Show the image from zoom2.test', title: /^Image hosted on an external/ }
-        : { show: 'Afficher', alt: 'Afficher l’image de zoom2.test', title: /^Image hébergée sur un site externe/ };
-      const pass = half.font === 22 && JSON.stringify(half.button) === '[128,44]' && full.font === 11 && JSON.stringify(full.button) === '[64,22]'
-        && ofPage.font === 13.75 && JSON.stringify(ofPage.button) === '[80,27.5]' && !half.viewBox && half.show === want.show
-        && seen.frame.show === want.show && seen.frame.font === 22 && seen.frame.alt === want.alt && want.title.test(seen.frame.title) && seen.frame.kept === 'Logo';
+        ? { note: 'Image not shown', alt: 'Image from zoom2.test not shown', title: /^Image hosted on an external/ }
+        : { note: 'Image non affichée', alt: 'Image de zoom2.test non affichée', title: /^Image hébergée sur un site externe/ };
+      const pass = half.font === 22 && full.font === 11 && ofPage.font === 13.75 && !half.viewBox && half.site && half.note === want.note
+        && seen.frame.note === want.note && seen.frame.font === 22 && seen.frame.alt === want.alt && want.title.test(seen.frame.title) && seen.frame.kept === 'Logo';
       return { pass, notes: JSON.stringify(seen) };
     },
   };
   cases.push(blockFrameCase, Object.assign({}, blockFrameCase, {
     id: 'extimg_block_frame_speaks_english',
     lang: 'en',
-    description: 'Page qui démarre en anglais : le cadre dessiné dit « Show », son texte alternatif « Show the image from … » et son titre « Image hosted on an external site » en anglais, en gardant son facteur de zoom',
+    description: 'Page qui démarre en anglais : le cadre dessiné dit « Image not shown », son texte alternatif « Image from … not shown » et son titre « Image hosted on an external site » en anglais, en gardant son facteur de zoom',
   }));
 
   cases.push({
-    id: 'extimg_allow_restores_addresses_in_html_and_in_live_frames',
-    description: 'ExternalImages.allow(site) : les cadres vivants de la page de ce site reprennent leur adresse, leur alt et leur titre (plus de rôle ni de data-blocked-*) puis sont signalés comme toute image affichée ; un cadre d’un autre site reste ; block(html) rend ensuite leur adresse aux cadres déjà dans une chaîne ; les abonnés (onReveal) sont prévenus une fois, un site déjà affiché ne prévient personne',
-    run: async (h) => {
-      const html = '<img id="x1" src="https://rev1.test/a.png" alt="Logo" title="Titre"><img id="x2" src="https://rev1.test/b.png"><img id="y" src="https://rev2.test/c.png">';
-      const blockedString = ExternalImages.block(html);
-      const host = document.createElement('div');
-      host.innerHTML = blockedString;
-      document.body.appendChild(host);
-      const told = [];
-      ExternalImages.onReveal(site => told.push(site));
-      try {
-        const before = Array.from(host.querySelectorAll('img')).map(i => i.hasAttribute('data-blocked-src'));
-        ExternalImages.allow('rev1.test');
-        ExternalImages.allow('rev1.test');
-        await h.sleep(80);
-        const x1 = host.querySelector('#x1'); const x2 = host.querySelector('#x2'); const y = host.querySelector('#y');
-        const attrs = i => ['data-blocked-src', 'data-blocked-site', 'data-blocked-alt', 'data-blocked-title', 'role', 'tabindex'].filter(n => i.hasAttribute(n));
-        const seen = {
-          before, told,
-          x1: { src: x1.getAttribute('src'), alt: x1.getAttribute('alt'), left: attrs(x1), site: x1.getAttribute('data-external-site') },
-          x2: { src: x2.getAttribute('src'), left: attrs(x2), site: x2.getAttribute('data-external-site') },
-          y: { blocked: y.hasAttribute('data-blocked-src'), src: y.getAttribute('src').slice(0, 24) },
-          stringAfter: parse(ExternalImages.block(blockedString)).map(i => i.getAttribute('src')),
-          allowed: [ExternalImages.isAllowed('rev1.test'), ExternalImages.isAllowed('rev2.test')],
-        };
-        const pass = JSON.stringify(before) === '[true,true,true]' && JSON.stringify(told) === '["rev1.test"]'
-          && seen.x1.src === 'https://rev1.test/a.png' && seen.x1.alt === 'Logo' && seen.x1.left.length === 0 && seen.x1.site === 'rev1.test'
-          && seen.x2.src === 'https://rev1.test/b.png' && seen.x2.left.length === 0 && seen.x2.site === 'rev1.test'
-          && seen.y.blocked && seen.y.src.startsWith('data:image/svg+xml')
-          && JSON.stringify(seen.stringAfter) === JSON.stringify(['https://rev1.test/a.png', 'https://rev1.test/b.png', parse(blockedString)[2].getAttribute('src')])
-          && JSON.stringify(seen.allowed) === '[true,false]';
-        return { pass, notes: JSON.stringify(seen) };
-      } finally { host.remove(); }
-    },
-  });
-
-  cases.push({
-    id: 'extimg_click_or_key_on_a_frame_shows_its_site',
-    description: 'Un clic sur un cadre, ou Entrée ou Espace quand il a le focus, affiche le site de l’image (avec preventDefault) sans que l’élément qui le contient reçoive le clic (la zone d’en-tête de l’éditeur ne s’ouvre pas) ; une autre touche ne fait rien',
+    id: 'extimg_a_frame_is_inert_a_click_or_a_key_shows_nothing',
+    description: 'Hors de l’éditeur et de la Lecture (une galerie, un aperçu, une impression) un cadre reste une image : un clic, Entrée ou Espace ne change ni son adresse ni son aspect (aucune adresse d’un autre site n’y est lue), n’ouvre pas la fenêtre qui explique, l’événement n’est pas retenu (l’élément qui le contient le reçoit, la zone d’en-tête de l’éditeur s’ouvre comme avant) et rien n’est noté dans la page',
     run: async (h) => {
       const host = document.createElement('div');
-      host.innerHTML = ExternalImages.block('<img id="c" src="https://clic1.test/a.png"><img id="e" src="https://clic2.test/a.png"><img id="s" src="https://clic3.test/a.png"><img id="t" src="https://clic4.test/a.png">');
+      host.innerHTML = ExternalImages.block('<img id="c" src="https://clic1.test/a.png"><img id="e" src="https://clic2.test/a.png">');
       document.body.appendChild(host);
       let reached = 0;
       host.addEventListener('click', () => { reached++; });
       try {
+        const before = Array.from(host.querySelectorAll('img')).map(i => i.getAttribute('src'));
         const fire = (id, type, init) => { const e = new (type === 'click' ? MouseEvent : KeyboardEvent)(type, Object.assign({ bubbles: true, cancelable: true }, init)); host.querySelector('#' + id).dispatchEvent(e); return e; };
         const click = fire('c', 'click');
         const enter = fire('e', 'keydown', { key: 'Enter' });
-        const space = fire('s', 'keydown', { key: ' ' });
-        fire('t', 'keydown', { key: 'a' });
-        fire('t', 'keydown', { key: 'Tab' });
-        await h.sleep(60);
-        const shown = ['clic1.test', 'clic2.test', 'clic3.test', 'clic4.test'].map(site => ExternalImages.isAllowed(site));
-        const pass = JSON.stringify(shown) === '[true,true,true,false]' && click.defaultPrevented && enter.defaultPrevented && space.defaultPrevented && reached === 0;
-        return { pass, notes: JSON.stringify({ shown, reached, prevented: [click.defaultPrevented, enter.defaultPrevented, space.defaultPrevented] }) };
-      } finally { host.remove(); }
+        const space = fire('e', 'keydown', { key: ' ' });
+        await h.sleep(80);
+        const images = Array.from(host.querySelectorAll('img'));
+        const seen = { after: images.map(i => i.getAttribute('src')), blocked: images.map(i => i.hasAttribute('data-blocked-src')), flagged: images.map(i => i.hasAttribute('data-external-site')), reached, prevented: [click.defaultPrevented, enter.defaultPrevented, space.defaultPrevented],
+          requests: requestsTo(['clic1.test', 'clic2.test']), window: explainOpen(), buttons: images.map(i => i.getAttribute('role')) };
+        const pass = JSON.stringify(seen.after) === JSON.stringify(before) && seen.blocked.every(Boolean) && seen.flagged.every(f => !f) && reached === 1 && seen.prevented.every(p => !p) && seen.requests === 0
+          && !seen.window && seen.buttons.every(role => role === null);
+        return { pass, notes: JSON.stringify(seen) };
+      } finally { host.remove(); await closeExplain(h); }
     },
   });
 
   cases.push({
-    id: 'extimg_editor_view_withholds_the_address_until_the_site_is_shown',
-    description: 'Éditeur : l’image d’un autre site n’a pas d’adresse dans le DOM tant que son site n’est pas affiché (cadre, nom du site, vrai bouton « Afficher »), alors que le modèle et le HTML enregistré gardent l’adresse ; le bouton affiche le site : l’image reprend son adresse dans toutes les vues de ce site, et le HTML enregistré ne bouge pas ; une image d’un autre site reste bloquée',
+    id: 'extimg_editor_view_withholds_the_address_and_shows_a_frame_without_a_button',
+    description: 'Éditeur : l’image d’un autre site n’a pas d’adresse dans le DOM (cadre, nom du site, « Image non affichée », aucun bouton), alors que le document et le HTML enregistré gardent l’adresse ; le cadre se décrit à un lecteur d’écran (rôle image, texte alternatif, infobulle qui dit comment la garder) et rien n’est chargé',
     run: async (h) => {
       await h.resetEditor();
       const url = 'https://vue1.test/logo.png'; const other = 'https://vue2.test/autre.png';
-      Editor.setHTML('<p>Texte</p><p>' + img(url) + img(url) + '</p><p>' + img(other) + '</p>');
-      await h.sleep(250);
+      Editor.setHTML('<p>Texte</p><p>' + img(url) + img(url) + '</p><p>' + img(other) + '</p><p>' + img(DATA_PNG) + '</p>');
+      await h.sleep(300);
       const views = () => Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
       const state = view => {
         const image = view.querySelector('img');
-        return { blocked: view.classList.contains('editor-image-blocked'), src: image.getAttribute('src'), site: (view.querySelector('.editor-image-blocked-site') || {}).textContent, button: (view.querySelector('.editor-image-reveal') || {}).textContent, boxShown: getComputedStyle(view.querySelector('.editor-image-blocked-box')).display };
+        const box = view.querySelector('.editor-image-blocked-box');
+        return { blocked: view.classList.contains('editor-image-blocked'), src: image.getAttribute('src'), site: (view.querySelector('.editor-image-blocked-site') || {}).textContent,
+          note: (view.querySelector('.editor-image-blocked-note') || {}).textContent, buttons: view.querySelectorAll('.editor-image-reveal, .editor-image-blocked-box button').length,
+          boxShown: getComputedStyle(box).display, role: box.getAttribute('role'), aria: box.getAttribute('aria-label'), title: box.title, flagged: image.hasAttribute('data-external-site') };
       };
-      const before = views().map(state);
-      const savedBefore = Editor.getHTML();
-      const first = views()[0].querySelector('.editor-image-reveal');
-      first.click();
-      await h.sleep(250);
-      const after = views().map(state);
-      const savedAfter = Editor.getHTML();
-      const flagged = views().map(view => view.querySelector('img').getAttribute('data-external-site'));
+      const seen = views().map(state);
+      const saved = Editor.getHTML();
+      const requests = requestsTo(['vue1.test', 'vue2.test']);
       await h.resetEditor();
-      const pass = views().length === 0 && before.length === 3
-        && before.every(v => v.blocked && !v.src && v.button === I18n.t('image.blocked.show') && v.boxShown !== 'none')
-        && before[0].site === 'vue1.test' && before[2].site === 'vue2.test'
-        && savedBefore.includes('src="' + url + '"') && savedBefore.includes('src="' + other + '"')
-        && !after[0].blocked && after[0].src === url && !after[1].blocked && after[1].src === url && after[0].boxShown === 'none'
-        && after[2].blocked && !after[2].src
-        && savedAfter === savedBefore && flagged[0] === 'vue1.test' && flagged[1] === 'vue1.test' && !flagged[2];
-      return { pass, notes: JSON.stringify({ before, after, flagged, sameHtml: savedAfter === savedBefore }) };
+      const external = seen.slice(0, 3);
+      const pass = seen.length === 4 && external.every(v => v.blocked && !v.src && v.note === I18n.t('image.blocked.note') && v.buttons === 0 && v.boxShown !== 'none' && v.role === 'img' && !v.flagged)
+        && seen[0].site === 'vue1.test' && seen[2].site === 'vue2.test' && seen[0].aria === I18n.t('image.blocked.alt', { site: 'vue1.test' }) && seen[0].title === ExternalImages.hintOf('vue1.test')
+        && !seen[3].blocked && seen[3].src === DATA_PNG && seen[3].boxShown === 'none'
+        && saved.includes('src="' + url + '"') && saved.includes('src="' + other + '"') && !/data-blocked|data-external/.test(saved) && requests === 0;
+      return { pass, notes: JSON.stringify({ seen, requests, savedKeepsAddresses: saved.includes(url) }) };
     },
   });
 
   cases.push({
-    id: 'extimg_editor_view_blocked_frame_keeps_the_images_box',
-    description: 'Éditeur : le cadre d’une image bloquée a exactement la largeur du modèle (style en ligne de l’image) et, sans largeur, en prend une ; il reste dans la page (jamais plus large que la ligne) ; l’image affichée a la même largeur : rien ne bouge quand la personne affiche le site',
+    id: 'extimg_editor_view_blocked_frame_keeps_the_images_box_and_is_selectable',
+    description: 'Éditeur : le cadre d’une image d’un autre site a exactement la largeur du document (style en ligne de l’image) et, sans largeur, en prend une ; il reste dans la page (jamais plus large que la ligne) ; un clic dessus sélectionne l’image comme n’importe quelle image (poignées, barre flottante) et ouvre la fenêtre qui explique',
     run: async (h) => {
       await h.resetEditor();
       Editor.setHTML('<p><img class="editor-image" src="https://boite1.test/a.png" style="width: 120px;"></p><p><img class="editor-image" src="https://boite1.test/b.png"></p>');
-      await h.sleep(250);
-      const widths = () => Array.from(document.querySelectorAll('.tiptap .editor-image-view')).map(v => Math.round(v.getBoundingClientRect().width));
+      await h.sleep(300);
+      const views = () => Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+      const widths = views().map(v => Math.round(v.getBoundingClientRect().width));
       const lineWidth = Math.round(document.querySelector('.tiptap').getBoundingClientRect().width);
-      const blocked = widths();
-      ExternalImages.allow('boite1.test');
-      await h.sleep(250);
-      const shown = widths();
+      const box = views()[0].querySelector('.editor-image-blocked-box');
+      h.tiptap().focus();
+      await h.selectAtomNode(box);
+      await h.sleep(200);
+      const selected = views()[0].classList.contains('editor-image-selected');
+      const selectedNode = EditorCore.getEditor().state.selection.node;
+      const opened = explainOpen();
+      await closeExplain(h);
       await h.resetEditor();
-      await h.resetEditor();
-      // Le cadre est dessiné dans la boîte de l'image : à la largeur du modèle près (120), et rien ne bouge quand le site est affiché.
-      const pass = blocked[0] === 120 && shown[0] === 120 && blocked[1] === shown[1] && blocked[1] >= 96 && blocked[1] <= lineWidth;
-      return { pass, notes: JSON.stringify({ blocked, shown, lineWidth }) };
+      const pass = widths[0] === 120 && widths[1] >= 96 && widths[1] <= lineWidth && selected && !!selectedNode && selectedNode.type.name === 'editorImage' && opened;
+      return { pass, notes: JSON.stringify({ widths, lineWidth, selected, selectedNode: selectedNode && selectedNode.type.name, opened }) };
     },
   });
 
   cases.push({
-    id: 'extimg_reader_blocks_body_and_header_images_until_shown',
-    description: 'Lecture en pages : l’image d’un autre site du corps et celle de l’en-tête prennent un cadre « Afficher » (pas d’adresse dans la page) ; le clic sur le cadre affiche le site, la mise en page se refait, et un nouveau rendu montre les images sans cadre',
+    id: 'extimg_reader_shows_frames_for_body_and_header_images_and_keeps_them',
+    description: 'Lecture en pages : l’image d’un autre site du corps et celle de l’en-tête prennent un cadre (pas d’adresse dans la page), un clic dessus ouvre la fenêtre qui explique et ne change rien, et un nouveau rendu les montre encore en cadre ; aucune requête ne part vers ces sites',
     run: async (h) => {
       await h.resetEditor();
       const hf = { enabled: true, differentFirstPage: false, header: { default: img('https://lect1.test/h.png'), first: '' }, footer: { default: '', first: '' } };
@@ -983,81 +722,38 @@
         h.setA4Preview(true);
         await h.renderReaderMode(body, hf);
         await h.sleep(300);
-        const frames = () => Array.from(document.querySelectorAll('#reader-container img[data-blocked-src]')).map(i => i.getAttribute('data-blocked-src'));
-        seen.before = frames();
+        const frames = () => Array.from(document.querySelectorAll('#reader-container img[data-blocked-src]')).map(i => i.getAttribute('data-blocked-src')).sort();
+        const loaded = () => Array.from(document.querySelectorAll('#reader-container img')).filter(i => /^https?:/.test(i.getAttribute('src') || '')).length;
+        seen.before = frames(); seen.loadedBefore = loaded();
         const bodyFrame = document.querySelector('#reader-container .reader-content img[data-blocked-src="https://lect1.test/b.png"]');
         if (bodyFrame) bodyFrame.click();
         await h.sleep(400);
-        seen.after = frames();
-        seen.bodySrc = (document.querySelector('#reader-container .reader-content img[src="https://lect1.test/b.png"]') || {}).src || null;
+        seen.window = explainOpen();
+        await closeExplain(h);
+        seen.after = frames(); seen.loadedAfter = loaded();
         await h.renderReaderMode(body, hf);
         await h.sleep(300);
         seen.rerender = frames();
-      } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = JSON.stringify(seen.before.slice().sort()) === JSON.stringify(['https://lect1.test/b.png', 'https://lect1.test/h.png', 'https://lect2.test/c.png'])
-        && JSON.stringify(seen.after) === JSON.stringify(['https://lect2.test/c.png']) && seen.bodySrc === 'https://lect1.test/b.png'
-        && JSON.stringify(seen.rerender) === JSON.stringify(['https://lect2.test/c.png']);
+        seen.requests = requestsTo(['lect1.test', 'lect2.test']);
+      } finally { h.setA4Preview(false); document.getElementById('reader-container').style.display = ''; document.getElementById('editor-container').style.display = ''; }
+      const all = ['https://lect1.test/b.png', 'https://lect1.test/h.png', 'https://lect2.test/c.png'];
+      const pass = JSON.stringify(seen.before) === JSON.stringify(all) && JSON.stringify(seen.after) === JSON.stringify(all) && JSON.stringify(seen.rerender) === JSON.stringify(all)
+        && seen.loadedBefore === 0 && seen.loadedAfter === 0 && seen.requests === 0 && seen.window === true;
       return { pass, notes: JSON.stringify(seen) };
     },
   });
 
   cases.push({
     id: 'extimg_page_zones_get_frames_from_resolve_page_number_badges',
-    description: 'PageLayout.resolvePageNumberBadges (le passage de tout en-tête et pied affichés : aperçu paginé de l’éditeur, Lecture) met le cadre « Afficher » aux images d’un autre site pas encore affichées et rend leur adresse à celles dont le site l’est ; les badges de page se résolvent comme avant',
+    description: 'PageLayout.resolvePageNumberBadges (le passage de tout en-tête et pied affichés : aperçu paginé de l’éditeur, Lecture) met le cadre aux images d’un autre site et le garde d’un passage à l’autre ; les badges de page se résolvent comme avant',
     run: async () => {
       const html = '<p>Page <span class="page-number-badge" data-format="n">#</span></p><img src="https://zone1.test/a.png"><img src="' + DATA_PNG + '">';
       const out = PageLayout.resolvePageNumberBadges(html, 3, 9);
       const frames = parse(out).filter(i => i.hasAttribute('data-blocked-src')).map(i => i.getAttribute('data-blocked-src'));
-      ExternalImages.allow('zone1.test');
-      const later = PageLayout.resolvePageNumberBadges(out, 3, 9);
-      const srcs = parse(later).map(i => i.getAttribute('src'));
-      const pass = JSON.stringify(frames) === '["https://zone1.test/a.png"]' && out.includes('>3</span>') && srcs[0] === 'https://zone1.test/a.png' && srcs[1] === DATA_PNG && !/data-blocked/.test(later);
-      return { pass, notes: JSON.stringify({ frames, srcs: srcs.map(s => s.slice(0, 30)) }) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_export_window_skips_the_sites_already_shown',
-    description: 'La fenêtre d’avant l’export ne redemande pas un site que la personne a affiché (clic « Afficher ») : seuls les sites pas encore affichés sont listés, et aucune fenêtre quand tous le sont ; un site pas affiché est listé comme avant',
-    run: async () => {
-      const asked = [];
-      const original = Dialogs.confirm;
-      Dialogs.confirm = async opts => { asked.push(sitesOf(opts.message)); return true; };
-      try {
-        const both = img('https://vu1.test/a.png') + img('https://pasvu1.test/b.png');
-        await ExternalImages.confirmExport(both, null);
-        ExternalImages.allow('vu1.test');
-        await ExternalImages.confirmExport(both, null);
-        ExternalImages.allow('pasvu1.test');
-        await ExternalImages.confirmExport(both, null);
-      } finally { Dialogs.confirm = original; }
-      const pass = JSON.stringify(asked) === JSON.stringify([['vu1.test', 'pasvu1.test'], ['pasvu1.test']]);
-      return { pass, notes: JSON.stringify(asked) };
-    },
-  });
-
-  cases.push({
-    id: 'extimg_showing_a_site_is_kept_for_the_session_only',
-    description: 'Afficher un site (allow) ne se retient que dans la page : ni localStorage ni sessionStorage ne changent, aucune action n’est envoyée au document Grist, le HTML d’un modèle garde ses adresses (le cadre d’un autre site reste) ; un site vide ou absent n’affiche rien (pas de « tout afficher »)',
-    run: async (h) => {
-      const stored = () => JSON.stringify({ local: Object.entries(localStorage).sort(), session: Object.entries(sessionStorage).sort() });
-      const stub = window.__gristStub;
-      const html = '<img id="a" src="https://sess1.test/a.png"><img id="b" src="https://sess2.test/b.png">';
-      const before = stored();
-      stub.clearActionLog();
-      ExternalImages.allow('sess1.test');
-      ExternalImages.allow('');
-      ExternalImages.allow(null);
-      ExternalImages.allow(undefined);
-      await h.sleep(120);
-      const images = parse(ExternalImages.block(html));
-      const seen = {
-        storageChanged: stored() !== before, actions: stub.getActionLog().length,
-        srcs: images.map(i => i.getAttribute('src').slice(0, 24)), allowed: ['sess1.test', 'sess2.test', '', null].map(site => ExternalImages.isAllowed(site)),
-      };
-      const pass = !seen.storageChanged && seen.actions === 0 && seen.srcs[0] === 'https://sess1.test/a.png' && seen.srcs[1].startsWith('data:image/svg+xml')
-        && JSON.stringify(seen.allowed) === '[true,false,false,false]';
-      return { pass, notes: JSON.stringify(seen) };
+      const later = PageLayout.resolvePageNumberBadges(out, 4, 9);
+      const framesLater = parse(later).filter(i => i.hasAttribute('data-blocked-src')).map(i => i.getAttribute('data-blocked-src'));
+      const pass = JSON.stringify(frames) === '["https://zone1.test/a.png"]' && out.includes('>3</span>') && JSON.stringify(framesLater) === JSON.stringify(frames) && parse(later)[1].getAttribute('src') === DATA_PNG;
+      return { pass, notes: JSON.stringify({ frames, framesLater }) };
     },
   });
 
@@ -1069,8 +765,8 @@
   const readerCopies = () => Array.from(document.querySelectorAll('#reader-container .v2-page-layer img.v2-page-layer-copy')).map(i => i.getAttribute('src'));
 
   cases.push({
-    id: 'extimg_blocked_images_are_not_repeated_on_every_page',
-    description: 'Éditeur (Aperçu A4) : une image « sur toutes les pages » d’un autre site pas encore affichée n’est pas peinte en copie sur les autres feuilles (ses copies seraient des cadres ou chargeraient le site) ; son site affiché, ses copies se peignent à l’adresse de l’image ; une image intégrée est répétée comme avant',
+    id: 'extimg_images_of_another_site_are_not_repeated_on_every_page',
+    description: 'Éditeur (Aperçu A4) : une image « sur toutes les pages » d’un autre site n’est pas peinte en copie sur les autres feuilles (ses copies seraient des cadres ou chargeraient le site) ; une image intégrée, elle, est répétée',
     run: async (h) => {
       const url = 'https://repete1.test/f.png';
       const seen = {};
@@ -1085,20 +781,18 @@
         seen.control = editorCopies().length;
         Editor.setHTML(repeatedImg(url) + bodyLines(130));
         Editor.refreshLayout();
-        await h.sleep(400);
-        seen.blocked = editorCopies();
-        ExternalImages.allow('repete1.test');
-        await h.sleep(600);
-        seen.shown = editorCopies();
+        await h.sleep(500);
+        seen.external = editorCopies();
+        seen.requests = requestsTo(['repete1.test']);
       } finally { h.setA4Preview(false); await h.resetEditor(); }
-      const pass = seen.control >= 2 && seen.blocked.length === 0 && seen.shown.length >= 2 && seen.shown.every(src => src === url);
-      return { pass, notes: JSON.stringify({ control: seen.control, blocked: seen.blocked.length, shown: seen.shown.length, srcs: Array.from(new Set(seen.shown)) }) };
+      const pass = seen.control >= 2 && seen.external.length === 0 && seen.requests === 0;
+      return { pass, notes: JSON.stringify({ control: seen.control, external: seen.external.length, requests: seen.requests }) };
     },
   });
 
   cases.push({
-    id: 'extimg_reader_does_not_repeat_a_blocked_image_and_repeats_it_once_shown',
-    description: 'Lecture en pages : une image « sur toutes les pages » d’un autre site pas encore affichée garde son cadre sur sa feuille et n’a aucune copie sur les autres ; le clic sur « Afficher » la rend à son adresse et les copies se peignent sur les autres feuilles',
+    id: 'extimg_reader_does_not_repeat_an_image_of_another_site',
+    description: 'Lecture en pages : une image « sur toutes les pages » d’un autre site garde son cadre sur sa feuille et n’a aucune copie sur les autres ; un clic sur son cadre ouvre la fenêtre qui explique et n’y change rien',
     run: async (h) => {
       const url = 'https://repete2.test/f.png';
       const html = repeatedImg(url) + bodyLines(130);
@@ -1110,16 +804,441 @@
         await h.renderReaderMode(html, JSON.parse(JSON.stringify(EMPTY_HF)));
         await h.sleep(400);
         const rc = document.getElementById('reader-container');
-        seen.copiesBefore = readerCopies().length;
         const frame = rc.querySelector('img[data-blocked-src="' + url + '"]');
         seen.frame = !!frame;
         if (frame) frame.click();
-        await h.sleep(800);
-        seen.copiesAfter = readerCopies();
-        seen.original = !!rc.querySelector('.reader-content img[src="' + url + '"]');
-      } finally { h.setA4Preview(false); restoreContainers(); }
-      const pass = seen.frame && seen.copiesBefore === 0 && seen.original && seen.copiesAfter.length >= 2 && seen.copiesAfter.every(src => src === url);
-      return { pass, notes: JSON.stringify({ frame: seen.frame, before: seen.copiesBefore, after: seen.copiesAfter.length, original: seen.original }) };
+        await h.sleep(500);
+        seen.window = explainOpen();
+        await closeExplain(h);
+        seen.copies = readerCopies().length;
+        seen.stillFrame = !!rc.querySelector('img[data-blocked-src="' + url + '"]');
+        seen.loaded = !!rc.querySelector('img[src="' + url + '"]');
+        seen.requests = requestsTo(['repete2.test']);
+      } finally { h.setA4Preview(false); document.getElementById('reader-container').style.display = ''; document.getElementById('editor-container').style.display = ''; }
+      const pass = seen.frame && seen.copies === 0 && seen.stillFrame && !seen.loaded && seen.requests === 0 && seen.window === true;
+      return { pass, notes: JSON.stringify(seen) };
+    },
+  });
+
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
+  // 7) La fenêtre qui explique (demande du 24/11 : « une pop-up qui s'ouvre et explique le pourquoi et la manip ; ensuite remplacer les images par un place holder, et au clic réafficher la pop-up »)
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  const byId = id => document.getElementById(id);
+  const verdict = problems => ({ pass: problems.length === 0, notes: JSON.stringify(problems) });
+  const same = (problems, label, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) problems.push(label + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(want)); };
+  const NOTHING = { count: 0, sites: [] };
+  const QUIET_SRCS = [DATA_PNG, 'blob:' + location.origin + '/0b1c', 'images/relatif.png', location.origin + '/meme-origine.png', 'ftp://fichiers.test/e.png'];
+  const quietImages = () => QUIET_SRCS.map(src => '<img src="' + src + '">').join('');
+  const ATTACHMENT_IMG = '<img data-attachment-id="7" src="https://grist.fictif.test/api/docs/x/attachments/7/download">';
+  // La promesse tenue, ou un délai : un essai qui attend une fermeture ne reste jamais suspendu.
+  const settled = (h, promise) => Promise.race([promise.then(() => 'tenue'), h.sleep(1000).then(() => 'attend encore')]);
+  const views = () => Array.from(document.querySelectorAll('.tiptap .editor-image-view'));
+  const mouse = (target, type, x, y) => target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y }));
+
+  cases.push({
+    id: 'extimg_survey_counts_the_images_of_other_sites_and_lists_their_sites_in_order',
+    description: 'ExternalImages.survey(morceaux de HTML) : le nombre d’images d’un autre site et leurs sites, dans l’ordre où ils se présentent et sans doublon, le corps puis l’en-tête et le pied ; data:, blob:, adresse relative, même origine, pièce jointe de Grist et protocole autre que http(s) ne comptent pas ; une image déjà passée par block ou setAside se lit de même ; les écritures de l’adresse que le navigateur comprend (« // », majuscules, entité, guillemets simples, « > » dans l’alt) comptent ; un HTML sans adresse d’un autre site n’est même pas lu',
+    run: async () => {
+      const problems = [];
+      const body = '<p>Texte</p>' + img('https://sondage1.test/a.png') + quietImages() + ATTACHMENT_IMG
+        + img('https://sondage2.test:8443/b.png') + img('https://sondage1.test/c.png') + '<img src="//sondage3.test/d.png">';
+      const wanted = { count: 4, sites: ['sondage1.test', 'sondage2.test:8443', 'sondage3.test'] };
+      same(problems, 'le corps', ExternalImages.survey([body]), wanted);
+      same(problems, 'le corps, l’en-tête et le pied', ExternalImages.survey([body, img('https://sondage4.test/h.png'), img('https://sondage1.test/p.png')]), { count: 6, sites: wanted.sites.concat(['sondage4.test']) });
+      same(problems, 'après block (l’adresse est dans data-blocked-src)', ExternalImages.survey([ExternalImages.block(body)]), wanted);
+      same(problems, 'après setAside (l’adresse est dans data-external-src)', ExternalImages.survey([await ExternalImages.setAside(body)]), wanted);
+      const odd = '<img alt="a>b" src="https://ecrit1.test/x.png"><img src="&#104;ttps://ecrit2.test/x.png"><img src="HTTPS://MAJ3.test/x.png"><img src=https://ecrit4.test/x.png>'
+        + '<img src = \'https://ecrit5.test/x.png\'><img title=\'l&apos;image\' src=" https://ecrit6.test/x.png "><img src="//ecrit7.test/x.png">';
+      same(problems, 'les écritures de l’adresse', ExternalImages.survey([odd]), { count: 7, sites: ['ecrit1.test', 'ecrit2.test', 'maj3.test', 'ecrit4.test', 'ecrit5.test', 'ecrit6.test', 'ecrit7.test'] });
+      same(problems, 'rien : sans morceaux, vides, sans image', [ExternalImages.survey(), ExternalImages.survey(null), ExternalImages.survey([null, undefined, '', '<p>Texte seul</p>'])], [NOTHING, NOTHING, NOTHING]);
+      same(problems, 'rien : tout ce qui ne part pas vers un autre site', ExternalImages.survey(['<p>x</p>' + quietImages() + ATTACHMENT_IMG]), NOTHING);
+      // Un HTML qui n'a pas une adresse vers un autre site n'est pas lu (un gros document, sans une telle image, s'ouvre sans surcoût) ; celui qui en a une est lu une fois.
+      const original = Dom.inertTemplate;
+      let reads = 0;
+      Dom.inertTemplate = function () { reads += 1; return original.apply(this, arguments); };
+      try {
+        const offline = '<p>x</p>' + img(DATA_PNG).repeat(40) + '<img src="blob:' + location.origin + '/0b1c"><img src="images/relatif.png"><img src="/chemin/absolu.png"><img src="ftp://fichiers.test/e.png">';
+        same(problems, 'sans adresse http : le décompte', ExternalImages.survey([offline]), NOTHING);
+        same(problems, 'sans adresse http : lectures', reads, 0);
+        // Une adresse http vers le widget lui-même se lit (le tri rapide ne juge pas l'origine) et ne compte pas.
+        same(problems, 'même origine : le décompte', ExternalImages.survey(['<img src="' + location.origin + '/meme-origine.png">']), NOTHING);
+        reads = 0;
+        ExternalImages.survey([body]);
+        same(problems, 'avec une adresse d’un autre site : lectures', reads, 1);
+      } finally { Dom.inertTemplate = original; }
+      return verdict(problems);
+    },
+  });
+
+  cases.push({
+    id: 'extimg_notice_on_open_shows_the_window_once_per_document_and_per_session',
+    description: 'ExternalImages.noticeOnOpen(document) : la fenêtre s’ouvre pour un document qui porte une image d’un autre site (corps, en-tête ou pied) et dit « vrai », une seule fois par document et par session (le numéro en texte ou en nombre est le même document) ; rien pour un document sans contenu, sans image d’un autre site, ou qui n’a que des data:, des adresses relatives, des pièces jointes ; un document sans numéro (un neuf) la remontre à chaque fois ; un document sans image n’est pas retenu : l’image qui lui vient ensuite s’annonce',
+    run: async (h) => {
+      const problems = [];
+      try {
+        const empty = [null, undefined, {}, { id: 'test-extimg-vide-1' }, { id: 'test-extimg-vide-2', contenu: null }, { id: 'test-extimg-vide-3', contenu: 12 },
+          { id: 'test-extimg-vide-4', contenu: '<p>Rien</p>' + img(DATA_PNG) }, { id: 'test-extimg-vide-5', contenu: '<p>x</p>' + quietImages() + ATTACHMENT_IMG }];
+        same(problems, 'rien à dire', empty.map(doc => ExternalImages.noticeOnOpen(doc)), empty.map(() => false));
+        same(problems, 'aucune fenêtre', explainOpen(), false);
+        const doc = { id: 'test-extimg-ouvert-1', contenu: DOC_HTML };
+        same(problems, 'un document avec une image d’un autre site', [ExternalImages.noticeOnOpen(doc), explainOpen()], [true, true]);
+        same(problems, 'la fenêtre dit une image et son site', [explainText().includes(I18n.t('image.explain.intro', { n: 1 })), explainText().includes('images.exemple.test')], [true, true]);
+        await closeExplain(h);
+        same(problems, 'le même document : rien', [ExternalImages.noticeOnOpen(doc), explainOpen()], [false, false]);
+        same(problems, 'un autre document', [ExternalImages.noticeOnOpen({ id: 'test-extimg-ouvert-2', contenu: DOC_HTML }), explainOpen()], [true, true]);
+        await closeExplain(h);
+        // L'en-tête et le pied comptent : leurs images s'ajoutent à celles du corps.
+        const hf = { enabled: true, differentFirstPage: false, header: { default: img(HEADER), first: '' }, footer: { default: img('https://pied.test/p.png'), first: '' } };
+        same(problems, 'l’en-tête et le pied d’un document', [ExternalImages.noticeOnOpen({ id: 'test-extimg-ouvert-3', contenu: '<p>Corps seul</p>', headerFooter: hf }), explainOpen()], [true, true]);
+        same(problems, 'l’en-tête et le pied : deux images, deux sites', [explainText().includes(I18n.t('image.explain.intro', { n: 2 })), explainText().includes('entete.test, pied.test')], [true, true]);
+        await closeExplain(h);
+        same(problems, 'un en-tête sans image d’un autre site ne compte pas', ExternalImages.noticeOnOpen({ id: 'test-extimg-ouvert-4', contenu: '<p>Corps</p>', headerFooter: Object.assign({}, hf, { header: { default: img(DATA_PNG), first: '' }, footer: { default: '', first: '' } }) }), false);
+        // Le numéro, en nombre ou en texte, désigne le même document.
+        same(problems, 'un numéro en nombre', [ExternalImages.noticeOnOpen({ id: 987001, contenu: DOC_HTML }), explainOpen()], [true, true]);
+        await closeExplain(h);
+        same(problems, 'le même numéro, en texte : le même document', [ExternalImages.noticeOnOpen({ id: '987001', contenu: DOC_HTML }), explainOpen()], [false, false]);
+        // Un document sans numéro (un neuf, jamais enregistré) n'a pas de mémoire : la fenêtre revient à chaque ouverture.
+        same(problems, 'sans numéro, la première fois', [ExternalImages.noticeOnOpen({ contenu: DOC_HTML }), explainOpen()], [true, true]);
+        await closeExplain(h);
+        same(problems, 'sans numéro, la fois suivante', [ExternalImages.noticeOnOpen({ contenu: DOC_HTML }), explainOpen()], [true, true]);
+        await closeExplain(h);
+        // Un document sans image d'un autre site n'est pas retenu : celui qui en reçoit une ensuite (même numéro) l'annonce.
+        same(problems, 'sans image : rien, et pas retenu', [ExternalImages.noticeOnOpen({ id: 'test-extimg-plus-tard', contenu: '<p>Rien</p>' }), explainOpen()], [false, false]);
+        same(problems, 'la même clé, avec une image', [ExternalImages.noticeOnOpen({ id: 'test-extimg-plus-tard', contenu: DOC_HTML }), explainOpen()], [true, true]);
+      } finally { await closeExplain(h); }
+      return verdict(problems);
+    },
+  });
+
+  const explainContent = {
+    id: 'extimg_explain_window_says_why_how_to_put_an_image_back_and_what_is_kept',
+    description: 'La fenêtre (ExternalImages.explain) dit pourquoi les images d’un autre site ne s’affichent plus (leur nombre et leurs sites, au singulier comme au pluriel, six sites au plus puis « et N autres »), les trois gestes pour en remettre une (« Copier l’image » sur son site, cliquer le cadre puis coller, une pièce jointe de Grist par « Image depuis une variable ») et que le document garde l’adresse ; elle se présente comme une fenêtre de dialogue, n’a qu’un bouton, « Compris », et n’écrit jamais une adresse, seulement le nom du site',
+    run: async (h) => {
+      const problems = [];
+      const en = I18n.getLang() === 'en';
+      const want = en
+        ? { title: 'Images from another site not shown', how: 'To put an image back:', close: 'Got it',
+          kept: 'The document keeps each image’s address: nothing is lost until you replace the frame.',
+          intro3: 'This document contains 3 images hosted on other sites. For security, Publipostage+ no longer calls any other site: they are neither shown nor exported, and a frame takes their place.',
+          intro1: 'This document contains 1 image hosted on another site. For security, Publipostage+ no longer calls any other site: it is neither shown nor exported, and a frame takes its place.',
+          sites2: 'Affected sites: alpha.test, beta.test', sites1: 'Affected site: alpha.test', more: n => 'and ' + n + ' more',
+          steps: [/right-click.*“Copy image”/, /Esc.*Ctrl\+V/, /attachments column.*“Image from a variable/] }
+        : { title: 'Images d’un autre site non affichées', how: 'Pour remettre une image :', close: 'Compris',
+          kept: 'Le document garde l’adresse de chaque image : rien n’est perdu tant que vous n’avez pas remplacé le cadre.',
+          intro3: 'Ce document contient 3 images hébergées sur d’autres sites. Par sécurité, Publipostage+ n’appelle plus aucun autre site : elles ne sont ni affichées ni exportées, un cadre les remplace.',
+          intro1: 'Ce document contient 1 image hébergée sur un autre site. Par sécurité, Publipostage+ n’appelle plus aucun autre site : elle n’est ni affichée ni exportée, un cadre la remplace.',
+          sites2: 'Sites concernés : alpha.test, beta.test', sites1: 'Site concerné : alpha.test', more: n => 'et ' + n + (n > 1 ? ' autres' : ' autre'),
+          steps: [/clic droit.*« Copier l’image »/, /Échap.*Ctrl\+V/, /Pièces jointes de Grist.*« Image depuis une variable/] };
+      const parts = () => ({
+        paragraphs: Array.from(explainWindow().querySelectorAll('.pp-external-images-body > p')).map(p => p.textContent),
+        steps: Array.from(explainWindow().querySelectorAll('.pp-external-images-body ol li')).map(li => li.textContent),
+      });
+      try {
+        // Trois images, deux sites.
+        ExternalImages.explain({ survey: { count: 3, sites: ['alpha.test', 'beta.test'] } });
+        const box = explainWindow().querySelector('.pp-modal-box');
+        let seen = parts();
+        same(problems, 'titre', byId('pp-external-images-title').textContent, want.title);
+        same(problems, 'pourquoi', seen.paragraphs[0], want.intro3);
+        same(problems, 'sites', seen.paragraphs[1], want.sites2);
+        same(problems, 'comment, l’amorce', seen.paragraphs[2], want.how);
+        same(problems, 'comment, trois gestes', seen.steps.length, 3);
+        if (!want.steps.every((rule, i) => rule.test(seen.steps[i] || ''))) problems.push('les gestes : ' + JSON.stringify(seen.steps));
+        same(problems, 'ce que le document garde', seen.paragraphs[3], want.kept);
+        same(problems, 'un seul bouton visible', explainButtons().map(b => b.textContent), [want.close]);
+        same(problems, 'fenêtre de dialogue', [box.getAttribute('role'), box.getAttribute('aria-modal'), box.getAttribute('aria-labelledby')], ['dialog', 'true', 'pp-external-images-title']);
+        await closeExplain(h);
+        // Une image, un site : le singulier.
+        ExternalImages.explain({ survey: { count: 1, sites: ['alpha.test'] } });
+        seen = parts();
+        same(problems, 'une image : pourquoi', seen.paragraphs[0], want.intro1);
+        same(problems, 'un site', seen.paragraphs[1], want.sites1);
+        await closeExplain(h);
+        // Six sites tiennent tous ; au-delà, « et N autres ».
+        const named = n => Array.from({ length: n }, (_, i) => 'site' + (i + 1) + '.test');
+        for (const n of [6, 7, 8]) {
+          ExternalImages.explain({ survey: { count: n + 2, sites: named(n) } });
+          same(problems, n + ' sites', parts().paragraphs[1], (en ? 'Affected sites: ' : 'Sites concernés : ') + named(Math.min(n, 6)).join(', ') + (n > 6 ? ' ' + want.more(n - 6) : ''));
+          await closeExplain(h);
+        }
+        // Un document réel : aucune adresse, ni chemin, ni jeton dans la fenêtre, seulement le nom du site.
+        const opened = ExternalImages.noticeOnOpen({ id: 'test-extimg-contenu-' + I18n.getLang(), contenu: '<p>x</p>' + img('https://secret.exemple.test/chemin/prive/logo.png?jeton=abc123') });
+        const text = explainText();
+        same(problems, 'un document réel', [opened, text.includes('secret.exemple.test'), /https?:|chemin|logo\.png|jeton|abc123/.test(text)], [true, true, false]);
+      } finally { await closeExplain(h); }
+      return verdict(problems);
+    },
+  };
+  cases.push(explainContent, Object.assign({}, explainContent, {
+    id: 'extimg_explain_window_speaks_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la fenêtre qui explique dit tout en anglais (« Images from another site not shown », « Affected sites », « Got it », « and 2 more ») avec les mêmes pluriels',
+  }));
+
+  cases.push({
+    id: 'extimg_explain_window_closes_with_escape_or_its_button_and_gives_the_focus_back',
+    description: 'La fenêtre qui explique : une demande pendant qu’elle est ouverte reçoit la même promesse (une seule fenêtre dans la page, le premier décompte) ; Échap ou « Compris » la ferment, tiennent la promesse et rendent le focus à qui l’avait ; elle se rouvre ensuite avec son nouveau décompte ; sans rien à dire (ni site, ni image dans le document) elle ne s’ouvre pas ; le document ouvert prime sur le site du cadre, qui ne sert qu’à défaut',
+    run: async (h) => {
+      const problems = [];
+      await h.resetEditor();
+      const opener = document.createElement('button');
+      opener.textContent = 'ouvreur';
+      document.body.appendChild(opener);
+      try {
+        opener.focus();
+        const first = ExternalImages.explain({ survey: { count: 2, sites: ['un.test'] } });
+        const second = ExternalImages.explain({ survey: { count: 5, sites: ['deux.test'] } });
+        same(problems, 'la même promesse pendant qu’elle est ouverte', first === second, true);
+        same(problems, 'une seule fenêtre dans la page', document.querySelectorAll('#pp-external-images-modal').length, 1);
+        same(problems, 'ouverte avec le premier décompte', [explainOpen(), explainText().includes('un.test'), explainText().includes('deux.test')], [true, true, false]);
+        same(problems, 'le focus est sur « Compris »', document.activeElement === explainButtons()[0], true);
+        document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        same(problems, 'Échap tient la promesse', await settled(h, first), 'tenue');
+        same(problems, 'Échap ferme et rend le focus', [explainOpen(), document.activeElement === opener], [false, true]);
+        const third = ExternalImages.explain({ survey: { count: 1, sites: ['trois.test'] } });
+        same(problems, 'rouverte : une autre promesse, le nouveau décompte', [third !== first, explainOpen(), explainText().includes('trois.test'), explainText().includes('un.test')], [true, true, true, false]);
+        explainButtons()[0].click();
+        same(problems, '« Compris » tient la promesse', await settled(h, third), 'tenue');
+        same(problems, '« Compris » ferme et rend le focus', [explainOpen(), document.activeElement === opener], [false, true]);
+        // Rien à dire : le document est vide, aucun site n'est donné.
+        same(problems, 'rien à dire : résolue sans fenêtre', [await settled(h, ExternalImages.explain()), explainOpen()], ['tenue', false]);
+        same(problems, 'rien à dire : un décompte vide', [await settled(h, ExternalImages.explain({ survey: NOTHING })), explainOpen()], ['tenue', false]);
+        // À défaut du document, le site du cadre cliqué.
+        ExternalImages.explain({ site: 'solo.test' });
+        same(problems, 'le site du cadre, à défaut', [explainOpen(), explainText().includes(I18n.t('image.explain.intro', { n: 1 })), explainText().includes(I18n.t('image.explain.sites', { n: 1, sites: 'solo.test' }))], [true, true, true]);
+        await closeExplain(h);
+        // Le document ouvert prime : son corps, puis son en-tête, comptés ensemble ; le site du cadre n'y change rien.
+        Editor.setHTML('<p>' + img('https://doc1.test/a.png') + img('https://doc2.test/b.png') + img('https://doc1.test/c.png') + img(DATA_PNG) + '</p>');
+        Editor.setHeaderFooterData(HF_WITH_IMAGE);
+        await h.sleep(300);
+        ExternalImages.explain({ site: 'autre.test' });
+        same(problems, 'le document ouvert', [explainText().includes(I18n.t('image.explain.intro', { n: 4 })), explainText().includes(I18n.t('image.explain.sites', { n: 3, sites: 'doc1.test, doc2.test, entete.test' })), explainText().includes('autre.test')], [true, true, false]);
+        await closeExplain(h);
+      } finally {
+        await closeExplain(h);
+        opener.remove();
+        await h.resetEditor();
+      }
+      return verdict(problems);
+    },
+  });
+
+  cases.push({
+    id: 'extimg_editor_click_on_a_frame_opens_the_window_and_changes_nothing_in_the_document',
+    description: 'Éditeur : un clic sur le cadre d’une image d’un autre site sélectionne l’image comme avant ET ouvre la fenêtre, qui compte les images du document ouvert (le corps, puis l’en-tête) ; le document n’est pas touché (même HTML, même adresse, aucune transaction) ; un glissement de plus de 4 px n’est pas un clic, un de 3 px en est un ; une image intégrée (data:) n’ouvre rien ; la fenêtre fermée, le focus revient dans l’éditeur et l’image reste sélectionnée',
+    run: async (h) => {
+      const problems = [];
+      try {
+        await h.resetEditor();
+        const one = 'https://edit1.test/a.png';
+        const two = 'https://edit2.test/b.png';
+        Editor.setHTML('<p>Texte</p><p>' + img(one) + img(two) + '</p><p>' + img(DATA_PNG) + '</p>');
+        Editor.setHeaderFooterData(HF_WITH_IMAGE);
+        await h.sleep(300);
+        const editor = EditorCore.getEditor();
+        const savedHtml = Editor.getHTML();
+        const doc = editor.state.doc;
+        h.tiptap().focus();
+        const frames = () => Array.from(document.querySelectorAll('.tiptap .editor-image-blocked .editor-image-blocked-box'));
+        same(problems, 'deux cadres, trois images', [frames().length, views().length], [2, 3]);
+        // Un clic : la souris descend et remonte au même endroit.
+        await h.selectAtomNode(frames()[0]);
+        same(problems, 'le clic ouvre la fenêtre', explainOpen(), true);
+        same(problems, 'elle compte le document ouvert', [explainText().includes(I18n.t('image.explain.intro', { n: 3 })), explainText().includes(I18n.t('image.explain.sites', { n: 3, sites: 'edit1.test, edit2.test, entete.test' }))], [true, true]);
+        same(problems, 'l’image est sélectionnée comme avant', [views()[0].classList.contains('editor-image-selected'), !!editor.state.selection.node && editor.state.selection.node.type.name], [true, 'editorImage']);
+        await closeExplain(h);
+        same(problems, 'fermée : le focus revient dans l’éditeur et l’image reste sélectionnée', [h.tiptap().contains(document.activeElement), views()[0].classList.contains('editor-image-selected')], [true, true]);
+        // Un glissement : la souris descend ici et remonte à 12 px ; à 3 px, c'est encore un clic.
+        const box = frames()[1].getBoundingClientRect();
+        const x = box.left + box.width / 2;
+        const y = box.top + box.height / 2;
+        mouse(frames()[1], 'mousedown', x, y); mouse(frames()[1], 'mouseup', x + 12, y); mouse(frames()[1], 'click', x + 12, y);
+        await h.sleep(150);
+        same(problems, 'un glissement de 12 px n’ouvre rien', explainOpen(), false);
+        mouse(frames()[1], 'mousedown', x, y); mouse(frames()[1], 'mouseup', x + 3, y); mouse(frames()[1], 'click', x + 3, y);
+        await h.sleep(150);
+        same(problems, 'un déplacement de 3 px est un clic', explainOpen(), true);
+        await closeExplain(h);
+        // Une image intégrée n'a pas de cadre : la sélectionner n'ouvre rien.
+        await h.selectAtomNode(views()[2].querySelector('img'));
+        same(problems, 'une image intégrée n’ouvre rien', explainOpen(), false);
+        same(problems, 'le document n’a pas bougé', [Editor.getHTML() === savedHtml, editor.state.doc === doc, savedHtml.includes('src="' + one + '"'), savedHtml.includes('src="' + two + '"')], [true, true, true, true]);
+      } finally {
+        await closeExplain(h);
+        await h.resetEditor();
+      }
+      return verdict(problems);
+    },
+  });
+
+  cases.push({
+    id: 'extimg_pasting_an_image_over_a_selected_frame_replaces_it_and_one_undo_brings_it_back',
+    description: 'Le geste que la fenêtre explique : un cadre sélectionné (le clic, la fenêtre fermée) et une image collée (Ctrl+V) : l’image prend la place du cadre, l’adresse d’un autre site n’est plus dans le document ; une seule annulation remet le cadre et son adresse et retire l’image collée ; le texte autour ne bouge pas',
+    run: async (h) => {
+      const problems = [];
+      const url = 'https://coller1.test/logo.png';
+      try {
+        await h.resetEditor();
+        Editor.setHTML('<p>Avant</p><p>' + img(url) + '</p><p>Après</p>');
+        await h.sleep(300);
+        const editor = EditorCore.getEditor();
+        h.tiptap().focus();
+        await h.selectAtomNode(document.querySelector('.tiptap .editor-image-blocked .editor-image-blocked-box'));
+        await closeExplain(h);
+        same(problems, 'le cadre est sélectionné', !!editor.state.selection.node && editor.state.selection.node.type.name, 'editorImage');
+        const before = Editor.getHTML();
+        const data = new DataTransfer();
+        data.items.add(new File([Uint8Array.from(atob(PNG_B64), c => c.charCodeAt(0))], 'collee.png', { type: 'image/png' }));
+        editor.view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        await waitFor(h, () => !Editor.getHTML().includes(url), 5000);
+        const pasted = Editor.getHTML();
+        const sources = parse(pasted).map(i => i.getAttribute('src'));
+        same(problems, 'l’image collée prend la place du cadre', [pasted.includes(url), sources.length, /^data:image\//.test(sources[0] || '')], [false, 1, true]);
+        same(problems, 'le texte autour ne bouge pas', [pasted.includes('Avant'), pasted.includes('Après')], [true, true]);
+        same(problems, 'plus de cadre dans la vue', document.querySelectorAll('.tiptap .editor-image-blocked .editor-image-blocked-box').length, 0);
+        editor.commands.undo();
+        await h.sleep(250);
+        same(problems, 'une annulation remet le document d’avant', Editor.getHTML() === before, true);
+        same(problems, 'le cadre est de retour dans la vue', document.querySelectorAll('.tiptap .editor-image-blocked .editor-image-blocked-box').length, 1);
+        same(problems, 'rien n’est parti vers le site', requestsTo(['coller1.test']), 0);
+      } finally {
+        await closeExplain(h);
+        await h.resetEditor();
+      }
+      return verdict(problems);
+    },
+  });
+
+  cases.push({
+    id: 'extimg_reader_frames_are_buttons_that_open_the_window',
+    description: 'Lecture : le cadre d’une image d’un autre site (corps, en-tête) est un bouton pour le clavier (rôle, Tab, texte qui dit ce qu’il fait) ; un clic, Entrée ou Espace ouvre la fenêtre qui explique, qui compte les images du document ; une autre touche ou un clic à côté n’ouvrent rien ; la fenêtre fermée, le focus revient sur le cadre, qui reste un cadre',
+    run: async (h) => {
+      const problems = [];
+      const hf = { enabled: true, differentFirstPage: false, header: { default: img('https://lecbtn1.test/h.png'), first: '' }, footer: { default: '', first: '' } };
+      const body = '<p>Corps du document</p>' + img('https://lecbtn1.test/b.png') + img('https://lecbtn2.test/c.png');
+      try {
+        await h.resetEditor();
+        Editor.setHTML(body);
+        Editor.setHeaderFooterData(hf);
+        h.setA4Preview(true);
+        await h.renderReaderMode(body, hf);
+        await h.sleep(300);
+        const frames = () => Array.from(document.querySelectorAll('#reader-container img[data-blocked-src]'));
+        same(problems, 'trois cadres', frames().length, 3);
+        same(problems, 'chacun est un bouton qui dit ce qu’il fait',
+          frames().map(f => [f.getAttribute('role'), f.getAttribute('tabindex'), f.getAttribute('aria-label')]),
+          frames().map(f => ['button', '0', I18n.t('image.blocked.action', { site: f.getAttribute('data-blocked-site') })]));
+        same(problems, 'le texte du bouton cite le site', frames().every(f => f.getAttribute('aria-label').includes(f.getAttribute('data-blocked-site'))), true);
+        const frame = frames().find(f => f.getAttribute('data-blocked-site') === 'lecbtn2.test');
+        frame.click();
+        await h.sleep(100);
+        same(problems, 'un clic ouvre la fenêtre', explainOpen(), true);
+        same(problems, 'elle compte le document : trois images, deux sites', [explainText().includes(I18n.t('image.explain.intro', { n: 3 })), explainText().includes(I18n.t('image.explain.sites', { n: 2, sites: 'lecbtn1.test, lecbtn2.test' }))], [true, true]);
+        await closeExplain(h);
+        frame.focus();
+        same(problems, 'Tab : le cadre prend le focus', document.activeElement === frame, true);
+        const press = key => { const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }); frame.dispatchEvent(event); return event; };
+        const enter = press('Enter');
+        same(problems, 'Entrée ouvre la fenêtre', [explainOpen(), enter.defaultPrevented], [true, true]);
+        await closeExplain(h);
+        same(problems, 'fermée : le focus revient sur le cadre', document.activeElement === frame, true);
+        const space = press(' ');
+        same(problems, 'Espace ouvre la fenêtre', [explainOpen(), space.defaultPrevented], [true, true]);
+        await closeExplain(h);
+        const other = press('a');
+        same(problems, 'une autre touche n’ouvre rien', [explainOpen(), other.defaultPrevented], [false, false]);
+        document.querySelector('#reader-container .reader-content p').click();
+        await h.sleep(100);
+        same(problems, 'un clic à côté n’ouvre rien', explainOpen(), false);
+        same(problems, 'le cadre reste un cadre', [frames().length, frame.isConnected && frame.hasAttribute('data-blocked-src'), /^data:image\/svg\+xml/.test(frame.getAttribute('src'))], [3, true, true]);
+      } finally {
+        await closeExplain(h);
+        h.setA4Preview(false);
+        document.getElementById('reader-container').style.display = '';
+        document.getElementById('editor-container').style.display = '';
+        await h.resetEditor();
+      }
+      return verdict(problems);
+    },
+  });
+
+  // Un document pour de vrai : enregistré par « Enregistrer », ouvert par la liste des documents (js/main.js:loadTemplateIntoEditor, où la fenêtre s'ouvre).
+  async function saveDocument(h, name, html, headerFooter) {
+    await h.resetEditor();
+    h.openFlyout('#v2-new-template-group');
+    await h.clickButton('v2-btn-new-document');
+    await h.sleep(60);
+    Editor.setHTML(html);
+    if (headerFooter) Editor.setHeaderFooterData(headerFooter);
+    byId('template-name').value = name;
+    await h.clickButton('btn-save');
+    await h.sleep(500);
+    return Templates.getCurrentId();
+  }
+  async function openDocument(h, id) {
+    await Templates.loadAll();
+    const select = byId('template-select');
+    select.value = String(id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await waitFor(h, () => Templates.isCurrent(id), 3000);
+    await h.sleep(250);
+  }
+  async function leaveDocument(h) {
+    ActionHistory.reset();
+    await h.clickButton('btn-new');
+    await h.sleep(300);
+  }
+
+  cases.push({
+    id: 'extimg_opening_a_saved_document_with_images_of_other_sites_shows_the_window_once',
+    description: 'Ouvrir un vrai document par la liste des documents : celui qui porte une image d’un autre site (dans le corps ou l’en-tête) ouvre la fenêtre, une seule fois par session ; l’enregistrer ne l’ouvre pas ; celui qui n’a que des images intégrées n’ouvre rien ; en lecture seule elle ne s’ouvre pas (et le document n’est pas retenu : la personne qui peut modifier la verra) ; le document garde l’adresse',
+    run: async (h) => {
+      const problems = [];
+      const ids = [];
+      const rights = AccessRights.get;
+      try {
+        const withImage = await saveDocument(h, 'Images - avec image', '<p>Bonjour</p>' + img(EXTERNAL) + '<p>Merci.</p>');
+        const without = await saveDocument(h, 'Images - sans image', '<p>Rien</p>' + img(DATA_PNG));
+        const inHeader = await saveDocument(h, 'Images - en-tête', '<p>Corps</p>', HF_WITH_IMAGE);
+        const guarded = await saveDocument(h, 'Images - lecture seule', '<p>Autre</p>' + img('https://lecseule.test/x.png'));
+        ids.push(withImage, without, inHeader, guarded);
+        same(problems, 'quatre documents enregistrés', new Set(ids).size, 4);
+        same(problems, 'enregistrer n’ouvre pas la fenêtre', explainOpen(), false);
+        await leaveDocument(h);
+        await openDocument(h, withImage);
+        same(problems, 'ouvrir : la fenêtre s’ouvre', [explainOpen(), explainText().includes(I18n.t('image.explain.intro', { n: 1 })), explainText().includes('images.exemple.test')], [true, true, true]);
+        same(problems, 'le document garde l’adresse', Editor.getHTML().includes('src="' + EXTERNAL + '"'), true);
+        await closeExplain(h);
+        await leaveDocument(h);
+        await openDocument(h, withImage);
+        same(problems, 'rouvrir le même document : rien', explainOpen(), false);
+        await leaveDocument(h);
+        await openDocument(h, without);
+        same(problems, 'un document sans image d’un autre site : rien', explainOpen(), false);
+        await leaveDocument(h);
+        await openDocument(h, inHeader);
+        same(problems, 'une image d’en-tête compte', [explainOpen(), explainText().includes('entete.test')], [true, true]);
+        await closeExplain(h);
+        // En lecture seule : rien à remettre, donc pas de fenêtre, et le document n'est pas retenu.
+        await leaveDocument(h);
+        AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+        await openDocument(h, guarded);
+        same(problems, 'lecture seule : pas de fenêtre', explainOpen(), false);
+        same(problems, 'lecture seule : le document est bien ouvert', Editor.getHTML().includes('lecseule.test'), true);
+        AccessRights.get = rights;
+        await leaveDocument(h);
+        await openDocument(h, guarded);
+        same(problems, 'avec le droit de modifier : la fenêtre s’ouvre', [explainOpen(), explainText().includes('lecseule.test')], [true, true]);
+        await closeExplain(h);
+      } finally {
+        AccessRights.get = rights;
+        await closeExplain(h);
+        try { await leaveDocument(h); } catch (e) { /* le cas est fini */ }
+        for (const id of ids) { try { await Templates.remove(id); } catch (e) { /* déjà retiré */ } }
+        try { await Templates.loadAll(); } catch (e) { /* idem */ }
+      }
+      return verdict(problems);
     },
   });
 
