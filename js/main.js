@@ -861,10 +861,13 @@
   }
   window.addEventListener('pagehide', flushMode);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushMode(); });
-  // Le mode d'ouverture : la Lecture seulement quand c'était le dernier choix ET qu'un modèle ordinaire s'ouvre de lui-même (le modèle de la ligne, de la vue, le ★, celui que GFS désigne ou que le rechargement
-  // d'un changement de langue rouvre). Tout ce qui demande l'éditeur - un modèle vierge, un import, un macro-modèle, l'absence de modèle - ouvre l'Édition comme avant.
+  // Le mode d'ouverture : quand un modèle ordinaire s'ouvre de lui-même (le modèle de la ligne, de la vue, le ★, celui que GFS désigne ou que le rechargement d'un changement de langue rouvre), le choix de la VUE
+  // (Réglages > Vue > « Mode d'ouverture de cette vue », ViewTemplate.openMode : Lecture ou Édition) passe d'abord ; sans choix pour la vue, la Lecture seulement quand c'était le dernier choix de la personne.
+  // Tout ce qui demande l'éditeur - un modèle vierge, un import, un macro-modèle, l'absence de modèle - ouvre l'Édition comme avant, quel que soit le choix.
   function startMode({ blank, importing, hasTemplate }) {
     if (blank || importing || !hasTemplate || currentTypeModele === 'macro') return 'edit';
+    const ofView = ViewTemplate.openMode();
+    if (ofView) return ofView;
     return PersonStore.get(LAST_MODE_KEY) === 'read' ? 'read' : 'edit';
   }
 

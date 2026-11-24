@@ -318,7 +318,7 @@ async function run() {
     const email = Templates.getCurrentId();
     MacroEditor.openModal(null);
     document.getElementById('macro-editor-name').value = 'Ligne - N macro';
-    const cover = document.getElementById('macro-editor-cover');
+    const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
     cover.value = String(window.__ids.A);
     cover.dispatchEvent(new Event('change', { bubbles: true }));
     document.getElementById('macro-editor-save').click();

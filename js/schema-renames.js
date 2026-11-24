@@ -577,12 +577,17 @@ const SchemaRenames = (function () {
     return count ? { text: JSON.stringify(parsed), count } : { text: json, count: 0 };
   }
 
-  // Macro-modèle : { slots: [{ type: 'conditional', rules: [{ column, operator, value, modeleId }], … }] } - les colonnes des règles.
+  // Macro-modèle : { slots: [{ type: 'conditional', rules: [{ column, operator, value, modeleId }], … }] } - les colonnes des règles - et, pour toute position,
+  // `condition` : { mode, rules } (le document n'est inclus que si elle est remplie ; une règle peut être un groupe), réécrite comme celle d'une bulle.
   function rewriteMacro(json, m, page) {
     const parsed = parseJson(json);
     if (!parsed || !Array.isArray(parsed.slots)) return { text: json, count: 0 };
     let count = 0;
     parsed.slots.forEach(slot => {
+      if (slot && slot.condition) {
+        const next = rewriteCondition(slot.condition, m, page, true);
+        if (next.count) { slot.condition = next.condition; count += next.count; }
+      }
       if (!slot || !Array.isArray(slot.rules)) return;
       slot.rules.forEach(rule => {
         if (!rule || typeof rule.column !== 'string' || !rule.column) return;

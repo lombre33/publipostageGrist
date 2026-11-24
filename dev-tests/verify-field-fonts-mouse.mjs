@@ -261,7 +261,7 @@ await realHover(page, '#v2-new-template-group #btn-new');
 await realClick(page, '#v2-btn-new-macro', 900);
 check('Macro-modèle : la fenêtre est ouverte', await shown(page, '#macro-editor-modal'));
 const macroName = await fontOf(page, '#macro-editor-name');
-const macroCover = await fontOf(page, '#macro-editor-cover');
+const macroCover = await fontOf(page, '#macro-editor-slots .macro-doc-model');
 check('Macro-modèle : le nom et la liste de la couverture ont la police des boutons', !!macroName && !!macroCover && macroName.ff === ref && macroCover.ff === ref, { macroName, macroCover });
 check('Macro-modèle : tous les champs de la fenêtre ont la police des boutons', outside(await fieldsIn(page, '#macro-editor-modal'), ref).length === 0, outside(await fieldsIn(page, '#macro-editor-modal'), ref));
 await realClick(page, '#macro-editor-cancel', 300);

@@ -35,7 +35,7 @@ const setupMacro = (page, nom) => page.evaluate(async name => {
   await Templates.loadAll();
   MacroEditor.openModal(null);
   byId('macro-editor-name').value = name;
-  const select = byId('macro-editor-cover');
+  const select = document.querySelector('#macro-editor-slots .macro-doc-model');
   select.value = String(cover.id);
   select.dispatchEvent(new Event('change', { bubbles: true }));
   byId('macro-editor-save').click();

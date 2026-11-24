@@ -52,7 +52,7 @@ async function loadMacro(page) {
     await Templates.loadAll();
     MacroEditor.openModal(null);
     document.getElementById('macro-editor-name').value = 'Macro marges';
-    const select = document.getElementById('macro-editor-cover');
+    const select = document.querySelector('#macro-editor-slots .macro-doc-model');
     select.value = String(cover.id);
     select.dispatchEvent(new Event('change', { bubbles: true }));
     document.getElementById('macro-editor-save').click();

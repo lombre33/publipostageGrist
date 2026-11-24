@@ -1,13 +1,19 @@
 // Écran de création des macro-modèles (planning/feature-macro-modeles.md) : une modale (même patron que #link-rules-modal de js/variables.js : liste
-// dynamique de lignes avec ajout et suppression) pour composer une page de garde et des annexes conditionnelles, et un panneau résumé affiché à la
+// dynamique de lignes avec ajout et suppression) pour composer une liste de documents, chacun avec sa condition d'inclusion, et un panneau résumé affiché à la
 // place de l'éditeur TipTap quand un macro-modèle est le modèle courant (js/main.js:loadMacroIntoEditor).
+// Deux sortes de position, dans l'ordre où on les lit (rien n'est plus « page de garde » : la première est un document comme les autres) :
+//  - un DOCUMENT (`fixed`) : un modèle, inclus toujours ou seulement si sa condition est remplie pour la ligne (`condition` : { mode, rules }, la même que celle d'une
+//    bulle conditionnelle - Et / Ou, groupes, autre colonne) ;
+//  - une position qui CHOISIT son modèle selon la ligne (`conditional`, l'ancienne « annexe ») : une cascade « si colonne = valeur, alors ce modèle », un modèle par défaut.
+// Un macro-modèle enregistré avec une page de garde et des annexes s'ouvre tel quel : la page de garde est son premier document, toujours inclus.
 const MacroEditor = (function () {
   let editingId = null;
   // Le nom que la fenêtre a montré à l'ouverture (null : un macro-modèle neuf). Un nom que la personne n'a pas changé ne repart pas avec « Enregistrer » : GFS renomme un fichier en n'écrivant que sa colonne Nom
   // (consigne GFS 029), et le nom d'avant remis dans le lot le défaisait.
   let nameOnOpen = null;
-  // Copie de travail des slots conditionnels (le slot fixe « page de garde » est géré à part par #macro-editor-cover, voir collectSlotsForSave) :
-  // jamais la même référence que tpl.macroSlots.slots, pour ne modifier le modèle enregistré qu'au clic sur « Enregistrer ».
+  // Copie de travail de TOUTES les positions de la composition, dans leur ordre (voir collectSlotsForSave) : jamais la même référence que tpl.macroSlots.slots, pour ne modifier le
+  // modèle enregistré qu'au clic sur « Enregistrer ». Un document porte en plus `_when` ('always' ou 'if' : ce que la liste « Inclure » montre) ; `condition` reste dans son brouillon
+  // quand on repasse à « Toujours », pour la retrouver si l'on change d'avis, mais n'est enregistrée que sous « Seulement si ».
   let slots = [];
   // Le macro-modèle dont le résumé est à l'écran et le rappel de js/main.js qui ouvre un de ses modèles dans l'éditeur (stylo d'une ligne du résumé).
   let summaryTpl = null;
@@ -15,9 +21,6 @@ const MacroEditor = (function () {
   // Rappel de js/main.js quand l'œil d'un modèle du résumé a fini d'écrire la composition dans Grist (voir toggleModelHidden) : { name, hidden, ok },
   // pour que le coin d'état le dise.
   let onVisibilityChange = null;
-  // La page de garde telle qu'elle était dans la composition quand la fenêtre s'est ouverte : « Enregistrer » reconstruit cette position et lui
-  // reporte ses modèles masqués (collectSlotsForSave).
-  let coverKept = null;
 
   // Les types de modèle qu'un macro-modèle assemble : un document, une grille (son tableau devient une page du document, dans le sens de sa propre page - « Selon chaque modèle », cf.
   // js/macro-templates.js) et une présentation (ses diapositives gardent leur page 16:9 dans un macro-modèle « Selon chaque modèle » ; ailleurs, elles coulent sur les pages du macro-modèle).
@@ -25,6 +28,8 @@ const MacroEditor = (function () {
   const ASSEMBLED_TYPES = ['document', 'grille', 'presentation'];
   const GRID_TYPE = 'grille';
   const SLIDES_TYPE = 'presentation';
+  const DOCUMENT_KIND = 'fixed';
+  const BY_ROW_KIND = 'conditional';
   // Les étiquettes que le résumé met à droite du nom d'un modèle (modelTags) : leur clé de texte, dans l'ordre où elles se lisent.
   const TAG_KEYS = { grid: 'macro.summary.tagGrid', slides: 'macro.summary.tagSlides', landscape: 'macro.summary.tagLandscape' };
 
@@ -36,13 +41,12 @@ const MacroEditor = (function () {
 
   function modal() { return document.getElementById('macro-editor-modal'); }
   function nameInput() { return document.getElementById('macro-editor-name'); }
-  function coverSelect() { return document.getElementById('macro-editor-cover'); }
   function slotsContainer() { return document.getElementById('macro-editor-slots'); }
 
   function searchable(select, opts) {
     // Liste avec recherche (js/search-select.js) : un modèle se cherche comme une colonne. Le <select> reste la source de la valeur, et la liste native
-    // si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Rappelé sur un <select> déjà
-    // équipé (la page de garde, posée dans index.html), `attach` rend le même contrôleur : un échec d'une ouverture est retenté à la suivante.
+    // si le composant est indisponible (rend alors null) ; l'appelant appelle `sync()` après l'avoir rempli à nouveau. Le <select> doit déjà avoir son
+    // parent : la liste se pose juste après lui.
     try { return SearchSelect.attachTemplates(select, opts); }
     catch (e) { console.warn('[MacroEditor] recherche de modèle indisponible, liste native conservée', e); return null; }
   }
@@ -65,6 +69,7 @@ const MacroEditor = (function () {
     const btn = node('button', className);
     btn.type = 'button';
     btn.setAttribute('aria-label', label);
+    btn.title = label;
     btn.addEventListener('click', onClick);
     return btn;
   }
@@ -76,8 +81,23 @@ const MacroEditor = (function () {
     select.value = selectedId != null ? String(selectedId) : '';
   }
 
+  // Un document dont le modèle n'est pas encore choisi, tel que « + Ajouter un document » le pose.
+  function blankDocument() {
+    return { type: DOCUMENT_KIND, modeleId: null, condition: null, _when: 'always' };
+  }
+
+  // La copie de travail d'une position enregistrée : une copie profonde, et pour un document ce que la liste « Inclure » dit d'elle.
+  function workingCopy(stored) {
+    const slot = JSON.parse(JSON.stringify(stored));
+    if (slot.type !== DOCUMENT_KIND) return slot;
+    const condition = ConditionRules.plainCondition(slot.condition);
+    slot.condition = condition;
+    slot._when = condition ? 'if' : 'always';
+    return slot;
+  }
+
   function ruleRow(slot, rule, ruleIndex) {
-    // Une règle de l'annexe : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec le réglage « Selon la
+    // Une règle de la position qui choisit son modèle : les champs et la mise en page sont ceux de ConditionFields.buildTemplateRule, partagés avec le réglage « Selon la
     // ligne ».
     const connector = I18n.t(ruleIndex === 0 ? 'macro.modal.ruleIf' : 'macro.modal.ruleOrIf');
     const onRemove = () => { slot.rules.splice(ruleIndex, 1); renderSlots(); };
@@ -98,10 +118,118 @@ const MacroEditor = (function () {
     return select;
   }
 
-  function slotCard(slot, slotIndex) {
-    const removeSlot = () => { slots.splice(slotIndex, 1); renderSlots(); };
-    const title = node('span', 'macro-slot-title', I18n.t('macro.modal.annexeLabel', { n: slotIndex + 1 }));
-    const header = node('div', 'macro-slot-header', null, [title, iconButton('macro-slot-remove', I18n.t('macro.modal.removeSlot'), removeSlot)]);
+  // Déplace la position `index` d'un cran (delta -1 : plus haut, +1 : plus bas) : le focus reste sur le même bouton de la carte déplacée, ou sur son vis-à-vis quand
+  // la carte arrive en bout de liste (le bouton y est grisé).
+  function moveSlot(index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= slots.length) return;
+    const [moved] = slots.splice(index, 1);
+    slots.splice(target, 0, moved);
+    renderSlots();
+    const card = slotsContainer() && slotsContainer().children[target];
+    const wanted = card && card.querySelector(delta < 0 ? '.macro-slot-move-up' : '.macro-slot-move-down');
+    const other = card && card.querySelector(delta < 0 ? '.macro-slot-move-down' : '.macro-slot-move-up');
+    if (wanted && !wanted.disabled) wanted.focus(); else if (other && !other.disabled) other.focus();
+  }
+
+  function slotHeader(slot, slotIndex) {
+    // Le haut d'une carte : « Document n » (et « choisi selon la ligne » pour une position qui choisit son modèle), puis plus haut, plus bas et supprimer. Les numéros
+    // sont ceux du résumé (summaryParts) : le rang dans la composition.
+    const title = node('span', 'macro-slot-title', I18n.t('macro.modal.docLabel', { n: slotIndex + 1 }));
+    const kind = slot.type === BY_ROW_KIND ? node('span', 'macro-slot-kind', I18n.t('macro.modal.byRowTag')) : null;
+    const up = iconButton('macro-slot-move macro-slot-move-up', I18n.t('macro.modal.moveUp', { n: slotIndex + 1 }), () => moveSlot(slotIndex, -1));
+    const down = iconButton('macro-slot-move macro-slot-move-down', I18n.t('macro.modal.moveDown', { n: slotIndex + 1 }), () => moveSlot(slotIndex, 1));
+    up.disabled = slotIndex === 0;
+    down.disabled = slotIndex === slots.length - 1;
+    const remove = iconButton('macro-slot-remove', I18n.t('macro.modal.removeSlot', { n: slotIndex + 1 }), () => { slots.splice(slotIndex, 1); renderSlots(); });
+    const controls = node('span', 'macro-slot-controls', null, [up, down, remove]);
+    return node('div', 'macro-slot-header', null, [node('span', 'macro-slot-heading', null, kind ? [title, kind] : [title]), controls]);
+  }
+
+  // La condition d'un document : la combinaison (« Inclure si toutes / au moins une des conditions suivantes »), les lignes et les groupes de la fenêtre de condition d'une
+  // bulle (ConditionFields.renderItems : « Et » / « Ou » devant une ligne, « + Groupe »), colonne de n'importe quelle table, valeur saisie ou autre colonne. Le tracé n'est
+  // refait que dans sa boîte : le reste de la fenêtre garde sa place et son focus. Rend { box, redraw }.
+  function conditionBox(slot) {
+    const box = node('div', 'macro-doc-condition');
+    const modeSelect = node('select');
+    modeSelect.setAttribute('aria-label', I18n.t('varCond.modeAria'));
+    modeSelect.append(option('all', I18n.t('varCond.modeAll')), option('any', I18n.t('varCond.modeAny')));
+    const modeRow = node('div', 'var-condition-mode macro-doc-mode', null, [node('span', null, I18n.t('macro.modal.docModeBefore')), modeSelect, node('span', null, I18n.t('varCond.modeAfter'))]);
+    const rulesBox = node('div', 'var-condition-rules macro-doc-rules');
+    // Une condition sans aucune règle complète ne s'enregistre pas : le document serait alors toujours inclus. La fenêtre le dit tant que c'est le cas.
+    const hint = node('p', 'macro-doc-hint', I18n.t('macro.modal.docIncomplete'));
+    const syncHint = () => { hint.hidden = !!ConditionRules.normalizeCondition(slot.condition); };
+    function redraw() {
+      if (!slot.condition) slot.condition = { mode: 'all', rules: [ConditionFields.emptyRule()] };
+      const condition = slot.condition;
+      modeRow.hidden = condition.rules.length < 2;
+      modeSelect.value = condition.mode === 'any' ? 'any' : 'all';
+      rulesBox.replaceChildren();
+      ConditionFields.renderItems(rulesBox, {
+        items: condition.rules,
+        mode: condition.mode,
+        setMode: next => { condition.mode = next; },
+        buildRow: (rule, row) => ConditionFields.buildRuleRow(rule, row.index, Object.assign({}, row, {
+          options: { allTables: true, compareColumn: true, typeAsTitle: true, onColumnChosen: ref => ConditionFields.ensureTableLinked(ref, redraw) },
+        })),
+        removeItem: index => {
+          condition.rules.splice(index, 1);
+          if (!condition.rules.length) condition.rules.push(ConditionFields.emptyRule());
+          redraw();
+        },
+        redraw,
+      });
+      const foot = node('div', 'var-condition-foot', null, [
+        ConditionFields.buildAddRuleButton(rulesBox, condition.rules, redraw),
+        ConditionFields.buildAddGroupButton(rulesBox, condition.rules, () => condition.mode, redraw),
+      ]);
+      rulesBox.appendChild(foot);
+      syncHint();
+    }
+    modeSelect.addEventListener('change', () => { slot.condition.mode = modeSelect.value === 'any' ? 'any' : 'all'; redraw(); });
+    // Chaque champ d'une règle écrit dans la règle en changeant : l'indication suit la saisie.
+    rulesBox.addEventListener('change', syncHint);
+    rulesBox.addEventListener('input', syncHint);
+    box.append(modeRow, rulesBox, hint);
+    return { box, redraw };
+  }
+
+  let fieldCounter = 0;
+  function labelledField(labelText, control, className) {
+    // Un champ d'une carte : son libellé (lié au contrôle) au-dessus, le contrôle dessous.
+    control.id = 'macro-doc-field-' + (++fieldCounter);
+    const label = node('label', 'macro-doc-label', labelText);
+    label.htmlFor = control.id;
+    return node('div', 'macro-doc-field' + (className ? ' ' + className : ''), null, [label, control]);
+  }
+
+  function documentCard(slot, slotIndex) {
+    // Un document : son modèle, puis « Inclure » - « Toujours » ou « Seulement si… » avec la condition (conditionBox).
+    const modelSelect = node('select', 'macro-doc-model');
+    fillModeleSelect(modelSelect, slot.modeleId);
+    modelSelect.addEventListener('change', () => { slot.modeleId = modelSelect.value || null; });
+    const modelField = labelledField(I18n.t('macro.modal.docModel'), modelSelect);
+    const when = node('select', 'macro-doc-when');
+    when.append(option('always', I18n.t('macro.modal.docAlways')), option('if', I18n.t('macro.modal.docOnlyIf')));
+    when.value = slot._when === 'if' ? 'if' : 'always';
+    const whenField = labelledField(I18n.t('macro.modal.docInclude'), when, 'macro-doc-when-field');
+    const condition = conditionBox(slot);
+    const syncCondition = () => {
+      condition.box.hidden = slot._when !== 'if';
+      if (!condition.box.hidden) condition.redraw();
+    };
+    when.addEventListener('change', () => { slot._when = when.value === 'if' ? 'if' : 'always'; syncCondition(); });
+    const card = node('div', 'macro-slot-card macro-doc-card', null, [slotHeader(slot, slotIndex), node('div', 'macro-doc-row', null, [modelField, whenField]), condition.box]);
+    card.dataset.kind = 'document';
+    card.setAttribute('role', 'group');
+    card.setAttribute('aria-label', I18n.t('macro.modal.docLabel', { n: slotIndex + 1 }));
+    syncCondition();
+    searchable(modelSelect);
+    return card;
+  }
+
+  function byRowCard(slot, slotIndex) {
+    // Une position qui choisit son modèle selon la ligne : la première règle remplie donne son modèle, sinon le modèle par défaut, sinon rien.
     const rules = node('div', 'macro-slot-rules', null, (slot.rules || []).map((rule, ruleIndex) => ruleRow(slot, rule, ruleIndex)));
     const addRule = node('button', 'macro-rule-add', I18n.t('macro.modal.addRule'));
     addRule.type = 'button';
@@ -112,9 +240,16 @@ const MacroEditor = (function () {
     });
     const defaultLabel = node('label', 'macro-slot-default-label', I18n.t('macro.modal.defaultLabel'));
     const defaultSelect = defaultSelectFor(slot);
-    const card = node('div', 'macro-slot-card', null, [header, rules, addRule, node('div', 'macro-slot-sep'), defaultLabel, defaultSelect]);
+    const card = node('div', 'macro-slot-card', null, [slotHeader(slot, slotIndex), rules, addRule, node('div', 'macro-slot-sep'), defaultLabel, defaultSelect]);
+    card.dataset.kind = 'by-row';
+    card.setAttribute('role', 'group');
+    card.setAttribute('aria-label', I18n.t('macro.modal.docLabel', { n: slotIndex + 1 }) + ' · ' + I18n.t('macro.modal.byRowTag'));
     searchable(defaultSelect);
     return card;
+  }
+
+  function slotCard(slot, slotIndex) {
+    return slot.type === BY_ROW_KIND ? byRowCard(slot, slotIndex) : documentCard(slot, slotIndex);
   }
 
   function renderSlots() {
@@ -128,17 +263,12 @@ const MacroEditor = (function () {
   function openModal(tpl) {
     editingId = tpl ? tpl.id : null;
     const existingSlots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
-    // Copie profonde : la modale ne doit jamais muter tpl.macroSlots tant que "Enregistrer" n'a pas été cliqué (Annuler doit tout jeter).
-    slots = JSON.parse(JSON.stringify(existingSlots.filter(s => s.type === 'conditional')));
-    const cover = existingSlots.find(s => s.type === 'fixed');
-    coverKept = cover ? JSON.parse(JSON.stringify(cover)) : null;
+    // Copie profonde : la modale ne doit jamais muter tpl.macroSlots tant que "Enregistrer" n'a pas été cliqué (Annuler doit tout jeter). Un macro-modèle neuf s'ouvre sur un
+    // premier document à choisir.
+    slots = existingSlots.filter(s => s && (s.type === DOCUMENT_KIND || s.type === BY_ROW_KIND)).map(workingCopy);
+    if (!tpl) slots.push(blankDocument());
     if (nameInput()) nameInput().value = tpl ? tpl.nom : '';
     nameOnOpen = tpl ? String(tpl.nom == null ? '' : tpl.nom).trim() : null;
-    if (coverSelect()) {
-      fillModeleSelect(coverSelect(), cover ? cover.modeleId : null);
-      const coverSearch = searchable(coverSelect());
-      if (coverSearch) coverSearch.sync();
-    }
     renderSlots();
     const m = modal();
     if (m) m.style.display = 'flex';
@@ -153,16 +283,37 @@ const MacroEditor = (function () {
     if (m) m.style.display = 'none';
   }
 
+  // « + Ajouter un document » / « + Ajouter un document choisi selon la ligne » : la nouvelle carte prend la fin de la liste, se montre et reçoit le focus (son modèle, ou sa première règle).
+  function addSlot(slot) {
+    slots.push(slot);
+    renderSlots();
+    const card = slotsContainer() && slotsContainer().lastElementChild;
+    if (!card) return;
+    if (typeof card.scrollIntoView === 'function') card.scrollIntoView({ block: 'nearest' });
+    const first = card.querySelector('.ss-trigger, select, input, button:not(.macro-slot-move):not(.macro-slot-remove)');
+    if (first) first.focus({ preventScroll: true });
+  }
+
   function collectSlotsForSave() {
-    // Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position reconstruite
-    // reprend ceux de ses modèles qui y sont encore (un modèle retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart
-    // affiché).
+    // Les positions, dans l'ordre de la fenêtre. Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position
+    // reconstruite reprend ceux de ses modèles qui y sont encore (un modèle retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart affiché). Un document
+    // sans modèle choisi n'est pas écrit ; sa condition ne l'est que sous « Seulement si » et avec au moins une règle complète (ConditionRules.plainCondition).
     const result = [];
-    const coverId = coverSelect() ? coverSelect().value : '';
-    if (coverId) result.push(MacroTemplates.keepHidden({ type: 'fixed', modeleId: coverId }, coverKept));
     slots.forEach(slot => {
+      if (slot.type === DOCUMENT_KIND) {
+        if (!slot.modeleId) return;
+        const saved = { type: DOCUMENT_KIND, modeleId: slot.modeleId };
+        const condition = slot._when === 'if' ? ConditionRules.plainCondition(slot.condition) : null;
+        if (condition) saved.condition = condition;
+        result.push(MacroTemplates.keepHidden(saved, slot));
+        return;
+      }
       const rules = (slot.rules || []).filter(r => r.column && r.modeleId);
-      result.push(MacroTemplates.keepHidden({ type: 'conditional', rules, defaultModeleId: slot.defaultModeleId || null }, slot));
+      const saved = { type: BY_ROW_KIND, rules, defaultModeleId: slot.defaultModeleId || null };
+      // Une condition d'inclusion que la fenêtre ne montre pas pour ce genre de position (écrite à la main, ou par une version à venir) n'est pas perdue.
+      const condition = ConditionRules.plainCondition(slot.condition);
+      if (condition) saved.condition = condition;
+      result.push(MacroTemplates.keepHidden(saved, slot));
     });
     return { slots: result };
   }
@@ -247,10 +398,11 @@ const MacroEditor = (function () {
     onVisibilityChange = typeof onModelVisibility === 'function' ? onModelVisibility : null;
     // Le menu Page du macro-modèle à l'écran (« Selon chaque modèle », Portrait, Paysage) change ce que « Paysage » dit de ses modèles (modelTags) : le résumé suit, sans attendre l'enregistrement.
     document.addEventListener('pp:pageLayoutChanged', () => { if (summaryTpl && Templates.isCurrent(summaryTpl.id)) renderSummary(summaryTpl); });
+    const addDocumentBtn = document.getElementById('macro-editor-add-document');
+    if (addDocumentBtn) addDocumentBtn.addEventListener('click', () => addSlot(blankDocument()));
     const addSlotBtn = document.getElementById('macro-editor-add-slot');
     if (addSlotBtn) addSlotBtn.addEventListener('click', () => {
-      slots.push({ type: 'conditional', rules: [{ column: '', operator: '=', value: '', modeleId: null }], defaultModeleId: null });
-      renderSlots();
+      addSlot({ type: BY_ROW_KIND, rules: [{ column: '', operator: '=', value: '', modeleId: null }], defaultModeleId: null });
     });
     const cancelBtn = document.getElementById('macro-editor-cancel');
     if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
@@ -266,15 +418,17 @@ const MacroEditor = (function () {
     });
   }
 
+  // Une position qui n'est pas toujours là : un document sous condition, ou une position qui choisit son modèle selon la ligne.
+  function isConditionalPosition(slot) {
+    return !!slot && (slot.type === BY_ROW_KIND || !!MacroTemplates.slotCondition(slot));
+  }
+
   function describeSummary(tpl) {
-    if (!tpl || !tpl.macroSlots || !Array.isArray(tpl.macroSlots.slots) || !tpl.macroSlots.slots.length) return I18n.t('macro.summary.empty');
-    const cover = tpl.macroSlots.slots.find(s => s.type === 'fixed');
-    const coverTpl = cover ? Templates.byId(cover.modeleId) : null;
-    const annexCount = tpl.macroSlots.slots.filter(s => s.type === 'conditional').length;
-    return I18n.t('macro.summary.text', {
-      cover: coverTpl ? coverTpl.nom : I18n.t('macro.summary.noCover'),
-      count: String(annexCount),
-    });
+    // La phrase du résumé : combien de documents, dont combien sous condition.
+    const list = tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots) ? tpl.macroSlots.slots : [];
+    if (!list.length) return I18n.t('macro.summary.empty');
+    const conditional = list.filter(isConditionalPosition).length;
+    return I18n.t(conditional ? 'macro.summary.textSome' : 'macro.summary.textAll', { count: String(list.length), conditional: String(conditional) });
   }
 
   function currentTemplate(tpl) {
@@ -285,22 +439,30 @@ const MacroEditor = (function () {
   }
 
   function summaryParts(tpl) {
-    // Les modèles de la composition dans l'ordre où on les lit : la page de garde, puis chaque annexe avec le modèle de chacune de ses règles et celui
-    // de « Si aucune règle ne correspond » (jamais deux fois le même dans une annexe), sous les mêmes numéros d'annexe que la fenêtre de composition
-    // (renderSlots). Une annexe sans aucun modèle garde sa ligne : le numéro suivant ne saute pas. `slot` et `slotIndex` disent de quelle position de
-    // la composition vient la ligne : c'est dans cette position que l'œil d'un modèle le masque.
+    // Les modèles de la composition dans l'ordre où on les lit : un « Document n » par position, avec le modèle du document ou celui de chaque règle de la position qui
+    // choisit son modèle et celui de « Si aucune règle ne correspond » (jamais deux fois le même dans une position), sous les mêmes numéros que la fenêtre de composition
+    // (renderSlots). Une position sans aucun modèle garde sa ligne : le numéro suivant ne saute pas. `slot` et `slotIndex` disent de quelle position de la composition vient
+    // la ligne : c'est dans cette position que l'œil d'un modèle le masque.
     const slots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
-    let annexNumber = 0;
-    return slots.map((slot, slotIndex) => {
-      const isCover = slot.type === 'fixed';
-      if (!isCover) annexNumber++;
-      return {
-        label: isCover ? I18n.t('macro.modal.coverLabel') : I18n.t('macro.modal.annexeLabel', { n: annexNumber }),
-        ids: MacroTemplates.slotModelIds(slot),
-        slot,
-        slotIndex,
-      };
-    });
+    return slots.map((slot, slotIndex) => ({
+      label: I18n.t('macro.modal.docLabel', { n: slotIndex + 1 }),
+      ids: MacroTemplates.slotModelIds(slot),
+      slot,
+      slotIndex,
+    }));
+  }
+
+  // Ce qui dit, sous les modèles d'une position, quand elle est incluse : « Seulement si : Statut = Urgent » (la condition en entier dans l'info-bulle) pour un document sous condition, « Selon la ligne »
+  // pour une position qui choisit son modèle. Rien pour un document toujours inclus. Null quand il n'y a rien à dire.
+  function conditionNote(slot) {
+    const condition = MacroTemplates.slotCondition(slot);
+    if (condition) {
+      const text = VariableConditionData.conditionSummary(condition, { full: true });
+      const note = node('span', 'macro-summary-condition', I18n.t('macro.summary.onlyIf', { condition: text }));
+      note.title = text;
+      return note;
+    }
+    return slot && slot.type === BY_ROW_KIND ? node('span', 'macro-summary-condition', I18n.t('macro.summary.byRow')) : null;
   }
 
   function paintEye(entry, eye, hidden, name) {
@@ -523,7 +685,8 @@ const MacroEditor = (function () {
       const entries = part.ids.map(id => modelEntry(id, Templates.byId(id), part, perModel));
       if (!entries.length) entries.push(node('span', 'macro-summary-model-name', I18n.t('macro.summary.noTemplate')));
       const label = node('span', 'macro-summary-part-label', part.label);
-      list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, entries)]));
+      const note = conditionNote(part.slot);
+      list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, note ? entries.concat([note]) : entries)]));
     });
     if (focusedEye) {
       const again = list.querySelector('.macro-summary-eye[data-slot="' + CSS.escape(focusedEye.slot) + '"][data-template-id="' + CSS.escape(focusedEye.id) + '"]');

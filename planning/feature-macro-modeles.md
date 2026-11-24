@@ -1,6 +1,8 @@
 # Macro modèles — assembler plusieurs modèles en un seul document
 
 > **Statut au 4 octobre 2026 : livré le 20 septembre** (écran de création `js/macro-editor.js`, résolution en Lecture et à l'export `js/macro-templates.js`). Depuis : un macro-modèle impose sa page (sens et format A3 à A6) aux modèles qu'il assemble, la colonne d'une règle se cherche dans une liste de toutes les tables, et un stylo ouvre chaque modèle assemblé dans l'éditeur. La mention « rien n'est implémenté » ci-dessous date du cadrage du 19 septembre.
+>
+> **24 novembre 2026 : plus de page de garde à part, une condition sur chaque document** (demande d'Antoine, carte « Liste de documents avec conditions ») : voir § « Documents et conditions » en bas ; les mots « page de garde » et « annexe » ci-dessous décrivent l'ancienne composition, qui s'ouvre toujours telle quelle.
 
 **Cadrage demandé par Antoine le 2026-09-19**, en même temps que le rangement/tri des modèles (traité
 dans un autre fil, cf. `planning/feature-misc-editor-and-output.md#dossiersfavoris-galerie-de-modèles`).
@@ -195,3 +197,16 @@ Même motif que les autres fonctionnalités (`dev-tests/scenarios-*.js`) : un ma
 2 slots conditionnels (dont un sans correspondance sur une ligne donnée), vérifié en mode Lecture
 (fragments dans le bon ordre, mêmes valeurs de la ligne courante partout) et en export PDF (mêmes
 pages, sauts corrects, en-tête/pied cohérents sur tout le document).
+
+## Documents et conditions (24 novembre 2026)
+
+**Demande d'Antoine** : « pour un macro modèle, ne plus avoir le fonctionnement par page de garde, mais pouvoir mettre des conditions sur chaque document ». Choix de la carte : une liste de documents, chacun avec sa condition.
+
+- **Vocabulaire** : un macro-modèle est une liste ordonnée de **documents**. Il n'y a plus de « page de garde » ni d'« annexes » à l'écran : l'ancienne page de garde est simplement le premier document, toujours inclus ; une annexe est un document « choisi selon la ligne » (la position à règles du 20/09, inchangée).
+- **Données** : la composition reste `{ slots: [...] }` (aucune migration, aucune colonne en plus). Chaque position, `fixed` comme `conditional`, peut porter une clé optionnelle `condition: { mode: 'all' | 'any', rules: [règle | groupe { mode, rules }] }`, le même format que la condition d'une bulle (`ConditionRules`) : Et / Ou, groupes, comparaison à une autre colonne (`valueColumn`). Sans clé `condition` (tous les macro-modèles d'avant) : le document est toujours inclus, comme avant. Une condition sans règle complète ne compte pas : le document reste inclus (la fenêtre le dit).
+- **Moteur** : `MacroTemplates.pickModeleId` est l'unique endroit où une position choisit son modèle ; il évalue d'abord la condition de la position (`slotIncluded`), puis choisit le modèle (règles de la ligne ou modèle fixe), puis écarte un modèle masqué par l'œil. Une position écartée ne laisse ni page vide ni saut de page orphelin : `buildConcatenatedHtml` numérote les sauts d'après les documents réellement assemblés. La Lecture, le PDF, le PDF unique, le ZIP, le Word, l'e-mail et le nom de fichier passent tous par là : une condition qui change d'une ligne à l'autre change les documents de chaque ligne, y compris dans un ZIP de plusieurs lignes.
+- **Fenêtre de composition** (`js/macro-editor.js`) : une carte par document (« Document 1 », « Document 2 »…), dans l'ordre ; sur chaque carte, le modèle et, à côté, « Inclure ce document » : « Toujours » ou « Seulement si… ». Sous « Seulement si… », les règles de la fenêtre de condition d'une bulle (Et / Ou, groupe, autre colonne : `ConditionFields`, mêmes classes `.var-condition-*`). Revenir à « Toujours » efface la condition de la ligne mais la garde en brouillon tant que la fenêtre est ouverte. Boutons « + Ajouter un document » et « + Ajouter un document choisi selon la ligne ». Monter, descendre et supprimer un document emportent son œil et sa condition. Un document sans modèle n'est pas enregistré.
+- **Résumé** : sous les modèles d'un document sous condition, « Seulement si : … » (la condition en entier dans l'info-bulle) ; sous une position à règles, « Le modèle est choisi selon la ligne » ; la phrase compte les documents et ceux sous condition (« 3 documents, dont 2 sous condition »). Historique des versions : même lecture.
+- **Renommage** : `SchemaRenames.rewriteMacro` réécrit aussi la condition de chaque position (colonne, groupe, autre colonne).
+- **Pas fait volontairement** : « sinon » d'un document (un document absent est simplement absent ; le « modèle par défaut » d'une position à règles couvre le cas « un autre modèle sinon »), répétition d'un document pour chaque ligne d'une table liée (écarté le 20/09 : voir plus haut).
+- **Tests** : `dev-tests/scenarios-macro-modeles.js` (cas `macro_condition_*`, `macro_editor_*`, `macro_summary_says_when_*`, `macro_reading_follows_*`, `macro_batch_zip_follows_*`), `schemarenames_the_condition_of_each_macro_document_follows_a_rename`, et les groupes qui lisaient « page de garde » (`undoMacro`, `versions`, `columnSearch`, `viewTemplate`, `emailLink`, `undoLibrary`).

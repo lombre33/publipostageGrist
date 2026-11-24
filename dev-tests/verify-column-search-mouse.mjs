@@ -623,7 +623,7 @@ const SECTIONS = {
     check('macro : le clic choisit Responsable, l’indication de type s’affiche, la fenêtre reste ouverte', chosen.value === 'Responsable' && chosen.hint === 'référence' && chosen.modalOpen, chosen);
     const documents = ['Notification_base', 'Notification_bureau', 'Notification_projet'];
     const lists = [
-      { name: 'de la page de garde', trigger: '#macro-editor-cover + .ss-wrap .ss-trigger', select: '#macro-editor-cover', rows: ['— Choisir un modèle —'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
+      { name: 'de la page de garde', trigger: '#macro-editor-slots .macro-doc-model + .ss-wrap .ss-trigger', select: '#macro-editor-slots .macro-doc-model', rows: ['— Choisir un modèle —'].concat(documents), typed: 'proj', row: 'Notification_projet', value: '13' },
       { name: 'du modèle d’une règle', trigger: '.macro-rule-modele + .ss-wrap .ss-trigger', select: '.macro-rule-modele', rows: ['— Choisir un modèle —'].concat(documents), typed: 'bu', row: 'Notification_bureau', value: '12' },
       { name: '« Si aucune règle ne correspond »', trigger: '.macro-slot-default-select + .ss-wrap .ss-trigger', select: '.macro-slot-default-select', rows: ['Ne rien inclure'].concat(documents.map(nom => 'Utiliser « ' + nom + ' »')), typed: 'base', row: 'Utiliser « Notification_base »', value: '11' },
     ];
@@ -3099,7 +3099,7 @@ const SECTIONS = {
       document.getElementById('macro-editor-add-slot').click();
     });
     await page.waitForTimeout(200);
-    const macroLists = { cover: '#macro-editor-cover', rule: macroScope + ' select.macro-rule-modele', dflt: macroScope + ' .macro-slot-default-select' };
+    const macroLists = { cover: '#macro-editor-slots .macro-doc-model', rule: macroScope + ' select.macro-rule-modele', dflt: macroScope + ' .macro-slot-default-select' };
     const macroBoxes = {};
     for (const [key, selector] of Object.entries(macroLists)) macroBoxes[key] = await reveal(selector, macroScope + ' .modal-content');
     const macroTriggers = await page.evaluate(() => document.querySelectorAll('#macro-editor-modal .ss-trigger').length);
@@ -3112,7 +3112,7 @@ const SECTIONS = {
     await reveal(macroScope + ' .macro-rule-add', macroScope + ' .modal-content');
     await clickCenter(macroScope + ' .macro-rule-add');
     const macroPicked = await page.evaluate(() => ({
-      cover: document.getElementById('macro-editor-cover').value, rules: document.querySelectorAll('#macro-editor-modal .macro-rule-row').length,
+      cover: document.querySelector('#macro-editor-slots .macro-doc-model').value, rules: document.querySelectorAll('#macro-editor-modal .macro-rule-row').length,
       rule: document.querySelector('#macro-editor-modal select.macro-rule-modele').value, dflt: document.querySelector('#macro-editor-modal .macro-slot-default-select').value,
     }));
     check('sans composant : choisir un modèle dans les listes natives marche, et le choix est gardé quand une condition est ajoutée', macroPicked.cover === '11' && macroPicked.rules === 2 && macroPicked.rule === '12' && macroPicked.dflt === '12', macroPicked);

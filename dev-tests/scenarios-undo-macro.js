@@ -72,7 +72,7 @@ window.EditorTestSuites.undoMacro = (function () {
     await Templates.loadAll();
     MacroEditor.openModal(null);
     byId('macro-editor-name').value = nom;
-    const select = byId('macro-editor-cover');
+    const select = document.querySelector('#macro-editor-slots .macro-doc-model');
     select.value = String(cover.id);
     select.dispatchEvent(new Event('change', { bubbles: true }));
     byId('macro-editor-save').click();
@@ -285,7 +285,7 @@ window.EditorTestSuites.undoMacro = (function () {
         const sentenceBefore = byId('macro-summary-text').textContent;
         MacroEditor.openModal(Templates.byId(macro.id));
         byId('macro-editor-name').value = 'Macro fenêtre 2';
-        const select = byId('macro-editor-cover');
+        const select = document.querySelector('#macro-editor-slots .macro-doc-model');
         select.value = String(macro.otherId);
         select.dispatchEvent(new Event('change', { bubbles: true }));
         byId('macro-editor-add-slot').click();

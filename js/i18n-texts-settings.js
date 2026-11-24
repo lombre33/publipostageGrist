@@ -310,6 +310,24 @@ const I18nTextsSettings = {
   'settings.viewTemplate.clear': { fr: 'Retirer', en: 'Remove' },
   'settings.viewTemplate.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
   // Pourquoi un des deux boutons est grisé (consigne 088 de GFS) : la phrase est son info-bulle ; celle du modèle pas encore enregistré est aussi affichée sous l'état.
+  // Mode d'ouverture de cette vue (js/view-template.js, option `ouvertureDeLaVue`, demande du 24/11).
+  'settings.viewOpen.title': { fr: 'Mode d’ouverture de cette vue', en: 'Opening mode of this view' },
+  'settings.viewOpen.intro': {
+    fr: 'Le mode dans lequel s’ouvre le modèle de cette vue quand on y arrive : la Lecture pour une page qui sert à consulter, l’Édition pour une page qui sert à écrire.',
+    en: 'The mode this view’s template opens in when someone arrives: Read for a page used to look things up, Edit for a page used to write.',
+  },
+  'settings.viewOpen.label': { fr: 'S’ouvre en', en: 'Opens in' },
+  'settings.viewOpen.value.last': { fr: 'Le dernier mode choisi', en: 'The last mode chosen' },
+  'settings.viewOpen.value.read': { fr: 'Lecture', en: 'Read' },
+  'settings.viewOpen.value.edit': { fr: 'Édition', en: 'Edit' },
+  'settings.viewOpen.status.last': { fr: 'Chaque personne retrouve le mode qu’elle a utilisé en dernier.', en: 'Each person gets back the mode they used last.' },
+  'settings.viewOpen.status.read': { fr: 'Le modèle de cette vue s’ouvre en Lecture, quel que soit le dernier mode de la personne.', en: 'This view’s template opens in Read mode, whatever mode the person used last.' },
+  'settings.viewOpen.status.edit': { fr: 'Le modèle de cette vue s’ouvre en Édition, même si la personne était en Lecture la dernière fois.', en: 'This view’s template opens in Edit mode, even if the person was in Read mode last time.' },
+  'settings.viewOpen.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+  'settings.viewOpen.hint': {
+    fr: 'Le bouton Mode lecture ou Mode édition reste utilisable à tout moment (sauf en lecture seule). Un modèle vierge, un fichier importé et un macro-modèle s’ouvrent toujours en Édition.',
+    en: 'The Read mode and Edit mode buttons stay usable at any time (except when read-only). A blank template, an imported file and a macro-template always open in Edit mode.',
+  },
   'settings.viewTemplate.reason.unsaved': {
     fr: 'Ce modèle n’est pas encore enregistré : donnez-lui un nom et cliquez sur Enregistrer, il pourra alors devenir celui de cette vue.',
     en: 'This template is not saved yet: give it a name and click Save, then it can become the one for this view.',

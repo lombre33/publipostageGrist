@@ -196,18 +196,21 @@ const VersionsHistory = (function () {
     return n;
   }
 
-  // Les noms des modèles d'une position de macro-modèle, séparés par des virgules ; « modèle supprimé » pour un modèle qui n'existe plus.
+  // Les noms des modèles d'une position de macro-modèle, séparés par des virgules ; « modèle supprimé » pour un modèle qui n'existe plus. Une position qui n'est incluse que sous condition la dit
+  // à la suite (« Seulement si : Statut = Urgent ») : deux versions qui ne diffèrent que par la condition d'un document se voient.
   function slotText(slot) {
     const ids = typeof MacroTemplates !== 'undefined' ? MacroTemplates.slotModelIds(slot) : [];
     if (!ids.length) return '—';
-    return ids.map(id => { const tpl = Templates.byId(id); return tpl ? tpl.nom : I18n.t('versions.preview.modelGone'); }).join(', ');
+    const names = ids.map(id => { const tpl = Templates.byId(id); return tpl ? tpl.nom : I18n.t('versions.preview.modelGone'); }).join(', ');
+    const condition = typeof MacroTemplates !== 'undefined' ? MacroTemplates.slotCondition(slot) : null;
+    return condition ? names + ' — ' + I18n.t('macro.summary.onlyIf', { condition: VariableConditionData.conditionSummary(condition, { full: true }) }) : names;
   }
 
-  // Les positions d'un macro-modèle, dans l'ordre : [{ cover, value }], `cover` pour une page de garde, `value` les noms de ses modèles.
+  // Les positions d'un macro-modèle, dans l'ordre : [{ value }], `value` les noms de ses modèles et sa condition.
   function macroEntries(state) {
     let slots = [];
     try { const parsed = JSON.parse(state.contenu); slots = parsed && Array.isArray(parsed.slots) ? parsed.slots : []; } catch (e) { slots = []; }
-    return slots.map(slot => ({ cover: !!slot && slot.type === 'fixed', value: slotText(slot) }));
+    return slots.map(slot => ({ value: slotText(slot) }));
   }
 
   // L'état d'une version dans la feuille : le texte d'un document, d'une grille ou d'un e-mail (avec son objet et ses destinataires), la composition d'un macro-modèle. `compare` ({ base : l'état
@@ -219,23 +222,21 @@ const VersionsHistory = (function () {
     refs.paper.scrollTop = 0;
     if (state.typeModele === 'macro') {
       const mine = macroEntries(state);
-      let lines = mine.map(entry => ({ kind: 'same', cover: entry.cover, value: entry.value }));
+      let lines = mine.map(entry => ({ kind: 'same', value: entry.value }));
       if (compare) {
-        // Une position se reconnaît à son genre et à ses modèles, jamais à son numéro : retirer la première annexe ne change pas les suivantes.
-        const key = entry => (entry.cover ? 'C' : 'A') + entry.value;
-        lines = VersionsCompare.compareLines(macroEntries(compare.base).map(key), mine.map(key)).map(item => ({ kind: item.kind, cover: item.text.charAt(0) === 'C', value: item.text.slice(1) }));
+        // Une position se reconnaît à ses modèles et à sa condition, jamais à son numéro : retirer le premier document ne change pas les suivants.
+        const key = entry => entry.value;
+        lines = VersionsCompare.compareLines(macroEntries(compare.base).map(key), mine.map(key)).map(item => ({ kind: item.kind, value: item.text }));
         summary.changes = groupsOf(lines);
       }
       if (!lines.length) extra.appendChild(el('p', 'pp-versions-line', I18n.t('versions.preview.macroEmpty')));
-      // Le numéro d'une annexe est son rang dans la composition qui la porte : la version, ou la version actuelle pour ce que seule elle a.
-      let annexOfVersion = 0;
-      let annexOfCurrent = 0;
+      // Le numéro d'un document est son rang dans la composition qui le porte : la version, ou la version actuelle pour ce que seule elle a.
+      let ofVersion = 0;
+      let ofCurrent = 0;
       lines.forEach(item => {
-        if (!item.cover) {
-          if (item.kind !== 'removed') annexOfVersion++;
-          if (item.kind !== 'added') annexOfCurrent++;
-        }
-        const label = I18n.t(item.cover ? 'macro.modal.coverLabel' : 'macro.modal.annexeLabel', { n: item.kind === 'removed' ? annexOfCurrent : annexOfVersion });
+        if (item.kind !== 'removed') ofVersion++;
+        if (item.kind !== 'added') ofCurrent++;
+        const label = I18n.t('macro.modal.docLabel', { n: item.kind === 'removed' ? ofCurrent : ofVersion });
         extra.appendChild(line(label, item.kind === 'same' ? item.value : [{ kind: item.kind, text: item.value }]));
       });
       extra.hidden = false;

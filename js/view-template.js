@@ -15,18 +15,30 @@
 //   ViewTemplate.usableId() -> id du modèle de la vue s'il existe encore et s'ouvre ici, sinon null
 //   ViewTemplate.set(id) -> choisit ce modèle pour la vue ; clear() retire le choix ; l'un et l'autre se défont par Ctrl + Z (js/settings-history.js)
 //   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
+// Le MODE d'ouverture de la vue (demande du 24/11 : « comment définir qu'un modèle par défaut d'une page s'ouvre en mode lecture et pas écriture ? », choix « un réglage par page ») : une seconde option du widget, `ouvertureDeLaVue`
+// (`read` | `edit`, absente = « le dernier mode choisi »), même mécanique que le modèle de la vue (écho, brouillon de Grist jusqu'à « Enregistrer », Ctrl + Z, grisé en lecture seule). Elle l'emporte sur le dernier mode de la personne
+// (`pp_last_mode`, js/main.js:startMode) quand un modèle ordinaire s'ouvre de lui-même ; un modèle vierge, un import, un macro-modèle ou l'absence de modèle ouvrent l'Édition comme avant, et la personne garde le bouton Édition ou
+// Lecture (sauf en lecture seule). Écran : section « Mode d'ouverture de cette vue » de Réglages > Vue, juste sous « Modèle par défaut de cette vue ».
+//   ViewTemplate.openMode() -> 'read' | 'edit' | null (null : le dernier mode choisi par la personne)
+//   ViewTemplate.setOpenMode(mode) -> choisit le mode (null ou 'last' : le dernier mode choisi) ; se défait par Ctrl + Z comme le modèle de la vue
 const ViewTemplate = (function () {
   const OPTION_KEY = 'modeleDeLaVue';
+  const OPEN_KEY = 'ouvertureDeLaVue';
 
   let currentId = null;      // id choisi (texte) ou null
+  let currentOpen = null;    // 'read' | 'edit' ou null (le dernier mode choisi)
   // Ce que cet écran vient d'écrire dans les options : Grist le renvoie par onOptions, parfois après un choix plus récent (même garde que
-  // js/row-template.js).
+  // js/row-template.js). Une garde par option : leurs valeurs n'ont rien à voir.
   const echoes = GristAPI.createEchoGuard();
+  const openEchoes = GristAPI.createEchoGuard();
 
   const normalize = value => (value != null && value !== '' ? String(value) : null);
+  // Seuls `read` et `edit` sont un choix ; tout le reste (absent, « last », une valeur d'un autre widget) est « le dernier mode choisi ».
+  const normalizeOpen = value => (value === 'read' || value === 'edit' ? value : null);
   const find = Templates.byId;
 
   function getId() { return currentId; }
+  function openMode() { return currentOpen; }
 
   // Un modèle d'un type que le widget ne sait pas ouvrir (js/templates.js, isOpenableType) n'est pas utilisable : la vue s'ouvre comme sans choix.
   function usableId() {
@@ -51,13 +63,33 @@ const ViewTemplate = (function () {
   const set = id => SettingsHistory.track(SETTING, () => write(id));
   const clear = () => SettingsHistory.track(SETTING, () => write(null));
 
+  async function writeOpen(mode) {
+    const next = normalizeOpen(mode);
+    openEchoes.remember(JSON.stringify(next));
+    currentOpen = next;
+    try { await GristAPI.setWidgetOption(OPEN_KEY, next); }
+    catch (e) { console.error('[ViewTemplate] enregistrement de l’option du mode d’ouverture impossible', e); }
+    renderPanel();
+  }
+  // Le mode d'ouverture, tel que Ctrl + Z le défait : la même écriture que le geste, et le coin d'état dit ce que la vue ouvre désormais.
+  const OPEN_SETTING = {
+    read: openMode,
+    write: writeOpen,
+    say: value => I18n.t('status.settingSet', { setting: I18n.t('settings.viewOpen.title'), value: I18n.t('settings.viewOpen.value.' + (value || 'last')) }),
+    locked: isReadOnly,
+  };
+  const setOpenMode = mode => SettingsHistory.track(OPEN_SETTING, () => writeOpen(mode));
+
   function init() {
-    currentId = normalize((GristAPI.getWidgetOptions() || {})[OPTION_KEY]);
-    GristAPI.onWidgetOptionsChange(options => {
-      const incoming = normalize(options && options[OPTION_KEY]);
-      if (echoes.isEcho(JSON.stringify(incoming))) return;
-      currentId = incoming;
-      renderPanel();
+    const options = GristAPI.getWidgetOptions() || {};
+    currentId = normalize(options[OPTION_KEY]);
+    currentOpen = normalizeOpen(options[OPEN_KEY]);
+    GristAPI.onWidgetOptionsChange(incomingOptions => {
+      // Les options changent pour mille raisons (les autres réglages du widget) : chacune des deux se lit seule, et rien n'est redessiné quand elle est celle qu'on a.
+      const incoming = normalize(incomingOptions && incomingOptions[OPTION_KEY]);
+      const incomingOpen = normalizeOpen(incomingOptions && incomingOptions[OPEN_KEY]);
+      if (!echoes.isEcho(JSON.stringify(incoming))) { currentId = incoming; renderPanel(); }
+      if (!openEchoes.isEcho(JSON.stringify(incomingOpen)) && incomingOpen !== currentOpen) { currentOpen = incomingOpen; renderPanel(); }
     });
   }
 
@@ -130,6 +162,23 @@ const ViewTemplate = (function () {
     if (unsavedHint) unsavedHint.hidden = !why.unsaved;
     const lockedHint = el('settings-viewtemplate-locked');
     if (lockedHint) lockedHint.hidden = !why.locked;
+    renderOpenMode(why.locked);
+  }
+
+  // Section « Mode d'ouverture de cette vue » : la liste montre le choix en vigueur, la phrase dessous dit ce qu'il fait. Verrouillée en lecture seule : la liste est grisée ET la phrase du verrou la décrit (aria-describedby).
+  function renderOpenMode(locked) {
+    const select = el('settings-viewopen-mode');
+    if (!select) return;
+    select.value = currentOpen || 'last';
+    select.disabled = locked;
+    // La raison du grisé, dite trois fois comme celle des boutons du dessus : la phrase visible, l'info-bulle (de la liste et de son libellé, que le survol atteint même quand la liste est inerte) et la description lue par le lecteur d'écran.
+    const reason = locked ? I18n.t('settings.viewOpen.locked') : '';
+    [select, el('settings-viewopen-mode-label')].forEach(node => { if (!node) return; if (reason) node.title = reason; else node.removeAttribute('title'); });
+    if (locked) select.setAttribute('aria-describedby', 'settings-viewopen-locked'); else select.removeAttribute('aria-describedby');
+    const status = el('settings-viewopen-status');
+    if (status) status.textContent = I18n.t('settings.viewOpen.status.' + (currentOpen || 'last'));
+    const lockedHint = el('settings-viewopen-locked');
+    if (lockedHint) lockedHint.hidden = !locked;
   }
 
   function wirePanel() {
@@ -143,6 +192,11 @@ const ViewTemplate = (function () {
       set(why.open.id);
     });
     clearBtn.addEventListener('click', () => { if (!greyedReasons().clear) clear(); });
+    const openSelect = el('settings-viewopen-mode');
+    if (openSelect) openSelect.addEventListener('change', () => {
+      if (isReadOnly()) { renderPanel(); return; }
+      setOpenMode(openSelect.value);
+    });
     // Relu à chaque ouverture des Réglages : le modèle ouvert, la liste des modèles et les droits ont pu changer depuis.
     const openBtn = el('v2-btn-settings');
     if (openBtn) openBtn.addEventListener('click', renderPanel);
@@ -152,5 +206,5 @@ const ViewTemplate = (function () {
     renderPanel();
   }
 
-  return { init, getId, usableId, set, clear, wirePanel };
+  return { init, getId, usableId, set, clear, openMode, setOpenMode, wirePanel };
 })();

@@ -53,7 +53,7 @@ async function composeFrom(page, macro, specs) {
     await Templates.loadAll();
     MacroEditor.openModal(null);
     document.getElementById('macro-editor-name').value = macro;
-    const select = document.getElementById('macro-editor-cover');
+    const select = document.querySelector('#macro-editor-slots .macro-doc-model');
     select.value = String(ids[0]);
     select.dispatchEvent(new Event('change', { bubbles: true }));
     for (const id of ids.slice(1)) {
