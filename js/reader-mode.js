@@ -34,9 +34,27 @@ const ReaderMode = (function () {
     const around = VariableFormat.affixes(badge.getAttribute('data-before'), badge.getAttribute('data-after'));
     if (!around || isError || node.nodeType === Node.TEXT_NODE) return node;
     if (node.textContent.trim() === '' && !node.querySelector('img')) return node;
-    if (around.before) node.prepend(document.createTextNode(around.before));
-    if (around.after) node.append(document.createTextNode(around.after));
+    if (around.before) node.prepend(textWithBreaks(around.before));
+    if (around.after) node.append(textWithBreaks(around.after));
     return node;
+  }
+  // Un texte où la personne a posé des retours à la ligne (Maj+Entrée dans « Avant » / « Après » ou dans un séparateur, `\n` ou VariableFormat.LINE_BREAK) : ses lignes, un <br> entre chacune -
+  // un vrai retour à la ligne pour la Lecture et tous les exports (le « \n » d'un nœud de texte, lui, est lu à sa façon par chacun). Un texte sans retour reste UN nœud de texte, comme avant.
+  function textWithBreaks(text) {
+    const lines = String(text).split(/\r\n?|\n|\u2028/);
+    const out = document.createDocumentFragment();
+    lines.forEach((line, i) => {
+      if (i) out.appendChild(document.createElement('br'));
+      if (line !== '' || lines.length === 1) out.appendChild(document.createTextNode(line));
+    });
+    return out;
+  }
+  // Le texte lu d'un nœud résolu, pour un champ (Objet, nom du PDF…) ou une info-bulle : un retour posé exprès (<br>) y est une espace, jamais deux mots collés.
+  function plainText(node) {
+    if (!node.querySelector || !node.querySelector('br')) return node.textContent || '';
+    const copy = node.cloneNode(true);
+    copy.querySelectorAll('br').forEach(br => br.replaceWith(' '));
+    return copy.textContent || '';
   }
   // Les traits (souligné, barré) que la personne a posés sur une bulle réglée sur un style de case (variable Oui / Non) s'écrivent sur chaque case de sa valeur, comme sur la case
   // conditionnelle (js/conditional-checkbox.js:resolve) : `data-checkbox-lines`, lu par la Lecture (css/editor-v2.css), le PDF, le Word et le HTML. Une case est une boîte en ligne que le
@@ -1816,12 +1834,14 @@ const ReaderMode = (function () {
       if (split.test(text)) {
         String(text).split(split).forEach(part => {
           if (part === CHECKED_BOX || part === UNCHECKED_BOX) span.appendChild(checkboxNode(part === CHECKED_BOX, style));
-          else if (part) span.appendChild(document.createTextNode(part));
+          else if (part) span.appendChild(textWithBreaks(part));
         });
         return span;
       }
     }
-    span.textContent = text;
+    // Un séparateur à retour à la ligne (VariableFormat.LINE_BREAK, posé par LoopRules.joinValues et VariableFormat.listText) : un <br> à sa place ; une valeur sans lui ne change pas.
+    if (String(text).indexOf(VariableFormat.LINE_BREAK) !== -1) span.appendChild(textWithBreaks(text));
+    else span.textContent = text;
     return span;
   }
   async function attachmentImages(ids) {
@@ -1983,7 +2003,7 @@ const ReaderMode = (function () {
       }));
       if (failed) return { error: failed };
       const via = hasOtherwise && (!holder.contains(copy) || copy.getAttribute('data-table') + '.' + copy.getAttribute('data-column') !== before);
-      const text = holder.textContent.trim();
+      const text = plainText(holder).trim();
       const files = holder.querySelectorAll('img').length;
       const turn = !text && files ? { files } : text ? { text } : { empty: true };
       if (via) turn.otherwise = true;
@@ -2153,7 +2173,7 @@ const ReaderMode = (function () {
           text = (await smartChipValue(atom.getAttribute('data-chip-kind'), atom.getAttribute('data-chip-time'), atom.getAttribute('data-chip-emoji'))).text;
         } else {
           const { node } = await resolveBadgeNode(atom, tableId || lastCurrentTableId, record, parseBadgeFormat(atom), loopCtx, { rawNumbers: true });
-          text = node.textContent || '';
+          text = plainText(node);
         }
       } catch (e) { /* une valeur illisible donne un texte vide, jamais un export en échec */ }
       putValue(atom, document.createTextNode(valueText ? valueText(text) : text));

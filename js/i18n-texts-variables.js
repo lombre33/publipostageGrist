@@ -146,10 +146,10 @@ const I18nTextsVariables = {
   // Le texte « Avant » / « Après » d'une bulle : collé à sa valeur, écrit seulement quand la variable s'affiche avec une valeur.
   'varCond.affixBefore': { fr: 'Texte avant', en: 'Text before' },
   'varCond.affixAfter': { fr: 'Texte après', en: 'Text after' },
-  'varCond.affixBeforeTitle': { fr: 'Texte écrit juste avant la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right before the value, for example a comma or a parenthesis. Spaces count.' },
-  'varCond.affixAfterTitle': { fr: 'Texte écrit juste après la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent.', en: 'Text written right after the value, for example a comma or a parenthesis. Spaces count.' },
+  'varCond.affixBeforeTitle': { fr: 'Texte écrit juste avant la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent. Maj+Entrée pose un retour à la ligne.', en: 'Text written right before the value, for example a comma or a parenthesis. Spaces count. Shift+Enter adds a line break.' },
+  'varCond.affixAfterTitle': { fr: 'Texte écrit juste après la valeur, par exemple une virgule ou une parenthèse. Les espaces comptent. Maj+Entrée pose un retour à la ligne.', en: 'Text written right after the value, for example a comma or a parenthesis. Spaces count. Shift+Enter adds a line break.' },
   'varCond.more.affix': { fr: 'texte avant et après la valeur', en: 'text before and after the value' },
-  'varCond.affixHint': { fr: 'Écrits seulement si la variable s’affiche avec une valeur.', en: 'Only written if the variable is shown with a value.' },
+  'varCond.affixHint': { fr: 'Écrits seulement si la variable s’affiche avec une valeur. Maj+Entrée : retour à la ligne.', en: 'Only written if the variable is shown with a value. Shift+Enter: line break.' },
   // « Sinon afficher » : ce qu'une bulle écrit à sa place quand sa condition n'est pas remplie (js/variable-otherwise.js) - un champ à variables, le même que celui d'une valeur
   // dans la phrase et d'un bloc (varCond.otherwiseTextNeedsRule pour son grisé sans règle). Dans la fenêtre d'une variable de ce champ, la ligne est grisée : un sinon ne se met
   // pas dans un sinon.
@@ -371,7 +371,7 @@ const I18nTextsVariables = {
   'varLoop.separator': { fr: 'Séparateur', en: 'Separator' },
   'varLoop.lastSeparator': { fr: 'Avant la dernière valeur', en: 'Before the last value' },
   'varLoop.lastSeparatorDefault': { fr: ' et ', en: ' and ' },
-  'varLoop.separatorHint': { fr: 'espaces inclus', en: 'spaces included' },
+  'varLoop.separatorHint': { fr: 'espaces inclus ; Maj+Entrée : retour à la ligne', en: 'spaces included; Shift+Enter: line break' },
   'varLoop.filter.before': { fr: 'Garder les lignes où', en: 'Keep rows where' },
   'varLoop.filter.none': { fr: 'Sans condition : toutes les lignes liées.', en: 'No condition: all linked rows.' },
   'varLoop.filter.noParent': { fr: 'Seulement les lignes sans parent ({column} vide)', en: 'Only rows without a parent ({column} empty)' },
@@ -556,7 +556,7 @@ const I18nTextsVariables = {
   'varList.separator': { fr: 'Séparateur', en: 'Separator' },
   'varList.lastSeparator': { fr: 'Avant la dernière valeur', en: 'Before the last value' },
   'varList.lastSeparatorPlaceholder': { fr: 'comme le séparateur', en: 'same as separator' },
-  'varList.separatorHint': { fr: 'espaces inclus', en: 'spaces included' },
+  'varList.separatorHint': { fr: 'espaces inclus ; Maj+Entrée : retour à la ligne', en: 'spaces included; Shift+Enter: line break' },
   'varList.number': { fr: 'Numéro', en: 'Number' },
   'varList.numberHint': { fr: '1 = la première valeur. Sans valeur à ce rang, rien n’est écrit.', en: '1 = the first value. With no value at that position, nothing is written.' },
   'varList.preview.empty': { fr: 'Ligne sélectionnée (n° {id}) : la liste est vide, le document n’écrit rien.', en: 'Selected row (#{id}): the list is empty, the document writes nothing.' },

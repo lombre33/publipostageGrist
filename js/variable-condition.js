@@ -78,8 +78,11 @@ const VariableCondition = (function () {
       // « Avant » / « Après » : propres à la bulle (cachés pour un bloc, une valeur ou une case, qui n'ont pas de valeur à entourer). Deux champs de
       // texte libre, espaces compris, et une indication qui commence sous le premier (css/variable-actions.css).
       const affixRow = el('div', 'var-condition-affix');
-      const beforeField = VariableModal.labelledInput('var-condition-before' + suffix, 'var-condition-affix-input');
-      const afterField = VariableModal.labelledInput('var-condition-after' + suffix, 'var-condition-affix-input');
+      // Des zones de texte d'une ligne (js/grow-text.js) : Maj+Entrée y pose un retour à la ligne (un « \n » du texte, écrit tel quel par la Lecture et les exports).
+      const beforeField = VariableModal.labelledInput('var-condition-before' + suffix, 'var-condition-affix-input', 'textarea');
+      const afterField = VariableModal.labelledInput('var-condition-after' + suffix, 'var-condition-affix-input', 'textarea');
+      GrowText.attach(beforeField.input, { lines: true });
+      GrowText.attach(afterField.input, { lines: true });
       afterField.label.className = 'var-condition-affix-after';
       const affixHint = el('span', 'var-loop-hint');
       for (const input of [beforeField.input, afterField.input]) {
@@ -233,6 +236,7 @@ const VariableCondition = (function () {
       r.affixHint.textContent = I18n.t('varCond.affixHint');
       r.beforeInput.value = VariableFormat.affix(node.attrs.before) || '';
       r.afterInput.value = VariableFormat.affix(node.attrs.after) || '';
+      GrowText.refresh(r.beforeInput); GrowText.refresh(r.afterInput);
       // Un texte avant ou après déjà écrit : le repli s'ouvre, la valeur ne reste pas cachée.
       r.moreFold.setOpen(showsValue() && !!(r.beforeInput.value || r.afterInput.value));
       const free = textField();

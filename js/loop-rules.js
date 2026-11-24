@@ -637,10 +637,13 @@ const LoopRules = (function () {
     const loop = parseLoop(badge.getAttribute('data-loop'));
     return loop && loop.repeat === 'inline' ? loop : null;
   }
+  // Un séparateur où la personne a posé un retour à la ligne (Maj+Entrée dans son champ : « \n ») le garde sous la forme « \u2028 » une fois mêlé aux valeurs (VariableFormat.LINE_BREAK, dont le
+  // sens est dit là) : un « \n » de la valeur d'une cellule, lui, reste ce qu'il est. ReaderMode.valueNode le lit.
+  const breaksOf = text => String(text).replace(/\r\n?|\n/g, '\u2028');
   function joinValues(values, separator, lastSeparator) {
     if (values.length < 2) return values.join('');
     const last = lastSeparator == null || lastSeparator === '' ? separator : lastSeparator;
-    return values.slice(0, -1).join(separator) + last + values[values.length - 1];
+    return values.slice(0, -1).join(breaksOf(separator)) + breaksOf(last) + values[values.length - 1];
   }
   const HIDE_MARKER_CLASS = 'pp-loop-hide-block';
   // Nœud qui remplace une bulle en boucle sans aucune ligne retenue ; « Masquer le paragraphe » pose un repère que removeHiddenBlocks traite une fois

@@ -100,7 +100,8 @@ const EditorNodes = (function () {
         const chip = document.createElement('span');
         chip.className = 'var-badge-affix';
         chip.setAttribute('aria-hidden', 'true');
-        chip.setAttribute('data-text', text);
+        // Un retour à la ligne tapé dans le texte (Maj+Entrée dans le champ de la fenêtre) s'y lit « ↵ » : la pastille reste sur la ligne de la bulle.
+        chip.setAttribute('data-text', text.replace(/\r\n?|\n/g, '\u21b5'));
         return chip;
       };
       if (attrs['data-before']) dom.appendChild(affixChip(attrs['data-before']));

@@ -424,7 +424,15 @@ const DocxExport = (function () {
   // .var-badge et .smart-chip ne devraient jamais arriver ici (ReaderMode.preview les résout déjà en <span class="resolved-var"> ou en texte simple) :
   // gardés par robustesse, comme dans js/pdf-export.js.
   function valueRuns(node, style) {
-    return node.textContent ? linedTextRuns(node.textContent, style, node) : [];
+    // Un retour posé exprès dans la valeur (<br> : le « Avant » / « Après » ou le séparateur d'une liste ou d'une boucle écrit avec Maj+Entrée, js/reader-mode.js:textWithBreaks) est une ligne de plus,
+    // comme le « \n » d'une valeur de cellule : la valeur est lue avec ses <br> changés en « \n ».
+    let text = node.textContent;
+    if (node.querySelector && node.querySelector('br')) {
+      const copy = node.cloneNode(true);
+      copy.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+      text = copy.textContent;
+    }
+    return text ? linedTextRuns(text, style, node) : [];
   }
 
   function pageNumberRuns(node, style) {

@@ -12,8 +12,9 @@
    étiquette. */
 .var-list-seps, .var-list-number { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 8px; }
 .var-list-seps[hidden], .var-list-number[hidden] { display: none; }
-.var-list-seps label + input, .var-list-number label + input { margin-right: 0; }
+.var-list-seps label + :is(input, textarea), .var-list-number label + input { margin-right: 0; }
 .var-list-seps .var-loop-hint, .var-list-number .var-loop-hint { grid-column: 2; }
+.var-list-seps .var-loop-hint { width: 0; min-width: 100%; }
 /* « Avant la dernière » porte un texte d'attente (« comme le séparateur ») ; le numéro de « La n-ième » tient sur trois chiffres. */
 .var-list-seps .var-list-last-input { width: 160px; }
 .var-list-number .var-list-index-input { width: 64px; }
