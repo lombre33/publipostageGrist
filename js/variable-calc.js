@@ -86,7 +86,8 @@ const VariableCalc = (function () {
     if (win) return;
     // restoreFocus: false : le focus revient à l'éditeur (closeWindow), pas à l'élément qui l'avait - la bulle y reste sélectionnée.
     win = ModalBase.create({ id: 'pp-calc-modal', titleId: 'pp-calc-title', size: 'md', boxClass: 'pp-calc-box', actionsClass: 'var-modal-actions', onEscape: closeWindow, restoreFocus: false });
-    const { label, input } = VariableModal.labelledInput('pp-calc-formula', 'pp-dialog-input');
+    const { label, input } = VariableModal.labelledInput('pp-calc-formula', 'pp-dialog-input', 'textarea');
+    GrowText.attach(input);
     label.className = 'pp-dialog-label';
     input.autocomplete = 'off';
     input.spellcheck = false;

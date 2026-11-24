@@ -48,3 +48,8 @@
 .pp-field-grows.is-open { max-height: 134px; overflow-x: hidden; overflow-y: auto; }
 .pp-field-grows.is-open > .pp-field-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pp-field-grows.is-open > .pp-field-text > p { overflow: visible; }
+
+/* Le champ de saisie simple qui s'agrandit (js/grow-text.js : le texte du QR code, la formule d'un calcul et celle du tableau croisé). Fermé, c'est l'ancien <input> : une ligne de 30 px, le texte ne passe pas à la ligne et montre son
+   début. Avec le focus et un texte qui ne tient plus (classe `is-open`, posée par js/grow-text.js, qui pose aussi la hauteur), le texte passe à la ligne et le champ grandit sur place, cinq lignes au plus puis il défile. */
+textarea.pp-grow-text { resize: none; overflow: hidden; white-space: pre; overflow-wrap: normal; height: 30px; padding: 4px 8px; line-height: 20px; }
+textarea.pp-grow-text.is-open { white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; }

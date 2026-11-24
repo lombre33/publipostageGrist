@@ -166,9 +166,8 @@ const QrCode = (function () {
     const form = el('div', 'pp-qr-form');
     const label = el('label', 'pp-dialog-label');
     label.htmlFor = 'pp-qr-text';
-    const input = el('input', 'pp-dialog-input');
+    const input = GrowText.create('pp-dialog-input');
     input.id = 'pp-qr-text';
-    input.type = 'text';
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.setAttribute('aria-describedby', 'pp-qr-hint pp-qr-error');

@@ -226,9 +226,8 @@ const PivotWindow = (function () {
     kind.key = 'kind';
     const valueColumn = select('pp-pivot-value-column');
     const valueColumnField = field('', valueColumn, 'pp-pivot-value-column');
-    const calc = el('input', 'pp-dialog-input');
+    const calc = GrowText.create('pp-dialog-input');
     calc.id = 'pp-pivot-calc';
-    calc.type = 'text';
     calc.autocomplete = 'off';
     calc.spellcheck = false;
     calc.setAttribute('aria-describedby', 'pp-pivot-calc-help');
