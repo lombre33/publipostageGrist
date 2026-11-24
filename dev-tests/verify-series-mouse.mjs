@@ -197,6 +197,7 @@ async function runMode(mode) {
     check(`${label} : « Remplacer » est dans la fenêtre et reçoit le vrai clic`, !!replace && replace.bottom <= HEIGHT && await reachable(page, '#var-linked-modal button.var-linked-replace'), replace);
     await page.mouse.click(replace.x, replace.y);
     await page.waitForTimeout(400);
+    await shot(page, `${mode.lang}-${mode.theme}-4-bulle`);
     const after = await page.evaluate(async () => {
       const keys = [];
       EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') keys.push(n.attrs.key); });
