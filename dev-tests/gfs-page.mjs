@@ -11,6 +11,8 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 
 export const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const OVERLAY = process.env.PP_SITE_OVERLAY ? resolve(process.env.PP_SITE_OVERLAY) : '';
+export const overlayServed = new Set();
 export const WIDTH = 700;
 export const HEIGHT = 400;
 // Les drapeaux du cadre où GFS fait tourner chaque app (consigne 011, cahier de GFS section 2) : pas d'`allow-same-origin`, donc une origine « nulle » pour l'app.
@@ -71,8 +73,12 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
         res.end(await readFile(PDFJS_FILE));
         return;
       }
-      const filePath = join(ROOT, normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
+      const relative = normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
+      let filePath = join(ROOT, relative);
       if (!filePath.startsWith(ROOT)) { res.writeHead(403).end(); return; }
+      // PP_SITE_OVERLAY : un dossier qui porte, pour js/, extensions/ et css/, les fichiers SANS commentaires (outils/alleger-publication.mjs) : ce que la page y trouve passe avant ceux du dépôt. Pour
+      // vérifier que l'app démarre et marche depuis ce qu'on publierait (dev-tests/verify-allegement.mjs), sans copier les 400 Mo du dépôt.
+      if (OVERLAY) { const over = join(OVERLAY, relative); if (over.startsWith(OVERLAY) && existsSync(over) && !(await stat(over)).isDirectory()) { filePath = over; overlayServed.add(relative); } }
       const info = await stat(filePath);
       const target = info.isDirectory() ? join(filePath, 'index.html') : filePath;
       // Le kit de Grist Factory (kit/, consigne 041 de GFS) et la copie figée de l'éditeur (vendor/editeur/, consigne 066) : des modules ES que l'app importe par import() ; un cadre à origine opaque (ISOLATED_SANDBOX) n'en lit un que si l'hôte répond avec cet en-tête, que GitHub Pages met sur tous ses fichiers.
