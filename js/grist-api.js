@@ -873,12 +873,38 @@ const GristAPI = (function () {
     }
     return (_columnTypesByTable[tableId] && _columnTypesByTable[tableId][colId]) || null;
   }
+  // Un maillon « ligne voisine » dans le chemin d'une variable : « +1(Date;Instance) » est la ligne qui suit celle-ci quand les lignes de la table sont rangées
+  // selon la colonne Date, parmi celles qui ont la même valeur dans Instance (« ;Instance » est facultatif : sans lui, toute la table) ; « -2(Date) » la deuxième
+  // d'avant. Les identifiants de colonne de Grist ne contiennent ni point, ni parenthèse, ni point-virgule, ni espace : le maillon passe tel quel là où un chemin
+  // se coupe aux points (resolveColumnPath, Variables.resolveRows) et ne se confond jamais avec une colonne. { offset, order, group } (group : '' sans groupe),
+  // ou null pour tout autre maillon - y compris un décalage nul, qui ne désigne aucune autre ligne.
+  const STEP_HOP = /^([+-])(\d{1,3})\(([^;().\s]+)(?:;([^;().\s]*))?\)$/;
+  function stepOf(hop) {
+    const found = STEP_HOP.exec(String(hop));
+    const offset = found ? Number(found[2]) * (found[1] === '-' ? -1 : 1) : 0;
+    return offset ? { offset, order: found[3], group: found[4] || '' } : null;
+  }
+  // Le maillon qui désigne la ligne `offset` rangs plus loin (négatif : avant), rangée selon `order`, dans le groupe `group` ('' : toute la table).
+  function stepToken(offset, order, group) {
+    return (offset < 0 ? '-' : '+') + Math.abs(offset) + '(' + order + (group ? ';' + group : '') + ')';
+  }
+  // Les colonnes d'un maillon existent-elles dans `table` ?
+  function stepColumnsExist(table, jump) {
+    const types = _columnTypesByTable[table];
+    return !!types && types[jump.order] !== undefined && (!jump.group || types[jump.group] !== undefined);
+  }
   // Table où mène une suite de colonnes Référence ou Liste de références à partir de `tableId` (la table elle-même si la suite est vide), null si un maillon
   // manque ou n'est pas une référence. Une liste de références désigne plusieurs lignes : la suite les lit toutes (Variables.resolveRows) et ce qu'on y lit est
   // une valeur par ligne. `singleOnly` : les seules Références simples, pour ce qui n'ouvre qu'une ligne (la flèche des listes de colonnes).
   function tableAtEndOf(tableId, hops, singleOnly) {
     let table = tableId;
     for (let i = 0; i < hops.length; i++) {
+      // Un maillon « ligne voisine » (stepOf) reste dans la même table, sur UNE ligne : il ne vaut que si les colonnes qu'il nomme existent encore.
+      const jump = stepOf(hops[i]);
+      if (jump) {
+        if (!stepColumnsExist(table, jump)) return null;
+        continue;
+      }
       const ref = referenceOf(_columnTypesByTable[table] && _columnTypesByTable[table][hops[i]]);
       if (!ref || (ref.list && singleOnly)) return null;
       table = ref.table;
@@ -1560,5 +1586,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, stepOf, stepToken, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

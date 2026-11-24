@@ -18,6 +18,12 @@
 // insérée porte un chemin, #Projet.Accompagnateur.Email (GristAPI.resolveColumnPath), sa table reste celle de la règle de liaison et le reste suit
 // les références de cette ligne, sans nouvelle règle. Les cases cochées se gardent d'un niveau à l'autre ; un fil d'Ariane remonte.
 //
+// Ligne suivante ou précédente : un volet sous le fil d'Ariane (replié, sauf pour une colonne ordinaire de la page, où la fenêtre s'ouvre d'ailleurs aussi : c'est ce qu'elle
+// y ajoute) règle un maillon « +1(Date;Cycle) » (GristAPI.stepOf : le sens et le rang, la colonne qui range les lignes, la colonne de groupe facultative) et « Aller à cette
+// ligne » l'ajoute au chemin. Le niveau d'après montre les colonnes de la ligne voisine, avec leurs valeurs pour la ligne sélectionnée ; « Insérer » et « Remplacer » posent
+// des bulles dont le chemin porte le maillon (#Instances.+1(Date;Cycle).Titre), lues par Variables.resolveRows comme n'importe quel chemin. La dernière colonne d'ordre et de
+// groupe réglée pour une table est reprise à l'ouverture suivante. Ni sur une pastille (elle désigne une ligne précise), ni pour le choix d'une colonne.
+//
 // Quand la variable d'origine a une condition d'affichage, chaque bulle insérée la reprend par défaut, en copie : « Reprendre la condition
 // d'affichage », décochée, les insère sans. « Remplacer », à côté d'« Insérer », met les attributs cochés à la place de la bulle au lieu de les
 // ajouter après elle : c'est la même bulle dont la colonne change, ses réglages restent (EditorCore.patchNodeAndReselect, setNodeMarkup).
@@ -61,7 +67,8 @@ const VariableLinkedAttrs = (function () {
   //  - colonne Liste de références de la page (ex. #Dossiers.Destinataires) : la fenêtre part de la colonne cliquée, comme avec plusieurs Références vers
   //    une même table, sans lien (un lien ne suit qu'une ligne) ; ses colonnes se lisent sur toutes les lignes de la liste. Une liste de références vers
   //    la page elle-même se lit de la même façon.
-  // Null pour une colonne ordinaire de la page ou une référence simple vers la page elle-même.
+  // Pour une colonne ordinaire de la page ou une référence simple vers la page elle-même : sa propre table, `sameRow`, d'où la fenêtre ne propose que la ligne
+  // suivante ou précédente et les autres colonnes de la même ligne. Null seulement sans table ni colonne, ou quand le chemin de la variable est cassé.
   function targetFor(attrs) {
     if (!attrs.table || !attrs.column) return null;
     const currentTableId = GristAPI.getCurrentTableId();
@@ -79,7 +86,10 @@ const VariableLinkedAttrs = (function () {
         ? { base: currentTableId, hops: [attrs.column], refColumn: null, minHops: 1 }
         : { base: ref.table, hops: [], refColumn: attrs.column, minHops: 0 };
     }
-    return found && GristAPI.tableAtEndOf(found.base, found.hops) ? found : null;
+    // Une colonne ordinaire de la page, ou une Référence vers la page elle-même : rien d'« autre attribut » d'une autre ligne à montrer, mais la ligne suivante ou
+    // précédente (« Ligne suivante ou précédente ») se cherche aussi dans sa propre table. `sameRow` : la fenêtre ouvre ce volet d'emblée.
+    if (!found) found = { base: attrs.table, hops: [], refColumn: null, minHops: 0, sameRow: true };
+    return GristAPI.tableAtEndOf(found.base, found.hops) ? found : null;
   }
   const isAvailable = attrs => !!targetFor(attrs);
 
@@ -117,6 +127,32 @@ const VariableLinkedAttrs = (function () {
     const list = el('div', 'var-linked-list');
     const note = el('p', 'var-linked-note');
     note.setAttribute('aria-live', 'polite');
+    // « Ligne suivante ou précédente » : replié, sauf pour une colonne ordinaire de la page, où c'est tout ce que la fenêtre ajoute (cf. showFor). Le maillon
+    // s'ajoute au chemin (GristAPI.stepToken) : le niveau d'après montre les colonnes de cette ligne-là, que « Insérer » et « Remplacer » posent comme à tout niveau.
+    const stepBox = el('details', 'var-linked-step');
+    const stepTitle = el('summary', 'var-linked-step-title');
+    const stepWhich = el('div', 'var-linked-step-line');
+    const stepDirection = el('select', 'var-linked-step-direction');
+    const stepRank = el('input', 'var-linked-step-rank');
+    stepRank.type = 'number';
+    stepRank.min = '1';
+    stepRank.max = '99';
+    stepRank.step = '1';
+    const stepOrder = el('select', 'var-linked-step-order');
+    const stepGroup = el('select', 'var-linked-step-group');
+    const stepGo = button('var-linked-step-go');
+    const stepHint = el('p', 'var-linked-step-hint');
+    const labelled = (text, control) => { const wrap = el('label', 'var-linked-step-field'); wrap.append(el('span', null, text), control); return wrap; };
+    stepTitle.textContent = I18n.t('varLinked.stepTitle');
+    stepHint.textContent = I18n.t('varLinked.stepHint');
+    [['after', 'varLinked.stepAfter'], ['before', 'varLinked.stepBefore']].forEach(([value, key]) => { const option = el('option', null, I18n.t(key)); option.value = value; stepDirection.appendChild(option); });
+    stepRank.value = '1';
+    stepRank.title = I18n.t('varLinked.stepRankTitle');
+    stepGo.textContent = I18n.t('varLinked.stepGo');
+    stepWhich.append(labelled(I18n.t('varLinked.stepWhich'), stepDirection), labelled(I18n.t('varLinked.stepRank'), stepRank), labelled(I18n.t('varLinked.stepOrder'), stepOrder));
+    const stepWho = el('div', 'var-linked-step-line');
+    stepWho.append(labelled(I18n.t('varLinked.stepGroup'), stepGroup), stepGo);
+    stepBox.append(stepTitle, stepWhich, stepWho, stepHint);
     // Proposée seulement si la variable d'origine a une condition (cf. renderInheritOption), cochée à chaque ouverture.
     const inheritRow = el('label', 'var-linked-inherit');
     inheritRow.hidden = true;
@@ -129,10 +165,16 @@ const VariableLinkedAttrs = (function () {
     // Entre « Annuler » et « Insérer », qui reste le bouton principal : remplacer est le geste moins courant.
     const replaceBtn = button('var-linked-replace');
     insertBtn.before(replaceBtn);
-    win.body.append(subtitle, inheritRow, path, filter, list, note);
-    refs = { title: win.title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, replaceBtn, insertBtn };
+    win.body.append(subtitle, inheritRow, path, stepBox, filter, list, note);
+    refs = {
+      title: win.title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, replaceBtn, insertBtn,
+      stepBox, stepDirection, stepRank, stepOrder, stepGroup, stepGo,
+    };
 
     filter.addEventListener('input', applyFilter);
+    stepGo.addEventListener('click', goToStep);
+    stepOrder.addEventListener('change', syncStepButton);
+    stepRank.addEventListener('keydown', event => { if (event.key === 'Enter' && !stepGo.disabled) { event.preventDefault(); goToStep(); } });
     list.addEventListener('change', onPickChange);
     list.addEventListener('click', event => {
       const descend = event.target.closest && event.target.closest('.var-linked-descend');
@@ -390,6 +432,42 @@ const VariableLinkedAttrs = (function () {
     return I18n.t('varLinked.subtitleVia', { badge, via });
   }
 
+  // Ce que la personne a réglé la dernière fois pour une table - colonne d'ordre et colonne de groupe -, pour ne pas le refaire à chaque ligne voisine : de la
+  // fenêtre à la suivante, tant que la page reste ouverte.
+  const lastSeries = {};
+  function fillSelect(select, options, value) {
+    select.replaceChildren(...options.map(({ value: v, text }) => { const option = el('option', null, text); option.value = v; return option; }));
+    select.value = value;
+  }
+  // « Aller à cette ligne » ne se propose que quand la colonne d'ordre est choisie.
+  function syncStepButton() {
+    refs.stepGo.disabled = !refs.stepOrder.value;
+  }
+  // Le volet « Ligne suivante ou précédente » du niveau affiché : les colonnes de sa table pour l'ordre et le groupe (une pièce jointe ne range rien). Ni sur une
+  // pastille (elle désigne une ligne précise), ni pour le choix d'une colonne.
+  function renderStepBox() {
+    const { stepBox, stepOrder, stepGroup } = refs;
+    stepBox.hidden = !!state.pick || !!state.mention;
+    if (stepBox.hidden) return;
+    const table = levelTable();
+    const columns = GristAPI.getVisibleColumns(table).filter(col => GristAPI.getColumnType(table, col) !== 'Attachments');
+    const last = lastSeries[table] || {};
+    const columnOptions = columns.map(col => ({ value: col, text: col }));
+    fillSelect(stepOrder, [{ value: '', text: I18n.t('varLinked.stepOrderNone') }].concat(columnOptions), columns.indexOf(last.order) !== -1 ? last.order : '');
+    fillSelect(stepGroup, [{ value: '', text: I18n.t('varLinked.stepGroupNone') }].concat(columnOptions), columns.indexOf(last.group) !== -1 ? last.group : '');
+    syncStepButton();
+  }
+  // Le maillon réglé (sens, rang, colonne d'ordre, groupe) rejoint le chemin : le niveau d'après montre les colonnes de la ligne voisine, avec leur valeur.
+  function goToStep() {
+    if (!state || !refs.stepOrder.value) return;
+    const { stepDirection, stepRank, stepOrder, stepGroup, stepBox } = refs;
+    const rank = Math.max(1, Math.min(99, Math.round(Number(stepRank.value)) || 1));
+    lastSeries[levelTable()] = { order: stepOrder.value, group: stepGroup.value };
+    const token = GristAPI.stepToken(stepDirection.value === 'before' ? -rank : rank, stepOrder.value, stepGroup.value);
+    stepBox.open = false;
+    goTo(state.hops.concat(token));
+  }
+
   // Affiche le niveau `state.hops` : titre, fil d'Ariane, colonnes puis valeurs. Le choix d'une colonne n'a pas de sous-titre (il dirait comment les attributs
   // s'insèrent) : le fil d'Ariane dit où l'on est, la ligne sous la liste ce qu'on a choisi.
   function renderLevel() {
@@ -398,6 +476,7 @@ const VariableLinkedAttrs = (function () {
     subtitle.textContent = state.pick ? '' : subtitleText();
     filter.value = '';
     renderPath();
+    renderStepBox();
     renderList();
     loadValues();
   }
@@ -583,6 +662,10 @@ const VariableLinkedAttrs = (function () {
       editor, pos, node, base: from.base, refColumn: from.refColumn, minHops: from.minHops, hops: from.hops.slice(), picks: [], pick: null,
       mention: mention ? { row: mention.row, labels: null } : null, noteText: '', noteBare: false,
     };
+    // Sens et rang repartent de « suivante, 1 » ; le volet s'ouvre d'emblée pour une colonne ordinaire de la page, où il est la raison d'ouvrir la fenêtre.
+    refs.stepDirection.value = 'after';
+    refs.stepRank.value = '1';
+    refs.stepBox.open = !!from.sameRow;
     const { filter, cancelBtn, replaceBtn, subtitle, inheritRow } = refs;
     filter.placeholder = I18n.t('varLinked.filter');
     filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
@@ -595,7 +678,8 @@ const VariableLinkedAttrs = (function () {
     if (mention) inheritRow.hidden = true; // une pastille n'a pas de condition d'affichage
     else renderInheritOption();
     renderLevel();
-    win.show(filter);
+    // Pour une colonne ordinaire de la page, le volet est ce qu'on vient chercher : le focus part sur son premier champ réglable, la fenêtre s'ouvre sur lui.
+    win.show(from.sameRow ? refs.stepOrder : filter);
   }
 
   // `pos` : position de la bulle ou de la pastille « @ », capturée au clic sur l'icône de sa barre flottante.

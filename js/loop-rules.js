@@ -313,6 +313,7 @@ const LoopRules = (function () {
   }
 
   // Une date (la colonne Référence qui montre une date, Variables.decodeShown) se trie dans l'ordre du calendrier : son instant, ou son écriture ISO dans une liste.
+  // sortKey et compareKeys rangent aussi les lignes d'un maillon « ligne voisine » (Variables.resolveRows) : une boucle triée et « la ligne suivante » suivent le même ordre.
   const validDate = v => v instanceof Date && !isNaN(v.getTime());
   function sortKey(value) {
     if (value === null || value === undefined || value === '') return null;
@@ -690,6 +691,6 @@ const LoopRules = (function () {
 
   return {
     EMPTY_MODES, END_MARKER_SELECTOR, sectionRanges, stripEndMarkers, defaultEmpty, normalizeLoop, sourceFor, allSourceFor, referenceColumnsTo, nestedColumn, parentTable, enclosingOf, sourceError, scopeFor, createContext, iterate, itemBinding,
-    bindingOf, bindElement, zoneChainOf, inheritBinding, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues,
+    bindingOf, bindElement, zoneChainOf, inheritBinding, expandZones, inlineLoopOf, resolveInline, removeHiddenBlocks, removeAndPrune, joinValues, sortKey, compareKeys,
   };
 })();

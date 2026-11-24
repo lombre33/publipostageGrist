@@ -207,7 +207,7 @@
 
   cases.push({
     id: 'varcond_toolbar_on_every_variable',
-    description: 'Barre flottante sur une variable Texte (actions seules), « Autres attributs » grisé pour une colonne ordinaire de la page, actif pour une autre table ou une Référence',
+    description: 'Barre flottante sur une variable Texte (actions seules), « Autres colonnes de la même ligne » actif pour toute variable - une colonne ordinaire de la page (ligne suivante ou précédente), une autre table ou une Référence',
     run: async (h) => {
       await seed(h);
       Editor.setHTML(`<p>${badgeHtml('VcDossiers', 'Titre')} ${badgeHtml('VcAnnuaire', 'NomPrenom')} ${badgeHtml('VcDossiers', 'Responsable')} ${badgeHtml('VcDossiers', 'Montant')}</p>`);
@@ -222,10 +222,10 @@
           sep: !bar.querySelector('[data-var-sep]').hidden,
         };
       }
-      const pass = states.Titre.visible && states.Titre.linkedDisabled === 'true' && !states.Titre.numberPanel && !states.Titre.sep
+      const pass = states.Titre.visible && states.Titre.linkedDisabled === 'false' && !states.Titre.numberPanel && !states.Titre.sep
         && states.NomPrenom.visible && states.NomPrenom.linkedDisabled === 'false'
         && states.Responsable.visible && states.Responsable.linkedDisabled === 'false'
-        && states.Montant.visible && states.Montant.numberPanel && states.Montant.sep && states.Montant.linkedDisabled === 'true';
+        && states.Montant.visible && states.Montant.numberPanel && states.Montant.sep && states.Montant.linkedDisabled === 'false';
       return { pass, notes: JSON.stringify(states) };
     },
   });

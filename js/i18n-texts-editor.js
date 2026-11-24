@@ -313,8 +313,8 @@ const I18nTextsEditor = {
 
   // --- Barre flottante d'une bulle #Variable : actions (js/floating-toolbars.js:wireVariableFloatingToolbar) ---
   'varToolbar.condition': { fr: 'Condition d’affichage', en: 'Display condition' },
-  'varToolbar.linked': { fr: 'Autres colonnes de la même ligne', en: 'Other columns of the same row' },
-  'varToolbar.linkedDisabled': { fr: 'Disponible pour une variable d’une autre table, une colonne Référence ou une colonne Liste de références', en: 'Available for a variable from another table, a Reference column or a Reference List column' },
+  'varToolbar.linked': { fr: 'Autres colonnes de la même ligne, ou ligne suivante ou précédente', en: 'Other columns of the same row, or the next or previous row' },
+  'varToolbar.linkedDisabled': { fr: 'Disponible pour une variable dont la table et la colonne existent', en: 'Available for a variable whose table and column exist' },
   'varToolbar.loop': { fr: 'Boucle : répéter pour chaque ligne', en: 'Loop: repeat for each row' },
   'varToolbar.loopDisabled': { fr: 'Indisponible : la variable ne trouve plus sa colonne', en: 'Unavailable: the variable can no longer find its column' },
   'varToolbar.loopNested': { fr: 'Déjà dans une zone répétée pour « {table} »', en: 'Already inside a zone repeated for “{table}”' },

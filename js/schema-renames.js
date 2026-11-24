@@ -197,6 +197,13 @@ const SchemaRenames = (function () {
       if (tRow === undefined) return false;
       const hops = String(path).split('.');
       for (let i = 0; i < hops.length; i++) {
+        // Une ligne voisine (« +1(Date;Instance) ») reste dans la table : ses colonnes doivent exister aujourd'hui, la table ne change pas.
+        const jump = GristAPI.stepOf(hops[i]);
+        if (jump) {
+          const columns = currentIndex.colRow[tRow] || {};
+          if (columns[jump.order] === undefined || (jump.group && columns[jump.group] === undefined)) return false;
+          continue;
+        }
         const cRow = (currentIndex.colRow[tRow] || {})[hops[i]];
         if (cRow === undefined) return false;
         if (i < hops.length - 1) {
@@ -207,12 +214,26 @@ const SchemaRenames = (function () {
       return true;
     }
 
+    // Le nom d'aujourd'hui de la colonne `name` d'hier dans la table `tRow`, null quand elle a disparu ou changé de table.
+    function renamedIn(tRow, name) {
+      const cRow = (o.colRow[tRow] || {})[name];
+      return cRow === undefined || currentIndex.colTable[cRow] !== tRow ? null : currentIndex.colName[cRow];
+    }
     // Le chemin d'hier, colonne après colonne, avec les noms d'aujourd'hui : chaque nom d'hier se cherche dans la table d'hier, la table suivante est
     // celle que la colonne désigne aujourd'hui.
     function walk(tRow, path) {
       const hops = String(path).split('.');
       const names = [];
       for (let i = 0; i < hops.length; i++) {
+        // Une ligne voisine : ses colonnes d'ordre et de groupe reprennent leur nom d'aujourd'hui, dans la même table.
+        const jump = GristAPI.stepOf(hops[i]);
+        if (jump) {
+          const order = renamedIn(tRow, jump.order);
+          const group = jump.group ? renamedIn(tRow, jump.group) : '';
+          if (order === null || group === null) return null;
+          names.push(GristAPI.stepToken(jump.offset, order, group));
+          continue;
+        }
         const cRow = (o.colRow[tRow] || {})[hops[i]];
         if (cRow === undefined || currentIndex.colTable[cRow] !== tRow) return null;
         names.push(currentIndex.colName[cRow]);

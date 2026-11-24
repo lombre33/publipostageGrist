@@ -176,6 +176,7 @@ const Variables = (function () {
     function crossedListTable(table, hops) {
       let at = table;
       for (const hop of hops) {
+        if (GristAPI.stepOf(hop)) continue; // une ligne voisine reste dans la même table
         const ref = GristAPI.referenceOf(GristAPI.getColumnType(at, hop));
         if (!ref) return null;
         if (ref.list) return ref.table;
@@ -208,6 +209,7 @@ const Variables = (function () {
       let at = table;
       let listHop = -1;
       for (let i = 0; i < hops.length; i++) {
+        if (GristAPI.stepOf(hops[i])) continue; // une ligne voisine reste dans la même table
         const ref = GristAPI.referenceOf(GristAPI.getColumnType(at, hops[i]));
         if (!ref) return '';
         if (ref.list) { if (listHop !== -1) return ''; listHop = i; }
@@ -1012,9 +1014,55 @@ const Variables = (function () {
       }
       return { table: reference.table, rows: rows.map(r => (r && byId.get(unwrapRefValue(r[column]))) || null), many: false };
     }
+    // Les séries de chaque table déjà rangées pour un maillon « ligne voisine » (GristAPI.stepOf), gardées tant que la lecture de la table - le tableau de lignes
+    // qu'on rend - est la même : les variables d'un même rendu partagent le rangement.
+    const seriesCache = new WeakMap();
+    // La série de chaque ligne de `rows` (les lignes brutes de `table`) pour le maillon `jump` : Map identifiant de ligne → { list, at }, `list` les lignes de son
+    // groupe rangées selon la colonne d'ordre - comme une boucle triée (LoopRules.sortKey et compareKeys), à égalité dans l'ordre de la table -, `at` son rang dans
+    // `list`. Une ligne dont la cellule d'ordre est vide est hors série : elle n'a ni précédente ni suivante, et aucune ligne ne la trouve. Sans colonne de groupe, toute
+    // la table forme une série ; les lignes dont le groupe est vide forment la leur.
+    function seriesOf(table, rows, jump) {
+      let byKey = seriesCache.get(rows);
+      if (!byKey) { byKey = new Map(); seriesCache.set(rows, byKey); }
+      const cacheKey = jump.order + '\u0000' + jump.group;
+      if (byKey.has(cacheKey)) return byKey.get(cacheKey);
+      const rank = row => (typeof row.manualSort === 'number' ? row.manualSort : row.id);
+      const groups = new Map();
+      rows.forEach(row => {
+        const key = LoopRules.sortKey(cellValue(table, jump.order, row));
+        if (key === null) return;
+        const groupKey = jump.group ? JSON.stringify(row[jump.group]) : '';
+        if (!groups.has(groupKey)) groups.set(groupKey, []);
+        groups.get(groupKey).push({ row, key });
+      });
+      const index = new Map();
+      groups.forEach(entries => {
+        entries.sort((a, b) => LoopRules.compareKeys(a.key, b.key) || (rank(a.row) - rank(b.row)) || (a.row.id - b.row.id));
+        const list = entries.map(entry => entry.row);
+        list.forEach((row, at) => index.set(row.id, { list, at }));
+      });
+      byKey.set(cacheKey, index);
+      return index;
+    }
+    // Un pas de plus, d'un autre genre que followReference : la ligne voisine de chacune des `rows` dans la même table (null quand il n'y en a pas : bout de la série,
+    // ligne sans valeur d'ordre, ligne disparue). Rend { table, rows, many: false } comme followReference ; une ligne de départ donne toujours UNE ligne ou null.
+    async function stepRows(table, jump, rows, opts) {
+      if (!rows.some(Boolean)) return { table, rows: rows.map(() => null), many: false };
+      const fetchRows = (opts && opts.fetchRows) || GristAPI.fetchTableRows;
+      const index = seriesOf(table, await fetchRows(table), jump);
+      return {
+        table,
+        rows: rows.map(row => {
+          const place = row && index.get(row.id);
+          return (place && place.list[place.at + jump.offset]) || null;
+        }),
+        many: false,
+      };
+    }
     // Les lignes de la table où mène le chemin `hops` (suite de colonnes Référence ou liste de références) à partir de la ligne courante de `varTable` :
     // { table, rows, multi } (une ligne, ou null si le chemin s'arrête sur une référence vide, par ligne de départ ; toutes celles des listes quand le chemin en
-    // traverse une, `multi` vrai) ou { error }. Sans `hops`, les lignes de départ elles-mêmes. Partagé avec la fenêtre « Autres attributs »
+    // traverse une, `multi` vrai) ou { error }. Un maillon « ligne voisine » (« +1(Date;Instance) », GristAPI.stepOf) reste dans la même table et passe à la
+    // ligne d'après ou d'avant. Sans `hops`, les lignes de départ elles-mêmes. Partagé avec la fenêtre « Autres attributs »
     // (js/variable-linked-attrs.js), qui montre les valeurs de chaque niveau du chemin.
     async function resolveRows(varTable, hops, currentTableId, record, opts) {
       if (!record) return { table: varTable, rows: [], multi: false };
@@ -1024,7 +1072,8 @@ const Variables = (function () {
       let rows = base.rows;
       let multi = !!base.multi;
       for (const hop of hops) {
-        const step = await followReference(table, hop, rows, opts);
+        const jump = GristAPI.stepOf(hop);
+        const step = jump ? await stepRows(table, jump, rows, opts) : await followReference(table, hop, rows, opts);
         if (step.error) return { error: step.error };
         ({ table, rows } = step);
         multi = multi || step.many;

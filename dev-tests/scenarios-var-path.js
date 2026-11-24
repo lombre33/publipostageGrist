@@ -576,7 +576,7 @@
 
   cases.push({
     id: 'varpath_availability_and_loop_source_of_paths',
-    description: 'Autres attributs reste grisé pour une colonne ordinaire de la page ou un chemin dont un maillon n’est pas une Référence, et n’est plus grisé pour une liste de références (seule, au bout d’un chemin ou au milieu) ; la boucle sur une liste de références refuse un chemin de la table de la page',
+    description: 'Autres attributs reste grisé pour un chemin dont un maillon n’est pas une Référence, n’est plus grisé pour une liste de références (seule, au bout d’un chemin ou au milieu), et s’ouvre aussi pour une colonne ordinaire de la page (la ligne suivante ou précédente, js/variable-linked-attrs.js) ; la boucle sur une liste de références refuse un chemin de la table de la page',
     run: async (h) => {
       await seed(h);
       const avail = attrs => VariableLinkedAttrs.isAvailable(attrs);
@@ -595,7 +595,7 @@
       };
       const loopOfPagePath = LoopRules.sourceFor({ table: 'VpNotifications', column: 'Projet.Membres' }, 'VpNotifications');
       const loopOfPageList = LoopRules.sourceFor({ table: 'VpProjet', column: 'Membres' }, 'VpProjet');
-      const pass = JSON.stringify(got) === JSON.stringify({ pageColumn: false, pageReference: true, otherPlain: true, otherReference: true, otherPath: true, pagePath: true,
+      const pass = JSON.stringify(got) === JSON.stringify({ pageColumn: true, pageReference: true, otherPlain: true, otherReference: true, otherPath: true, pagePath: true,
         notAReferenceHop: false, missingHop: false, otherList: true, otherListHop: true, pageListPath: true }) && loopOfPagePath === null && !!loopOfPageList && loopOfPageList.table === 'VpAnnuaire';
       return { pass, notes: JSON.stringify({ got, loopOfPagePath, loopOfPageList }) };
     },
