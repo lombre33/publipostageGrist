@@ -1441,6 +1441,31 @@
   });
 
   cases.push({
+    id: 'pdfbatch_linked_view_alone_never_asks_gfs_which_section_it_is',
+    description: 'Seul (sans GFS : consigne 097, dev-tests/scenarios-gfs-section.js joue le GFS qui répond), le widget ne demande rien à GFS (GfsLink.section n’est jamais appelé) et cherche sa section par l’adresse de sa page : deux sections à son adresse reliées à deux vues donnent « ambiguous », une seule donne sa vue, comme avant',
+    run: async (h) => {
+      const problems = [];
+      const filters = [{ section: SOURCE, col: 'Ville', filter: { included: ['Lyon'] } }];
+      const original = GfsLink.section;
+      let asked = 0;
+      GfsLink.section = () => { asked += 1; return Promise.resolve(30); };
+      try {
+        if (GfsLink.hosted) problems.push('la page de ce groupe devrait être seule');
+        await onPage(h, [widgetOn(SOURCE), widgetOn(22, { id: 30 }), { id: SOURCE, kind: 'record' }, { id: 22, kind: 'record', title: 'Autre tableau' }], filters, async () => {
+          const got = await linkedIds();
+          if (!got || got.unreadable !== 'ambiguous' || got.name !== '') problems.push('deux widgets, deux vues : ' + JSON.stringify(got));
+        });
+        await onPage(h, [widgetOn(SOURCE), { id: SOURCE, kind: 'record' }], filters, async () => {
+          const got = await linkedIds();
+          if (idsOf(got) !== '[1,3]') problems.push('un seul widget : ' + JSON.stringify(got));
+        });
+      } finally { GfsLink.section = original; }
+      if (asked) problems.push('GfsLink.section appelé ' + asked + ' fois sans GFS');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
     id: 'pdfbatch_linked_view_says_what_it_cannot_read',
     description: 'Un filtre de dates relatives (« 7 derniers jours ») ou un tableau lui-même filtré par la ligne choisie dans un autre widget (colonne cible, liste de références) : « relative » et « upstream » avec le nom de la vue ; un tableau relié en haut par un simple curseur reste lisible',
     run: async (h) => {

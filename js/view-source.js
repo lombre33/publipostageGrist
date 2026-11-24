@@ -13,6 +13,8 @@
 //    lui-même), ou ses réglages sont illisibles. `ids` : les identifiants des lignes que la vue liée affiche, dans son ordre. `unreadable` : ce que le widget ne sait pas calculer,
 //    `name` étant la vue concernée ('' quand on ne sait même pas laquelle) - « relative » (un filtre de dates relatives : « les 7 derniers jours »), « upstream » (la vue liée est
 //    elle-même filtrée par la ligne choisie dans un autre widget) ou « ambiguous » (plusieurs widgets de la table ont l'adresse de celui-ci, et ils ne sont pas tous reliés à la même vue).
+//    Sous GFS (consigne 097) le widget ne cherche pas sa section par son adresse - toutes les sections de GFS portent la même : GFS dit laquelle est la sienne (GfsLink.section, l'appel `section`) ; « ambiguous » ne reste que quand
+//    GFS ne le sait pas (`{ id: null }`, un GFS d'avant, un délai) ou quand le widget est seul avec plusieurs sections à son adresse.
 //  Le moteur : filterOf, savedFiltersOf, sortKeyOf, sortKeysOf, arrange, typedCompare, isoInTimezone, dayEdge, parseJson, pureTypeOf, ownWidgetUrl, isOwnWidget (graphique de la page).
 const ViewSource = (function () {
   const parseJson = (text, fallback) => {
@@ -243,12 +245,26 @@ const ViewSource = (function () {
   // Les sections qui montrent des lignes : « record » (un tableau) et « detail » (une liste de fiches). Une fiche seule (« single ») ne montre que la ligne choisie.
   const ROW_VIEWS = ['record', 'detail'];
 
+  // Le numéro de la section que GFS dit être la sienne (consigne 097 : l'appel `section`, GfsLink.section), ou 0 quand il ne le dit pas - widget seul, GFS qui ne donne pas son adresse, `{ id: null }`, un GFS d'avant, un délai :
+  // la recherche par adresse reprend alors, comme avant. Demandé AVANT de lire les réglages : la première demande de GFS peut poser un instant une marque dans ses sections de la table, que la lecture ne doit pas voir. La réponse est gardée
+  // par le lien (une demande par vie du cadre).
+  async function hostSectionId() {
+    if (!Extensions.widgetAddress() || typeof GfsLink === 'undefined') return 0;
+    return (await GfsLink.section()) || 0;
+  }
+
   async function readLinkedRows(tableId, allRows) {
+    const hostId = await hostSectionId();
     const meta = await readMeta();
     const table = Array.from(meta.tables.values()).find(one => one.tableId === tableId);
     if (!table) return null;
-    // Ce widget : les sections de sa table qui portent son adresse. Une seule, sauf s'il est posé plusieurs fois sur la table ou si GFS le porte (toutes ses applications ont l'adresse de GFS).
-    const own = Array.from(meta.sections.values()).filter(section => section.tableRef === table.id && isOwnWidget(section));
+    // Ce widget : la section que GFS dit être la sienne (un numéro qui n'est plus une section de widget - une vue défaite - n'est pas cru) ; sinon les sections de sa table qui portent son adresse. Une seule, sauf s'il est posé
+    // plusieurs fois sur la table ou si GFS le porte sans pouvoir dire laquelle (toutes ses applications ont l'adresse de GFS).
+    const given = hostId ? meta.sections.get(hostId) : null;
+    const hosted = given && given.parentKey === 'custom' ? given : null;
+    // La personne a choisi une autre table de travail que celle de la section de GFS : rien à suivre.
+    if (hosted && hosted.tableRef !== table.id) return null;
+    const own = hosted ? [hosted] : Array.from(meta.sections.values()).filter(section => section.tableRef === table.id && isOwnWidget(section));
     const sources = new Set(own.map(section => cursorSourceOf(meta, section)));
     if (!own.length || (sources.size === 1 && sources.has(0))) return null;
     // Plusieurs sections possibles, reliées à des vues différentes (ou l'une reliée, l'autre non) : rien ne dit laquelle est ce widget.

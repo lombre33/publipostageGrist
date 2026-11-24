@@ -46,6 +46,9 @@
 //   window.__gfsStub.identite : l'adresse de la personne que rend le contexte (contrats 5.2 point 9, consigne 094) : `{ email }` (la casse est celle de Grist), null : GFS ne la connaît pas (encore : sa propre sonde n'a rien lu, un compte Lecteur, un
 //   document sans sa table de rangement), ou undefined : une app qui n'a pas déclaré `permissions.identite`, ou un GFS d'avant (par défaut), dont le contexte n'a pas d'`identite` et qui n'envoie aucun événement. Réglée avant le chargement de la page,
 //   comme `ambiance` ; setIdentite(message) la change et envoie l'événement `identite` `{ identite }` (null quand GFS la perd), UNE seule fois par changement, et rien quand elle ne change pas, comme GFS.
+//   window.__gfsStub.section : l'appel `section` (contrats 5.4 point 15, consigne 097 : « quelle ligne de `_grist_Views_section` est la tienne ? ») - null : un GFS d'avant la consigne 097, dont l'appel reçoit `GFS_INCONNU` (par
+//   défaut) ; sinon un objet de réglage : `reponse` (ce que GFS rend : `{ id: 6 }`, ou `{ id: null, raison: 'inconnue' }` ; ou une fonction `(rang, args) => réponse`), `erreur` ({ code, message } : l'appel est refusé), `delai`
+//   (millisecondes avant la réponse), `silence` (vrai : GFS ne répond jamais). Sans argument de l'app : GFS les ignore (`sectionAppels` garde ceux qu'il a reçus, `{ rang, args }`, dans l'ordre : de quoi compter les demandes).
 //   window.__gfsStub.ranger : l'appel `ranger { fichier, nom, type?, lot?, suivants?, dossier? }` (contrats 5.4 point 9, consigne 043) - null : un GFS d'avant la consigne 043, dont l'appel reçoit `GFS_INCONNU` (par défaut) ; sinon un objet de réglage que le
 //   test pose (`{}` : un GFS qui sait ranger) : `quandPris` ('copie' par défaut, 'remplace' ou 'ignore', ou une fonction `(nom, args, rang) => …` : ce que la personne répond à la fenêtre « Ce nom est déjà pris »), `erreur` ({ code, message } : toutes les
 //   demandes échouent ainsi), `erreurs` ({ rang: { code, message } } : celle-là seule, `rang` compté de 1 dans l'ordre des appels), `delai` (millisecondes avant la réponse : le temps que la personne prend). Il tient le contrat : le nom reçoit « .pdf » s'il lui
@@ -113,6 +116,8 @@
     lecteurRefus: [],
     installReply: null,
     ranger: null,
+    section: null,
+    sectionAppels: [],
     joindre: null,
     joindreAppels: [],
     joindreEnCours: 0,
@@ -431,6 +436,17 @@
       } else { refuse('action'); return; }
       if (parentOf) stub.layoutPlayer();
     },
+    // L'appel `section` (contrats 5.4 point 15, consigne 097) : voir `section` plus haut. Rien n'est écrit dans la page : le stub rend ce que le test a posé.
+    locate(message) {
+      const rang = stub.sectionAppels.push({ rang: stub.sectionAppels.length + 1, args: message.args });
+      const setting = stub.section;
+      if (!setting) { stub.post({ type: 'erreur', id: message.id, code: 'GFS_INCONNU', message: 'appel inconnu : section' }); return; }
+      if (setting.silence) return;
+      setTimeout(() => {
+        if (setting.erreur) { stub.post({ type: 'erreur', id: message.id, code: setting.erreur.code || 'GFS_ECHEC', message: setting.erreur.message || 'erreur' }); return; }
+        stub.post({ type: 'reponse', id: message.id, data: typeof setting.reponse === 'function' ? setting.reponse(rang, message.args) : setting.reponse });
+      }, setting.delai || 0);
+    },
     post(message) { deliver(Object.assign({ gfs: CONTRACT }, message), '*'); },
     // Un appel de GFS vers l'app (contrats 5.1) : la promesse rend la réponse ou l'erreur de l'app.
     call(nom, args) {
@@ -500,6 +516,8 @@
       stub.deposit(message).catch((e) => { console.error('[gfs-stub] ranger en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
     } else if (message.nom === 'joindre') {
       stub.attach(message).catch((e) => { console.error('[gfs-stub] joindre en échec', e); if (Number.isInteger(message.id)) stub.post({ type: 'erreur', id: message.id, code: 'GFS_ECHEC', message: String(e && e.message || e) }); });
+    } else if (message.nom === 'section') {
+      stub.locate(message);
     } else if (message.nom === 'securite') {
       // Sans `id` : GFS n'a rien à répondre ; l'appel est déjà dans `calls`.
     } else if (message.nom === 'installer') {

@@ -1,7 +1,7 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
 // protocole des widgets de Grist, envoyée au cadre parent par une seule fonction (`sendToHost`) : à `targetOrigin "*"` tant que GFS n'a rien dit (la demande de `contexte`, la première, ne porte aucune donnée : le sous-cadre d'une app
-// a une origine opaque et ne sait pas encore d'où il est cadré), puis à l'origine de GFS, retenue à son premier message valide (`holdOrigin`, consigne 086, contrats de GFS 1.2 point 4). Seize choses seulement :
+// a une origine opaque et ne sait pas encore d'où il est cadré), puis à l'origine de GFS, retenue à son premier message valide (`holdOrigin`, consigne 086, contrats de GFS 1.2 point 4). Dix-sept choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }), les copies figées des bibliothèques natives de l'app
 //    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
@@ -45,9 +45,13 @@
 //    échoue est une erreur (`GFS_ECHEC`, GFS demande alors à la personne), jamais un `oui`. Tout autre appel de GFS reçoit `GFS_INCONNU` (contrats 5.1, point 3) ;
 //  - l'appel `securite` (consigne 084, contrats 5.4 point 14, règle S8), sans `id` (GFS ne répond rien) : le relais des appels que la politique de contenu de la page bloque. `{ quoi: 'relais', kit }` une fois, quand il démarre ;
 //    `{ quoi: 'bloque', directive, cible, source, disposition, fois }` à chaque appel bloqué que le relais n'a pas déjà dit, par `tell` (le kit, kit/js/violations-pose.js, en fait les messages : le nom d'hôte seul, jamais l'adresse
-//    entière, son chemin ni ses paramètres ; js/gfs-violations.js, le seul à s'en servir). Cela informe GFS, cela ne protège pas : la protection est la politique de contenu de la page.
+//    entière, son chemin ni ses paramètres ; js/gfs-violations.js, le seul à s'en servir). Cela informe GFS, cela ne protège pas : la protection est la politique de contenu de la page ;
+//  - l'appel `section` (consigne 097, contrats 5.4 point 15), sans argument, que l'app envoie UNE fois pour savoir quelle ligne de `_grist_Views_section` est la section de GFS dans la page : `{ id }` (un entier de 1 ou plus) ou `{ id: null, raison }`
+//    (`acces`, `lecture-seule`, `inconnue` : GFS n'en est pas sûr) ; un GFS d'avant la consigne répond `GFS_INCONNU`. `section()` rend l'identifiant, ou null pour tout le reste, et seule (sans rien envoyer) ; la réponse est gardée pour la vie du cadre,
+//    null comprise (GFS ne la change pas : une vue défaite ou une page recopiée en change le numéro, pas la vie du cadre). js/view-source.js (readLinkedRows), le seul à s'en servir, prend alors cette section au lieu de « toutes les sections de la table à
+//    l'adresse de GFS » ; sans identifiant il garde sa recherche par adresse.
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `identity()` rend null, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `identity()` rend null, `section()` rend null, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -551,6 +555,18 @@ const GfsLink = (function () {
     return installing.get(extension);
   }
 
+  // L'appel `section` (consigne 097, contrats 5.4 point 15) : le numéro de la ligne de `_grist_Views_section` où GFS se trouve dans la page, quand GFS en est sûr. Sans argument (ceux qu'on donne seraient ignorés). La réponse est
+  // `{ id }` (un entier de 1 ou plus) ou `{ id: null, raison }` ; tout le reste vaut null et ne dit rien à la personne : `{ id: null }`, une réponse d'une autre forme (un nombre à virgule, un texte, zéro, un négatif), `GFS_INCONNU` d'un GFS
+  // d'avant la consigne, un refus, un délai de SECTION_TIMEOUT_MS. Demandée UNE fois par vie du cadre : la première demande peut poser un instant une marque dans les sections de GFS de la table, les suivantes ne coûtent rien ; la réponse est
+  // gardée, null comprise, et les appels qui arrivent pendant l'attente reçoivent la même promesse. Ne rejette jamais. Seule, rend null sans rien envoyer.
+  const SECTION_TIMEOUT_MS = 4000;
+  let sectionRequest = null;
+  function getSection() {
+    if (!hosted) return Promise.resolve(null);
+    if (!sectionRequest) sectionRequest = call('section', undefined, SECTION_TIMEOUT_MS).then(data => (data && Number.isInteger(data.id) && data.id >= 1 ? data.id : null), () => null);
+    return sectionRequest;
+  }
+
   // Ce que GFS répond à `ranger` : `{ statut, id, nom }` (contrats 5.4, point 9), `statut` l'un des quatre mots du contrat, `id` et `nom` un texte ou null (`ignore` : la personne n'en veut pas, les deux sont null). Une réponse
   // hors de cette forme n'est pas lue au hasard : elle est une erreur (`GFS_REPONSE`), et l'export, lui, ne se perd pas (PdfDelivery télécharge le fichier).
   const DEPOSIT_STATUSES = ['ajoute', 'remplace', 'copie', 'ignore'];
@@ -612,5 +628,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, section: getSection, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();
