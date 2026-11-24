@@ -11,7 +11,10 @@
 //     arrive à GFS, dans la forme fermée du contrat, le nom d'hôte seul (jamais le chemin, `secret`, le jeton ni le fragment), et le code bloqué ne s'exécute pas ; `GfsLink.tell` n'envoie que `securite`.
 //  4) UN `fetch` ET UNE IMAGE sous une politique plus stricte (en-tête ajouté par l'essai : la politique de la page n'a ni `connect-src` ni `img-src`) : `connect-src` et `img-src` arrivent à GFS avec `exemple.test`
 //     seul, sans `secret` ; la même violation ne repart qu'à la 10e fois ; jamais plus de 50 violations différentes ni de 200 messages.
-//  5) CE QUE LA POLITIQUE PERMET NE LÈVE RIEN (la limite dite à GFS) : un `fetch` vers un autre site que la politique de la page ne ferme pas n'est pas bloqué, donc pas relayé.
+//  5) CE QUE LA POLITIQUE PERMET NE LÈVE RIEN (la limite dite à GFS) : la politique de la page laisse `https:` à `connect-src` et `img-src` (le serveur de Grist de la personne, qu'elle ne peut pas nommer) : un `fetch` vers
+//     un autre site n'est pas bloqué, donc pas relayé ; avec un serveur de Grist en http (le faux Grist de l'essai), la seconde balise de politique n'est pas posée.
+//  5 bis) LA POLITIQUE SE REFERME AU SEUL SERVEUR DE GRIST (js/csp-narrow.js, 24/11) : dès que le jeton donne l'adresse du serveur (https), une seconde balise remplace `https:` par cette origine dans `img-src` et `connect-src` ;
+//     rien d'autre n'est dit, la balise d'index.html ne bouge pas, une seule fois par page ; ensuite un `fetch` ou une image vers un autre site est bloqué et relayé (nom d'hôte seul), le serveur de Grist passe.
 //  6) UN KIT QUI MANQUE OU QUI ARRIVE EN RETARD : le module de pose (ou son lecteur de message) absent, l'app démarre, GFS n'est pas averti et la console le dit une fois ; un kit lent relaie quand même.
 //  7) DANS LE CADRE ISOLÉ de GFS (sans `allow-same-origin`, politique de la page respectée) : `relais` et un appel bloqué traversent le vrai `postMessage`, aucune violation causée par le relais lui-même, cadre jamais rechargé.
 // Lancé par run-headless.mjs (groupe Node « gfsViolations », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-violations.mjs
@@ -176,16 +179,54 @@ check('la page continue : l\'éditeur est là, le relais écoute encore, rien da
 
 console.log('— 5) ce que la politique permet ne lève rien');
 const policy = await on.app.evaluate(() => (document.querySelector('meta[http-equiv="Content-Security-Policy"]') || {}).content || '');
-const closesConnect = policy.split(';').map(part => part.trim().split(/\s+/)[0]).some(name => name === 'connect-src' || name === 'default-src');
+// Les sources qui jugent un `fetch` : celles de `connect-src`, à défaut celles de `default-src` ; ni l'une ni l'autre, tout passe.
+const sourcesOfPolicy = (name) => { const words = policy.split(';').map(part => part.trim().split(/\s+/)).find(list => list[0] === name); return words ? words.slice(1) : null; };
+const fetchSources = sourcesOfPolicy('connect-src') || sourcesOfPolicy('default-src');
+const letsAnyHostIn = !fetchSources || fetchSources.some(source => source === 'https:' || source === '*');
+// Le faux Grist de l'essai donne une adresse en http (`http://localhost`) : la seconde balise (js/csp-narrow.js) ne s'ouvre jamais pour autre chose qu'une origine https simple, la politique reste celle d'index.html.
+const httpServer = await on.app.evaluate(async () => ({ origin: await GristAPI.getServerOrigin(), narrowed: CspNarrow.origin(), tags: document.querySelectorAll('meta[data-pp-narrowed]').length }));
+check('un serveur de Grist en http (le faux Grist de l\'essai) : la seconde balise de politique n\'est pas posée, la politique reste celle d\'index.html', /^http:\/\//.test(httpServer.origin) && httpServer.narrowed === '' && httpServer.tags === 0, httpServer);
 const blockedBeforePermitted = (await blockedOf(on.page)).length;
 const permitted = await probe.fetch(on.app, HOSTS.permitted, 3);
 await sleep(400);
 const permittedSeen = forHost(await blockedOf(on.page), HOSTS.permitted);
-check(closesConnect
-  ? 'la politique de la page ferme `connect-src` : un `fetch` vers un autre site est bloqué et relayé (nom d\'hôte seul)'
-  : 'la politique de la page n\'a ni `connect-src` ni `default-src` : un `fetch` vers un autre site PASSE, n\'est pas bloqué, donc n\'est pas relayé (le relais informe, il ne protège pas)',
-closesConnect ? permitted.every(o => o === 'bloque') && permittedSeen.length >= 1 : permitted.every(o => o === 'passe') && permittedSeen.length === 0 && (await blockedOf(on.page)).length === blockedBeforePermitted, [permitted, permittedSeen, closesConnect]);
+check(letsAnyHostIn
+  ? 'la politique de la page laisse `https:` à `connect-src` (le serveur de Grist, qu\'elle ne peut pas nommer) : un `fetch` vers un autre site PASSE, n\'est pas bloqué, donc n\'est pas relayé (le relais informe, il ne protège pas)'
+  : 'la politique de la page ferme `connect-src` aux hôtes en https : un `fetch` vers un autre site est bloqué et relayé (nom d\'hôte seul)',
+letsAnyHostIn ? permitted.every(o => o === 'passe') && permittedSeen.length === 0 && (await blockedOf(on.page)).length === blockedBeforePermitted : permitted.every(o => o === 'bloque') && permittedSeen.length >= 1, [permitted, permittedSeen, fetchSources]);
 await closeOf(on);
+
+console.log('— 5 bis) la politique se referme au seul serveur de Grist dès qu\'il est connu (js/csp-narrow.js)');
+const GRIST_HOST = 'grist.exemple.test';
+const narrowed = await open({ stub: {}, seed: SEED + `\n  stub.state.tokenBaseUrl = 'https://${GRIST_HOST}/api/docs/doc1';\n` });
+await settle(narrowed.app);
+const before = await narrowed.app.evaluate(() => ({ origin: CspNarrow.origin(), tags: document.querySelectorAll('meta[data-pp-narrowed]').length }));
+const afterToken = await narrowed.app.evaluate(async () => {
+  const origin = await GristAPI.getServerOrigin();
+  const tags = Array.from(document.querySelectorAll('meta[http-equiv]')).map(meta => ({ narrowed: meta.hasAttribute('data-pp-narrowed'), content: meta.getAttribute('content') }));
+  return { origin, kept: CspNarrow.origin(), tags };
+});
+const pageTag = afterToken.tags.find(tag => !tag.narrowed);
+const narrowTag = afterToken.tags.find(tag => tag.narrowed);
+const directivesOf = content => Object.fromEntries(content.split(';').map(part => part.trim().split(/\s+/)).filter(words => words[0]).map(words => [words[0], words.slice(1)]));
+const narrowDirectives = narrowTag ? directivesOf(narrowTag.content) : {};
+check('la seconde balise vient après le jeton du serveur de Grist, une seule fois, et nomme son origine (https, rien d\'autre)', afterToken.origin === `https://${GRIST_HOST}` && afterToken.kept === afterToken.origin && afterToken.tags.length === 2 && !!pageTag && !!narrowTag, [before, afterToken]);
+check('elle ne resserre que `img-src` et `connect-src` : `https:` y devient l\'origine du serveur, tout le reste de ces deux directives est repris tel quel, rien d\'autre n\'est dit', Object.keys(narrowDirectives).sort().join() === 'connect-src,img-src'
+  && Object.entries(narrowDirectives).every(([name, sources]) => sources.includes(afterToken.origin) && !sources.includes('https:') && JSON.stringify(sources.filter(source => source !== afterToken.origin)) === JSON.stringify(directivesOf(pageTag.content)[name].filter(source => source !== 'https:'))), [pageTag, narrowTag]);
+check('la balise d\'index.html n\'a pas bougé : elle garde `https:` (deux politiques s\'ajoutent, la seconde ne peut que resserrer)', !!pageTag && directivesOf(pageTag.content)['connect-src'].includes('https:') && directivesOf(pageTag.content)['img-src'].includes('https:'), pageTag);
+const second = await narrowed.app.evaluate(async () => ({ again: CspNarrow.toGristServer('https://autre.exemple.test'), kept: CspNarrow.origin(), tags: document.querySelectorAll('meta[data-pp-narrowed]').length }));
+check('une autre origine ensuite n\'ajoute rien (une seule fois par page : l\'intersection de deux origines ne laisserait plus aucun serveur)', second.again === false && second.kept === afterToken.origin && second.tags === 1, second);
+const toGrist = await probe.fetch(narrowed.app, GRIST_HOST, 2);
+const toOther = await probe.fetch(narrowed.app, HOSTS.fetch, 2);
+await probe.image(narrowed.app, HOSTS.image);
+await narrowed.app.evaluate((host) => { const el = new Image(); el.src = `https://${host}/p/piece.png?secret=1#frag`; document.body.appendChild(el); }, GRIST_HOST);
+const narrowedBlocked = await blockedAfter(narrowed.page, 2);
+check('un `fetch` vers le serveur de Grist passe, rien n\'en est relayé', toGrist.every(o => o === 'passe') && forHost(narrowedBlocked, GRIST_HOST).length === 0, [toGrist, forHost(narrowedBlocked, GRIST_HOST)]);
+check('un `fetch` vers un autre site est maintenant bloqué, et GFS reçoit `connect-src` avec son nom d\'hôte seul', toOther.every(o => o === 'bloque') && forHost(narrowedBlocked, HOSTS.fetch).length >= 1 && forHost(narrowedBlocked, HOSTS.fetch)[0].directive === 'connect-src' && forHost(narrowedBlocked, HOSTS.fetch)[0].disposition === 'enforce', [toOther, forHost(narrowedBlocked, HOSTS.fetch)]);
+check('une image d\'un autre site est bloquée aussi (`img-src`), une image du serveur de Grist ne lève rien', forHost(narrowedBlocked, HOSTS.image).length === 1 && forHost(narrowedBlocked, HOSTS.image)[0].directive === 'img-src' && forHost(narrowedBlocked, GRIST_HOST).length === 0, [forHost(narrowedBlocked, HOSTS.image), forHost(narrowedBlocked, GRIST_HOST)]);
+check('ces messages sont dans la forme fermée et ne laissent rien partir (ni `secret`, ni chemin, ni fragment)', narrowedBlocked.length >= 2 && narrowedBlocked.every(isClosed) && !narrowedBlocked.some(leaks), narrowedBlocked);
+check('l\'app continue : l\'éditeur est là, le relais écoute encore', (await htmlOf(narrowed.app)) === MODEL_HTML && (await activeOf(narrowed.app)) === true, [await htmlOf(narrowed.app), await activeOf(narrowed.app)]);
+await closeOf(narrowed);
 
 console.log('— 4) un `fetch` et une image sous une politique plus stricte');
 const strict = await open({ stub: {}, before: withHeader(STRICT) });

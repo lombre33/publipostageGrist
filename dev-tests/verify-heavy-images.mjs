@@ -103,8 +103,8 @@ const imagesIn = (target, hostId) => target.evaluate(async (id) => {
   await Promise.all(list.map(node => (node.complete ? null : new Promise((resolve) => { node.addEventListener('load', resolve, { once: true }); node.addEventListener('error', resolve, { once: true }); setTimeout(resolve, 5000); }))));
   return list.map(node => ({ scheme: (node.getAttribute('src') || '').split(':')[0], src: node.getAttribute('src') || '', asked: parseFloat(node.style.width) || 0, natural: [node.naturalWidth, node.naturalHeight], complete: node.complete }));
 }, hostId);
-// Une adresse `blob:` se lit-elle encore depuis `target` ?
-const readable = (target, urls) => target.evaluate(list => Promise.all(list.map(url => fetch(url).then(r => r.ok, () => false))), urls);
+// Une adresse `blob:` se lit-elle encore depuis `target` ? La page ne `fetch` plus rien d'autre que son serveur de Grist (24/11, `connect-src` fermé) : l'essai la lit comme le fait l'app, par une image (`img-src` nomme `blob:`).
+const readable = (target, urls) => target.evaluate(list => Promise.all(list.map(url => new Promise((resolve) => { const probe = new Image(); probe.onload = () => resolve(true); probe.onerror = () => resolve(false); probe.src = url; }))), urls);
 // Les étapes du diaporama que le rapport de fluidité a gardées, sans leur préfixe.
 const showMarks = app => app.evaluate(() => PerfTrace.events().filter(e => e.kind === 'mark' && e.label.indexOf('diaporama : ') === 0).map(e => e.label.slice('diaporama : '.length)));
 const expected = [
@@ -120,13 +120,15 @@ async function unit(app) {
   const seen = await app.evaluate(async ([heavyA, heavyB, small]) => {
     if (typeof HeavyImages === 'undefined') return { missing: true };
     const tag = (src, extra) => '<p><img class="editor-image" ' + (extra || '') + 'src="' + src + '" alt=""></p>';
-    const bytesOf = async url => new Uint8Array(await (await fetch(url)).arrayBuffer());
+    // Les octets du fichier (le Blob que rend `lighten`) et ceux de l'image écrite dans le texte (son base64) : ni l'un ni l'autre ne passe par `fetch`, que `connect-src` ne laisse plus lire `blob:` ni `data:`.
+    const bytesOf = async source => (typeof source === 'string' ? Uint8Array.from(atob(source.slice(source.indexOf(',') + 1)), c => c.charCodeAt(0)) : new Uint8Array(await source.arrayBuffer()));
+    const readableUrl = url => new Promise((resolve) => { const probe = new Image(); probe.onload = () => resolve(true); probe.onerror = () => resolve(false); probe.src = url; });
     const same = (a, b) => a.length === b.length && a.every((value, i) => value === b[i]);
     const out = {};
     // Une image lourde : une adresse courte, les mêmes octets.
     const one = HeavyImages.lighten('<h2>Un</h2>' + tag(heavyA) + '<p>fin</p>');
     out.one = one ? { shorter: one.html.length < 400, blob: /<img class="editor-image" src="blob:[^"]+" alt="">/.test(one.html), noData: one.html.indexOf('data:image') === -1, images: one.images.length, type: one.images[0].blob.type,
-      bytes: same(await bytesOf(one.images[0].url), await bytesOf(heavyA)), kept: one.html.indexOf('<h2>Un</h2>') === 0 && one.html.endsWith('<p>fin</p>') } : null;
+      bytes: same(await bytesOf(one.images[0].blob), await bytesOf(heavyA)), kept: one.html.indexOf('<h2>Un</h2>') === 0 && one.html.endsWith('<p>fin</p>') } : null;
     // La même deux fois et une autre : deux fichiers, trois adresses.
     const three = HeavyImages.lighten(tag(heavyA) + tag(heavyB) + tag(heavyA));
     const urls = three ? Array.from(three.html.matchAll(/src="(blob:[^"]+)"/g)).map(found => found[1]) : [];
@@ -143,10 +145,10 @@ async function unit(app) {
     out.none = [HeavyImages.lighten(''), HeavyImages.lighten(null), HeavyImages.lighten(tag(small).repeat(400)), HeavyImages.lighten(quoted + broken + video)].map(value => value === null);
     // Libérer.
     if (one) {
-      const before = await fetch(one.images[0].url).then(r => r.ok, () => false);
+      const before = await readableUrl(one.images[0].url);
       one.release();
       one.release();
-      const after = await fetch(one.images[0].url).then(r => r.ok, () => false);
+      const after = await readableUrl(one.images[0].url);
       out.release = { before, after };
     } else {
       out.release = { before: null, after: null };

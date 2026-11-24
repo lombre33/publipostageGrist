@@ -5,9 +5,45 @@
 const ImageIo = (function () {
   const refused = () => new Error('adresse d’un autre site refusée');
 
-  // Le contenu de `src` (data:, blob: ou adresse de pièce jointe de Grist) en Blob ; une autre adresse est refusée.
+  // Les octets d'une adresse `data:` lus SUR PLACE, sans `fetch` : la politique de sécurité du contenu (24/11, « plus aucun appel externe ») n'ouvre `connect-src` qu'au widget, au serveur de Grist et à deux dossiers
+  // de polices, et pas à `data:` ; ce n'est d'ailleurs pas un appel, les octets sont dans l'adresse. Même résultat que `fetch` : le type du fichier est celui de l'adresse sans ses paramètres (« image/svg+xml » pour
+  // « image/svg+xml;charset=utf-8 », comme le fait Chromium), « text/plain » quand elle n'en dit pas ou n'en dit pas un lisible ; le texte hors base64 est décodé octet par octet (%XX), un caractère qui n'est pas ASCII en UTF-8. Une adresse sans virgule ou un base64 illisible lève.
+  function blobOfDataUri(address) {
+    const comma = address.indexOf(',');
+    if (comma === -1) throw new Error('data: sans contenu');
+    const head = address.slice(5, comma).trim();
+    const isBase64 = /;\s*base64$/i.test(head);
+    const essence = head.replace(/;\s*base64$/i, '').split(';')[0].trim().toLowerCase();
+    const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(essence) ? essence : 'text/plain';
+    let payload = address.slice(comma + 1);
+    let bytes;
+    if (isBase64) {
+      if (payload.indexOf('%') !== -1) payload = decodeURIComponent(payload);
+      if (typeof Uint8Array.fromBase64 === 'function') bytes = Uint8Array.fromBase64(payload);
+      else {
+        const binary = atob(payload);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      }
+    } else {
+      const encoder = new TextEncoder();
+      const out = [];
+      for (let i = 0; i < payload.length;) {
+        if (payload.charCodeAt(i) === 37 && /^[0-9a-fA-F]{2}$/.test(payload.slice(i + 1, i + 3))) { out.push(parseInt(payload.slice(i + 1, i + 3), 16)); i += 3; continue; }
+        const point = payload.codePointAt(i);
+        const char = String.fromCodePoint(point);
+        if (point < 128) out.push(point); else encoder.encode(char).forEach(byte => out.push(byte));
+        i += char.length;
+      }
+      bytes = Uint8Array.from(out);
+    }
+    return new Blob([bytes], { type });
+  }
+
+  // Le contenu de `src` (data:, blob: ou adresse de pièce jointe de Grist) en Blob ; une autre adresse est refusée. Une adresse data: se lit sur place (blobOfDataUri), jamais par `fetch`.
   async function fetchBlob(src) {
     if (!(await ExternalImages.mayRead(src))) throw refused();
+    if (typeof src === 'string' && /^\s*data:/i.test(src)) return blobOfDataUri(src.trim());
     const response = await fetch(src);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     return response.blob();

@@ -10,9 +10,14 @@
 //   3) le VRAI fichier d'API de Grist (docs.getgrist.com/grist-plugin-api.js) s'évalue sous la politique : c'est un bundle de développement dont chaque module passe par eval(), le faux
 //      Grist des autres tests n'en a pas besoin, et une politique sans 'unsafe-eval' laisserait le widget sans objet grist, donc mort, chez Antoine ; ce contrôle demande le réseau ;
 //   4) le widget démarre dans un cadre à bac à sable comme celui d'un document Grist, avec et sans allow-same-origin ;
-//   5) la politique ne limite ni les styles, ni les polices, ni les images, ni les connexions ;
+//   5) la politique est FERMÉE (24/11, « plus aucun appel externe », lot 3 des images d'autres sites) : `default-src 'none'`, puis chaque famille nommée, et ce que chacune ouvre est écrit ici EN ENTIER (styles, polices,
+//      images, connexions ; médias, workers et manifestes se replient sur 'none') : un hôte, un schéma ou un joker de plus fait échouer le contrôle et se décide. Les deux dossiers de polices de jsDelivr que `connect-src` nomme
+//      sont ceux que lisent extensions/polices/libres.js et marianne.js ; le parcours entier (écrire, lire, exporter AVEC des images) passe sous elle sans une violation ; ce qu'elle refuse l'est vraiment (une image en http:,
+//      une police, une feuille de style, un média, un worker, une connexion vers un autre hôte...) ;
 //   6) le widget n'a besoin d'aucune feuille de style ni d'aucune police d'un autre site (choix d'Antoine du 04/10 : « une police système similaire, pas de Google Fonts ou autre ») : le parcours
-//      entier n'en demande aucune, c'est la seule garde contre une police qui reviendrait, puisque la politique laisse les polices libres ;
+//      entier n'en demande aucune (et la politique les refuse maintenant aussi) ;
+//   8) la seconde balise de politique (js/csp-narrow.js) : `https:` est ouvert pour le serveur de Grist, qu'on ne peut pas nommer ; dès que son adresse est connue (le jeton d'accès), une seconde politique le
+//      referme à cette seule origine : une image ou une connexion vers un autre hôte est refusée, celles du serveur de Grist et des deux dossiers de polices passent, une seule fois par page, jamais pour une adresse mal formée ;
 //   7) le mode CDN de GFS (consigne GFS 007) : GFS ne peut imposer aucune politique à un sous-cadre, la politique de la page garde donc l'adresse EXACTE de Plotly 2.13.2 (celle du catalogue de GFS) et rien d'autre pour le
 //      graphique. La source que GFS donne en CDN se charge avec son empreinte ; avec une fausse empreinte le navigateur la refuse (l'extension la lui transmet bien) ; un autre fichier de jsDelivr - une autre
 //      version de Plotly, un autre paquet - est refusé par la politique : jsDelivr n'y est pas ouvert en entier ;
@@ -96,7 +101,26 @@ check('script-src : esm.sh n\'est pas ouvert en entier - aucune source n\'est l\
 check('object-src, base-uri, form-action : « none »', ['object-src', 'base-uri', 'form-action'].every(d => (directives[d] || []).join(' ') === "'none'"), directives);
 // Le lecteur d'une vidéo que l'app seule pose au clic sur ▶ (js/video-frame.js, choix d'Antoine du 09/11) est la seule ouverture de `frame-src` : deux hôtes nommés, en https, ni joker ni schéma entier.
 check('frame-src : seulement youtube-nocookie.com et player.vimeo.com, en https (ni joker, ni schéma entier, ni \'self\')', JSON.stringify([...(directives['frame-src'] || [])].sort()) === JSON.stringify(['https://player.vimeo.com', 'https://www.youtube-nocookie.com']), directives['frame-src']);
-check('la politique ne limite ni les styles, ni les polices, ni les images, ni les connexions', !['default-src', 'style-src', 'font-src', 'img-src', 'connect-src', 'media-src'].some(d => d in directives), Object.keys(directives));
+// FERMÉE depuis le 24/11 : default-src 'none', puis chaque famille nommée. Ce que chaque directive ouvre est écrit ici en entier.
+const sameSources = (name, expected) => JSON.stringify([...(directives[name] || [])].sort()) === JSON.stringify([...expected].sort());
+const FONT_DIRECTORIES = ['https://cdn.jsdelivr.net/npm/@fontsource/', 'https://cdn.jsdelivr.net/npm/@gouvfr/dsfr@1.15.4/dist/fonts/'];
+check('default-src : « \'none\' » (ce qu\'aucune famille ne nomme est fermé : médias, workers, manifestes)', sameSources('default-src', ["'none'"]), directives['default-src']);
+check('style-src : \'self\' et \'unsafe-inline\' (l\'éditeur écrit des attributs style), aucun hôte', sameSources('style-src', ["'self'", "'unsafe-inline'"]), directives['style-src']);
+check('font-src : \'self\' et data:, aucun hôte (la police du système, choix d\'Antoine du 04/10)', sameSources('font-src', ["'self'", 'data:']), directives['font-src']);
+check('img-src : \'self\', data:, blob: et https: (les pièces jointes du serveur de Grist, qu\'on ne peut pas nommer), aucun hôte nommé, ni http:, ni joker', sameSources('img-src', ["'self'", 'data:', 'blob:', 'https:']), directives['img-src']);
+check('connect-src : \'self\', https: (le même serveur de Grist) et les deux dossiers EXACTS de jsDelivr pour les polices du PDF dans GFS : ni data:, ni blob:, ni http:, ni joker', sameSources('connect-src', ["'self'", 'https:', ...FONT_DIRECTORIES]), directives['connect-src']);
+check('ni media-src, ni worker-src, ni manifest-src, ni child-src, ni prefetch-src : ils se replient sur default-src \'none\'', !['media-src', 'worker-src', 'manifest-src', 'child-src', 'prefetch-src'].some(d => d in directives), Object.keys(directives));
+{
+  // Les dossiers que la politique nomme sont ceux que les deux fichiers de l'extension « polices » lisent : même adresse, même version. Une autre version du paquet de Marianne sans la politique, et le PDF en Marianne se tait.
+  const libres = readFileSync(join(ROOT, 'extensions', 'polices', 'libres.js'), 'utf8');
+  const marianne = readFileSync(join(ROOT, 'extensions', 'polices', 'marianne.js'), 'utf8');
+  const libresBase = (libres.match(/const BASE = '([^']+)'/) || [])[1] || '';
+  const version = (marianne.match(/const VERSION = '([^']+)'/) || [])[1] || '';
+  const marianneParts = marianne.match(/const BASE = '([^']+)' \+ VERSION \+ '([^']+)'/) || [];
+  const marianneBase = version && marianneParts[1] ? marianneParts[1] + version + marianneParts[2] : '';
+  check('connect-src nomme les deux dossiers de polices que lisent extensions/polices/libres.js (Fontsource) et marianne.js (le DSFR, à sa version), et eux seuls sur jsDelivr', libresBase === FONT_DIRECTORIES[0] && marianneBase === FONT_DIRECTORIES[1]
+    && (directives['connect-src'] || []).filter(source => source.startsWith('https://cdn.jsdelivr.net')).length === 2, { libresBase, marianneBase, connect: directives['connect-src'] });
+}
 
 const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
 const context = await browser.newContext({ viewport: { width: 700, height: 400 } });
@@ -144,6 +168,8 @@ await context.route('https://docs.getgrist.com/grist-plugin-api.js', route => ro
 await context.addInitScript(() => {
   window.__cspViolations = [];
   document.addEventListener('securitypolicyviolation', e => window.__cspViolations.push({ directive: e.effectiveDirective, blocked: e.blockedURI }), true);
+  // Le faux Grist donne un jeton dont l'adresse est celle d'un serveur en https (comme un vrai) : js/csp-narrow.js la retient dès le démarrage, et tout ce qui suit tourne sous la politique REFERMÉE à ce serveur.
+  window.__preSeedGristStub = (stub) => { stub.state.tokenBaseUrl = 'https://grist.test/api/docs/doc1'; };
 });
 // Un GFS simulé donne l'extension « graphique » et la source de Plotly : d'abord la copie vendorisée, un fichier de l'ORIGINE de la page (`'self'` la laisse passer sans que la politique la nomme) ;
 // en 7), l'adresse de jsDelivr, que la politique nomme. Les octets sont ceux de jsDelivr (la version et l'empreinte que GFS donne), pris une fois : la page les reçoit de l'une ou de l'autre adresse.
@@ -159,6 +185,13 @@ await context.route('**/vendor/plotly/2.13.2/plotly-basic.min.js', servePlotly);
 // Un faux lecteur pour les deux sites que `frame-src` nomme : rien n'est demandé aux vrais (le cloud ne les joint pas, et l'essai ne regarde que la politique).
 for (const pattern of ['https://www.youtube-nocookie.com/**', 'https://player.vimeo.com/**']) await context.route(pattern, route => route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><title>faux lecteur</title><p>faux lecteur</p>' }));
 await context.route(PLOTLY_CDN, servePlotly);
+// Le faux serveur de Grist (jeton, lecture légère, pièces jointes) et les deux dossiers de polices de jsDelivr : rien n'est demandé aux vrais ; l'essai ne regarde que la politique.
+const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+const OPEN_CORS = { 'access-control-allow-origin': '*' };
+await context.route('https://grist.test/**', route => route.fulfill(/\/attachments\/\d+\/download/.test(route.request().url())
+  ? { status: 200, contentType: 'image/png', headers: OPEN_CORS, body: PIXEL }
+  : { status: 200, contentType: 'application/json', headers: OPEN_CORS, body: '{"records":[]}' }));
+await context.route(/^https:\/\/cdn\.jsdelivr\.net\/npm\/(?:@fontsource|@gouvfr)\//, route => route.fulfill({ status: 200, contentType: 'font/woff', headers: OPEN_CORS, body: 'wOFF' }));
 
 await page.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
 await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
@@ -203,6 +236,19 @@ const exportsRun = await page.evaluate(async () => {
   await step('xlsx', async () => { await XlsxExport.ensureExcelLibLoaded(); const wb = new ExcelJS.Workbook(); wb.addWorksheet('a').getCell('A1').value = 'x'; return (await wb.xlsx.writeBuffer()).byteLength > 1000; });
   // L'import Markdown (js/markdown-import.js) : le lecteur (marked, cdnjs, avec son empreinte) se charge au premier import, sous la politique, et lit un texte.
   await step('markdownImport', async () => { await MarkdownImport.ensureLibLoaded(); const imported = MarkdownImport.toDocument('# Titre\n\nTexte **gras**\n'); return imported.html === '<h1>Titre</h1>\n<p>Texte <strong>gras</strong></p>' || imported.html; });
+  // Des images dans le document, sous la politique : une adresse data: se lit sur place (jamais par fetch : connect-src n'ouvre pas data:), une image se décode par une adresse blob: (img-src l'ouvre), Word et PDF les embarquent.
+  await step('images', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="red"/></svg>');
+    const blob = await ImageIo.fetchBlob(png);
+    const decoded = await ImageIo.load(blob);
+    const redrawn = await ImageIo.pngBlob(await ImageIo.draw(svg));
+    await DocxExport.ensureDocxLibLoaded();
+    const word = await DocxExport.getDocxBlobForRecord('<p>Avec image</p><img src="' + png + '"><img src="' + svg + '">', null, {}, '', null, null);
+    await PdfExport.ensurePdfLibsLoaded();
+    const pdf = await PdfExport.getNativePdfBlobForRecord('<p>Avec image</p><img src="' + png + '">', null, {}, '', null, undefined);
+    return blob.type === 'image/png' && decoded.naturalWidth === 1 && redrawn.size > 50 && word.blob.size > 1000 && pdf.blob.size > 1000;
+  });
   await step('qr', async () => { await QrCode.ensureLibrary(); return /^data:image\/png/.test(await QrCode.dataUri('https://exemple.fr')); });
   await step('chart', async () => {
     await GfsLink.ready;
@@ -223,7 +269,7 @@ const exportsRun = await page.evaluate(async () => {
   });
   return out;
 });
-for (const [name, label] of [['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['docxCharts', 'Word, graphiques natifs (docx/charts, le second fichier de docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (conteneur et feuilles prêts dans la page, sans cadre ni fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
+for (const [name, label] of [['images', 'images du document (adresse data: lue sur place, décodée par une adresse blob:, embarquée dans Word et dans le PDF)'], ['moteurs', 'les moteurs du widget (PDF, fusion, feuilles, Word, Excel, format des nombres, Markdown : js/export-engines.js, au premier export)'], ['pdf', 'PDF (pdfmake, polices du dépôt)'], ['zip', 'archive ZIP (JSZip)'], ['pdfMerge', 'PDF unique (pdf-lib)'], ['docx', 'Word (docx)'], ['docxCharts', 'Word, graphiques natifs (docx/charts, le second fichier de docx)'], ['xlsx', 'Excel (ExcelJS)'], ['markdownImport', 'import Markdown (marked, avec son empreinte)'], ['qr', 'QR code (qrcode-generator)'], ['chart', 'graphique de la page (l\'extension de GFS, puis Plotly en copie vendorisée de l\'origine de la page)'], ['print', 'impression par le navigateur (conteneur et feuilles prêts dans la page, sans cadre ni fichier : la fenêtre du navigateur s\'ouvre ensuite)']]) {
   check('export : ' + label + ' se charge et produit son fichier sous la politique', exportsRun[name] === true, exportsRun[name]);
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
@@ -323,6 +369,74 @@ const printHost = await page.evaluate(async () => {
   return result;
 });
 check('le conteneur de l\'impression par le navigateur : du HTML piégé n\'y court pas (gestionnaire, script, javascript:), la politique de la page le refuse, et il n\'y a aucun cadre', printHost.alive && printHost.ran.length === 0 && printHost.violations.some(v => v.startsWith('script-src')) && printHost.frames === 0, printHost);
+
+// 8) La politique fermée refuse ce qu'elle ne nomme pas. Une adresse est essayée comme le navigateur le ferait ; ce que le navigateur dit (securitypolicyviolation) est la preuve, pas la réponse du réseau.
+async function tryLoad(label, kind, address, expectedDirective) {
+  const r = await page.evaluate(async ({ kind, address }) => {
+    window.__cspViolations.length = 0;
+    const settle = (promise) => Promise.race([promise, new Promise(resolve => setTimeout(() => resolve('délai'), 4000))]);
+    let ok;
+    if (kind === 'image') ok = await settle(new Promise(resolve => { const img = new Image(); img.onload = () => resolve(true); img.onerror = () => resolve(false); img.src = address; }));
+    else if (kind === 'fetch') ok = await settle(fetch(address, { mode: 'no-cors' }).then(() => true, () => false));
+    else if (kind === 'font') ok = await settle(new FontFace('pp-probe', 'url("' + address + '")').load().then(() => true, () => false));
+    else if (kind === 'sheet') ok = await settle(new Promise(resolve => { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = address; link.onload = () => resolve(true); link.onerror = () => resolve(false); document.head.appendChild(link); }));
+    else if (kind === 'audio') ok = await settle(new Promise(resolve => { const audio = new Audio(); audio.onerror = () => resolve(false); audio.onloadedmetadata = () => resolve(true); audio.src = address; audio.load(); }));
+    else if (kind === 'worker') { try { const worker = new Worker(address); worker.terminate(); ok = 'créé'; } catch (e) { ok = false; } }
+    else if (kind === 'socket') ok = await settle(new Promise(resolve => { try { const socket = new WebSocket(address); socket.onopen = () => { socket.close(); resolve(true); }; socket.onerror = () => resolve(false); } catch (e) { resolve(false); } }));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return { ok, violations: window.__cspViolations.map(v => v.directive + ' ' + v.blocked.slice(0, 60)) };
+  }, { kind, address });
+  // 'refus' : le navigateur refuse avant même d'appliquer la politique (un worker d'un autre site : règle de même origine, `SecurityError` sans événement de violation) ; la preuve est que rien n'est créé.
+  if (expectedDirective === 'refus') check(label, r.ok === false || r.violations.length > 0, r);
+  else if (expectedDirective) check(label, r.violations.some(v => v.startsWith(expectedDirective)), r);
+  else check(label, r.violations.length === 0 && r.ok === true, r);
+}
+// Ce que la page ouvre : ses propres fichiers, les images en data: et blob:, le serveur de Grist (après la seconde balise : lui seul), les deux dossiers de polices.
+await tryLoad('une image d\'un fichier du widget se charge', 'image', `${BASE}/img/grist-factory-logo.jpg`, null);
+await tryLoad('une image en data: se charge', 'image', 'data:image/png;base64,' + PIXEL.toString('base64'), null);
+await tryLoad('une image en blob: se charge (les images lourdes du diaporama, le décodage des exports)', 'image', await page.evaluate(async b64 => URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'image/png' })), PIXEL.toString('base64')), null);
+await tryLoad('une pièce jointe du serveur de Grist se charge comme image', 'image', 'https://grist.test/api/docs/doc1/attachments/1/download?auth=t', null);
+await tryLoad('le serveur de Grist se lit (la lecture légère du document, l\'envoi d\'un PDF)', 'fetch', 'https://grist.test/api/docs/doc1/tables/T/records', null);
+await tryLoad('le dossier des polices libres de jsDelivr se lit (le PDF, dans GFS)', 'fetch', 'https://cdn.jsdelivr.net/npm/@fontsource/lora@5.0.8/files/lora-latin-400-normal.woff', null);
+await tryLoad('le dossier de la police Marianne de jsDelivr se lit (le PDF, dans GFS)', 'fetch', 'https://cdn.jsdelivr.net/npm/@gouvfr/dsfr@1.15.4/dist/fonts/Marianne-Regular.woff', null);
+// Ce qu'elle refuse.
+await tryLoad('une image en http: (sans chiffrement) est refusée', 'image', 'http://exemple.invalid/a.png', 'img-src');
+await tryLoad('une image en ftp: est refusée', 'image', 'ftp://exemple.invalid/a.png', 'img-src');
+await tryLoad('une image d\'un autre site en https est refusée (la seconde balise : seul le serveur de Grist reste ouvert)', 'image', 'https://exemple.invalid/a.png', 'img-src');
+await tryLoad('une image d\'un hôte qui commence comme le serveur de Grist est refusée (grist.test.exemple.invalid)', 'image', 'https://grist.test.exemple.invalid/a.png', 'img-src');
+await tryLoad('une image d\'un autre hôte qui finit comme le serveur de Grist est refusée (autre-grist.test)', 'image', 'https://autre-grist.test/a.png', 'img-src');
+await tryLoad('une connexion vers un autre site en https est refusée', 'fetch', 'https://exemple.invalid/', 'connect-src');
+await tryLoad('une connexion en http: est refusée', 'fetch', 'http://exemple.invalid/', 'connect-src');
+await tryLoad('un fetch d\'une adresse data: est refusé (le widget les lit sur place)', 'fetch', 'data:text/plain,bonjour', 'connect-src');
+await tryLoad('une autre version du paquet de polices libres de jsDelivr, un autre paquet : refusés (seuls les deux dossiers sont nommés)', 'fetch', 'https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js', 'connect-src');
+await tryLoad('une connexion WebSocket vers un autre site est refusée', 'socket', 'wss://exemple.invalid/', 'connect-src');
+await tryLoad('une police d\'un autre site est refusée', 'font', 'https://exemple.invalid/f.woff', 'font-src');
+await tryLoad('une feuille de style d\'un autre site est refusée', 'sheet', 'https://exemple.invalid/a.css', 'style-src');
+await tryLoad('un son d\'un autre site est refusé (media-src : default-src \'none\')', 'audio', 'https://exemple.invalid/a.mp3', 'media-src');
+await tryLoad('un worker d\'un autre site est refusé (la règle de même origine du navigateur, avant même la politique)', 'worker', 'https://exemple.invalid/w.js', 'refus');
+await tryLoad('un worker depuis une adresse blob: est refusé (script-src ne nomme pas blob:)', 'worker', await page.evaluate(() => URL.createObjectURL(new Blob(['1'], { type: 'text/javascript' }))), 'worker-src');
+{
+  // La seconde balise : posée au démarrage par le jeton du faux Grist (https://grist.test), une seule fois par page, jamais pour une adresse mal formée.
+  const narrowed = await page.evaluate(() => ({
+    origin: CspNarrow.origin(),
+    second: [...document.querySelectorAll('meta[data-pp-narrowed]')].map(meta => meta.getAttribute('content')),
+    again: CspNarrow.toGristServer('https://autre.test'),
+    badOnes: ['https://grist.test/;script-src *', 'https://*.test', 'http://grist.test', 'https://grist.test/chemin', 'https://u:p@grist.test', 'https://grist test', 'https://[::1]', '', null].map(origin => CspNarrow.toGristServer(origin)),
+    count: document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]').length,
+  }));
+  check('la seconde balise de politique est posée une seule fois, pour l\'origine du jeton (https://grist.test) : img-src et connect-src y remplacent https: par elle, le reste est repris tel quel',
+    narrowed.origin === 'https://grist.test' && narrowed.second.length === 1 && narrowed.count === 2
+    && narrowed.second[0] === "img-src 'self' data: blob: https://grist.test; connect-src 'self' https://grist.test " + FONT_DIRECTORIES.join(' '), narrowed);
+  check('une autre origine ensuite n\'est pas ajoutée (l\'intersection de deux serveurs n\'en laisserait aucun), et aucune adresse mal formée n\'est prise (point-virgule, joker, http:, chemin, identifiant, blanc, crochets, vide)', narrowed.again === false && narrowed.badOnes.every(done => done === false), narrowed);
+  // Sans la seconde balise (le jeton donne une adresse en http:), `https:` reste ouvert comme index.html l'écrit, et rien ne casse.
+  const plain = await context.newPage();
+  await plain.addInitScript(() => { window.__preSeedGristStub = (stub) => { stub.state.tokenBaseUrl = 'http://localhost/api/docs/doc1'; }; });
+  await plain.goto(`${BASE}/index.html?gfs=0`, { waitUntil: 'load' });
+  await plain.waitForFunction(() => typeof GristAPI !== 'undefined' && typeof CspNarrow !== 'undefined', null, { timeout: 60000 });
+  const kept = await plain.evaluate(async () => { await GristAPI.getServerOrigin(); return { origin: CspNarrow.origin(), second: document.querySelectorAll('meta[data-pp-narrowed]').length }; });
+  check('un jeton dont l\'adresse n\'est pas en https (http://localhost) ne pose rien : la politique reste celle d\'index.html', kept.origin === '' && kept.second === 0, kept);
+  await plain.close();
+}
 
 const alive = await page.evaluate(() => Editor.getHTML());
 check('le widget fonctionne encore après ces essais', /Bonjour la politique/.test(alive), alive.slice(0, 80));

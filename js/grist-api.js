@@ -1290,6 +1290,9 @@ const GristAPI = (function () {
         const baseUrl = fixBaseUrl(info.baseUrl);
         if (baseUrl !== info.baseUrl) console.warn('[GristAPI] baseUrl corrigé:', info.baseUrl, '->', baseUrl);
         _tokenCache = { token: info.token, baseUrl, expiresAt: now + (info.ttlMsecs || 120000) };
+        // La politique de la page ne peut pas nommer le serveur de Grist (chaque instance a le sien) : elle ouvre `https:` pour les pièces jointes et la lecture légère. Maintenant que son adresse est connue, une seconde
+        // balise la referme à cette seule origine (js/csp-narrow.js : une fois par page, sans effet pour une adresse qui n'est pas une origine https simple).
+        try { if (typeof CspNarrow !== 'undefined') CspNarrow.toGristServer(new URL(baseUrl).origin); } catch (e) { /* la politique reste telle qu'index.html l'écrit */ }
         return _tokenCache;
       })();
       const forget = () => { _tokenPending = null; };

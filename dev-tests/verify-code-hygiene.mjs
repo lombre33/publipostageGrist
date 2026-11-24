@@ -1546,12 +1546,14 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     !!liveSpec && JSON.stringify(Object.keys(liveDeps).sort()) === JSON.stringify(LIVE_SIX.slice().sort()) && Object.values(liveDeps).every(version => /^\d+\.\d+\.\d+$/.test(String(version)))
       && !!liveSpec.assemble && Array.isArray(liveSpec.assemble.modules) && liveSpec.assemble.modules.length === 5 && /edition-live\.json/.test(read('dev-tests/.offline-cache/assemblage-gfs.mjs')),
     liveSpec ? Object.keys(liveDeps).join(', ') : 'edition-live.json introuvable ou illisible');
-  const policyTokens = policy.split(/\s+/).filter(Boolean);
+  // Ces règles sont celles de `script-src` : ce qui peut s'EXÉCUTER. `connect-src` nomme, depuis le 24/11, deux dossiers de polices de jsDelivr (des fichiers lus, jamais lancés) et `img-src` nomme `blob:` (des images) : ni l'un ni l'autre n'est un script.
+  const scriptPart = (policy.split(';').map(part => part.trim()).find(part => /^script-src\s/.test(part)) || '');
+  const policyTokens = scriptPart.split(/\s+/).filter(Boolean);
   const plotlyTokens = policyTokens.filter(token => /plotly/i.test(token));
   const jsdelivrTokens = policyTokens.filter(token => /jsdelivr/i.test(token));
-  check('extension : la politique de sécurité du contenu d\'index.html nomme Plotly 2.13.2 par l\'adresse exacte du catalogue de GFS (mode CDN), une fois, et par aucun autre moyen : jsDelivr n\'y est jamais ouvert en entier (ni hôte seul, ni caractère générique) et blob: n\'y est pas',
-    policy.length > 100 && plotlyTokens.length === 1 && plotlyTokens[0] === PLOTLY_ADDRESS && jsdelivrTokens.length > 0 && jsdelivrTokens.every(token => !token.includes('*') && /^https:\/\/cdn\.jsdelivr\.net\/npm\/[^\s]+\.js$/.test(token)) && !/\bblob:/.test(policy),
-    JSON.stringify({ plotly: plotlyTokens, jsdelivr: jsdelivrTokens, blob: /\bblob:/.test(policy) }));
+  check('extension : le `script-src` de la politique de sécurité du contenu d\'index.html nomme Plotly 2.13.2 par l\'adresse exacte du catalogue de GFS (mode CDN), une fois, et par aucun autre moyen : jsDelivr n\'y est jamais ouvert en entier (ni hôte seul, ni caractère générique) et blob: n\'y est pas',
+    policy.length > 100 && scriptPart.length > 20 && plotlyTokens.length === 1 && plotlyTokens[0] === PLOTLY_ADDRESS && jsdelivrTokens.length > 0 && jsdelivrTokens.every(token => !token.includes('*') && /^https:\/\/cdn\.jsdelivr\.net\/npm\/[^\s]+\.js$/.test(token)) && !/\bblob:/.test(scriptPart),
+    JSON.stringify({ plotly: plotlyTokens, jsdelivr: jsdelivrTokens, blob: /\bblob:/.test(scriptPart) }));
 
   const named = [], versions = [];
   for (const rel of [...jsFiles, 'index.html']) {
@@ -1903,9 +1905,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const directives = new Map(policy.split(';').map(part => part.trim().split(/\s+/)).filter(parts => parts[0]).map(([name, ...values]) => [name, values]));
   const scriptTags = Array.from(page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g));
   const policyAt = page.indexOf('Content-Security-Policy');
-  check('diaporama à part : present.html a sa politique de sécurité du contenu avant son premier script - scripts du dossier seulement (`script-src \'self\'` : ni en ligne, ni eval, ni autre site), aucun objet, cadre, formulaire ni balise de base - et ni script en ligne ni gestionnaire d\'événement',
-    policyAt > 0 && policyAt < page.indexOf('<script') && JSON.stringify(directives.get('script-src')) === '["\'self\'"]' && JSON.stringify(directives.get('object-src')) === '["\'none\'"]' && JSON.stringify(directives.get('base-uri')) === '["\'none\'"]'
-      && JSON.stringify(directives.get('frame-src')) === '["\'none\'"]' && JSON.stringify(directives.get('form-action')) === '["\'none\'"]' && !/unsafe-/.test(policy)
+  // 24/11 : la fenêtre est fermée comme la page (`default-src 'none'`), ses images viennent d'elle, de `data:`, de `blob:` (les images lourdes que la fenêtre fabrique) et de `https:` (les pièces jointes du serveur de Grist, que sa politique ne peut pas nommer) ; ni connexion, ni média, ni worker.
+  const sources = name => JSON.stringify(directives.get(name));
+  check('diaporama à part : present.html a sa politique de sécurité du contenu avant son premier script - fermée par défaut (`default-src \'none\'`), scripts du dossier seulement (`script-src \'self\'` : ni en ligne, ni eval, ni autre site), styles et polices de la page, images du dossier, de data:, de blob: et de https: seulement, aucune connexion, aucun objet, cadre, formulaire ni balise de base - et ni script en ligne ni gestionnaire d\'événement',
+    policyAt > 0 && policyAt < page.indexOf('<script') && sources('default-src') === '["\'none\'"]' && sources('script-src') === '["\'self\'"]' && sources('style-src') === '["\'self\'","\'unsafe-inline\'"]' && sources('font-src') === '["\'self\'","data:"]'
+      && sources('img-src') === '["\'self\'","data:","blob:","https:"]' && !directives.has('connect-src') && !directives.has('media-src') && !directives.has('worker-src')
+      && sources('object-src') === '["\'none\'"]' && sources('base-uri') === '["\'none\'"]'
+      && sources('frame-src') === '["\'none\'"]' && sources('form-action') === '["\'none\'"]' && !/unsafe-eval|script-src[^;]*unsafe-inline/.test(policy)
       && scriptTags.length >= 9 && scriptTags.every(tag => /\bsrc="[^"]+"/.test(tag[1]) && !tag[2].trim()) && !/\son[a-z]+\s*=/i.test(page.replace(/<meta[^>]*>/g, '')), policy);
   const literal = (read('js/extensions.js').match(/const REGISTRY = (\{[\s\S]*?\n  \});/) || [])[1];
   let registry = null;

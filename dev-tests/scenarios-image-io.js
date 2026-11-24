@@ -43,6 +43,46 @@
     },
   });
 
+  // 24/11 (lot 3 des images d'autres sites) : la politique de contenu n'ouvre pas `data:` à `connect-src`, fetchBlob lit donc une adresse data: SUR PLACE, octet pour octet comme `fetch` le faisait, et ne lance aucune requête.
+  cases.push({
+    id: 'imageio_fetch_blob_reads_data_uri_on_the_spot_like_fetch',
+    description: 'fetchBlob lit une adresse data: sur place (aucun fetch) et rend les mêmes octets et le même type que fetch : base64, texte encodé en %, texte brut, retours à la ligne, sans type, majuscules, caractères non ASCII ; un base64 illisible lève',
+    run: async () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1"><rect width="2" height="1"/></svg>';
+      const addresses = [
+        ['png base64', DATA_PNG],
+        ['svg encodé', 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)],
+        ['svg brut', 'data:image/svg+xml,' + svg],
+        ['base64 sur deux lignes', 'data:image/png;base64,' + PNG_B64.slice(0, 20) + '\n' + PNG_B64.slice(20)],
+        ['sans type', 'data:,bonjour%20le%20monde'],
+        ['accents encodés', 'data:text/plain;charset=utf-8,%C3%A9t%C3%A9'],
+        ['accents bruts', 'data:text/plain,été à Noël'],
+        ['majuscules', 'DATA:Image/PNG;BASE64,' + PNG_B64],
+        ['base64 sans remplissage', 'data:text/plain;base64,YQ'],
+      ];
+      const bad = [];
+      const nativeFetch = window.fetch;
+      let fetched = 0;
+      window.fetch = function () { fetched += 1; return nativeFetch.apply(this, arguments); };
+      const mine = [];
+      try { for (const [label, address] of addresses) mine.push([label, await ImageIo.fetchBlob(address)]); } finally { window.fetch = nativeFetch; }
+      if (fetched !== 0) bad.push('fetch appelé ' + fetched + ' fois');
+      for (const [i, [label, address]] of addresses.entries()) {
+        const reference = await (await nativeFetch(address)).blob();
+        const same = (await mine[i][1].arrayBuffer()).byteLength === reference.size
+          && Array.from(new Uint8Array(await mine[i][1].arrayBuffer())).join() === Array.from(new Uint8Array(await reference.arrayBuffer())).join();
+        if (!same || mine[i][1].type !== reference.type) bad.push(label + ' : ' + JSON.stringify({ type: mine[i][1].type, attendu: reference.type, taille: mine[i][1].size, attendue: reference.size }));
+      }
+      let broken = null;
+      try { await ImageIo.fetchBlob('data:image/png;base64,@@@'); } catch (e) { broken = e.name; }
+      if (!broken) bad.push('un base64 illisible ne lève pas');
+      let empty = null;
+      try { await ImageIo.fetchBlob('data:image/png'); } catch (e) { empty = e.message; }
+      if (!empty) bad.push('une adresse data: sans virgule ne lève pas');
+      return { pass: !bad.length, notes: bad.join(' | ') || 'ok' };
+    },
+  });
+
   cases.push({
     id: 'imageio_load_string_creates_no_object_url',
     description: 'load d\'une adresse décode l\'image sans créer d\'adresse temporaire',

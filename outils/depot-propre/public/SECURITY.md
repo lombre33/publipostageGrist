@@ -51,8 +51,10 @@ vulnérabilités, mais des améliorations sont les bienvenues sous forme d'issue
 - le widget demande l'accès complet au document (`requiredAccess: 'full'`), faute de niveau
   intermédiaire dans Grist ;
 - les imports ES de `esm.sh` ne peuvent pas porter d'intégrité SRI ;
-- la CSP garde `'unsafe-eval'`, que le script d'API de Grist exige, et ne limite ni les images ni les
-  connexions ;
+- la CSP garde `'unsafe-eval'`, que le script d'API de Grist exige ; elle est fermée pour le reste
+  (`default-src 'none'`, puis chaque famille nommée), mais ouvre `https:` aux images et aux connexions
+  parce que le serveur Grist de la personne ne peut pas être nommé : une seconde balise de politique
+  referme `https:` à ce seul serveur dès que son adresse est connue ;
 - les « droits par personne » du widget sont un verrou d'interface, pas une protection des données.
 
 ## Si un site tiers ou un compte est compromis
@@ -120,8 +122,10 @@ vulnerabilities, but improvements are welcome as an issue:
 - the widget requests full access to the document (`requiredAccess: 'full'`), for lack of a middle
   level in Grist;
 - `esm.sh` ES imports cannot carry an SRI integrity hash;
-- the CSP keeps `'unsafe-eval'`, which Grist's API script requires, and limits neither images nor
-  connections;
+- the CSP keeps `'unsafe-eval'`, which Grist's API script requires; it is closed for everything else
+  (`default-src 'none'`, then each family named), but opens `https:` to images and connections because
+  the person's Grist server cannot be named: a second policy tag closes `https:` to that single
+  server as soon as its address is known;
 - the widget's "per-person rights" are an interface lock, not data protection.
 
 ## If a third-party site or an account is compromised

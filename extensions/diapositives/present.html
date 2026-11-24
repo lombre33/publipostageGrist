@@ -4,9 +4,10 @@
 <meta charset="utf-8"><title>Diaporama · Slide show</title><meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/jpeg" href="../../img/grist-factory-logo.jpg">
 <!-- La fenêtre à part du diaporama (extensions/diapositives/slide-window.js dit pourquoi, slide-present.js ce qu'elle fait). Elle reçoit le rendu de la présentation de l'app qui l'a ouverte : même politique de
-     sécurité du contenu que index.html moins ce qu'elle n'utilise pas (ni bibliothèque, ni 'unsafe-eval', aucun script en ligne), si bien que même du HTML piégé reçu en message ne s'exécute pas. Les
+     sécurité du contenu que index.html moins ce qu'elle n'utilise pas (ni bibliothèque, ni 'unsafe-eval', aucun script en ligne, aucune connexion : default-src 'none' ferme tout ce qui n'est pas nommé), si bien que même du HTML piégé reçu en message ne s'exécute pas.
+     Les images : celles du texte (data:), les fichiers que l'app lui envoie pour les images lourdes (blob:, slide-window.js) et les pièces jointes du serveur de Grist (https:, la seule ouverture vers un hôte quelconque : son adresse ne peut pas être nommée). Les
      numéros de version (?v=) sont ceux d'index.html pour css/ et js/, et celui de l'extension (js/extensions.js) pour le reste : codeHygiene garde qu'ils s'accordent. -->
-<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'">
 <link rel="stylesheet" href="../../css/style.css?v=0.113">
 <link rel="stylesheet" href="slide-show.css?v=0.89">
 <style>
