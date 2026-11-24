@@ -697,7 +697,14 @@
       const save = press('Ctrl+s', document.body);
       out.saveFreedStopped = save.defaultPrevented;
       Shortcuts.resetKey('save');
-      const saveBack = press('Ctrl+s', document.body);
+      // Ctrl+S, rendue à js/main.js, enregistre pour de bon : sur un document sans nom, le premier « Enregistrer » demande le nom (js/main-save.js:askFirstName). La question n'est pas ce qu'on
+      // mesure ici : une réponse toute faite (annulée), sinon la fenêtre reste ouverte et fausse les cas d'après.
+      const stub = h.stubDialogs();
+      let saveBack;
+      try {
+        saveBack = press('Ctrl+s', document.body);
+        await sleep(150);
+      } finally { stub.restore(); }
       out.saveBackHandledByMain = saveBack.defaultPrevented;
       const pass = out.nativeBefore === true && out.altBBefore === false && out.altBAfter === true && out.oldDoesNothing && out.oldStopped && out.oldKeptInTextField && out.restored
         && out.ctrlBMakesItalic && out.takenResult === '' && out.saveFreedStopped && out.saveBackHandledByMain;
@@ -1334,7 +1341,13 @@
       input.remove();
       out.freedEditor = decision(keyDecision('Ctrl+b', 'bold', { target: inEditor() }));
       document.body.appendChild(modal);
-      out.freedUnderModal = decision(keyDecision('Ctrl+s', 'save'));
+      // Sous la fausse fenêtre, Ctrl+S reste à js/main.js, qui enregistre pour de bon : le premier « Enregistrer » d'un document sans nom demande le nom (js/main-save.js:askFirstName), question à laquelle
+      // une réponse toute faite (annulée) évite de laisser une fenêtre ouverte derrière le cas.
+      const stub = h.stubDialogs();
+      try {
+        out.freedUnderModal = decision(keyDecision('Ctrl+s', 'save'));
+        await sleep(150);
+      } finally { stub.restore(); }
       modal.remove();
       Shortcuts.resetAll();
       // Une touche d'origine « native » (Ctrl+B est celle de l'éditeur, qui la prend lui-même : elle reste visible aux écouteurs d'après, l'action ne part pas) ; enregistrée telle quelle dans
