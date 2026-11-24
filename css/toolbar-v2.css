@@ -235,7 +235,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .link-config-modal-content .modal-actions .link-config-btn-primary:hover,
 .macro-editor-modal-content .modal-actions .link-config-btn-primary:hover { background: var(--fill-hover, var(--accent-solid-hover)) border-box; }
 
-/* Fenêtre « Macro modèle » (#macro-editor-modal, js/macro-editor.js) : page de garde et liste de cartes « annexe conditionnelle », chaque carte
+/* Fenêtre « Macro modèle » (#macro-editor-modal, js/macro-editor.js) : la liste des documents, une carte chacun (modèle et condition d'inclusion, ou règles d'un document choisi selon la ligne), chaque carte
    reprenant `.link-rule-row` pour ses lignes de règle (même vocabulaire visuel que la fenêtre « Tables liées » ci-dessus) plutôt qu'un nouveau
    patron de liste. */
 /* Titre et boutons de la fenêtre sont fixes et seul le contenu défile (base commune des fenêtres, js/modal-base.js), comme dans toutes les autres
@@ -246,7 +246,8 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .macro-editor-field label { font-size: 11px; font-weight: 700; color: var(--text-muted); }
 .macro-editor-field input, .macro-editor-field select { height: 30px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-size: 12.5px; padding: 0 8px; background: var(--surface); color: var(--text); }
 .macro-editor-slots-header { font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 4px 0 8px; text-transform: uppercase; letter-spacing: .02em; }
-.macro-editor-slots { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow: auto; margin-bottom: 10px; }
+/* Pas de hauteur propre : la liste suit les cartes (un document sous condition en a plusieurs lignes) et c'est le corps de la fenêtre qui défile, seul. */
+.macro-editor-slots { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
 .macro-slots-empty { font-size: 12px; color: var(--text-faint); margin: 0; padding: 8px 0; }
 .macro-slot-card { border: 1px solid var(--border); border-radius: var(--radius-md, 8px); padding: 10px; background: var(--surface-sunken); }
 .macro-slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -255,6 +256,29 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .macro-slot-remove:hover, .macro-rule-remove:hover { background: var(--surface); border-color: var(--border-strong); color: var(--danger); }
 .macro-slot-remove::before, .macro-rule-remove::before { content: "✕"; font-size: 12px; }
 .macro-slot-rules { display: flex; flex-direction: column; gap: 4px; }
+/* Le haut d'une carte : « Document n » (et « choisi selon la ligne »), puis plus haut, plus bas et supprimer. Les trois boutons ont la forme et la taille de la croix des règles ; celui qu'on ne peut pas
+   utiliser (le premier ne monte pas, le dernier ne descend pas) est grisé, jamais retiré. */
+.macro-slot-heading { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.macro-slot-kind { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.macro-slot-controls { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.macro-slot-move { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.macro-slot-move:hover:not(:disabled) { background: var(--surface); border-color: var(--border-strong); color: var(--text); }
+.macro-slot-move:disabled { opacity: .35; cursor: default; }
+.macro-slot-move-up::before { content: "↑"; font-size: 13px; }
+.macro-slot-move-down::before { content: "↓"; font-size: 13px; }
+.macro-slot-move:focus-visible, .macro-slot-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Un document : son modèle, « Inclure ce document » (Toujours / Seulement si…) et, sous « Seulement si… », la condition - les lignes de la fenêtre de condition d'une bulle (`.var-condition-rules`, css/variable-actions.css) sur le fond de la carte. */
+/* Le modèle et « Inclure ce document » côte à côte (le modèle prend la place qui reste), l'un sous l'autre quand la fenêtre est étroite : la carte garde la hauteur d'une ligne de champs dans un panneau bas. */
+.macro-doc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
+.macro-doc-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 200px; min-width: 0; }
+.macro-doc-when-field { flex: 0 1 170px; }
+.macro-doc-label { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.macro-doc-card select.macro-doc-model, .macro-doc-card select.macro-doc-when { width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }
+.macro-doc-card select.macro-doc-model + .ss-wrap .ss-trigger { height: 28px; padding: 0 6px; font-size: 12px; }
+.macro-doc-condition[hidden] { display: none; }
+.macro-doc-condition .var-condition-rules { background: var(--surface); }
+.macro-doc-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--warn-ink); }
+.macro-doc-hint[hidden] { display: none; }
 /* `flex-wrap: wrap` (au lieu du `nowrap` implicite) : sans lui, les zones `flex: 1` (`min-width: 0`) de la ligne se réduiraient jusqu'à
    l'illisible plutôt que de passer à la ligne (sélecteur de colonne réduit à 10 px dans un panneau étroit ou avec l'avertissement « colonne
    absente »). */
@@ -300,6 +324,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .macro-slot-sep { border-top: 1px solid var(--border); margin: 8px 0; }
 .macro-slot-default-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
 .macro-slot-default-select { width: 100%; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); }
+.macro-editor-add { display: flex; flex-direction: column; gap: 6px; }
 .macro-editor-add-slot { display: block; width: 100%; font-size: 12.5px; font-weight: 600; color: var(--accent); background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 7px; cursor: pointer; font-family: var(--font-ui); }
 .macro-editor-add-slot:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
 
@@ -311,7 +336,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .macro-summary-box { text-align: center; max-width: 480px; margin: 0 auto; }
 /* La phrase prend `--text` : `--text-muted` sur le fond `--surface-sunken` du panneau n'atteint que 4,39:1 en clair, sous les 4,5:1 de la charte. */
 .macro-summary-text { font-size: 13px; color: var(--text); margin: 0 0 12px; }
-/* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par page de garde ou annexe, avec le nom du modèle suivi de son
+/* Les modèles de la composition (js/macro-editor.js:renderParts) : une ligne par document, avec le nom du modèle suivi de son
    stylo, qui l'ouvre dans l'éditeur (le bandeau « Revenir au macro-modèle » ramène ici, js/main.js), puis de son œil, qui le masque de la Lecture
    et des exports. Un modèle masqué reste dans la composition : son nom se grise et son œil est barré et enfoncé (rien ne disparaît, on grise). Un
    modèle supprimé depuis reste dit (grisé, stylo et œil grisés), jamais retiré. */
@@ -325,6 +350,9 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 /* Les étiquettes « Grille » et « Paysage » (js/macro-editor.js:modelTags), à droite du nom : un liseré et le texte atténué du panneau (`--text-muted` sur `--surface`, la ligne qui les porte : 5,4:1 en clair, 6,3:1 en
    sombre), jamais de couleur. Elles ne rétrécissent pas : c'est le nom qui se coupe par « … » quand la ligne manque de place. */
 .macro-summary-model-tag { flex: none; margin-left: 4px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; line-height: 16px; white-space: nowrap; color: var(--text-muted); }
+/* Sous les modèles d'une ligne du résumé : quand elle est incluse (« Seulement si : Statut = Urgent », ou « Le modèle est choisi selon la ligne »). Sur sa propre ligne, en texte atténué du panneau (`--text-muted`
+   sur `--surface` : 5,4:1 en clair), coupé par « … » quand la condition est longue - elle se lit en entier au survol. */
+.macro-summary-condition { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-muted); }
 .macro-summary-edit, .macro-summary-eye { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
 .macro-summary-edit svg, .macro-summary-eye svg { width: 14px; height: 14px; pointer-events: none; }
 .macro-summary-edit:hover, .macro-summary-eye:hover { background: var(--surface-sunken); border-color: var(--border-strong); color: var(--text); }

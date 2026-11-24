@@ -40,7 +40,7 @@
     await h.resetEditor();
     MacroEditor.openModal(null);
     el('macro-editor-name').value = nom;
-    const cover = el('macro-editor-cover');
+    const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
     cover.value = String(coverId);
     cover.dispatchEvent(new Event('change', { bubbles: true }));
     el('macro-editor-save').click();

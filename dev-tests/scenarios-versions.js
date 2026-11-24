@@ -376,7 +376,7 @@
       await waitFor(() => rows().length === 2, 3000);
       if (sheetShown()) problems.push('un macro-modèle ne montre pas de feuille');
       const lines = extraText();
-      if (!lines.includes('Page de garde : Historique modèle un') || !lines.includes('Annexe 1 : Historique modèle deux, Historique modèle un') || !lines.includes('Page de garde : modèle supprimé')) problems.push('composition actuelle : ' + lines);
+      if (!lines.includes('Document 1 : Historique modèle un') || !lines.includes('Document 2 : Historique modèle deux, Historique modèle un') || !lines.includes('Document 3 : modèle supprimé')) problems.push('composition actuelle : ' + lines);
       await pickRow(1);
       await sleep(150);
       if (!extraText().includes('Aucun modèle dans la composition.') || restoreButton().disabled) problems.push('composition vide : ' + extraText() + ' / bouton ' + restoreButton().disabled);
@@ -665,7 +665,7 @@
       // Le macro-modèle, par la vraie fenêtre de composition : enregistré, choisi et chargé comme par une personne.
       MacroEditor.openModal(null);
       document.getElementById('macro-editor-name').value = 'Historique macro à restaurer';
-      const select = document.getElementById('macro-editor-cover');
+      const select = document.querySelector('#macro-editor-slots .macro-doc-model');
       select.value = String(cover.id);
       select.dispatchEvent(new Event('change', { bubbles: true }));
       document.getElementById('macro-editor-save').click();
@@ -680,10 +680,10 @@
       try {
         await openHistory();
         await waitFor(() => rows().length === 2, 3000);
-        if (!extraText().includes('Page de garde : Historique macro - garde')) problems.push('composition actuelle : ' + extraText());
+        if (!extraText().includes('Document 1 : Historique macro - garde')) problems.push('composition actuelle : ' + extraText());
         await pickRow(1);
         await waitFor(() => extraText().includes('Historique macro - autre'), 2000);
-        if (!extraText().includes('Page de garde : Historique macro - autre')) problems.push('composition de la version : ' + extraText());
+        if (!extraText().includes('Document 1 : Historique macro - autre')) problems.push('composition de la version : ' + extraText());
         restoreButton().click();
         await waitFor(() => !isOpen(), 6000);
       } finally { dialogs.restore(); }
@@ -994,7 +994,7 @@
       // Le macro-modèle, par la vraie fenêtre de composition (enregistré, choisi et chargé comme par une personne) avec sa seule page de garde, puis ses annexes écrites dans sa ligne.
       MacroEditor.openModal(null);
       document.getElementById('macro-editor-name').value = 'Comparer macro';
-      const select = document.getElementById('macro-editor-cover');
+      const select = document.querySelector('#macro-editor-slots .macro-doc-model');
       select.value = String(gardeA.id);
       select.dispatchEvent(new Event('change', { bubbles: true }));
       document.getElementById('macro-editor-save').click();
@@ -1011,7 +1011,7 @@
       await waitFor(compareReady, 3000);
       await turnCompare(true);
       const lines = Array.from(document.querySelectorAll('#pp-versions-modal .pp-versions-extra .pp-versions-line')).map(node => node.textContent);
-      const expected = ['Page de garde : Comparer macro - garde A', 'Page de garde : Comparer macro - garde B', 'Annexe 1 : Comparer macro - annexe X', 'Annexe 2 : Comparer macro - annexe Y'];
+      const expected = ['Document 1 : Comparer macro - garde A', 'Document 1 : Comparer macro - garde B', 'Document 2 : Comparer macro - annexe X', 'Document 3 : Comparer macro - annexe Y'];
       if (JSON.stringify(lines) !== JSON.stringify(expected)) problems.push('lignes : ' + JSON.stringify(lines));
       if (extraMarks('removed').join('|') !== 'Comparer macro - garde A|Comparer macro - annexe Y' || extraMarks('added').join('|') !== 'Comparer macro - garde B') problems.push('marques : -' + extraMarks('removed') + ' +' + extraMarks('added'));
       if (noteText() !== '2 différences avec la version actuelle') problems.push('note : ' + noteText());

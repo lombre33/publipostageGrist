@@ -334,20 +334,20 @@ async function run(theme) {
   console.log(`\n=== Stylo d'un modèle du macro-modèle et retour, ${WIDTH}x${HEIGHT}, thème ${T} ===`);
   await away();
 
-  // 1) Le résumé : une ligne par page de garde ou annexe, un stylo par modèle.
+  // 1) Le résumé : une ligne par document, un stylo par modèle.
   check(`${T} - le macro-modèle s'ouvre par la liste`, await pickTemplate(MACRO, idMacro));
   const s0 = await snap(), sum0 = await summaryOf();
   await shot(`${theme}-1-resume`);
   check(`${T} - le résumé est à l'écran, l'éditeur et le bandeau « Revenir au macro-modèle » non`, s0.summaryShown && !s0.editorShown && !s0.barShown, s0);
-  check(`${T} - une ligne par page de garde ou annexe : « Page de garde », « Annexe 1 », « Annexe 2 »`, JSON.stringify(sum0.rows.map(r => r.label)) === JSON.stringify(['Page de garde', 'Annexe 1', 'Annexe 2']), sum0.rows.map(r => r.label));
+  check(`${T} - une ligne par document : « Document 1 », « Document 2 », « Document 3 »`, JSON.stringify(sum0.rows.map(r => r.label)) === JSON.stringify(['Document 1', 'Document 2', 'Document 3']), sum0.rows.map(r => r.label));
   const names = sum0.rows.map(r => r.models.map(m => m.name));
-  check(`${T} - chaque ligne dit ses modèles : la garde, les trois de l'annexe 1 (jamais deux fois le même), celui de l'annexe 2`,
+  check(`${T} - chaque ligne dit ses modèles : la garde, les trois du document 2 (jamais deux fois le même), celui du document 3`,
     JSON.stringify(names) === JSON.stringify([['Contrat client'], ['Annexe CDI', 'Annexe CDD', 'Mentions légales'], ['Mentions légales']]), names);
   const pencils = sum0.rows.flatMap(r => r.models);
   check(`${T} - un stylo par modèle (cinq), nom accessible et info-bulle « Modifier le modèle « … » », au moins 24 px, au premier plan`,
     pencils.length === 5 && pencils.every(p => p.label === `Modifier le modèle « ${p.name} »` && p.title === p.label && p.w >= 24 && p.h >= 24 && p.onTop && !p.disabled), pencils);
   const sentence = await paintOf('#macro-summary-text', '#macro-summary-container');
-  check(`${T} - la phrase du résumé (« Page de garde : … — 2 annexes conditionnelles. ») se lit sur le fond du panneau (4,5:1 au moins ; en couleur de texte du thème, elle n'avait que 4,39:1 en clair avec le gris atténué)`,
+  check(`${T} - la phrase du résumé (« 3 documents, dont 2 sous condition. ») se lit sur le fond du panneau (4,5:1 au moins ; en couleur de texte du thème, elle n'avait que 4,39:1 en clair avec le gris atténué)`,
     ratio(sentence.color, sentence.bg) >= 4.5, { sentence: ratio(sentence.color, sentence.bg), color: sentence.color, bg: sentence.bg });
 
   // Contrastes du résumé : étiquette, nom, nom d'un modèle introuvable, stylo, tous sur le fond de leur ligne.
@@ -568,8 +568,8 @@ await sleep(400);
 const en = await seedDemo();
 check('en anglais le macro-modèle s\'ouvre par la liste', await pickTemplate(MACRO, en.idMacro));
 const en0 = await summaryOf();
-check('anglais : « Cover page », « Annex 1 », « Annex 2 » et l\'info-bulle « Edit the template “…” » sur chaque stylo',
-  JSON.stringify(en0.rows.map(r => r.label)) === JSON.stringify(['Cover page', 'Annex 1', 'Annex 2']) && en0.rows.flatMap(r => r.models).every(m => m.label === `Edit the template “${m.name}”` && m.title === m.label), en0.rows);
+check('anglais : « Document 1 », « Document 2 », « Document 3 » et l\'info-bulle « Edit the template “…” » sur chaque stylo',
+  JSON.stringify(en0.rows.map(r => r.label)) === JSON.stringify(['Document 1', 'Document 2', 'Document 3']) && en0.rows.flatMap(r => r.models).every(m => m.label === `Edit the template “${m.name}”` && m.title === m.label), en0.rows);
 await realClick(PENCIL(en.idCdd), 900);
 await waitCurrent(en.idCdd);
 const en1 = await snap(), eg = await barOf();

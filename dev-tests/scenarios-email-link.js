@@ -325,7 +325,7 @@ window.EditorTestSuites.emailLink = (function () {
         check(problems, 'document neuf : le bouton est toujours là', !!button() && !button().hidden, true);
         MacroEditor.openModal(null);
         byId('macro-editor-name').value = 'Lien - macro';
-        const cover = byId('macro-editor-cover');
+        const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
         cover.value = String(f.D1);
         cover.dispatchEvent(new Event('change', { bubbles: true }));
         byId('macro-editor-save').click();

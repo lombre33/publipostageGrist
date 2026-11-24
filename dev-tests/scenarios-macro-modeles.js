@@ -861,7 +861,7 @@
     await Templates.loadAll();
     MacroEditor.openModal(null);
     document.getElementById('macro-editor-name').value = nom;
-    const select = document.getElementById('macro-editor-cover');
+    const select = document.querySelector('#macro-editor-slots .macro-doc-model');
     select.value = String(cover.id);
     select.dispatchEvent(new Event('change', { bubbles: true }));
     document.getElementById('macro-editor-save').click();
@@ -972,7 +972,7 @@
         await h.sleep(700);
         document.getElementById('btn-edit-macro').click();
         await h.sleep(200);
-        const cover = document.getElementById('macro-editor-cover');
+        const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
         cover.value = String(otherId);
         cover.dispatchEvent(new Event('change', { bubbles: true }));
         document.getElementById('macro-editor-save').click();
@@ -1005,7 +1005,7 @@
         const untouched = macroRow(id);
         document.getElementById('btn-edit-macro').click();
         await h.sleep(200);
-        const cover = document.getElementById('macro-editor-cover');
+        const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
         cover.value = String(otherId);
         cover.dispatchEvent(new Event('change', { bubbles: true }));
         document.getElementById('macro-editor-save').click();
@@ -1526,7 +1526,7 @@
         document.getElementById('macro-editor-add-slot').click();
         await h.sleep(150);
         const ours = select => Array.from(select.options).map(option => option.textContent.replace(/^Utiliser\s+«\s*/i, '').replace(/\s*»\s*$/, '').trim()).filter(name => /^Liste - /.test(name)).sort();
-        const cover = ours(document.getElementById('macro-editor-cover'));
+        const cover = ours(document.querySelector('#macro-editor-slots .macro-doc-model'));
         const annex = ours(document.querySelector('#macro-editor-slots .macro-slot-default-select'));
         const want = ['Liste - diapositives', 'Liste - document', 'Liste - grille'];
         const problems = [];
@@ -1553,7 +1553,7 @@
         const untouched = JSON.parse(macroRow(id).Margins || '{}');
         document.getElementById('btn-edit-macro').click();
         await h.sleep(200);
-        const cover = document.getElementById('macro-editor-cover');
+        const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
         cover.value = String(otherId);
         cover.dispatchEvent(new Event('change', { bubbles: true }));
         document.getElementById('macro-editor-save').click();
@@ -1764,7 +1764,7 @@
 
   cases.push({
     id: 'macro_summary_lists_every_model_of_the_composition_with_a_pencil',
-    description: 'Le résumé d\'un macro-modèle liste ses modèles (page de garde, puis chaque annexe : modèle de chaque règle et modèle par défaut, sans doublon dans une annexe), un stylo chacun ; une annexe sans modèle garde sa ligne, un modèle supprimé reste dit avec son stylo grisé',
+    description: 'Le résumé d\'un macro-modèle liste ses modèles (un « Document n » par position : le modèle d\'un document, ou celui de chaque règle d\'une position choisie selon la ligne et le modèle par défaut, sans doublon dans une position), un stylo chacun ; une position sans modèle garde sa ligne, un modèle supprimé reste dit avec son stylo grisé',
     run: async (h) => {
       try {
         const macro = await composedMacro(h, 'Macro stylos', (m, rule) => [
@@ -1775,7 +1775,7 @@
         const cover = 'Macro stylos - garde', other = 'Macro stylos - autre', third = 'Macro stylos - défaut';
         const rows = summaryRows();
         const problems = [];
-        const wanted = [['Page de garde', [cover]], ['Annexe 1', [other, cover, third]], ['Annexe 2', [other]], ['Annexe 3', ['aucun modèle choisi']], ['Annexe 4', ['modèle introuvable']]];
+        const wanted = [['Document 1', [cover]], ['Document 2', [other, cover, third]], ['Document 3', [other]], ['Document 4', ['aucun modèle choisi']], ['Document 5', ['modèle introuvable']]];
         if (JSON.stringify(rows.map(r => [r.label, r.models])) !== JSON.stringify(wanted)) problems.push('lignes : ' + JSON.stringify(rows.map(r => [r.label, r.models])));
         const ids = rows.map(r => r.pencils.map(p => p.id + (p.disabled ? '(grisé)' : '')));
         const wantedIds = [[macro.coverId], [macro.otherId, macro.coverId, macro.thirdId], [macro.otherId], [], ['987654(grisé)']].map(list => list.map(String));
@@ -1786,7 +1786,7 @@
         const wantedLabels = ['Modifier le modèle « ' + cover + ' »', 'Modifier le modèle « ' + other + ' »', 'Modifier le modèle « ' + cover + ' »', 'Modifier le modèle « ' + third + ' »', 'Modifier le modèle « ' + other + ' »', 'modèle introuvable'];
         if (JSON.stringify(labels) !== JSON.stringify(wantedLabels)) problems.push('noms accessibles : ' + JSON.stringify(labels));
         const sentence = document.getElementById('macro-summary-text').textContent;
-        if (sentence !== 'Page de garde : ' + cover + ' — 4 annexes conditionnelles.') problems.push('phrase : ' + sentence);
+        if (sentence !== '5 documents, dont 4 sous condition.') problems.push('phrase : ' + sentence);
         if (!isShown('macro-summary-container') || returnBarShown()) problems.push('le résumé doit être à l\'écran, sans bandeau de retour');
         return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
       } finally { await leaveMacro(h); }
@@ -1976,15 +1976,15 @@
   // Le résumé et le bandeau de retour s'écrivent avec la langue de la page, au moment où ils se dessinent : le même parcours en français, puis dans une page qui démarre en anglais.
   const macroTextsCase = {
     id: 'macro_pencil_and_return_bar_texts_are_in_the_page_language',
-    description: 'En français, le résumé (Page de garde, Annexe 1, infobulle du stylo) et le bandeau de retour sont en français ; dans la page qui démarre en anglais (Cover page, Annex 1, « Edit the template … », « Back to the macro template ») ils sont en anglais',
+    description: 'En français, le résumé (Document 1, Document 2, infobulle du stylo) et le bandeau de retour sont en français ; dans la page qui démarre en anglais (Document 1, Document 2, « Edit the template … », « Back to the macro template ») ils sont en anglais',
     run: async (h) => {
       try {
         const macro = await composedMacro(h, 'Macro langue');
         const problems = [];
         const en = I18n.getLang() === 'en';
         const want = en
-          ? { cover: 'Cover page', annex: 'Annex 1', pencil: 'Edit the template “Macro langue - garde”', barText: 'Template opened from the macro template “Macro langue”.', barButton: 'Back to the macro template', barAria: 'Back to the macro template' }
-          : { cover: 'Page de garde', annex: 'Annexe 1', pencil: 'Modifier le modèle « Macro langue - garde »', barText: 'Modèle ouvert depuis le macro-modèle « Macro langue ».', barButton: 'Revenir au macro-modèle', barAria: 'Retour au macro-modèle' };
+          ? { cover: 'Document 1', annex: 'Document 2', pencil: 'Edit the template “Macro langue - garde”', barText: 'Template opened from the macro template “Macro langue”.', barButton: 'Back to the macro template', barAria: 'Back to the macro template' }
+          : { cover: 'Document 1', annex: 'Document 2', pencil: 'Modifier le modèle « Macro langue - garde »', barText: 'Modèle ouvert depuis le macro-modèle « Macro langue ».', barButton: 'Revenir au macro-modèle', barAria: 'Retour au macro-modèle' };
         const rows = summaryRows();
         if (rows[0].label !== want.cover || rows[1].label !== want.annex || rows[0].pencils[0].label !== want.pencil) problems.push('résumé : ' + JSON.stringify(rows[0]));
         pencilOf(macro.otherId).click();
@@ -2216,7 +2216,7 @@
         await h.sleep(700);
         const hiddenCover = await outputs();
         if (JSON.stringify(hiddenCover) !== JSON.stringify({ reading: 1, pdf: [1], merged: [1], word: 1 })) problems.push('page de garde masquée : ' + JSON.stringify(hiddenCover));
-        if (JSON.stringify(summaryRows().map(r => [r.label, r.models])) !== JSON.stringify([['Page de garde', ['Macro œil sorties - garde']], ['Annexe 1', ['Macro œil sorties - autre', 'Macro œil sorties - garde', 'Macro œil sorties - défaut']]])) problems.push('le résumé a changé : ' + JSON.stringify(summaryRows().map(r => r.models)));
+        if (JSON.stringify(summaryRows().map(r => [r.label, r.models])) !== JSON.stringify([['Document 1', ['Macro œil sorties - garde']], ['Document 2', ['Macro œil sorties - autre', 'Macro œil sorties - garde', 'Macro œil sorties - défaut']]])) problems.push('le résumé a changé : ' + JSON.stringify(summaryRows().map(r => r.models)));
         // Un second clic remet tout, à l'identique.
         eyeOf(0, macro.coverId).click();
         await h.sleep(700);
@@ -2328,7 +2328,7 @@
         // Une autre page de garde : le masquage de l'ancienne ne la suit pas ; remettre l'ancienne ne le ressuscite pas.
         document.getElementById('btn-edit-macro').click();
         await h.sleep(250);
-        const cover = document.getElementById('macro-editor-cover');
+        const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
         cover.value = String(macro.otherId);
         cover.dispatchEvent(new Event('change', { bubbles: true }));
         document.getElementById('macro-editor-save').click();
@@ -2337,7 +2337,7 @@
         if (JSON.stringify(hiddenIn(row, 0)) !== JSON.stringify([]) || String(composition(row)[0].modeleId) !== String(macro.otherId)) problems.push('après une autre page de garde : ' + row.Contenu);
         document.getElementById('btn-edit-macro').click();
         await h.sleep(250);
-        const back = document.getElementById('macro-editor-cover');
+        const back = document.querySelector('#macro-editor-slots .macro-doc-model');
         back.value = String(macro.coverId);
         back.dispatchEvent(new Event('change', { bubbles: true }));
         document.getElementById('macro-editor-save').click();
@@ -2636,7 +2636,7 @@
         // Les listes de la fenêtre de composition ne portent pas d'étiquette (« Oui, dans le résumé », pas « partout »).
         MacroEditor.openModal(Templates.byId(macro.id));
         await h.sleep(200);
-        const listed = Array.from(document.querySelectorAll('#macro-editor-cover option, #macro-editor-slots .macro-slot-default-select option')).map(o => o.textContent);
+        const listed = Array.from(document.querySelectorAll('#macro-editor-slots .macro-doc-model option, #macro-editor-slots .macro-slot-default-select option')).map(o => o.textContent);
         if (!listed.some(text => text.includes(nom + ' - grille paysage'))) problems.push('la liste de la fenêtre n\'a pas le modèle attendu : ' + JSON.stringify(listed.slice(0, 6)));
         if (listed.some(text => /Paysage|Grille/.test(text))) problems.push('une liste de la fenêtre de composition porte une étiquette : ' + JSON.stringify(listed.filter(text => /Paysage|Grille/.test(text))));
         document.getElementById('macro-editor-cancel').click();
@@ -2713,6 +2713,491 @@
         I18n.setLang('fr');
         await leaveMacro(h);
       }
+    },
+  });
+
+  // --- La condition de chaque document (24/11, demande d'Antoine : « ne plus avoir le fonctionnement par page de garde, mais pouvoir mettre des conditions sur chaque document ») ---
+  // Un macro-modèle est une liste de documents : chacun est inclus toujours, ou seulement si sa condition (`condition` : { mode, rules }, la même que celle d'une bulle conditionnelle : Et / Ou, groupes, autre colonne)
+  // est remplie pour la ligne. Les macro-modèles d'avant (une page de garde puis des annexes) s'ouvrent tels quels : la page de garde est leur premier document, toujours inclus.
+  // Le moteur (MacroTemplates.pickModeleId, buildConcatenatedHtml) est testé sans DOM ; la fenêtre, le résumé, la Lecture et le ZIP par les vrais gestes.
+  const COND_TEXTS = { cover: 'Pagedegarde', other: 'Autrepage', third: 'Pagepardéfaut' };
+  const whenCond = (...rules) => ({ mode: 'all', rules });
+  const ruleOn = (column, operator, value) => ({ column, operator, value });
+  const pickOn = (slot, record) => MacroTemplates.pickModeleId(slot, 'Dossiers', record);
+
+  cases.push({
+    id: 'macro_condition_includes_the_document_only_when_the_condition_holds',
+    description: 'pickModeleId : un document avec condition ne sort que pour la ligne qui la remplit (null sinon) ; sans condition il sort toujours, comme avant',
+    run: async () => {
+      const problems = [];
+      const slot = { type: 'fixed', modeleId: '42', condition: whenCond(ruleOn('Statut', '=', 'Urgent')) };
+      if (await pickOn(slot, { id: 1, Statut: 'Urgent' }) !== '42') problems.push('ligne qui remplit la condition');
+      if (await pickOn(slot, { id: 2, Statut: 'Normal' }) !== null) problems.push('ligne qui ne la remplit pas');
+      if (await pickOn(slot, { id: 3 }) !== null) problems.push('ligne sans la colonne');
+      if (await pickOn({ type: 'fixed', modeleId: '42' }, { id: 4, Statut: 'Normal' }) !== '42') problems.push('document sans condition');
+      if (await pickOn({ type: 'fixed', modeleId: '42', condition: null }, { id: 5 }) !== '42') problems.push('condition nulle');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_condition_combines_and_or_groups_and_another_column',
+    description: 'La condition d\'un document se lit comme celle d\'une bulle : « toutes » ou « au moins une », un groupe (« A et (B ou C) »), la comparaison à une autre colonne de la ligne',
+    run: async () => {
+      const problems = [];
+      const all = { type: 'fixed', modeleId: 'x', condition: whenCond(ruleOn('Statut', '=', 'Urgent'), ruleOn('Montant', '>', '100')) };
+      const any = { type: 'fixed', modeleId: 'x', condition: { mode: 'any', rules: [ruleOn('Statut', '=', 'Urgent'), ruleOn('Montant', '>', '100')] } };
+      const grouped = { type: 'fixed', modeleId: 'x', condition: whenCond(ruleOn('Statut', '=', 'Urgent'), { mode: 'any', rules: [ruleOn('Montant', '>', '100'), ruleOn('Nom', 'contient', 'A')] }) };
+      const versus = { type: 'fixed', modeleId: 'x', condition: whenCond({ column: 'Montant', operator: '>', value: '', valueColumn: 'Seuil' }) };
+      const rows = {
+        urgentBig: { id: 1, Statut: 'Urgent', Montant: 500, Nom: 'Zed', Seuil: 1000 },
+        urgentSmallA: { id: 2, Statut: 'Urgent', Montant: 5, Nom: 'Ada', Seuil: 1 },
+        urgentSmall: { id: 3, Statut: 'Urgent', Montant: 5, Nom: 'Zed', Seuil: 1 },
+        normalBig: { id: 4, Statut: 'Normal', Montant: 500, Nom: 'Ada', Seuil: 1000 },
+      };
+      const verdicts = async slot => (await Promise.all(Object.values(rows).map(row => pickOn(slot, row)))).map(v => v === 'x');
+      const same = (name, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) problems.push(name + ' : ' + JSON.stringify(got)); };
+      same('toutes', await verdicts(all), [true, false, false, false]);
+      same('au moins une', await verdicts(any), [true, true, true, true]);
+      same('A et (B ou C)', await verdicts(grouped), [true, true, false, false]);
+      same('autre colonne', await verdicts(versus), [false, true, true, false]);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_condition_without_a_complete_rule_keeps_the_document_and_an_unreadable_column_leaves_it_out',
+    description: 'Une condition sans règle complète n\'en est pas une (le document reste, comme avant) ; une règle sur une colonne que la ligne n\'a pas n\'est pas remplie : le document sort de l\'assemblage, sans erreur',
+    run: async () => {
+      const problems = [];
+      const record = { id: 1, Statut: 'Urgent' };
+      if (await pickOn({ type: 'fixed', modeleId: 'x', condition: whenCond(ruleOn('', '=', '')) }, record) !== 'x') problems.push('règle vide');
+      if (await pickOn({ type: 'fixed', modeleId: 'x', condition: { mode: 'all', rules: [] } }, record) !== 'x') problems.push('aucune règle');
+      if (await pickOn({ type: 'fixed', modeleId: 'x', condition: whenCond(ruleOn('Inexistante', '=', 'oui')) }, record) !== null) problems.push('colonne absente de la ligne');
+      if (await pickOn({ type: 'fixed', modeleId: 'x', condition: whenCond(ruleOn('Statut', '=', 'Urgent'), ruleOn('Inexistante', '=', 'oui')) }, record) !== null) problems.push('une règle remplie et une illisible');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_condition_on_a_position_chosen_by_the_row_and_the_hidden_eye',
+    description: 'La condition d\'une position qui choisit son modèle selon la ligne vaut avant le choix (condition fausse : rien, même si une règle correspond) ; un modèle masqué par son œil reste masqué que la condition soit remplie ou non',
+    run: async () => {
+      const problems = [];
+      const byRow = condition => ({ type: 'conditional', rules: [ruleOn('Statut', '=', 'Urgent')].map(r => Object.assign(r, { modeleId: 'urgent' })), defaultModeleId: 'defaut', condition });
+      const record = { id: 1, Statut: 'Urgent', Montant: 500 };
+      if (await pickOn(byRow(whenCond(ruleOn('Montant', '>', '100'))), record) !== 'urgent') problems.push('condition remplie : la règle choisit');
+      if (await pickOn(byRow(whenCond(ruleOn('Montant', '>', '1000'))), record) !== null) problems.push('condition non remplie : ni règle ni défaut');
+      if (await pickOn(byRow(undefined), record) !== 'urgent') problems.push('sans condition : comme avant');
+      const hidden = condition => ({ type: 'fixed', modeleId: 'm', hiddenModeleIds: ['m'], condition });
+      if (await pickOn(hidden(whenCond(ruleOn('Statut', '=', 'Urgent'))), record) !== null) problems.push('masqué, condition remplie');
+      if (await pickOn(hidden(whenCond(ruleOn('Statut', '=', 'Normal'))), record) !== null) problems.push('masqué, condition non remplie');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_condition_build_leaves_documents_out_row_by_row_without_a_stray_page_break',
+    description: 'buildConcatenatedHtml : chaque ligne a son assemblage - le premier document sorti ne laisse pas de saut de page devant, les suivants gardent leur rang (saut n° 1, n° 2…), un document sans condition est toujours là',
+    run: async () => {
+      const problems = [];
+      const templates = [{ id: 'g', contenu: '<p>GARDE</p>' }, { id: 'u', contenu: '<p>URGENT</p>' }, { id: 'c', contenu: '<p>CONTRAT</p>' }];
+      const slots = { slots: [
+        { type: 'fixed', modeleId: 'u', condition: whenCond(ruleOn('Statut', '=', 'Urgent')) },
+        { type: 'fixed', modeleId: 'g' },
+        { type: 'fixed', modeleId: 'c', condition: whenCond(ruleOn('Montant', '>', '100')) },
+      ] };
+      const build = record => MacroTemplates.buildConcatenatedHtml(slots, 'Dossiers', record, templates);
+      const wanted = [
+        [{ id: 1, Statut: 'Urgent', Montant: 50 }, '<p>URGENT</p>' + MacroTemplates.slotBreakHtml(1) + '<p>GARDE</p>'],
+        [{ id: 2, Statut: 'Normal', Montant: 500 }, '<p>GARDE</p>' + MacroTemplates.slotBreakHtml(1) + '<p>CONTRAT</p>'],
+        [{ id: 3, Statut: 'Normal', Montant: 5 }, '<p>GARDE</p>'],
+        [{ id: 4, Statut: 'Urgent', Montant: 500 }, '<p>URGENT</p>' + MacroTemplates.slotBreakHtml(1) + '<p>GARDE</p>' + MacroTemplates.slotBreakHtml(2) + '<p>CONTRAT</p>'],
+      ];
+      for (const [record, expected] of wanted) {
+        const html = await build(record);
+        if (html !== expected) problems.push('ligne ' + record.id + ' : ' + html);
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  // --- La fenêtre de composition : une carte par document, dans l'ordre ---
+  const cardsOf = () => Array.from(document.querySelectorAll('#macro-editor-slots .macro-slot-card'));
+  const cardView = card => ({
+    kind: card.dataset.kind,
+    title: card.querySelector('.macro-slot-title').textContent,
+    byRowTag: (card.querySelector('.macro-slot-kind') || {}).textContent || null,
+    model: card.querySelector('select.macro-doc-model') ? card.querySelector('select.macro-doc-model').value : null,
+    when: card.querySelector('select.macro-doc-when') ? card.querySelector('select.macro-doc-when').value : null,
+    conditionShown: card.querySelector('.macro-doc-condition') ? !card.querySelector('.macro-doc-condition').hidden : null,
+    up: card.querySelector('.macro-slot-move-up').disabled,
+    down: card.querySelector('.macro-slot-move-down').disabled,
+    rules: card.querySelectorAll('.macro-slot-rules .macro-rule-row').length,
+  });
+  const setSelect = (select, value) => { select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); };
+  // Une règle de la condition d'un document, remplie comme la personne : la colonne dans la liste, l'opérateur, la valeur saisie.
+  async function fillRule(h, row, column, operator, value) {
+    setSelect(row.querySelector('select.macro-rule-column:not(.macro-rule-value-column)'), column);
+    await h.sleep(80);
+    const op = Array.from(row.querySelectorAll('select')).find(s => s.options.length === ConditionRules.OPERATORS.length && s.options[0].value === '=');
+    if (operator && op) setSelect(op, operator);
+    const input = row.querySelector('input.macro-rule-value');
+    if (input) { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); }
+  }
+  async function feedColumns(h, row) {
+    const stub = window.__gristStub;
+    stub.setVariables(PAGE_DATA, { Nom: 'Text', Statut: 'Text', Montant: 'Numeric' });
+    stub.setRows(PAGE_DATA, [row]);
+    await GristAPI.refreshSchema();
+    stub.fireRecord(row, PAGE_DATA);
+    await h.sleep(100);
+  }
+  async function recomposed(h, macro, slots) {
+    window.__gristStub.remoteWrite(MACRO_TABLE, macro.id, { Contenu: JSON.stringify({ slots }) });
+    await reopen(h, macro.id);
+  }
+  const savedSlots = id => (composition(macroRow(id)) || []);
+  const saveWindow = async h => { document.getElementById('macro-editor-save').click(); await h.sleep(900); };
+  const openWindow = async h => { document.getElementById('btn-edit-macro').click(); await h.sleep(300); };
+
+  cases.push({
+    id: 'macro_editor_opens_a_legacy_composition_as_documents_and_saves_it_unchanged',
+    description: 'Un macro-modèle fait d\'une page de garde et d\'annexes s\'ouvre en cartes « Document 1, 2… » dans le même ordre (la page de garde est le premier document, toujours inclus ; l\'annexe garde ses règles et son modèle par défaut) ; « Enregistrer » sans rien toucher réécrit la même composition, sans condition',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro ancienne');
+        setAutosave(false);
+        const problems = [];
+        const before = macroRow(macro.id).Contenu;
+        await openWindow(h);
+        const views = cardsOf().map(cardView);
+        const want = [
+          { kind: 'document', title: 'Document 1', byRowTag: null, model: String(macro.coverId), when: 'always', conditionShown: false, up: true, down: false, rules: 0 },
+          { kind: 'by-row', title: 'Document 2', byRowTag: 'choisi selon la ligne', model: null, when: null, conditionShown: null, up: false, down: true, rules: 2 },
+        ];
+        if (JSON.stringify(views) !== JSON.stringify(want)) problems.push('cartes : ' + JSON.stringify(views));
+        if (document.getElementById('macro-editor-cover') || document.querySelector('#macro-editor-modal .macro-editor-slots-header').textContent !== 'Documents') problems.push('la page de garde a encore sa liste à part');
+        if (document.getElementById('macro-editor-add-document').textContent !== '+ Ajouter un document' || document.getElementById('macro-editor-add-slot').textContent !== '+ Ajouter un document choisi selon la ligne') problems.push('boutons d\'ajout');
+        await saveWindow(h);
+        const norm = text => JSON.stringify(JSON.parse(text).slots.map(s => s.type === 'fixed'
+          ? [s.type, String(s.modeleId), s.condition || null, s.hiddenModeleIds || null]
+          : [s.type, (s.rules || []).map(r => [r.column, r.operator, r.value, String(r.modeleId)]), s.defaultModeleId == null ? null : String(s.defaultModeleId), s.condition || null, s.hiddenModeleIds || null]));
+        if (norm(macroRow(macro.id).Contenu) !== norm(before)) problems.push('composition réécrite : ' + macroRow(macro.id).Contenu + ' / avant : ' + before);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_editor_new_macro_opens_on_one_empty_document',
+    description: 'Un macro-modèle neuf s\'ouvre sur un premier document à choisir ; « + Ajouter un document » en ajoute un, « + Ajouter un document choisi selon la ligne » une position à règles ; un document sans modèle n\'est pas enregistré',
+    run: async (h) => {
+      try {
+        setAutosave(true);
+        await h.clickButton('btn-new');
+        await h.sleep(300);
+        const a = await Templates.save(null, 'Neuf - A', '<p>A</p>', '', null, null, 'document', null);
+        const b = await Templates.save(null, 'Neuf - B', '<p>B</p>', '', null, null, 'document', null);
+        await Templates.loadAll();
+        const problems = [];
+        MacroEditor.openModal(null);
+        if (JSON.stringify(cardsOf().map(c => [cardView(c).kind, cardView(c).model])) !== JSON.stringify([['document', '']])) problems.push('à l\'ouverture : ' + JSON.stringify(cardsOf().map(cardView)));
+        document.getElementById('macro-editor-add-document').click();
+        document.getElementById('macro-editor-add-slot').click();
+        await h.sleep(60);
+        if (JSON.stringify(cardsOf().map(c => cardView(c).kind)) !== JSON.stringify(['document', 'document', 'by-row'])) problems.push('après les ajouts : ' + JSON.stringify(cardsOf().map(cardView)));
+        const models = Array.from(document.querySelectorAll('#macro-editor-slots select.macro-doc-model'));
+        setSelect(models[1], String(b.id));
+        document.getElementById('macro-editor-name').value = 'Macro neuve';
+        await saveWindow(h);
+        const id = Templates.getCurrentId();
+        const slots = savedSlots(id);
+        if (slots.length !== 2 || slots[0].type !== 'fixed' || String(slots[0].modeleId) !== String(b.id) || slots[1].type !== 'conditional') problems.push('composition : ' + JSON.stringify(slots));
+        void a;
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_editor_document_condition_is_saved_under_only_if_and_dropped_under_always',
+    description: 'Sous « Seulement si… » le document porte la condition réglée dans sa carte (colonne, opérateur, valeur), écrite dans la ligne Grist ; la rouvrir la montre ; revenir à « Toujours » l\'efface de la ligne mais la garde en brouillon tant que la fenêtre reste ouverte',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro condition');
+        setAutosave(false);
+        await feedColumns(h, { id: 1, Nom: 'a', Statut: 'Urgent', Montant: 10 });
+        const problems = [];
+        await openWindow(h);
+        const first = () => cardsOf()[0];
+        setSelect(first().querySelector('select.macro-doc-when'), 'if');
+        await h.sleep(100);
+        if (first().querySelector('.macro-doc-condition').hidden) problems.push('la condition ne s\'affiche pas sous « Seulement si… »');
+        await fillRule(h, first().querySelector('.macro-doc-rules .macro-rule-row'), 'Statut', '=', 'Urgent');
+        await saveWindow(h);
+        const saved = savedSlots(macro.id)[0];
+        if (!saved || saved.type !== 'fixed' || String(saved.modeleId) !== String(macro.coverId) || JSON.stringify(saved.condition) !== JSON.stringify({ mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }] })) problems.push('première écriture : ' + JSON.stringify(saved));
+        // Rouverte : la carte la montre.
+        await openWindow(h);
+        const view = cardView(first());
+        const row = first().querySelector('.macro-doc-rules .macro-rule-row');
+        if (view.when !== 'if' || !view.conditionShown || !row || row.querySelector('select.macro-rule-column').value !== 'Statut' || (row.querySelector('input.macro-rule-value') || {}).value !== 'Urgent') problems.push('fenêtre rouverte : ' + JSON.stringify(view));
+        // « Toujours » : plus de condition écrite, mais le brouillon revient si l'on change d'avis.
+        setSelect(first().querySelector('select.macro-doc-when'), 'always');
+        await h.sleep(50);
+        if (!first().querySelector('.macro-doc-condition').hidden) problems.push('la condition reste affichée sous « Toujours »');
+        setSelect(first().querySelector('select.macro-doc-when'), 'if');
+        await h.sleep(50);
+        const draft = first().querySelector('.macro-doc-rules .macro-rule-row input.macro-rule-value');
+        if (!draft || draft.value !== 'Urgent') problems.push('le brouillon n\'est pas revenu : ' + (draft && draft.value));
+        setSelect(first().querySelector('select.macro-doc-when'), 'always');
+        await saveWindow(h);
+        const cleared = savedSlots(macro.id)[0];
+        if (!cleared || 'condition' in cleared) problems.push('« Toujours » écrit encore une condition : ' + JSON.stringify(cleared));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_editor_incomplete_condition_says_so_and_is_not_saved',
+    description: 'Sous « Seulement si… » sans colonne choisie, la carte dit que le document sera toujours inclus (l\'indication disparaît dès qu\'une règle est complète) ; rien n\'est écrit comme condition',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro incomplète');
+        setAutosave(false);
+        await feedColumns(h, { id: 1, Nom: 'a', Statut: 'Urgent', Montant: 10 });
+        const problems = [];
+        await openWindow(h);
+        const card = () => cardsOf()[0];
+        const hint = () => card().querySelector('.macro-doc-hint');
+        setSelect(card().querySelector('select.macro-doc-when'), 'if');
+        await h.sleep(100);
+        if (hint().hidden || !/toujours inclus/.test(hint().textContent)) problems.push('indication absente : ' + hint().textContent + ' / ' + hint().hidden);
+        await fillRule(h, card().querySelector('.macro-doc-rules .macro-rule-row'), 'Statut', '=', 'Urgent');
+        await h.sleep(80);
+        if (!hint().hidden) problems.push('l\'indication reste affichée avec une règle complète');
+        // Le document reste vide de condition : on vide la règle, l'indication revient, et la ligne n'a pas de condition.
+        const select = card().querySelector('.macro-doc-rules select.macro-rule-column:not(.macro-rule-value-column)');
+        setSelect(select, '');
+        await h.sleep(80);
+        if (hint().hidden) problems.push('l\'indication ne revient pas quand la colonne est vidée');
+        await saveWindow(h);
+        const saved = savedSlots(macro.id)[0];
+        if (!saved || 'condition' in saved) problems.push('condition écrite sans règle complète : ' + JSON.stringify(saved));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_editor_condition_takes_several_rules_a_group_and_an_or_connector',
+    description: 'La carte reprend les gestes de la fenêtre de condition d\'une bulle : « + Ajouter une condition », le mot « Et » / « Ou » devant une ligne qui change la combinaison, « + Groupe » pose des parenthèses ; la condition enregistrée porte la combinaison et le groupe',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro groupe');
+        setAutosave(false);
+        await feedColumns(h, { id: 1, Nom: 'a', Statut: 'Urgent', Montant: 10 });
+        const problems = [];
+        await openWindow(h);
+        const card = () => cardsOf()[0];
+        setSelect(card().querySelector('select.macro-doc-when'), 'if');
+        await h.sleep(80);
+        await fillRule(h, card().querySelector('.macro-doc-rules .macro-rule-row'), 'Statut', '=', 'Urgent');
+        card().querySelector('.macro-doc-rules .var-condition-add-group').click();
+        await h.sleep(120);
+        let rows = Array.from(card().querySelectorAll('.macro-doc-rules .macro-rule-row'));
+        if (rows.length !== 3 || !card().querySelector('.macro-doc-rules .cond-group')) { problems.push('groupe : ' + rows.length + ' lignes'); return { pass: false, notes: JSON.stringify({ problems }) }; }
+        await fillRule(h, rows[1], 'Montant', '>', '100');
+        await fillRule(h, rows[2], 'Nom', 'contient', 'A');
+        // Le groupe est combiné à l'inverse de la condition (« toutes » dehors, « au moins une » dedans).
+        const groupMode = card().querySelector('.cond-group .cond-group-mode').value;
+        if (groupMode !== 'any') problems.push('combinaison du groupe : ' + groupMode);
+        // Le mot « Et » devant la ligne du groupe est un bouton : un clic passe la condition entière à « Ou ».
+        const toggle = card().querySelector('.macro-doc-rules > .cond-group-row > .macro-rule-connector-toggle');
+        if (!toggle) problems.push('pas de bouton « Et » devant le groupe');
+        else { toggle.click(); await h.sleep(120); }
+        const modeSelect = card().querySelector('.macro-doc-mode select');
+        if (!modeSelect || modeSelect.value !== 'any' || card().querySelector('.macro-doc-mode').hidden) problems.push('la liste « Inclure si » ne suit pas : ' + (modeSelect && modeSelect.value));
+        await saveWindow(h);
+        const saved = savedSlots(macro.id)[0];
+        const want = { mode: 'any', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }, { mode: 'any', rules: [{ column: 'Montant', operator: '>', value: '100' }, { column: 'Nom', operator: 'contient', value: 'A' }] }] };
+        if (!saved || JSON.stringify(saved.condition) !== JSON.stringify(want)) problems.push('condition enregistrée : ' + JSON.stringify(saved && saved.condition));
+        rows = [];
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_editor_move_and_remove_keep_the_hidden_eye_with_its_document',
+    description: 'Monter / descendre un document change l\'ordre de la composition (le premier ne monte pas, le dernier ne descend pas : boutons grisés) ; son œil et sa condition le suivent ; supprimer un document retire sa carte et sa position',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro ordre');
+        setAutosave(false);
+        const condition = whenCond(ruleOn('Nom', '=', 'a'));
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId, hiddenModeleIds: [macro.coverId] },
+          { type: 'fixed', modeleId: macro.otherId, condition },
+          { type: 'fixed', modeleId: macro.thirdId },
+        ]);
+        const problems = [];
+        await openWindow(h);
+        const ends = cardsOf().map(c => { const v = cardView(c); return [v.up, v.down]; });
+        if (JSON.stringify(ends) !== JSON.stringify([[true, false], [false, false], [false, true]])) problems.push('boutons : ' + JSON.stringify(ends));
+        cardsOf()[1].querySelector('.macro-slot-move-up').click();
+        await h.sleep(100);
+        const order = cardsOf().map(c => cardView(c).model);
+        if (JSON.stringify(order) !== JSON.stringify([macro.otherId, macro.coverId, macro.thirdId].map(String))) problems.push('ordre à l\'écran : ' + JSON.stringify(order));
+        // Le document monté est arrivé en tête : son bouton « monter » y est grisé, le focus passe donc à son vis-à-vis « descendre », toujours sur la même carte.
+        const focused = document.activeElement;
+        if (!focused || !focused.classList.contains('macro-slot-move-down') || !cardsOf()[0].contains(focused)) problems.push('le focus ne suit pas le document monté : ' + (focused && focused.className));
+        // Supprimer le troisième document.
+        cardsOf()[2].querySelector('.macro-slot-remove').click();
+        await h.sleep(100);
+        await saveWindow(h);
+        const slots = savedSlots(macro.id);
+        if (slots.length !== 2 || String(slots[0].modeleId) !== String(macro.otherId) || String(slots[1].modeleId) !== String(macro.coverId)) problems.push('composition : ' + JSON.stringify(slots));
+        else if (JSON.stringify(slots[0].condition) !== JSON.stringify(condition) || JSON.stringify((slots[1].hiddenModeleIds || []).map(String)) !== JSON.stringify([String(macro.coverId)]) || slots[0].hiddenModeleIds) problems.push('condition ou œil perdus : ' + JSON.stringify(slots));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  // La fenêtre et le résumé en anglais : le même parcours dans une page qui démarre en anglais.
+  cases.push({
+    id: 'macro_editor_and_summary_speak_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la fenêtre (« Document 1 », « Template », « Include this document », « Always », « Only if… », « Include if », les deux boutons d\'ajout) et le résumé (« Only if: … », « 2 documents, 1 of them conditional. ») sont en anglais',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro english');
+        setAutosave(false);
+        await feedColumns(h, { id: 1, Nom: 'a', Statut: 'Urgent', Montant: 10 });
+        const problems = [];
+        await openWindow(h);
+        const card = cardsOf()[0];
+        const texts = {
+          title: card.querySelector('.macro-slot-title').textContent,
+          labels: Array.from(card.querySelectorAll('.macro-doc-label')).map(l => l.textContent),
+          when: Array.from(card.querySelectorAll('select.macro-doc-when option')).map(o => o.textContent),
+          tag: cardsOf()[1].querySelector('.macro-slot-kind').textContent,
+          add: [document.getElementById('macro-editor-add-document').textContent, document.getElementById('macro-editor-add-slot').textContent],
+          intro: document.querySelector('#macro-editor-modal .macro-editor-intro').textContent,
+          move: [card.querySelector('.macro-slot-move-up').getAttribute('aria-label'), card.querySelector('.macro-slot-move-down').getAttribute('aria-label'), card.querySelector('.macro-slot-remove').getAttribute('aria-label')],
+        };
+        const want = {
+          title: 'Document 1', labels: ['Template', 'Include this document'], when: ['Always', 'Only if…'], tag: 'chosen by the row',
+          add: ['+ Add a document', '+ Add a document chosen by the row'],
+          intro: 'One document made of several templates, in the order of the list. Each document can have its own condition: it is only included when the condition is met for the row.',
+          move: ['Move document 1 up', 'Move document 1 down', 'Remove document 1'],
+        };
+        if (JSON.stringify(texts) !== JSON.stringify(want)) problems.push('fenêtre : ' + JSON.stringify(texts));
+        setSelect(card.querySelector('select.macro-doc-when'), 'if');
+        await h.sleep(80);
+        const modeText = card.querySelector('.macro-doc-mode');
+        const hint = card.querySelector('.macro-doc-hint').textContent;
+        if (hint !== 'No complete condition yet: this document will always be included. Choose a column.') problems.push('indication : ' + hint);
+        void modeText;
+        await fillRule(h, card.querySelector('.macro-doc-rules .macro-rule-row'), 'Statut', '=', 'Urgent');
+        await saveWindow(h);
+        const summary = { sentence: document.getElementById('macro-summary-text').textContent, notes: Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-condition')).map(n => n.textContent) };
+        if (summary.sentence !== '2 documents, 2 of them conditional.' || JSON.stringify(summary.notes) !== JSON.stringify(['Only if: Statut = Urgent', 'The template is chosen by the row'])) problems.push('résumé : ' + JSON.stringify(summary));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_summary_says_when_each_document_is_included',
+    description: 'Le résumé écrit, sous les modèles d\'un document sous condition, « Seulement si : … » (la condition en entier en info-bulle), « Le modèle est choisi selon la ligne » sous une position à règles, rien sous un document toujours inclus ; la phrase compte les documents et ceux qui sont sous condition',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro résumé');
+        setAutosave(false);
+        const problems = [];
+        const condition = { mode: 'all', rules: [ruleOn('Nom', '=', 'a'), { mode: 'any', rules: [ruleOn('Montant', '>', '100'), ruleOn('Statut', '=', 'Urgent')] }] };
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'fixed', modeleId: macro.otherId, condition },
+          { type: 'conditional', rules: [{ column: 'Nom', operator: '=', value: 'a', modeleId: macro.thirdId }], defaultModeleId: null },
+        ]);
+        const notes = () => Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-part')).map(row => { const n = row.querySelector('.macro-summary-condition'); return n ? [n.textContent, n.title] : null; });
+        const full = 'Nom = a et (Montant > 100 ou Statut = Urgent)';
+        const got = notes();
+        if (JSON.stringify(got) !== JSON.stringify([null, ['Seulement si : ' + full, full], ['Le modèle est choisi selon la ligne', '']])) problems.push('notes : ' + JSON.stringify(got));
+        if (document.getElementById('macro-summary-text').textContent !== '3 documents, dont 2 sous condition.') problems.push('phrase : ' + document.getElementById('macro-summary-text').textContent);
+        // Sans aucune condition : « toujours inclus ».
+        await recomposed(h, macro, [{ type: 'fixed', modeleId: macro.coverId }, { type: 'fixed', modeleId: macro.otherId }]);
+        if (document.getElementById('macro-summary-text').textContent !== '2 documents, toujours inclus.') problems.push('phrase sans condition : ' + document.getElementById('macro-summary-text').textContent);
+        if (notes().some(Boolean)) problems.push('notes sans condition : ' + JSON.stringify(notes()));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  // --- Ce que la personne lit : la Lecture et le ZIP de PDF suivent la condition de chaque document, ligne après ligne ---
+  cases.push({
+    id: 'macro_reading_follows_each_document_condition_row_by_row',
+    description: 'En Lecture, un document sous condition n\'apparaît que pour la ligne qui la remplit ; changer de ligne change les documents (le document sans condition est toujours là)',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro lecture condition');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'fixed', modeleId: macro.otherId, condition: whenCond(ruleOn('Nom', '=', 'a')) },
+          { type: 'fixed', modeleId: macro.thirdId, condition: whenCond(ruleOn('Nom', '≠', 'a')) },
+        ]);
+        const seen = text => ['cover', 'other', 'third'].filter(key => text.includes(COND_TEXTS[key])).join('+');
+        await feedNom(h, 'a');
+        const forA = seen(await readingOf(h));
+        await feedNom(h, 'z');
+        const forZ = seen(await readingOf(h));
+        if (forA !== 'cover+other') problems.push('ligne a : ' + forA);
+        if (forZ !== 'cover+third') problems.push('ligne z : ' + forZ);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_batch_zip_follows_each_document_condition_row_by_row',
+    description: 'ZIP de PDF, une ligne après l\'autre : chaque ligne reçoit les documents dont la condition est remplie pour ELLE (un document sorti en tête ne laisse pas de page blanche, le document sans condition est partout)',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro lot condition');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.otherId, condition: whenCond(ruleOn('Nom', '=', 'a')) },
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'fixed', modeleId: macro.thirdId, condition: whenCond(ruleOn('Nom', '=', 'z')) },
+        ]);
+        const stub = window.__gristStub;
+        const rows = [{ id: 1, Nom: 'a' }, { id: 2, Nom: 'b' }, { id: 3, Nom: 'z' }];
+        stub.setVariables(PAGE_DATA, { Nom: 'Text' });
+        stub.setRows(PAGE_DATA, rows);
+        await GristAPI.refreshSchema();
+        stub.fireRecord(rows[0], PAGE_DATA);
+        await h.sleep(100);
+        const file = await fileDownloaded(h, 'v2-btn-export-pdf-batch');
+        if (!file || !file.blob) return { pass: false, notes: 'aucun ZIP téléchargé' };
+        await ExportCommon.ensureJsZipLoaded();
+        const zip = await JSZip.loadAsync(await file.blob.arrayBuffer());
+        const texts = {};
+        for (const name of Object.keys(zip.files)) texts[name] = (await pdfPages(h, await zip.file(name).async('blob'))).map(p => squashed(p.text));
+        const names = ['Macro lot condition - a.pdf', 'Macro lot condition - b.pdf', 'Macro lot condition - z.pdf'];
+        if (Object.keys(texts).length !== 3 || !names.every(n => texts[n])) return { pass: false, notes: 'fichiers : ' + JSON.stringify(Object.keys(texts)) };
+        const pages = n => texts[n].map(t => ['cover', 'other', 'third'].filter(key => t.includes(COND_TEXTS[key])).join('+'));
+        if (JSON.stringify(pages(names[0])) !== JSON.stringify(['other', 'cover'])) problems.push('ligne a : ' + JSON.stringify(pages(names[0])));
+        if (JSON.stringify(pages(names[1])) !== JSON.stringify(['cover'])) problems.push('ligne b : ' + JSON.stringify(pages(names[1])));
+        if (JSON.stringify(pages(names[2])) !== JSON.stringify(['cover', 'third'])) problems.push('ligne z : ' + JSON.stringify(pages(names[2])));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
     },
   });
 

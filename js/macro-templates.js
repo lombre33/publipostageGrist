@@ -42,9 +42,9 @@ const MacroTemplates = (function () {
   // L'évaluation d'une règle { column, operator, value } contre la ligne courante (comparaison, colonnes Oui/Non et Date, fuseau, avertissement
   // « colonne absente de la ligne ») est dans js/condition-rules.js, partagée avec les variables conditionnelles.
 
-  // Les modèles qu'une position de la composition peut donner, sans doublon : celui de la page de garde, ou celui de chaque règle d'une annexe puis
-  // son modèle par défaut. Le résumé du macro-modèle (js/macro-editor.js) en fait une ligne par position ; l'œil d'un modèle et l'enregistrement de
-  // la fenêtre de composition s'en servent pour savoir lesquels existent encore.
+  // Les modèles qu'une position de la composition peut donner, sans doublon : celui d'un document (`fixed`), ou celui de chaque règle d'une position qui
+  // choisit son modèle selon la ligne (`conditional`) puis son modèle par défaut. Le résumé du macro-modèle (js/macro-editor.js) en fait une ligne par
+  // position ; l'œil d'un modèle et l'enregistrement de la fenêtre de composition s'en servent pour savoir lesquels existent encore.
   function slotModelIds(slot) {
     if (!slot) return [];
     const candidates = slot.type === 'fixed'
@@ -83,10 +83,25 @@ const MacroTemplates = (function () {
     return target;
   }
 
-  // Renvoie l'id de modèle choisi pour ce slot contre cette ligne/table, ou null si le slot doit être absent du document assemblé (ni règle ni modèle
-  // par défaut, ou modèle masqué par son œil). Le modèle choisi par la première règle qui correspond est le seul candidat, masqué ou non : masquer un
-  // modèle ne fait jamais passer une règle suivante ni le modèle par défaut à sa place.
+  // La condition d'inclusion d'une position (`slot.condition`, la même { mode, rules } que celle d'une bulle conditionnelle, groupes compris) : la position n'entre dans
+  // le document assemblé que si elle est remplie pour la ligne. Sans règle complète, pas de condition (null) : la position est toujours là, comme avant. Elle vaut
+  // pour un document (`fixed`) comme pour une position qui choisit son modèle selon la ligne (`conditional`) : le choix du modèle ne se fait qu'une fois la position retenue.
+  function slotCondition(slot) {
+    return slot ? ConditionRules.normalizeCondition(slot.condition) : null;
+  }
+
+  // La condition de la position est-elle remplie pour cette ligne ? Vrai sans condition. Une règle illisible compte pour non remplie (ConditionRules.matches) ; une
+  // condition dont l'évaluation échoue laisse la position de côté (buildConcatenatedHtml attrape l'échec).
+  async function slotIncluded(slot, tableId, record) {
+    const condition = slotCondition(slot);
+    return condition ? ConditionRules.conditionHolds(condition, tableId, record) : true;
+  }
+
+  // Renvoie l'id de modèle choisi pour ce slot contre cette ligne/table, ou null si le slot doit être absent du document assemblé (condition de la position non
+  // remplie, ni règle ni modèle par défaut, ou modèle masqué par son œil). Le modèle choisi par la première règle qui correspond est le seul candidat, masqué ou
+  // non : masquer un modèle ne fait jamais passer une règle suivante ni le modèle par défaut à sa place.
   async function pickModeleId(slot, tableId, record) {
+    if (!(await slotIncluded(slot, tableId, record))) return null;
     const chosen = await chooseModeleId(slot, tableId, record);
     return chosen != null && isModelHidden(slot, chosen) ? null : chosen;
   }
@@ -131,5 +146,5 @@ const MacroTemplates = (function () {
     return perModel && fragments.length ? PageSections.startHtml(fragments[0].page) + body : body;
   }
 
-  return { pickModeleId, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml, pageOfTemplate, senseOfTemplate, slotModelIds, isModelHidden, withModelHidden, keepHidden };
+  return { pickModeleId, slotCondition, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml, pageOfTemplate, senseOfTemplate, slotModelIds, isModelHidden, withModelHidden, keepHidden };
 })();

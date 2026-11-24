@@ -251,6 +251,33 @@
   });
 
   cases.push({
+    id: 'schemarenames_the_condition_of_each_macro_document_follows_a_rename',
+    description: 'La condition d’un document de macro-modèle (clé `condition` d’une position, au-dessus des règles de la position) : colonne renommée, groupe, autre colonne comparée suivent comme une condition de bulle et se comptent ; le reste de la composition est rendu tel quel',
+    run: async () => {
+      const m = mapper();
+      const page = m.tableContext('Dossiers');
+      const text = JSON.stringify({ slots: [
+        { type: 'fixed', modeleId: 'a', condition: { mode: 'all', rules: [{ column: 'Montant', operator: '>', value: '10' }, { mode: 'any', rules: [{ column: 'Projets.Nom', operator: '=', value: 'A' }, { column: 'Titre', operator: '=', value: 'x' }] }] } },
+        { type: 'fixed', modeleId: 'b', condition: { mode: 'all', rules: [{ column: 'Titre', operator: '≠', value: '', valueColumn: 'Montant' }] } },
+        { type: 'conditional', condition: { mode: 'all', rules: [{ column: 'Montant', operator: '=', value: '1' }] }, rules: [{ column: 'Montant', operator: '>', value: '5', modeleId: 'c' }], defaultModeleId: 'd' },
+        { type: 'fixed', modeleId: 'e' },
+      ] });
+      const out = SchemaRenames.rewriteMacro(text, m, page);
+      const slots = JSON.parse(out.text).slots;
+      const checks = {
+        count: out.count === 5,
+        group: same(slots[0].condition.rules[0], { column: 'Total', operator: '>', value: '10' }) && same(slots[0].condition.rules[1].rules.map(r => r.column), ['Portefeuille.Intitule', 'Titre']) && slots[0].condition.rules[1].mode === 'any',
+        otherColumn: slots[1].condition.rules[0].column === 'Titre' && slots[1].condition.rules[0].valueColumn === 'Total',
+        byRowSlot: slots[2].condition.rules[0].column === 'Total' && slots[2].rules[0].column === 'Total' && slots[2].defaultModeleId === 'd',
+        withoutConditionIsTheSame: same(slots[3], { type: 'fixed', modeleId: 'e' }),
+        untouchedMacroIsTheSameText: SchemaRenames.rewriteMacro(JSON.stringify({ slots: [{ type: 'fixed', modeleId: 'a', condition: { mode: 'all', rules: [{ column: 'Titre', operator: '=', value: 'x' }] } }] }), m, page).count === 0,
+      };
+      const v = verdict(checks);
+      return { pass: v.pass, notes: v.failed.join(', ') || 'ok' };
+    },
+  });
+
+  cases.push({
     id: 'schemarenames_the_other_column_of_a_comparison_rule_follows_a_rename_too',
     description: 'Une règle qui compare à une autre colonne (valueColumn, fenêtre de condition) : les deux colonnes suivent un renommage, chacune lue comme la colonne d’une règle (nue = table de la page, « Table.Colonne », chemin) et comptée ; une colonne supprimée, pas encore choisie ou la valeur saisie ne bougent pas, une condition sans rien à changer est rendue telle quelle',
     run: async () => {

@@ -1916,7 +1916,7 @@ window.EditorTestSuites.undoLibrary = (function () {
         // Un macro-modèle créé par la vraie fenêtre de composition (la page de garde est le premier modèle) : il est enregistré, sélectionné et ouvert.
         MacroEditor.openModal(null);
         byId('macro-editor-name').value = 'Macro UL';
-        const cover = byId('macro-editor-cover');
+        const cover = document.querySelector('#macro-editor-slots .macro-doc-model');
         cover.value = String(ids.a);
         cover.dispatchEvent(new Event('change', { bubbles: true }));
         byId('macro-editor-save').click();

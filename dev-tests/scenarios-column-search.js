@@ -1269,7 +1269,7 @@
     { id: 15, nom: 'Macro déjà composé', typeModele: 'macro' },
   ];
   const macroModal = () => document.getElementById('macro-editor-modal');
-  const coverList = () => document.getElementById('macro-editor-cover');
+  const coverList = () => document.querySelector('#macro-editor-slots .macro-doc-model');
   const ruleModelList = () => macroModal().querySelector('select.macro-rule-modele');
   const defaultModelList = () => macroModal().querySelector('select.macro-slot-default-select');
   const hasField = select => !!select.nextElementSibling && select.nextElementSibling.classList.contains('ss-wrap');
@@ -1390,7 +1390,7 @@
 
   cases.push({
     id: 'colsearch_macro_editor_cover_list_follows_the_macro_model_at_each_opening',
-    description: 'Macro-modèle : la liste de la page de garde, posée une seule fois dans la page, montre à chaque ouverture le modèle du macro-modèle édité (rien pour un nouveau) sans se dédoubler, comme les listes redessinées de ses annexes',
+    description: 'Macro-modèle : la liste du modèle du premier document, posée une seule fois dans la page, montre à chaque ouverture le modèle du macro-modèle édité (un seul document vide pour un nouveau) sans se dédoubler, comme les listes redessinées de ses autres documents',
     run: async (h) => {
       await seed(h);
       const realCached = Templates.getCached;
@@ -1422,7 +1422,7 @@
       const choose = I18n.t('macro.modal.choosePlaceholder');
       const pass = out.edited.cover === 'Notification_base' && out.edited.coverValue === '11' && !out.edited.coverPlaceholder && out.edited.rule === 'Notification_projet'
         && out.edited.dflt === I18n.t('macro.modal.defaultUse', { name: 'Notification_bureau' }) && out.edited.wraps === 1
-        && out.fresh.cover === choose && out.fresh.coverValue === '' && out.fresh.coverPlaceholder && out.fresh.cards === 0 && out.fresh.wraps === 1
+        && out.fresh.cover === choose && out.fresh.coverValue === '' && out.fresh.coverPlaceholder && out.fresh.cards === 1 && out.fresh.wraps === 1
         && out.again.cover === 'Notification_base' && out.again.coverValue === '11' && out.again.wraps === 1;
       return { pass, notes: JSON.stringify(out) };
     },
