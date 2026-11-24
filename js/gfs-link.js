@@ -1,7 +1,7 @@
 // Le lien avec Grist Factory Suite (GFS) : ce que le widget en sait quand GFS l'héberge, et rien quand il tourne seul (une fenêtre de Grist qui charge l'adresse de ce dépôt).
 // Les messages de GFS ont leur enveloppe (contrats de GFS, section 5) : { gfs: <contrat>, type: 'appel' | 'reponse' | 'erreur' | 'evenement', id, nom, args | data }, sans le `mtype` du
 // protocole des widgets de Grist, envoyée au cadre parent par une seule fonction (`sendToHost`) : à `targetOrigin "*"` tant que GFS n'a rien dit (la demande de `contexte`, la première, ne porte aucune donnée : le sous-cadre d'une app
-// a une origine opaque et ne sait pas encore d'où il est cadré), puis à l'origine de GFS, retenue à son premier message valide (`holdOrigin`, consigne 086, contrats de GFS 1.2 point 4). Quinze choses seulement :
+// a une origine opaque et ne sait pas encore d'où il est cadré), puis à l'origine de GFS, retenue à son premier message valide (`holdOrigin`, consigne 086, contrats de GFS 1.2 point 4). Seize choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }), les copies figées des bibliothèques natives de l'app
 //    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
@@ -26,6 +26,9 @@
 //    par le bouton de la barre de GFS) : `{ coupes: true | false }`, vrai quand elle les a coupés. Il est lu par `normalizeCorrecteurs` du kit (kit/js/correcteurs-message.js, une carte d'importation de index.html le nomme) :
 //    tout ce qui n'est pas exactement `{ coupes: true }` vaut « pas coupé ». Le dernier est gardé (`correcteurs()`, une copie), les abonnés de `onCorrecteurs` sont rappelés quand `coupes` change vraiment (js/gfs-correcteurs.js,
 //    le seul à s'en servir : il pose la marque que LanguageTool respecte sur chaque zone de texte de la page) ;
+//  - `identite` (contrats 5.2, point 9, consignes 094 et 095), au contexte puis par l'événement `identite` `{ identite }` (une fois par changement : GFS apprend l'adresse après le contexte, ou la perd) : `{ email }`, l'adresse de la personne telle que Grist la
+//    donne (la casse est gardée), que GFS ne dit qu'à l'app qui a déclaré `permissions.identite` dans son manifeste, ou null (GFS ne la connaît pas encore, un compte Lecteur, un document sans sa table de rangement). Elle remplace la sonde de
+//    l'ouverture (une ligne écrite, relue et retirée dans une table interne) : js/grist-api.js (getCurrentUserEmail), le seul à s'en servir, ne passe par la sonde que quand `identity()` rend null ;
 //  - `lecteurs` (demande du 06/11, objet vidéo de Slides+, js/video-frame.js), au contexte puis par l'événement `lecteurs` `{ lecteurs }` : les sites dont GFS sait jouer le lecteur (`youtube`, `vimeo`), qu'il pose lui-même par-dessus
 //    le cadre de l'app (le cadre isolé n'a pas d'identité et un lecteur posé dedans échoue) ; l'app lui dit quoi et où par les appels `lecteur.afficher { id, fournisseur, video, debut?, rect, zone }`, `lecteur.deplacer { id, rect, zone }`,
 //    `lecteur.masquer { id, masque }` et `lecteur.fermer { id }`, sans `id` d'appel (GFS ne répond rien), et GFS dit où en est son lecteur par l'événement `lecteur { id, etat }` (`lecture`, `pause`, `fin`, `erreur`). Sans la clé, la liste est vide
@@ -44,7 +47,7 @@
 //    `{ quoi: 'bloque', directive, cible, source, disposition, fois }` à chaque appel bloqué que le relais n'a pas déjà dit, par `tell` (le kit, kit/js/violations-pose.js, en fait les messages : le nom d'hôte seul, jamais l'adresse
 //    entière, son chemin ni ses paramètres ; js/gfs-violations.js, le seul à s'en servir). Cela informe GFS, cela ne protège pas : la protection est la politique de contenu de la page.
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `identity()` rend null, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -89,6 +92,7 @@ const GfsLink = (function () {
   let ambianceRaw = null;      // ce que GFS a dit, tel quel : relu dès que le lecteur du kit est là
   let readAmbiance = null;     // `normalizeAmbiance` du kit, une fois son module chargé (hébergée seulement)
   const ambianceListeners = new Set();
+  let identity = null;         // `identite` du contexte, puis de l'événement `identite` (consignes 094 et 095), lue par `normalizeIdentity` : { email } ou null (seul, GFS ne la donne pas, l'app n'a pas la permission `identite`, ou GFS ne connaît pas encore la personne)
   let correcteurs = { coupes: false };   // `correcteurs` du contexte, puis de l'événement `correcteurs` (consigne 068), lu par `normalizeCorrecteurs` du kit : { coupes } ; { coupes: false } seul, si GFS ne le donne pas, ou si le lecteur du kit n'est pas là
   let correcteursRaw = null;   // ce que GFS a dit, tel quel : relu dès que le lecteur du kit est là
   let readCorrecteurs = null;  // `normalizeCorrecteurs` du kit, une fois son module chargé (hébergée seulement)
@@ -160,6 +164,13 @@ const GfsLink = (function () {
     return found;
   }
 
+  // `identite` du contexte ou de l'événement `identite` (contrats 5.2, point 9, consignes 094 et 095) : { email }, l'adresse telle que Grist la donne, sans espaces autour, la casse gardée (qui la compare met les deux côtés en minuscules). null
+  // quand ce n'est pas une adresse (rien, un autre type, un texte sans « @ » ou avec deux) : l'app fait alors comme seule, par sa sonde, plutôt que de croire une forme inconnue.
+  function normalizeIdentity(raw) {
+    const email = raw && typeof raw === 'object' && typeof raw.email === 'string' ? raw.email.trim() : '';
+    return /^[^@\s]+@[^@\s]+$/.test(email) ? { email } : null;
+  }
+
   // `stockage` du contexte (contrats 5.2, consigne 024) : l'espace de cette app chez GFS, `{ clé: texte }`. Une clé hors de la règle de GFS ou une valeur qui n'est pas un texte n'est pas gardée ; null quand
   // ce n'est pas un objet (un GFS d'avant la consigne 024 n'en donne pas : l'app garde alors ses préférences comme avant).
   function normalizeStorage(raw) {
@@ -205,8 +216,8 @@ const GfsLink = (function () {
     return out;
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, les copies figées des bibliothèques natives, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance et les correcteurs, rien d'autre n'est gardé. L'événement
-  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance, ni correcteurs : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, les copies figées des bibliothèques natives, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance, les correcteurs et l'identité, rien d'autre n'est gardé. L'événement
+  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance, ni correcteurs, ni identité : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
   // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
   // l'événement `barre`.
   function apply(data) {
@@ -218,6 +229,7 @@ const GfsLink = (function () {
     if ('barre' in data) bar = normalizeBar(data.barre);
     if ('ambiance' in data) setAmbiance(data.ambiance);
     if ('correcteurs' in data) setCorrecteurs(data.correcteurs);
+    if ('identite' in data) identity = normalizeIdentity(data.identite);
     if ('lecteurs' in data) players = normalizePlayers(data.lecteurs);
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
@@ -305,6 +317,14 @@ const GfsLink = (function () {
     setAmbiance(data.ambiance);
   }
 
+  // L'événement `identite` (contrats 5.2, point 9, consignes 094 et 095) : GFS a appris l'adresse de la personne après le contexte, ou l'a perdue, `{ identite }` de la même forme que celle du contexte. Elle est gardée pour la prochaine
+  // lecture (`identity()`) ; personne n'est rappelé : l'app la lit au moment où elle en a besoin (js/grist-api.js, getCurrentUserEmail). Un événement sans `identite` ne dit rien et ne change rien.
+  function applyIdentity(data) {
+    known = true;
+    if (!data || typeof data !== 'object' || !('identite' in data)) return;
+    identity = normalizeIdentity(data.identite);
+  }
+
   // Le lecteur du kit : kit/js/ambiance-message.js par la carte d'importation de index.html, une seule adresse (le kit le demande). Seule l'app hébergée le charge, dès le départ et en même temps que le contexte se
   // demande ; seule, rien n'est téléchargé. Un module qui ne se charge pas (le dépôt de l'app sans son kit, un réseau qui le coupe) ne casse rien : l'app garde ses couleurs et le dit une fois dans la console.
   const ambianceReader = !hosted ? Promise.resolve() : import('kit/ambiance-message').then((module) => {
@@ -356,6 +376,7 @@ const GfsLink = (function () {
     else if (message.type === 'evenement' && message.nom === 'reglages') applySettings(message.data);
     else if (message.type === 'evenement' && message.nom === 'ambiance') applyAmbiance(message.data);
     else if (message.type === 'evenement' && message.nom === 'correcteurs') applyCorrecteurs(message.data);
+    else if (message.type === 'evenement' && message.nom === 'identite') applyIdentity(message.data);
     else if (message.type === 'evenement' && message.nom === 'lecteurs') applyPlayers(message.data);
     else if (message.type === 'evenement' && message.nom === 'lecteur') applyPlayerEvent(message.data);
     else if (message.type === 'appel') receiveCall(message);
@@ -464,6 +485,9 @@ const GfsLink = (function () {
   // Les correcteurs du navigateur (LanguageTool), coupés ou non par la personne (consigne 068) : ceux du contexte, puis ceux du dernier événement `correcteurs`, lus par le kit : { coupes }, une copie que l'appelant peut garder.
   // { coupes: false } seul, si GFS ne répond pas ou ne les donne pas (un GFS d'avant la consigne 068), tant que le bouton n'est pas dans sa barre, et quand le lecteur du kit ne s'est pas chargé.
   function getCorrecteurs() { return { coupes: correcteurs.coupes }; }
+  // L'adresse de la personne que GFS donne (consignes 094 et 095, contrats 5.2 point 9) : celle du contexte, puis celle du dernier événement `identite`, `{ email }` (une copie que l'appelant peut garder). null seul, si GFS ne répond pas, quand il ne connaît pas
+  // encore la personne (un compte Lecteur, un document sans sa table de rangement), ou quand il ne la donne pas à cette app (la permission `identite` de son manifeste, un GFS d'avant la consignes 094 et 095).
+  function getIdentity() { return identity === null ? null : { email: identity.email }; }
   // Les sites que GFS sait jouer (`['youtube', 'vimeo']`), une copie ; vide seul ou quand GFS ne les donne pas.
   function getPlayers() { return players.slice(); }
   // Un appel `lecteur.<action>` vers GFS (`afficher`, `deplacer`, `masquer`, `fermer`), sans `id` d'appel : GFS ne répond rien. `args` est un objet simple (js/video-frame.js en fait la forme : identifiants et nombres, jamais
@@ -588,5 +612,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

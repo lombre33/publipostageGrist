@@ -1110,6 +1110,17 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   }
 
   window.__gristStub = { names: NAMES, installUploadServer, state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  // Un essai qui change le document du faux Grist APRÈS le chargement des scripts de la page joue un acteur du dehors (un autre widget, une autre personne, un autre onglet) : ce que l'ouverture met en commun (js/open-reads.js : la
+  // liste des tables, les métadonnées, le jeton de lecture) serait périmé, et les lectures qui suivent le liraient d'avant le changement. L'ouverture est donc finie dès que l'essai change le document par ces fonctions (consigne 095
+  // de GFS). Avant le chargement (la graine de __preSeedGristStub), OpenReads n'existe pas encore : rien à faire. Un essai qui écrit dans `state` sans elles appelle `OpenReads.end()` lui-même.
+  ['setVariables', 'setColumnLabels', 'setColumnFormats', 'setColumnRules', 'setDocumentSettings', 'setAttachments', 'setFormulaColumn', 'setRows', 'setHiddenColumns', 'renameColumn', 'renameTable', 'deleteColumn', 'dropTable', 'dropColumn', 'resetPages'].forEach(name => {
+    const change = window.__gristStub[name];
+    if (typeof change !== 'function') return;
+    window.__gristStub[name] = function () {
+      if (typeof OpenReads !== 'undefined' && OpenReads && OpenReads.end) OpenReads.end();
+      return change.apply(this, arguments);
+    };
+  });
   // Point d'ancrage pour seeder AVANT que main.js:init() ne tourne (donc avant le tout premier
   // fetchTable de GristAPI.init()) - contrairement à un appel de setVariables/setRows APRÈS "Widget
   // prêt.", qui ne peut jamais tester "le widget démarre avec tel modèle déjà marqué par défaut" (cf.

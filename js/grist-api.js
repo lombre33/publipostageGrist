@@ -1406,6 +1406,20 @@ const GristAPI = (function () {
   // valeur (ligne ajoutée puis retirée). `user.Name` se lit de la même ligne, dans une seconde colonne ajoutée à la première demande de nom
   // (sandbox/grist/user.py de grist-core : `Name` comme `Email` ; GranularAccess.ts:getUser : le nom du profil Grist, à défaut la partie de l'adresse
   // avant le @, ou null pour un compte sans nom).
+  // Quand GFS héberge l'app et connaît l'adresse (consignes 094 et 095 : `identite` du contexte, js/gfs-link.js), c'est elle qui sert : l'ouverture n'écrit plus de ligne dans la table-sonde. La sonde reste le repli (seule, GFS qui
+  // ne la donne pas, qui ne la connaît pas encore ou à qui l'app n'a pas la permission `identite`) et le SEUL chemin du nom : GFS ne donne que l'adresse.
+  function gfsEmailNow() {
+    try {
+      const identity = typeof GfsLink !== 'undefined' && GfsLink.hosted ? GfsLink.identity() : null;
+      return identity && identity.email ? identity.email : null;
+    } catch (e) { return null; }
+  }
+  // Attend le contexte de GFS (ses 5 secondes au plus, que le démarrage attend déjà) : l'ouverture demande l'adresse avant qu'il n'arrive et passerait sinon par la sonde pour rien. Seule, rien à attendre. Ne rejette jamais.
+  async function emailFromGfs() {
+    if (typeof GfsLink === 'undefined' || !GfsLink.hosted) return null;
+    try { await GfsLink.ready; } catch (e) { /* `ready` ne rejette jamais ; au cas où, la sonde prend le relais */ }
+    return gfsEmailNow();
+  }
   async function ensureUserProbeTable() {
     await addTableIfMissing(await listAllTablesCached(), USER_PROBE_TABLE_NAME, [
       // recalcWhen:0 = RecalcWhen.DEFAULT (nouvelles lignes ou changement de recalcDeps) ; recalcDeps:null car seule la création de ligne doit
@@ -1444,6 +1458,10 @@ const GristAPI = (function () {
   let _userEmailCache = null;
   async function getCurrentUserEmail() {
     if (_userEmailCache) return _userEmailCache;
+    const given = await emailFromGfs();
+    // Une lecture partie pendant l'attente a pu poser l'adresse : la première gardée reste (la casse de GFS comme celle de Grist se comparent en minuscules, mais ne se mélangent pas dans une session).
+    if (_userEmailCache) return _userEmailCache;
+    if (given) { _userEmailCache = given; return given; }
     const row = await probeUserRow();
     const email = row && row.Email;
     if (!email) throw new Error('la formule déclenchée user.Email n’a renvoyé aucune valeur');
@@ -1464,13 +1482,13 @@ const GristAPI = (function () {
   // Une ligne lue donne les deux : l'email et, si la ligne a sa colonne, le nom sont gardés pour la session - la chip qui demande l'autre ensuite n'a
   // rien à relire.
   function rememberUserRow(row) {
-    if (row && row.Email) _userEmailCache = row.Email;
+    if (row && row.Email && !_userEmailCache) _userEmailCache = row.Email;
     const name = userNameOf(row);
     if (name !== null) _userNameCache = name;
   }
   // Ce que la session sait déjà de la personne devant l'écran : { email, name }, '' pour ce qui n'est pas lu. Ne lit ni n'écrit rien (jamais de passage par la table-sonde) : l'enregistrement d'un
   // modèle s'en sert pour dire qui l'a écrit (colonne « Modifié par ») sans rien ajouter à ses écritures.
-  function peekCurrentUser() { return { email: _userEmailCache || '', name: _userNameCache || '' }; }
+  function peekCurrentUser() { return { email: _userEmailCache || gfsEmailNow() || '', name: _userNameCache || '' }; }
   async function getCurrentUserName() {
     if (_userNameCache !== null) return _userNameCache;
     if (!_userNameRead) {

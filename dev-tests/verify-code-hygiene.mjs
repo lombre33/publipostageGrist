@@ -2175,7 +2175,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // Grist n'a pas de niveau entre « lire une table » et « accès complet » : tout code qui s'exécute dans le widget lit et écrit toutes les tables. Rien dans le code ne le limite (un code piégé n'a qu'à appeler
 // grist.docApi lui-même) : ce contrôle borne ce que NOTRE code écrit, pour qu'une écriture de plus ne s'ajoute pas sans être vue. Chaque fichier qui appelle `applyUserActions` est ici, avec les actions qu'il
-// emploie et la nature de sa cible : « widget » = ses propres tables Publipostage_* (ou celles d'une extension), « document » = une table de la personne, pour une fonction qu'elle demande (l'écriture en direct,
+// emploie et la nature de sa cible : « widget » = ses propres tables Publipostage_* (ou celles d'une extension), « aucune » = un fichier qui n'écrit rien (il enveloppe l'appel), « document » = une table de la personne, pour une fonction qu'elle demande (l'écriture en direct,
 // la date d'export, le PDF joint à la ligne, une table créée depuis un modèle de la galerie), « métadonnées » = une table de Grist (_grist_…). Un fichier qui écrit en plus, une action en plus, une table de
 // Grist écrite ailleurs ou une suppression de table hors du retour arrière d'une installation de modèle de la galerie : le contrôle échoue, et la ligne à changer ici dit POURQUOI (puis README et SECURITY.md).
 {
@@ -2187,6 +2187,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     'js/export-date.js': { cible: 'document', actions: ['BulkUpdateRecord'], pourquoi: 'la colonne de date d\'export que la personne a choisie dans sa table' },
     'js/grist-api.js': { cible: 'widget', actions: ['AddColumn', 'AddRecord', 'AddTable', 'AddVisibleColumn', 'RemoveRecord', 'UpdateRecord'], pourquoi: 'AddTable : la porte addTableIfMissing, derrière la fenêtre de consentement du 05/10' },
     'js/schema-columns.js': { cible: 'widget', actions: ['ModifyColumn', 'RenameColumn', 'RenameTable'], pourquoi: 'le traducteur des noms anglais : il relaie, sous les noms que le document porte, ce que les modules du widget écrivent dans leurs tables (leurs actions sont relevées dans leurs fichiers) ; et la reprise d\'un document d\'avant (migrate), SEUL endroit qui renomme : RenameTable, RenameColumn et le libellé (ModifyColumn) des tables et colonnes de SON registre, en un seul lot que Grist rejoue en entier ou pas du tout, jamais une table ni une colonne de la personne' },
+    'js/open-reads.js': { cible: 'aucune', actions: [], pourquoi: 'rien n\'est écrit : le fichier enveloppe applyUserActions pour oublier les lectures mises en commun pendant l\'ouverture quand une écriture peut changer la structure du document (consigne 095 de GFS) ; une action de plus dans ce fichier fait échouer le contrôle' },
     'js/page-tree.js': { cible: 'métadonnées', actions: ['UpdateRecord'], tables: ['_grist_Pages'], pourquoi: 'l\'état plié du groupe de pages du widget' },
     'js/row-attachment.js': { cible: 'document', actions: ['AddVisibleColumn', 'BulkUpdateRecord'], pourquoi: 'le PDF joint à la ligne : une colonne de pièces jointes de la table de la personne' },
     'js/saved-page-formats.js': { cible: 'widget', actions: ['AddRecord', 'RemoveRecord'] },

@@ -323,10 +323,11 @@
   }
 
   // Range le document `id` dans le dossier `folder` que GFS a donné (« Nouveau » cliqué dans ce dossier de « Mes fichiers ») : sa ligne de rangement de la personne, comme un « Déplacer vers » mais sans historique (rien à annuler : le document naît
-  // là). Sans dossier : rien, il reste à la racine. Une écriture refusée ne perd pas le document : il est enregistré, à la racine, et l'état le dit.
+  // là). Sans dossier : rien, il reste à la racine. Un chemin d'espace (« Espaces/… », consigne 096 de GFS) n'est jamais écrit non plus (GfsOpen ne le donne déjà plus : ceci est la seconde garde, devant l'écriture).
+  // Une écriture refusée ne perd pas le document : il est enregistré, à la racine, et l'état le dit.
   async function fileInGfsFolder(id, folder) {
     const path = TemplatePreferences.normalizeFolderPath(folder);
-    if (!path || id == null) return;
+    if (!path || id == null || TemplatePreferences.isSpacePath(path)) return;
     try {
       await TemplatePreferences.setFolder(id, path);
       TemplateTreeSelect.refresh();

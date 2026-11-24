@@ -54,9 +54,13 @@ const GfsOpen = (function () {
 
   let hooks = null;
   // Le dossier que GFS a donné à la création en attente (« Nouveau », « Nouveau > Depuis un modèle »), normalisé : '' sans dossier. Pris par js/main.js à la naissance de la ligne du modèle (takeFolder), oublié dès qu'un
-  // autre document s'ouvre (forgetFolder).
+  // autre document s'ouvre (forgetFolder). Un chemin d'ESPACE (« Espaces/… », consigne 096 de GFS) n'est jamais gardé : le rangement de la personne n'en reçoit pas, le document reste à la racine et rien n'est écrit
+  // (TemplatePreferences.isSpacePath).
   let pendingFolder = '';
-  const folderOf = opening => (opening && typeof TemplatePreferences !== 'undefined' ? TemplatePreferences.normalizeFolderPath(opening.dossier) : '') || '';
+  const folderOf = opening => {
+    const folder = (opening && typeof TemplatePreferences !== 'undefined' ? TemplatePreferences.normalizeFolderPath(opening.dossier) : '') || '';
+    return folder && !TemplatePreferences.isSpacePath(folder) ? folder : '';
+  };
   function takeFolder() { const folder = pendingFolder; pendingFolder = ''; return folder; }
   function forgetFolder() { pendingFolder = ''; }
   let startupReason = '';    // la raison de l'ouverture du démarrage, dite quand le coin d'état a fini de dire « Widget prêt. »

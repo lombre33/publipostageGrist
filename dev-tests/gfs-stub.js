@@ -43,6 +43,9 @@
 //   d'avant la consigne 068 (par défaut), dont le contexte n'a pas de `correcteurs` et qui n'envoie aucun événement (un vrai GFS qui n'a pas le bouton dans sa barre rend `{ coupes: false }`). Réglée avant le chargement de la page, comme `ambiance` ;
 //   setCorrecteurs(message) la change et envoie l'événement `correcteurs` `{ correcteurs: { coupes } }`, UNE seule fois par changement de `coupes`, et rien quand il ne change pas, comme GFS (cocher la ligne « Bouton LanguageTool » alors que le choix
 //   de couper est éteint n'envoie rien) ; un message d'une autre forme se poste tel quel par `post({ type: 'evenement', nom: 'correcteurs', data })`.
+//   window.__gfsStub.identite : l'adresse de la personne que rend le contexte (contrats 5.2 point 9, consigne 094) : `{ email }` (la casse est celle de Grist), null : GFS ne la connaît pas (encore : sa propre sonde n'a rien lu, un compte Lecteur, un
+//   document sans sa table de rangement), ou undefined : une app qui n'a pas déclaré `permissions.identite`, ou un GFS d'avant (par défaut), dont le contexte n'a pas d'`identite` et qui n'envoie aucun événement. Réglée avant le chargement de la page,
+//   comme `ambiance` ; setIdentite(message) la change et envoie l'événement `identite` `{ identite }` (null quand GFS la perd), UNE seule fois par changement, et rien quand elle ne change pas, comme GFS.
 //   window.__gfsStub.ranger : l'appel `ranger { fichier, nom, type?, lot?, suivants?, dossier? }` (contrats 5.4 point 9, consigne 043) - null : un GFS d'avant la consigne 043, dont l'appel reçoit `GFS_INCONNU` (par défaut) ; sinon un objet de réglage que le
 //   test pose (`{}` : un GFS qui sait ranger) : `quandPris` ('copie' par défaut, 'remplace' ou 'ignore', ou une fonction `(nom, args, rang) => …` : ce que la personne répond à la fenêtre « Ce nom est déjà pris »), `erreur` ({ code, message } : toutes les
 //   demandes échouent ainsi), `erreurs` ({ rang: { code, message } } : celle-là seule, `rang` compté de 1 dans l'ordre des appels), `delai` (millisecondes avant la réponse : le temps que la personne prend). Il tient le contrat : le nom reçoit « .pdf » s'il lui
@@ -99,6 +102,7 @@
     barre: undefined,
     ambiance: undefined,
     correcteurs: undefined,
+    identite: undefined,
     masquee: false,
     refusBarre: [],
     ignoreContext: false,
@@ -142,6 +146,7 @@
       if (stub.barre !== undefined) data.barre = stub.shownBar();
       if (stub.ambiance !== undefined) data.ambiance = JSON.parse(JSON.stringify(stub.ambiance));
       if (stub.correcteurs !== undefined) data.correcteurs = JSON.parse(JSON.stringify(stub.correcteurs));
+      if (stub.identite !== undefined) data.identite = JSON.parse(JSON.stringify(stub.identite));
       if (stub.lecteurs !== undefined) data.lecteurs = stub.lecteurs.slice();
       if (stub.natives !== undefined) data.natives = JSON.parse(JSON.stringify(stub.natives));
       return data;
@@ -457,6 +462,12 @@
       if (JSON.stringify(next) === JSON.stringify(stub.ambiance)) return;
       stub.ambiance = next === undefined ? undefined : JSON.parse(JSON.stringify(next));
       stub.post({ type: 'evenement', nom: 'ambiance', data: { ambiance: next === undefined ? null : JSON.parse(JSON.stringify(next)) } });
+    },
+    // L'événement `identite` : GFS apprend (ou perd) l'adresse de la personne après le contexte. Un seul événement par changement, et aucun quand elle ne change pas, comme GFS.
+    setIdentite(next) {
+      if (JSON.stringify(next) === JSON.stringify(stub.identite)) return;
+      stub.identite = next === undefined ? undefined : JSON.parse(JSON.stringify(next));
+      stub.post({ type: 'evenement', nom: 'identite', data: { identite: next === undefined ? null : JSON.parse(JSON.stringify(next)) } });
     },
     // L'événement `correcteurs` : la personne coupe ou rallume les correcteurs du navigateur par le bouton de la barre de GFS. Un seul événement par changement de `coupes`, et aucun quand il ne change pas, comme GFS.
     setCorrecteurs(next) {

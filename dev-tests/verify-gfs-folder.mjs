@@ -9,6 +9,7 @@
 //  4. « Nouveau > Importer » (le document importé s'enregistre de lui-même) : rangé dans le dossier ; l'import d'après, sans dossier : racine ;
 //  5. « Nouveau > Depuis un modèle » : le modèle de la galerie, enregistré, est rangé dans le dossier ;
 //  6. un `dossier` écrit de travers (espaces, barres en trop) est rangé normalisé ; vide, aucune ligne.
+//  7. un `dossier` qui est un chemin d'ESPACE (« Espaces/… », consigne 096 de GFS) n'est jamais écrit : au démarrage, par `ouvrir` et à l'import, le document est enregistré à la racine, sans ligne de rangement ; le dossier d'après est rangé normalement.
 // Lancé par run-headless.mjs (groupe Node "gfsFolder", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-gfs-folder.mjs
 import { start, seedModels } from './gfs-page.mjs';
 
@@ -175,6 +176,42 @@ console.log('\n== 6. Un dossier écrit de travers, un dossier vide ==');
   const blank = await nameAndSave(o.page, 'Sans dossier');
   check('un dossier fait d’espaces ne range rien', blank != null && (await folderOf(o.page, blank)) === '', await prefRows(o.page));
   await o.context.close();
+}
+
+console.log('\n== 7. Un chemin d’espace (« Espaces/… ») n’est jamais écrit ==');
+{
+  // Consigne 096 de GFS : le rangement de la personne ne reçoit jamais un chemin d'espace (un fichier ne se place dans un espace que par GFS_Placement, écrit par GFS) ; le document est créé, enregistré et reste à la racine.
+  const SPACE = 'Espaces/Equipe/Contrats';
+  const noSpaceRow = async page => !(await prefRows(page)).some(r => /^Espaces\//.test(r.folder || ''));
+  {
+    const o = await openHosted({ ouverture: NEW('document', { dossier: SPACE }) });
+    const id = await nameAndSave(o.page, 'Document de l’espace');
+    check('« Nouveau » au démarrage dans un espace : le document est enregistré', id != null, id);
+    check('… il est à la racine, sans ligne de rangement', (await folderOf(o.page, id)) === '' && !(await prefRows(o.page)).some(r => r.model === Number(id)), await prefRows(o.page));
+    check('… et aucune écriture du rangement n’est partie', (await writesOf(o.page)).prefs === 0 && (await noSpaceRow(o.page)), await writesOf(o.page));
+    await o.context.close();
+  }
+  {
+    const o = await openHosted({ ouverture: null });
+    const reply = await ask(o.page, NEW('email', { dossier: SPACE }));
+    check('l’app déjà ouverte : le « Nouveau » dans un espace est accepté', reply.type === 'reponse' && reply.data.ouvert === true, reply);
+    const id = await nameAndSave(o.page, 'Courrier de l’espace');
+    check('… le document enregistré est à la racine, sans ligne de rangement, rien d’écrit', id != null && (await folderOf(o.page, id)) === '' && (await writesOf(o.page)).prefs === 0 && (await noSpaceRow(o.page)), { id, rows: await prefRows(o.page) });
+    // Le dossier d'après est un vrai dossier : l'attente du premier n'a rien laissé derrière elle.
+    await ask(o.page, NEW('document', { dossier: 'Contrats/2026' }));
+    const next = await nameAndSave(o.page, 'Document rangé');
+    check('le « Nouveau » d’après, dans un dossier ordinaire, est rangé comme avant', next != null && (await folderOf(o.page, next)) === 'Contrats/2026', await prefRows(o.page));
+    await o.context.close();
+  }
+  {
+    const o = await openHosted({ ouverture: null });
+    const reply = await askImport(o.page, MARKDOWN, { dossier: SPACE });
+    check('« Nouveau > Importer » dans un espace est accepté', reply.type === 'reponse' && reply.data.ouvert === true, reply);
+    await sleep(700);
+    const id = await currentId(o.page);
+    check('le document importé est enregistré à la racine, sans ligne de rangement, rien d’écrit', id != null && (await folderOf(o.page, id)) === '' && (await writesOf(o.page)).prefs === 0 && (await noSpaceRow(o.page)), { id, rows: await prefRows(o.page) });
+    await o.context.close();
+  }
 }
 
 await t.finish();

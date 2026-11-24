@@ -90,8 +90,10 @@ const TextExpansion = (function () {
     tableKnown = true;
     let tableData;
     try { tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME); } catch (e) { console.warn('[text-expansion] lecture des abréviations impossible', e); return found; }
+    // Les adresses se comparent en minuscules (consignes 094 et 095 : GFS donne l'adresse telle que Grist la donne, la casse gardée).
+    const mine = String(email || '').toLowerCase();
     for (let i = 0; i < tableData.id.length; i++) {
-      if (((tableData.User && tableData.User[i]) || '') !== email) continue;
+      if (String((tableData.User && tableData.User[i]) || '').toLowerCase() !== mine) continue;
       const abbreviation = String((tableData.Abbreviation && tableData.Abbreviation[i]) || '').trim();
       if (!abbreviation) continue;
       found.push({ rowId: tableData.id[i], abbreviation, text: String((tableData.Text && tableData.Text[i]) || '') });

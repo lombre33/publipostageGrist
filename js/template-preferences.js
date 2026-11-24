@@ -94,6 +94,14 @@ const TemplatePreferences = (function () {
     return cleaned || null;
   }
 
+  // Un chemin d'ESPACE de GFS (« Espaces/<clé>/… », consigne 096) : le rangement de la personne n'en reçoit jamais (contrat de GFS, contrats.md:3469). Un fichier ne se place dans un espace que par la table GFS_Placement, que GFS écrit
+  // (et un propriétaire) ; GFS n'a pas mesuré ce que son explorateur montre d'une ligne de rangement qui porte un tel chemin. Le `dossier` que GFS donne à une création (js/gfs-open.js) passe par ici : un chemin d'espace n'est ni gardé ni
+  // écrit, le document reste à la racine. Seul ce qui COMMENCE par « Espaces/ » est un chemin d'espace : un dossier « Espaces » seul, « Contrats/Espaces/2026 » ou « espaces/x » restent des dossiers de la personne.
+  function isSpacePath(path) {
+    const cleaned = normalizeFolderPath(path);
+    return !!cleaned && cleaned.indexOf('Espaces/') === 0;
+  }
+
   // Préférences de la personne courante uniquement : { [modeleId]: { rowId, epingle, dossier } }, jamais celles des autres.
   let cache = null;
 
@@ -140,12 +148,14 @@ const TemplatePreferences = (function () {
   }
 
   // Remplit `into` ({ cache, folderStates }) d'après ce que dit la table pour la personne `email`. Une lecture sans Utilisateur ni ModeleId (règle d'accès qui
-  // les cache, lecture partielle) ne dit rien de la personne : aucune préférence, sans erreur. Dossier et Epingle absents se lisent vides.
+  // les cache, lecture partielle) ne dit rien de la personne : aucune préférence, sans erreur. Dossier et Epingle absents se lisent vides. Les adresses se comparent en minuscules (consigne 094 : GFS donne l'adresse telle que
+  // Grist la donne, la casse gardée) : une préférence écrite sous « Jean@x.fr » se retrouve sous « jean@x.fr ».
   function parseRows(tableData, email, into) {
     const count = tableData.User && tableData.TemplateId ? tableData.id.length : 0;
     const folderOf = i => normalizeFolderPath(tableData.Folder ? tableData.Folder[i] : null);
+    const mine = String(email || '').toLowerCase();
     for (let i = 0; i < count; i++) {
-      if ((tableData.User[i] || '') !== email) continue;
+      if (String(tableData.User[i] || '').toLowerCase() !== mine) continue;
       if (tableData.TemplateId[i] === FOLDER_ROW_MODELE_ID) {
         const chemin = folderOf(i);
         const replie = !!(tableData.Collapsed && tableData.Collapsed[i]);
@@ -431,6 +441,6 @@ const TemplatePreferences = (function () {
 
   return {
     loadForCurrentUser, refresh, getCached, setPinned, setFolder, isPinned, getFolder, listFolders, listStateFolders,
-    isFolderCollapsed, setFolderCollapsed, hasFolderState, createFolderState, clearFolderState, normalizeFolderPath, getExportChoices, setExportChoices,
+    isFolderCollapsed, setFolderCollapsed, hasFolderState, createFolderState, clearFolderState, normalizeFolderPath, isSpacePath, getExportChoices, setExportChoices,
   };
 })();

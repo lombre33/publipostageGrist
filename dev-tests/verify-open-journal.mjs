@@ -14,7 +14,22 @@ const t = await start({ name: 'verify-open-journal', port: Number(process.env.OP
 const { check } = t;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-const { page } = await t.openPage({ hosted: true, stub: { extensions: [] }, seed: seedModels(), lang: 'fr', colorScheme: 'light' });
+// Le rapport ne garde que les 12 appels les plus longs : avec un faux Grist qui répond en moins d'une milliseconde, la place de la table des modèles dans cette liste ne tenait qu'à des fractions de milliseconde (le test
+// tombait au hasard dès que l'ouverture faisait un appel de moins ou de plus). Comme chez une personne, la table des modèles est la lecture la plus longue de l'ouverture : 30 ms de plus, posées avant le chargement.
+const slowModels = `
+(function () {
+  let g;
+  function slow(api) {
+    const original = api.fetchTable;
+    api.fetchTable = async function (name) {
+      const result = await original.apply(this, arguments);
+      if (name === 'Publipostage_Modeles') await new Promise(resolve => setTimeout(resolve, 30));
+      return result;
+    };
+  }
+  Object.defineProperty(window, 'grist', { configurable: true, get() { return g; }, set(value) { g = value; try { if (value && value.docApi) slow(value.docApi); } catch (error) { /* rien */ } } });
+})();`;
+const { page } = await t.openPage({ hosted: true, stub: { extensions: [] }, seed: seedModels(), lang: 'fr', colorScheme: 'light', init: slowModels });
 await page.waitForFunction(() => typeof PerfTrace !== 'undefined' && typeof Editor !== 'undefined' && !!EditorCore.getEditor(), null, { timeout: 30000 });
 await sleep(1500);
 

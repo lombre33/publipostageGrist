@@ -7,7 +7,10 @@
 //  - l'email SEUL ne change jamais le schéma du document : aucune colonne ajoutée tant qu'aucune puce Nom n'est lue ;
 //  - plusieurs puces d'un même rendu (Email et Nom ensemble) ne font qu'une lecture : une seule table-sonde même sur un document qui n'en avait pas, une seule colonne Name ;
 //  - un nom que Grist ne donne pas ('' : compte sans nom, formule en erreur) est une réponse gardée ; une lecture qui échoue (lecteur Grist, colonne refusée) ne l'est pas et
-//    n'abîme pas l'email.
+//    n'abîme pas l'email ;
+//  - l'adresse que GFS donne (consigne 095 de GFS, 24/11 : `GfsLink.identity()`, le contexte ou l'événement `identite`) remplace la sonde à l'ouverture : ni écriture, ni lecture, ni retrait de ligne, l'adresse
+//    gardée telle que GFS la donne (la casse comprise), le contexte attendu quand il n'est pas encore là ; quand `identity()` rend null, quand l'app est seule ou quand elle échoue, la sonde reprend comme avant ;
+//    le NOM passe toujours par la sonde (GFS ne donne que l'adresse) sans changer l'adresse déjà gardée.
 // Lancer : node dev-tests/unit-user-identity.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 
@@ -23,6 +26,7 @@ class ProbeDoc {
     this.latencyMs = latencyMs;
     this.nextId = 1;
     this.journal = []; // [type, tableId, ...] des actions appliquées, dans l'ordre
+    this.reads = []; // les lectures (listTables, fetchTable <table>), dans l'ordre
     this.tables = { Missions: { cols: { Titre: null }, rows: [] } }; // colId -> formule déclenchée (null : colonne de données)
     if (probe === 'ancienne') this.tables[PROBE] = { cols: { Email: 'user.Email' }, rows: [] };
     if (probe === 'complete') this.tables[PROBE] = { cols: { Email: 'user.Email', Name: 'user.Name' }, rows: [] };
@@ -37,9 +41,10 @@ class ProbeDoc {
 
   async _latency() { if (this.latencyMs) await sleep(this.latencyMs); }
 
-  async listTables() { await this._latency(); return Object.keys(this.tables); }
+  async listTables() { this.reads.push('listTables'); await this._latency(); return Object.keys(this.tables); }
 
   async fetchTable(tableId) {
+    this.reads.push('fetchTable ' + tableId);
     await this._latency();
     const t = this.tables[tableId];
     if (!t) throw new Error('Invalid table ' + tableId);
@@ -95,11 +100,11 @@ class ProbeDoc {
 
 // Un contexte par scénario : GristAPI garde un état module-niveau (caches de l'email et du nom, lectures en cours) qui ne doit pas fuiter d'un scénario à l'autre, exactement
 // comme un rechargement de page.
-function fresh(doc) {
-  const ctx = createContext({
+function fresh(doc, gfs) {
+  const ctx = createContext(Object.assign({
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn() {}, error() {} },
-  });
+  }, gfs ? { GfsLink: gfs } : {}));
   loadScript(ctx, 'js/schema-columns.js');
   loadScript(ctx, 'js/grist-api.js');
   return { run: (expr) => evalIn(ctx, expr) };
@@ -108,6 +113,17 @@ function fresh(doc) {
 // Une écriture que le widget n'attend pas (le retrait de la ligne-sonde) se termine en arrière-plan : laisser la main avant de compter.
 const flush = () => sleep(15);
 const names = (list) => JSON.stringify(list);
+// Le lien avec GFS tel que js/grist-api.js le lit : `hosted` (l'app est hébergée), `ready` (le contexte est arrivé : une promesse), `identity()` (l'adresse de GFS : { email } ou null). `state.identity` se change à chaud (l'événement
+// `identite`), `readyAfterMs` retarde le contexte, `throws` fait échouer `identity()`.
+function fakeGfs({ hosted = true, email = null, readyAfterMs = 0, throws = false } = {}) {
+  const state = { identity: email === null ? null : { email }, asked: 0 };
+  const link = {
+    hosted,
+    ready: readyAfterMs ? sleep(readyAfterMs) : Promise.resolve(),
+    identity() { state.asked += 1; if (throws) throw new Error('identity() en panne'); return state.identity ? { email: state.identity.email } : null; },
+  };
+  return { state, link };
+}
 // Une exception dans un scénario (l'API qu'on teste n'existe pas sur l'ancien code) est un échec nommé, pas la fin du script : les scénarios suivants tournent quand même.
 async function section(label, work) {
   try { await work(); } catch (e) { check(label + ' : aucune exception', false, e && e.message); }
@@ -240,6 +256,119 @@ async function main() {
     check('lecteur : aucune colonne n\'a été tentée', doc.count('AddColumn') === 0);
     doc.denyAddRecord = false;
     check('lecteur devenu éditeur : le nom puis l\'email se lisent', await run('GristAPI.getCurrentUserName()') === 'Ada Lovelace' && await run('GristAPI.getCurrentUserEmail()') === 'ada@exemple.fr');
+  });
+
+  // 11. GFS donne l'adresse (contexte hébergé, `identite` : { email }) : elle sert telle quelle, la casse gardée, et l'ouverture n'écrit, ne lit et ne retire rien - même sur un document qui n'a pas de table-sonde.
+  await section('scénario 11', async () => {
+    for (const probe of ['absente', 'ancienne']) {
+      const doc = new ProbeDoc({ probe });
+      const { link } = fakeGfs({ email: 'Ada.Lovelace@Exemple.fr' });
+      const { run } = fresh(doc, link);
+      check('GFS donne l\'adresse (' + probe + ') : peekCurrentUser la voit avant toute lecture', await run('GristAPI.peekCurrentUser().email') === 'Ada.Lovelace@Exemple.fr');
+      const email = await run('GristAPI.getCurrentUserEmail()');
+      await flush();
+      check('GFS donne l\'adresse (' + probe + ') : getCurrentUserEmail la rend telle que GFS la donne, la casse gardée', email === 'Ada.Lovelace@Exemple.fr', email);
+      check('GFS donne l\'adresse (' + probe + ') : aucune écriture, aucune ligne ajoutée ni retirée', doc.journal.length === 0 && doc.probeRows() === (probe === 'absente' ? null : 0), names(doc.journal));
+      check('GFS donne l\'adresse (' + probe + ') : aucune lecture, pas même la liste des tables', doc.reads.length === 0, names(doc.reads));
+      check('GFS donne l\'adresse (' + probe + ') : une seconde demande est gardée', await run('GristAPI.getCurrentUserEmail()') === 'Ada.Lovelace@Exemple.fr' && doc.journal.length === 0 && doc.reads.length === 0);
+      check('GFS donne l\'adresse (' + probe + ') : aucune table-sonde créée', doc.count('AddTable') === 0 && names(doc.probeTables()) === names(probe === 'absente' ? [] : [PROBE]), names(doc.probeTables()));
+    }
+  });
+
+  // 12. Plusieurs demandes ensemble (chip Email de la Lecture, préférences, commentaires) : une seule réponse, aucune sonde.
+  await section('scénario 12', async () => {
+    const doc = new ProbeDoc({ probe: 'absente', latencyMs: 5 });
+    const { link } = fakeGfs({ email: 'ada@exemple.fr', readyAfterMs: 10 });
+    const { run } = fresh(doc, link);
+    const got = await run('Promise.all([GristAPI.getCurrentUserEmail(), GristAPI.getCurrentUserEmail(), GristAPI.getCurrentUserEmail()])');
+    await flush();
+    check('trois demandes ensemble : la même adresse, le contexte attendu, aucune action ni lecture', names(got) === names(['ada@exemple.fr', 'ada@exemple.fr', 'ada@exemple.fr']) && doc.journal.length === 0 && doc.reads.length === 0, names(got) + names(doc.journal));
+  });
+
+  // 13. Le contexte n'est pas encore arrivé quand l'ouverture demande l'adresse : elle l'attend (au lieu de passer par la sonde pour rien) ; l'événement qui l'apporte plus tard compte pour la demande suivante.
+  await section('scénario 13', async () => {
+    const doc = new ProbeDoc({ probe: 'ancienne' });
+    const gfs = fakeGfs({ email: null, readyAfterMs: 40 });
+    const { run } = fresh(doc, gfs.link);
+    setTimeout(() => { gfs.state.identity = { email: 'ada@exemple.fr' }; }, 15); // le contexte (prêt à 40 ms) l'apporte
+    const asked = run('GristAPI.getCurrentUserEmail()');
+    await sleep(5);
+    check('contexte attendu : rien ne part vers Grist tant que le contexte n\'est pas là', doc.journal.length === 0 && doc.reads.length === 0, names(doc.journal));
+    check('contexte attendu : l\'adresse du contexte sert', await asked === 'ada@exemple.fr' && doc.journal.length === 0, doc.journal.length);
+
+    // Le contexte arrive SANS adresse (GFS ne la connaît pas encore) : la sonde reprend, et ce qu'elle a lu reste : une adresse que GFS donne ensuite (événement) ne change pas ce que la session a déjà gardé.
+    const second = new ProbeDoc({ probe: 'ancienne' });
+    const late = fakeGfs({ email: null });
+    const again = fresh(second, late.link);
+    const first = await again.run('GristAPI.getCurrentUserEmail()');
+    await flush();
+    late.state.identity = { email: 'AUTRE@exemple.fr' }; // GFS l'apprend plus tard
+    check('contexte sans adresse : la sonde reprend', first === 'ada@exemple.fr' && second.count('AddRecord', PROBE) === 1, first);
+    check('contexte sans adresse : l\'adresse que GFS donne ensuite ne remplace pas celle déjà gardée', await again.run('GristAPI.getCurrentUserEmail()') === 'ada@exemple.fr' && await again.run('GristAPI.peekCurrentUser().email') === 'ada@exemple.fr');
+  });
+
+  // 14. Chaque cas où GFS ne donne rien : la sonde, comme avant.
+  await section('scénario 14', async () => {
+    const cases = {
+      'GFS ne connaît pas la personne (identity() rend null)': fakeGfs({ email: null }).link,
+      'l\'app est seule (pas hébergée), même si identity() rendrait une adresse': fakeGfs({ hosted: false, email: 'intrus@exemple.fr' }).link,
+      'identity() échoue': fakeGfs({ email: 'intrus@exemple.fr', throws: true }).link,
+      'identity() rend une forme vide': { hosted: true, ready: Promise.resolve(), identity() { return { email: '' }; } },
+      'identity() rend autre chose qu\'un objet': { hosted: true, ready: Promise.resolve(), identity() { return 'ada@exemple.fr'; } },
+      'le lien n\'a pas identity() (un GFS d\'avant)': { hosted: true, ready: Promise.resolve() },
+      'ready ne répond jamais bien : il rejette': { hosted: true, ready: Promise.reject(new Error('contexte perdu')), identity() { return null; } },
+    };
+    cases['ready ne répond jamais bien : il rejette'].ready.catch(() => {});
+    for (const [label, link] of Object.entries(cases)) {
+      const doc = new ProbeDoc({ probe: 'ancienne' });
+      const { run } = fresh(doc, link);
+      const email = await run('GristAPI.getCurrentUserEmail()');
+      await flush();
+      check(label + ' : la sonde lit l\'adresse de Grist', email === 'ada@exemple.fr', email);
+      check(label + ' : une ligne ajoutée puis retirée, comme avant', doc.count('AddRecord', PROBE) === 1 && doc.count('RemoveRecord', PROBE) === 1 && doc.probeRows() === 0);
+    }
+    const doc = new ProbeDoc({ probe: 'ancienne' });
+    const { run } = fresh(doc);
+    check('sans lien avec GFS du tout (une page d\'essai), peekCurrentUser ne voit rien avant la lecture', await run('typeof GfsLink') === 'undefined' && await run('GristAPI.peekCurrentUser().email') === '');
+    check('sans lien avec GFS du tout, la sonde lit l\'adresse', await run('GristAPI.getCurrentUserEmail()') === 'ada@exemple.fr');
+  });
+
+  // 15. Le NOM passe toujours par la sonde (GFS ne donne que l'adresse) : la sonde est lue pour lui, mais l'adresse déjà gardée - celle de GFS - ne change pas.
+  await section('scénario 15', async () => {
+    const doc = new ProbeDoc({ probe: 'ancienne', user: { email: 'ada@exemple.fr', name: 'Ada Lovelace' } });
+    const { link } = fakeGfs({ email: 'Ada@Exemple.fr' });
+    const { run } = fresh(doc, link);
+    check('l\'adresse de GFS est lue sans rien écrire', await run('GristAPI.getCurrentUserEmail()') === 'Ada@Exemple.fr' && doc.journal.length === 0);
+    const name = await run('GristAPI.getCurrentUserName()');
+    await flush();
+    check('le nom est lu par la sonde, à la demande de la puce Nom seulement', name === 'Ada Lovelace' && doc.count('AddRecord', PROBE) >= 1 && doc.count('AddColumn', PROBE) === 1, name + ' / ' + names(doc.journal.map((a) => a[0])));
+    check('l\'adresse de GFS reste celle que la session garde (la ligne de la sonde ne la remplace pas)', await run('GristAPI.getCurrentUserEmail()') === 'Ada@Exemple.fr' && await run('GristAPI.peekCurrentUser().email') === 'Ada@Exemple.fr');
+    check('peekCurrentUser rend l\'adresse et le nom', names(await run('GristAPI.peekCurrentUser()')) === names({ email: 'Ada@Exemple.fr', name: 'Ada Lovelace' }));
+    check('aucune ligne ne reste dans la sonde', doc.probeRows() === 0, doc.probeRows());
+  });
+
+  // 16. Un compte qui ne peut rien écrire (écriture refusée) : l'adresse que GFS donne se lit quand même, sans fabriquer un refus ; sans elle, rien ne change (scénario 10).
+  await section('scénario 16', async () => {
+    const doc = new ProbeDoc({ probe: 'ancienne' });
+    doc.denyAddRecord = true;
+    const { link } = fakeGfs({ email: 'ada@exemple.fr' });
+    const { run } = fresh(doc, link);
+    check('écriture refusée mais adresse de GFS : l\'adresse se lit', await run('GristAPI.getCurrentUserEmail()') === 'ada@exemple.fr');
+    check('écriture refusée mais adresse de GFS : aucune écriture n\'a été tentée', doc.journal.length === 0);
+    let failed = false;
+    try { await run('GristAPI.getCurrentUserName()'); } catch (e) { failed = true; }
+    check('écriture refusée : le nom, lui, ne se lit pas (la sonde reste son seul chemin)', failed);
+  });
+
+  // 17. Le suivi : l'événement `identite` qui change l'adresse de GFS est lu à la demande suivante tant que la session n'a rien gardé.
+  await section('scénario 17', async () => {
+    const doc = new ProbeDoc({ probe: 'ancienne' });
+    const gfs = fakeGfs({ email: null });
+    const { run } = fresh(doc, gfs.link);
+    check('avant toute adresse, peekCurrentUser rend \'\'', await run('GristAPI.peekCurrentUser().email') === '');
+    gfs.state.identity = { email: 'ada@exemple.fr' };
+    check('une fois l\'adresse donnée par GFS, peekCurrentUser la voit sans rien lire', await run('GristAPI.peekCurrentUser().email') === 'ada@exemple.fr' && doc.journal.length === 0 && doc.reads.length === 0);
+    check('et getCurrentUserEmail la prend sans passer par la sonde', await run('GristAPI.getCurrentUserEmail()') === 'ada@exemple.fr' && doc.journal.length === 0);
   });
 
   summarizeAndExit();

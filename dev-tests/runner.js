@@ -12,6 +12,9 @@ window.TestRunner = (function () {
     // en anglais. Les autres sont français. Ceux de l'autre langue sont mis de côté et comptés dans `results.deferred` : dev-tests/run-headless.mjs lance la seconde page
     // quand la française en a mis de côté.
     const pageLang = typeof I18n !== 'undefined' && I18n.getLang ? I18n.getLang() : 'fr';
+    // L'ouverture de la page est finie : js/open-reads.js ne met plus rien en commun. Un scénario joue la personne qui travaille APRÈS l'ouverture (il change l'état du faux Grist, puis ouvre une fenêtre qui relit
+    // les métadonnées) et ne fait aucun geste que le fichier reconnaisse (un clic par programme n'est pas un geste de la personne) : sans cela, la relecture lui rendrait la réponse de l'ouverture, plus ancienne.
+    if (typeof OpenReads !== 'undefined' && OpenReads.end) OpenReads.end();
     // `--case mot` de dev-tests/run-headless.mjs (window.__onlyCases) : seuls les scénarios dont l'identifiant contient l'un de ces mots sont joués.
     const only = Array.isArray(window.__onlyCases) && window.__onlyCases.length ? window.__onlyCases : null;
     const results = [];

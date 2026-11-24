@@ -129,6 +129,27 @@ async function main() {
     check('isolation : le dossier de l’AUTRE utilisateur ne fuite pas', cache[1].dossier !== 'Confidentiel');
   }
 
+  // 4bis. La casse de l'adresse ne change pas la personne (consigne 094 de GFS : l'adresse que GFS donne garde la casse de Grist, qui la compare met les deux côtés en minuscules) : une préférence écrite
+  // sous « Ada.Lovelace@Exemple.fr » se retrouve sous « ada.lovelace@exemple.fr » et l'inverse ; une AUTRE adresse reste exclue, même proche.
+  {
+    const rows = [
+      { Utilisateur: 'Ada.Lovelace@Exemple.fr', ModeleId: 1, Epingle: true, Dossier: 'Écrit en majuscules' },
+      { Utilisateur: 'ada.lovelace2@exemple.fr', ModeleId: 2, Epingle: true, Dossier: 'Une autre personne' },
+    ];
+    for (const [label, email] of [['adresse en minuscules, ligne en majuscules', 'ada.lovelace@exemple.fr'], ['adresse en majuscules, ligne en majuscules', 'Ada.Lovelace@Exemple.fr'], ['adresse toute en majuscules', 'ADA.LOVELACE@EXEMPLE.FR']]) {
+      const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], email });
+      docApi.seedRows(TABLE_NAME, rows);
+      const cache = await run('TemplatePreferences.loadForCurrentUser()');
+      check('casse (' + label + ') : la préférence de la personne est chargée', cache[1] && cache[1].epingle === true && cache[1].dossier === 'Écrit en majuscules', JSON.stringify(cache));
+      check('casse (' + label + ') : une autre adresse, même proche, reste exclue', cache[2] === undefined, JSON.stringify(cache[2]));
+    }
+    const { docApi, run } = freshModule({ initialTables: [TABLE_NAME], email: 'ada.lovelace@exemple.fr' });
+    docApi.seedRows(TABLE_NAME, [{ Utilisateur: 'Ada.Lovelace@Exemple.fr', ModeleId: 1, Epingle: true, Dossier: '' }]);
+    await run('TemplatePreferences.loadForCurrentUser()');
+    await run('TemplatePreferences.setPinned(1, false)');
+    check('casse : épingler ou désépingler met à jour la ligne trouvée, sans en écrire une seconde', docApi.rows[TABLE_NAME].length === 1 && docApi.rows[TABLE_NAME][0].Epingle === false, docApi.rows[TABLE_NAME].length);
+  }
+
   // 5. Repli anonyme silencieux (identification indisponible) : ni loadForCurrentUser() ni setPinned()
   // ne doivent lever - même politique que js/comments.js (Auteur='' plutôt que de bloquer l'action).
   // L'écriture doit rester lisible dans la MÊME session anonyme (round-trip), pas juste "ne pas planter".
@@ -164,6 +185,30 @@ async function main() {
     check('normalisation à l’écriture', await run('TemplatePreferences.getFolder(1)') === 'Factures/2024');
     await run('TemplatePreferences.setFolder(1, "")');
     check('dossier vidé -> null (pas une chaîne vide)', await run('TemplatePreferences.getFolder(1)') === null);
+  }
+
+  // 6 bis. Un chemin d'ESPACE de GFS (consigne 096) : « Espaces/ » en tête, une fois le chemin normalisé. Le rangement de la personne n'en reçoit jamais (js/gfs-open.js, js/main.js). Un dossier de la personne qui n'a que
+  // « Espaces » dans son nom, ou qui en porte un plus bas, reste un dossier : seul ce qui commence par « Espaces/ » est un chemin d'espace.
+  {
+    const { run } = freshModule({ initialTables: [TABLE_NAME] });
+    const spaces = {
+      'Espaces/Equipe': true,
+      'Espaces/Equipe/Contrats/2026': true,
+      '/Espaces/Equipe/': true,
+      '  Espaces / Equipe ': true,
+      'Espaces': false,
+      'espaces/Equipe': false,
+      'Mes Espaces/Equipe': false,
+      'Contrats/Espaces/2026': false,
+      'Espaces verts/2026': false,
+      'Contrats/2026': false,
+      '': false,
+      '   ': false,
+    };
+    for (const [path, expected] of Object.entries(spaces)) {
+      check('chemin d’espace : « ' + path + ' » ' + (expected ? 'en est un' : 'n’en est pas un'), (await attempt(run, 'TemplatePreferences.isSpacePath(' + JSON.stringify(path) + ')')) === expected);
+    }
+    check('chemin d’espace : null et rien ne sont pas des chemins d’espace', (await attempt(run, 'TemplatePreferences.isSpacePath(null)')) === false && (await attempt(run, 'TemplatePreferences.isSpacePath()')) === false);
   }
 
   // 7. Dossier replié par défaut (29/09) : une ligne d'état par (utilisateur × dossier), ModeleId 0, qui ne fuit pas dans le cache des modèles, mise à jour
