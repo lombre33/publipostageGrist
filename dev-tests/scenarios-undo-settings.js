@@ -1005,7 +1005,7 @@ window.EditorTestSuites.undoSettings = (function () {
   // --- Quatrième lot : l'onglet Vue de Réglages ---
   const stub = () => window.__gristStub;
   const VIEW_TABLE = 'UvLignes';
-  const OPTION = { view: 'modeleDeLaVue', date: 'dateDernierExport', row: 'modeleSelonLigne' };
+  const OPTION = { view: 'modeleDeLaVue', open: 'ouvertureDeLaVue', date: 'dateDernierExport', row: 'modeleSelonLigne' };
   // Le brouillon des options du widget, tel que Grist le garderait (le faux Grist) ; null quand le réglage est absent ou retiré.
   const optionOf = key => { const value = (stub().state.options || {})[key]; return value === undefined ? null : value; };
   const idText = id => String(id);
@@ -1019,6 +1019,7 @@ window.EditorTestSuites.undoSettings = (function () {
   // Ce que le coin d'état dit : la phrase de l'écran pour le modèle de la vue, « Réglage « … » : … » pour les deux autres.
   const viewSet = name => I18n.t('settings.viewTemplate.status.set', { name });
   const viewNone = () => I18n.t('settings.viewTemplate.status.none');
+  const openSaid = mode => said(I18n.t('settings.viewOpen.title'), I18n.t('settings.viewOpen.value.' + (mode || 'last')));
   const dateSaid = column => said(I18n.t('settings.exportDate.title'), column ? I18n.t('status.exportDateColumn', { column }) : I18n.t('status.exportDateNone'));
   const rowSaid = raw => said(I18n.t('settings.rowTemplate.title'), raw && raw.enabled ? I18n.t('status.rowTemplateOn', { count: raw.rules.length }) : I18n.t('status.rowTemplateOff'));
 
@@ -1073,6 +1074,15 @@ window.EditorTestSuites.undoSettings = (function () {
   async function viewButton(h, id) {
     await openView(h);
     byId(id).click();
+    await h.sleep(150);
+    await closeSettings(h);
+  }
+  // Le mode d'ouverture de la vue : la liste changée comme la personne le fait, puis la fenêtre refermée.
+  async function pickOpenMode(h, value) {
+    await openView(h);
+    const select = byId('settings-viewopen-mode');
+    select.value = value;
+    fire(select, 'change');
     await h.sleep(150);
     await closeSettings(h);
   }
@@ -1168,6 +1178,57 @@ window.EditorTestSuites.undoSettings = (function () {
         await settle(h);
         check(problems, 'bouton Rétablir : le choix est retiré', [optionOf(OPTION.view), ViewTemplate.getId(), status()], [null, null, viewNone()]);
         return verdict(problems, { option: optionOf(OPTION.view), status: status() });
+      } finally { await leaveView(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_the_view_open_mode_goes_back_with_ctrl_z_and_forward_with_ctrl_y',
+    description: 'Le mode d\'ouverture de la vue (Réglages > Vue, « S\'ouvre en », la fenêtre refermée) : UN Ctrl + Z rend le mode d\'avant (l\'option du widget et le réglage tenu), puis « le dernier mode choisi » ; le coin d\'état le nomme ; les Réglages rouverts le montrent ; UN Ctrl + Y le rend ; le modèle de la vue n\'est pas touché ; choisir ce qui est déjà choisi ne laisse aucun pas',
+    async run(h) {
+      const problems = [];
+      try {
+        const f = await seedView(h);
+        await viewButton(h, 'settings-viewtemplate-set');
+        reserve().reset();
+        await pickOpenMode(h, 'read');
+        await pickOpenMode(h, 'edit');
+        check(problems, 'Édition est le mode de la vue (option et réglage tenu), deux actions en réserve', [optionOf(OPTION.open), ViewTemplate.openMode(), reserve().count()], ['edit', 'edit', 2]);
+        await undo(h);
+        check(problems, 'Ctrl + Z : Lecture revient', [optionOf(OPTION.open), ViewTemplate.openMode()], ['read', 'read']);
+        check(problems, 'Ctrl + Z : le coin d\'état nomme le mode', [status(), statusClass() === 'error-msg'], [openSaid('read'), false]);
+        await openView(h);
+        check(problems, 'les Réglages rouverts montrent Lecture et la phrase qui va avec', [byId('settings-viewopen-mode').value, byId('settings-viewopen-status').textContent], ['read', I18n.t('settings.viewOpen.status.read')]);
+        await closeSettings(h);
+        await undo(h);
+        check(problems, 'Ctrl + Z suivant : le dernier mode choisi', [optionOf(OPTION.open), ViewTemplate.openMode(), status()], [null, null, openSaid(null)]);
+        check(problems, 'le modèle de la vue n\'a pas bougé', [optionOf(OPTION.view), ViewTemplate.getId()], [idText(f.a), idText(f.a)]);
+        await redo(h);
+        await redo(h);
+        check(problems, 'deux Ctrl + Y : Édition revient', [optionOf(OPTION.open), ViewTemplate.openMode(), status()], ['edit', 'edit', openSaid('edit')]);
+        const steps = reserve().count();
+        await pickOpenMode(h, 'edit');
+        check(problems, 'choisir ce qui est déjà choisi ne laisse aucun pas', reserve().count(), steps);
+        return verdict(problems, { option: optionOf(OPTION.open), status: status() });
+      } finally { await leaveView(h); }
+    },
+  });
+
+  cases.push({
+    id: 'undo_settings_the_view_open_mode_is_not_overwritten_once_changed_elsewhere',
+    description: 'Le mode d\'ouverture changé depuis par quelqu\'un d\'autre (l\'option reçue de Grist) n\'est jamais écrasé par un Ctrl + Z : rien n\'est écrit et le coin d\'état le dit',
+    async run(h) {
+      const problems = [];
+      try {
+        await seedView(h);
+        await pickOpenMode(h, 'read');
+        stub().setWidgetOptions({ [OPTION.open]: 'edit' });
+        await h.sleep(200);
+        check(problems, 'le mode reçu de Grist est celui en vigueur', ViewTemplate.openMode(), 'edit');
+        await undo(h);
+        check(problems, 'Ctrl + Z n\'écrase pas le mode changé depuis', [optionOf(OPTION.open), ViewTemplate.openMode()], ['edit', 'edit']);
+        check(problems, 'le coin d\'état dit que le réglage a changé', status(), I18n.t('history.settingChanged'));
+        return verdict(problems, { option: optionOf(OPTION.open), status: status() });
       } finally { await leaveView(h); }
     },
   });

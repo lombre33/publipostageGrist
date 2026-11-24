@@ -185,7 +185,7 @@ Le bouton **Réglages** de la barre du haut ouvre neuf onglets :
 | Raccourcis | Les touches du clavier, une par action, et les abréviations avec leur caractère déclencheur. |
 | Email | La messagerie qui ouvre le lien du mode E-mail : Standard ou Zimbra. |
 | Marges | Les marges du modèle ouvert, avec quatre préréglages (Aucune, Étroites, Classiques, Larges). |
-| Vue | Le modèle par défaut de la vue, le choix du modèle selon la ligne, la colonne de la date du dernier export PDF, la colonne des PDF joints. |
+| Vue | Le modèle par défaut de la vue, son mode d'ouverture (Lecture, Édition ou le dernier mode choisi), le choix du modèle selon la ligne, la colonne de la date du dernier export PDF, la colonne des PDF joints. |
 | Accès | La table qui donne à chaque personne ses droits. |
 | Crédits | Auteur, site, licence, version et nouveautés. |
 
@@ -529,7 +529,7 @@ The **Settings** button in the top bar opens nine tabs:
 | Shortcuts | The keyboard keys, one per action, and the abbreviations with their trigger character. |
 | Email | The mail client that opens the E-mail mode link: Standard or Zimbra. |
 | Margins | The open template's margins, with four presets (None, Narrow, Classic, Wide). |
-| View | The view's default template, the choice of template by row, the column of the date of the last PDF export, the column of the attached PDFs. |
+| View | The view's default template, its opening mode (Read, Edit or the last mode chosen), the choice of template by row, the column of the date of the last PDF export, the column of the attached PDFs. |
 | Access | The table that gives each person their rights. |
 | Credits | Author, site, license, version and what's new. |
 

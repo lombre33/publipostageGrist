@@ -482,6 +482,139 @@
     },
   });
 
+  // Mode d'ouverture de la vue (demande du 24/11, « un réglage par page ») : une seconde option du widget, `ouvertureDeLaVue` (`read` | `edit`, absente = le dernier mode choisi), au pied du modèle de la vue
+  // (Réglages > Vue). Ce que le démarrage en fait (js/main.js:startMode) est dans dev-tests/verify-view-open-mode.mjs, qui sème le faux Grist avant l'init.
+  const OPEN_KEY = 'ouvertureDeLaVue';
+  const openOption = () => { const value = (stub().state.options || {})[OPEN_KEY]; return value === undefined ? null : value; };
+  const openPanel = () => {
+    const select = el('settings-viewopen-mode');
+    return {
+      value: select.value, disabled: select.disabled, labels: Array.from(select.options).map(o => o.value + '=' + o.textContent),
+      sentence: el('settings-viewopen-status').textContent, lockedShown: shown('settings-viewopen-locked'), describedBy: select.getAttribute('aria-describedby'), title: select.title, labelTitle: el('settings-viewopen-mode-label').title,
+      visible: select.getBoundingClientRect().height > 0,
+    };
+  };
+  async function pickOpen(value) {
+    const select = el('settings-viewopen-mode');
+    select.value = value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(250);
+  }
+  const OPEN_LABELS = () => ['last', 'read', 'edit'].map(v => v + '=' + I18n.t('settings.viewOpen.value.' + v));
+
+  cases.push({
+    id: 'view_open_mode_list_writes_its_own_option_and_leaves_the_template_choice_alone',
+    description: "Réglages > Vue > « Mode d'ouverture de cette vue » : la liste dit « Le dernier mode choisi » au départ, Lecture et Édition écrivent l'option `ouvertureDeLaVue` (la phrase dessous le dit), « Le dernier mode choisi » la retire ; le modèle de la vue n'est jamais touché, et « Retirer » le modèle ne retire pas le mode",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await openByHand(f.A);
+      await ViewTemplate.set(f.B);
+      await openSettings();
+      const start = Object.assign({ option: openOption(), mode: ViewTemplate.openMode() }, openPanel());
+      await pickOpen('read');
+      const read = Object.assign({ option: openOption(), mode: ViewTemplate.openMode(), template: optionNow() }, openPanel());
+      await pickOpen('edit');
+      const edit = Object.assign({ option: openOption(), mode: ViewTemplate.openMode(), template: optionNow() }, openPanel());
+      await pickOpen('read');
+      el('settings-viewtemplate-clear').click();
+      await sleep(250);
+      const afterClear = { option: openOption(), mode: ViewTemplate.openMode(), template: optionNow() || null, value: el('settings-viewopen-mode').value };
+      await pickOpen('last');
+      const last = Object.assign({ option: openOption(), mode: ViewTemplate.openMode() }, openPanel());
+      await closeSettings();
+      await cleanup();
+      const pass = start.option === null && start.mode === null && start.value === 'last' && start.sentence === I18n.t('settings.viewOpen.status.last') && !start.disabled && start.visible && same(start.labels, OPEN_LABELS()) && !start.lockedShown
+        && read.option === 'read' && read.mode === 'read' && read.value === 'read' && read.sentence === I18n.t('settings.viewOpen.status.read') && same(read.template, f.B)
+        && edit.option === 'edit' && edit.mode === 'edit' && edit.value === 'edit' && edit.sentence === I18n.t('settings.viewOpen.status.edit') && same(edit.template, f.B)
+        && afterClear.option === 'read' && afterClear.mode === 'read' && afterClear.template === null && afterClear.value === 'read'
+        && last.option === null && last.mode === null && last.value === 'last' && last.sentence === I18n.t('settings.viewOpen.status.last');
+      return { pass, notes: JSON.stringify({ start, read, edit, afterClear, last }) };
+    },
+  });
+
+  cases.push({
+    id: 'view_open_mode_follows_the_view_and_a_value_that_is_not_a_choice_means_the_last_mode',
+    description: "Le mode d'ouverture vient des options de la vue : enregistré par quelqu’un d’autre (`read`, `edit`) il est suivi Réglages ouverts ou fermés ; `last`, un texte quelconque, `null` ou l'option absente valent « le dernier mode choisi » ; les options changées pour une autre raison laissent le mode en vigueur quand elles le portent encore",
+    run: async (h) => {
+      await ensureFixture(h);
+      const seen = [];
+      const arrive = async options => {
+        stub().setWidgetOptions(options);
+        await sleep(200);
+        seen.push({ in: options, mode: ViewTemplate.openMode() });
+      };
+      await arrive({ [OPEN_KEY]: 'read' });
+      await arrive({ [OPEN_KEY]: 'edit' });
+      await arrive({ [OPEN_KEY]: 'last' });
+      await arrive({ [OPEN_KEY]: 'lecture ??' });
+      await arrive({ [OPEN_KEY]: 7 });
+      await arrive({ [OPEN_KEY]: 'read', modeleSelonLigne: null });
+      await arrive({ [OPEN_KEY]: null });
+      await arrive({ [OPEN_KEY]: 'edit' });
+      await arrive(null);
+      await arrive({ [OPEN_KEY]: 'read' });
+      await openSettings();
+      const opened = openPanel();
+      stub().setWidgetOptions({ [OPEN_KEY]: 'edit' });
+      await sleep(250);
+      const whileOpen = openPanel();
+      await closeSettings();
+      await cleanup();
+      const modes = seen.map(x => x.mode);
+      const pass = same(modes, ['read', 'edit', null, null, null, 'read', null, 'edit', null, 'read']) && opened.value === 'read' && opened.sentence === I18n.t('settings.viewOpen.status.read')
+        && whileOpen.value === 'edit' && whileOpen.sentence === I18n.t('settings.viewOpen.status.edit');
+      return { pass, notes: JSON.stringify({ modes, opened, whileOpen }) };
+    },
+  });
+
+  cases.push({
+    id: 'view_open_mode_is_locked_for_a_read_only_person_and_says_why',
+    description: "En lecture seule la liste du mode d'ouverture est grisée et DIT pourquoi (la phrase visible, l'info-bulle de la liste et de son libellé, la description lue par le lecteur d'écran) ; un changement forcé n'écrit rien et la liste revient au choix en vigueur",
+    run: async (h) => {
+      const f = await ensureFixture(h);
+      await ViewTemplate.setOpenMode('read');
+      await openByHand(f.A);
+      const savedRights = AccessRights.get;
+      AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+      try {
+        await openSettings();
+        const locked = openPanel();
+        const original = GristAPI.setWidgetOption;
+        let writes = 0;
+        GristAPI.setWidgetOption = function () { writes++; return original.apply(this, arguments); };
+        try { await pickOpen('edit'); } finally { GristAPI.setWidgetOption = original; }
+        const after = openPanel();
+        await closeSettings();
+        const reason = I18n.t('settings.viewOpen.locked');
+        const pass = locked.disabled && locked.lockedShown && locked.visible && locked.title === reason && locked.labelTitle === reason && locked.describedBy === 'settings-viewopen-locked'
+          && writes === 0 && openOption() === 'read' && ViewTemplate.openMode() === 'read' && after.value === 'read';
+        return { pass, notes: JSON.stringify({ locked, writes, after }) };
+      } finally { AccessRights.get = savedRights; await cleanup(); }
+    },
+  });
+
+  // Les droits qui reviennent : la liste se dégrise et perd sa raison, sans rouvrir les Réglages.
+  cases.push({
+    id: 'view_open_mode_is_unlocked_again_when_the_rights_come_back',
+    description: "Une fois les droits rendus, la liste du mode d'ouverture est active, sans phrase de verrou ni info-bulle d'interdit",
+    run: async (h) => {
+      await ensureFixture(h);
+      const savedRights = AccessRights.get;
+      AccessRights.get = () => ({ readOnly: true, canExport: false, canComment: false });
+      try {
+        await openSettings();
+        const locked = openPanel();
+        AccessRights.get = savedRights;
+        await closeSettings();
+        await openSettings();
+        const free = openPanel();
+        await closeSettings();
+        const pass = locked.disabled && locked.lockedShown && !free.disabled && !free.lockedShown && free.title === '' && free.labelTitle === '' && free.describedBy === null;
+        return { pass, notes: JSON.stringify({ locked, free }) };
+      } finally { AccessRights.get = savedRights; await cleanup(); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.viewTemplate = cases;
 })();

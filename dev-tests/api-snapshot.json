@@ -313,7 +313,7 @@
 "VersionsStore":"CLEANUP_EVERY_ROWS:d FORMAT:d KEEP_AFTER_MS:d KEEP_EVERY_MS:d MAX_AUTO_PER_MODEL:d MAX_TOTAL_CHARS:d MAX_VERSION_CHARS:d NAME_MAX:d TABLE_COLUMNS:d TABLE_NAME:d authorLabel:f cleanName:f emailOf:f forget:f keepNamed:f keyOf:f loadCompare:f loadWindow:f open:f pack:f parseAuthor:f planCleanup:f prepare:f readAll:f removeRows:f renameVersion:f reset:f snapshotOf:f stable:f suspend:f toMs:f unpack:f usable:f",
 "VideoFrame":"ATTR:d HOST:d IMAGE_ATTR:d PLAY:d PROVIDERS:d activate:f canPlay:f decode:f embedUrl:f encode:f fill:f forExport:f host:f imageOf:f insertImage:f nameOf:f openDialog:f parseLink:f play:f playing:f poster:f stop:f valueOf:f watchUrl:f",
 "ViewSource":"arrange:f dayEdge:f filterOf:f isOwnWidget:f isoInTimezone:f linkedRows:f ownWidgetUrl:f parseJson:f pureTypeOf:f savedFiltersOf:f sortKeyOf:f sortKeysOf:f typedCompare:f",
-"ViewTemplate":"clear:f getId:f init:f set:f usableId:f wirePanel:f",
+"ViewTemplate":"clear:f getId:f init:f openMode:f set:f setOpenMode:f usableId:f wirePanel:f",
 "ViewportFit":"avoidBar:f contentCap:f placePopup:f releaseBar:f",
 "WatermarkDialog":"open:f",
 "WhatsNew":"EXPORT_SLIDE_COUNT:d SEEN_KEY:d SLIDE_COUNT:d VERSION:d isOpen:f isUnseen:f open:f openExport:f openOnFirstConnection:f wouldOpenAlone:f",
