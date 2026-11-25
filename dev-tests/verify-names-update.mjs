@@ -180,6 +180,7 @@ await scenario('dans GFS, propriétaire, en français, à la souris', async () =
   await sleep(300);
   const done = await windowText(page);
   check('le résultat est dit : « Terminé : 3 tables mises à jour »', /Terminé : 3 tables mises à jour/.test(done), done);
+  check('sans nombre de lignes : l\'app ne donne pas `rowCount` au kit (compter lirait tout le contenu des modèles, consigne 104 e), la fenêtre dit seulement que les données n\'ont pas été touchées', /Vos données n’ont pas été touchées/.test(done) && !/lignes? vérifiées?/.test(done), done);
   check('le bouton devient « Continuer », seul', same(await buttonLabels(page), ['Continuer']), await buttonLabels(page));
   await shoot(page, 'fenetre-gfs-fr-fait');
   state = await docState(page);

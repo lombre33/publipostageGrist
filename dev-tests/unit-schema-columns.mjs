@@ -39,6 +39,7 @@ function fakeKit(spy, { decline = false } = {}) {
         const outcome = { state: prepared.state, held: prepared.held, reason: prepared.reason || null, taken: prepared.taken || [], missing: prepared.missing || [], result: null };
         if (prepared.state !== 'ready') return outcome;
         spy.windows.push({ appName, summary: prepared.summary, held: prepared.held });
+        spy.ports.push(port);
         spy.order.push('fenêtre');
         if (spy.gate) await spy.gate;   // la personne n'a pas encore cliqué
         if (decline) return { ...outcome, state: 'skipped' };
@@ -195,7 +196,7 @@ const ENGLISH_COLS = ['Name', 'Content', 'PdfFileName', 'ModifiedAt', 'HeaderFoo
 function fresh(doc, { englishOnDisk = false, migrate = false, owner = true, hosted = null, readOnly = false, decline = false, gate = null, token = null, document = null, kitLoader = null, globals = {} } = {}) {
   // Un journal muet : le traducteur avertit (console.warn) quand un lot de renommage est refusé, ce que plusieurs cas jouent exprès.
   const quiet = { warn() {}, log() {}, error() {} };
-  const spy = { loads: 0, windows: [], languages: [], pauses: 0, resumes: 0, accessAsked: 0, urls: [], order: [], warnings: [], gate, token, document };
+  const spy = { loads: 0, windows: [], ports: [], languages: [], pauses: 0, resumes: 0, accessAsked: 0, urls: [], order: [], warnings: [], gate, token, document };
   const logs = { warn: (...args) => spy.warnings.push(args), log() {}, error: (...args) => spy.warnings.push(args) };
   const base = { grist: { docApi: doc }, console: migrate ? logs : quiet };
   if (migrate) Object.assign(base, bridgeGlobals(spy, { owner, hosted, readOnly }));
@@ -428,6 +429,7 @@ async function main() {
     const { api, schema, spy } = fresh(doc, { migrate: true });
     const read = await api.fetchTable('Publipostage_Templates');
     check('la fenêtre s\'ouvre une fois, au nom de l\'app, devant six tables à renommer', spy.windows.length === 1 && spy.windows[0].appName === 'Publipostage+' && spy.windows[0].summary.tables.length === 6 && spy.windows[0].held.length === 0, JSON.stringify(spy.windows));
+    check('le port donné au kit lit les noms, envoie un lot et prouve la propriété, mais ne compte aucune ligne : pas de `rowCount` (compter lirait tout le contenu des modèles, 118 Mo environ 6 s dans le banc de GFS : consigne 104 e)', spy.ports.length === 1 && typeof spy.ports[0].readSchema === 'function' && typeof spy.ports[0].apply === 'function' && typeof spy.ports[0].isOwner === 'function' && spy.ports[0].rowCount === undefined, Object.keys(spy.ports[0] || {}));
     check('la première lecture reprend le document : un seul lot', doc.bundles.length === 1, doc.bundles.length);
     const batch = doc.bundles[0] || [];
     check('le lot ne porte que RenameTable, RenameColumn et ModifyColumn, sur les seules tables du widget, et ModifyColumn ne change que le libellé (ce que le courtier de GFS laisse passer avec la capacité « renommage »)', batch.length > 0
