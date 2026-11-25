@@ -3,7 +3,8 @@
 // présentations que le document ouvert ne touche pas). Tant que cette lecture dure, la feuille du document que GFS ouvre se pose en lecture seule : sa ligne seule est lue par l'interface REST de Grist. Ce que les cas vérifient :
 //  1. (le cœur) la lecture de la table des modèles dure 4 s : la feuille du document est à l'écran bien AVANT, avec son texte, sans que la table soit arrivée ni que l'éditeur ait un texte ;
 //  2. le jeton en lecture seule part AVANT la lecture de la table (l'hôte de Grist fait attendre tout appel posé pendant elle : un jeton demandé après n'arriverait qu'à la fin) ;
-//  3. la demande est UNE ligne, filtrée sur le numéro du document ET sur son type (document) : une présentation, un e-mail ou une grille ne sont jamais envoyés ;
+//  3. la demande est UNE ligne, filtrée sur le numéro du document ET sur son type (document) : une présentation, un e-mail ou une grille ne sont jamais envoyés (quand GFS désigne un fichier d'un autre type,
+//     la demande est filtrée sur CE type : sa ligne se lit pour js/early-open.js, sans feuille ; un macro-modèle ou un type inconnu ne demande aucune ligne) ;
 //  4. la feuille est inerte (un lien ne se suit pas, rien ne prend la souris, aucun script du texte ne s'exécute) et ne dit rien aux lecteurs d'écran (`aria-hidden`) ;
 //  5. le widget ouvre ensuite le document pour de bon : la feuille s'efface, l'éditeur porte le texte du document (celui de la table, pas celui de l'aperçu), il est éditable, et RIEN n'a été écrit dans le document ;
 //  6. aucune feuille quand elle ne peut pas être sûre : pas de fichier désigné, un import, une lecture de PDF, un modèle du catalogue, une ligne refusée (HTTP 403), une présentation, un texte suivi par « suivi des modifications »,
@@ -25,9 +26,9 @@ const PREVIEW_TEXT = 'Aperçu rapide du compte rendu';
 const rowsOf = (extra = {}) => [
   { id: 2, fields: Object.assign({
     Name: 'Départ B', TemplateType: 'document', Margins: JSON.stringify({ top: 20, right: 25, bottom: 20, left: 30 }),
-    // Le texte porte une diapositive liée (`data-link-mode`) : l'ouverture depuis la seule ligne (js/early-open.js, essai « earlyOpen ») ne s'applique pas à un document qui parle d'un autre modèle, la table entière se lit
-    // comme avant et l'aperçu tient l'attente - c'est ce que cet essai regarde.
-    Content: '<h1>' + PREVIEW_TEXT + '</h1><p data-link-mode="push">Bonjour <a href="https://exemple.test/lien">un lien</a></p><img src="x" onerror="window.__xss=1"><script>window.__xss=2</script>',
+    // Le texte porte une diapositive liée à une présentation (`data-link-model`, le numéro de la source) : l'ouverture depuis la seule ligne (js/early-open.js, essai « earlyOpen ») ne s'applique pas à un document qui
+    // désigne un autre modèle, la liste se lit comme avant et l'aperçu tient l'attente - c'est ce que cet essai regarde.
+    Content: '<h1>' + PREVIEW_TEXT + '</h1><p data-link-model="6" data-link-mode="push">Bonjour <a href="https://exemple.test/lien">un lien</a></p><img src="x" onerror="window.__xss=1"><script>window.__xss=2</script>',
   }, extra) },
   { id: 6, fields: { Name: 'Futur', TemplateType: 'presentation', Content: '<p>PRESENTATION LOURDE</p>' } },
   { id: 4, fields: { Name: 'Départ E', TemplateType: 'email', Content: '<p>EMAIL</p>' } },
@@ -126,7 +127,7 @@ const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
 const asked9 = [];
 // Le même document pour l'aperçu (la ligne que Grist rend par REST) et pour l'ouverture pour de bon (la table du faux Grist).
 // (La diapositive liée du texte garde l'ouverture d'avant, comme dans les autres cas de cet essai : js/early-open.js ne s'applique pas à un document qui parle d'un autre modèle.)
-const IMAGES_HTML = '<p data-link-mode="push">Texte avec images</p><img class="editor-image" src="https://images.exemple.test/logo.png" alt="Logo" style="width: 60px;"><img class="editor-image" src="' + PIXEL + '" alt="Pastille" style="width: 40px;">';
+const IMAGES_HTML = '<p data-link-model="6" data-link-mode="push">Texte avec images</p><img class="editor-image" src="https://images.exemple.test/logo.png" alt="Logo" style="width: 60px;"><img class="editor-image" src="' + PIXEL + '" alt="Pastille" style="width: 40px;">';
 const withImages = await openSlow({ outside: asked9, slowMs: 3000, content: IMAGES_HTML, rows: rowsOf({ Content: IMAGES_HTML }) });
 await sleep(1800);
 const images9 = await (withImages.app || withImages.page).evaluate(() => {
@@ -149,7 +150,7 @@ async function noSheet(label, options, extra) {
   const requests = run.seen.filter(entry => /\/tables\//.test(entry.url) && /limit=1/.test(entry.url)).length;
   await waitReady(run.app || run.page);
   const after = await look(run.app || run.page);
-  check(label, !during.shown && !after.shown && (extra ? extra(requests, during, after) : true), { during: { shown: during.shown, state: during.state }, requests, after: { shown: after.shown, editorText: after.editorText } });
+  check(label, !during.shown && !after.shown && (extra ? extra(requests, during, after, run.seen) : true), { during: { shown: during.shown, state: during.state }, requests, after: { shown: after.shown, editorText: after.editorText } });
   await run.context.close();
   return { requests, during, after };
 }
@@ -158,7 +159,14 @@ await noSheet('GFS demande un import (raison « importer ») : aucune demande, a
 await noSheet('GFS demande une lecture de PDF (raison « lire ») : aucune demande, aucune feuille', { stub: opening({ id: 2, type: 'document' }, 'lire') }, requests => requests === 0);
 await noSheet('GFS demande un modèle du catalogue (raison « modele ») : aucune demande, aucune feuille', { stub: opening({ id: 2, type: 'document' }, 'modele') }, requests => requests === 0);
 await noSheet('Grist refuse la lecture de la ligne (HTTP 403) : aucune feuille, le document s\'ouvre quand même', { status: 403 }, (requests, during, after) => requests === 1 && /Contenu B/.test(after.editorText || ''));
-await noSheet('le fichier désigné est une présentation : la demande ne rend rien (filtre sur le type), aucune feuille', { stub: opening({ id: 6, type: 'presentation' }) }, (requests) => requests === 1);
+// Consigne 103 de GFS, demande 1 : la ligne d'une présentation se lit aussi (js/early-open.js l'ouvre depuis elle), le type que GFS donne filtre la demande ; l'aperçu, lui, est la feuille d'un document : aucune ne se pose.
+await noSheet('le fichier désigné est une présentation : sa ligne se lit, filtrée sur ce type (jamais celle d\'un document), et aucune feuille ne se pose', { stub: opening({ id: 6, type: 'presentation' }) }, (requests, during, after, seen) => {
+  const row = seen.find(entry => /\/tables\//.test(entry.url) && /limit=1/.test(entry.url));
+  const filter = row ? JSON.parse(new URL(row.url).searchParams.get('filter')) : null;
+  return requests === 1 && !!filter && JSON.stringify(filter.id) === '[6]' && JSON.stringify(filter.TemplateType) === JSON.stringify(['presentation']);
+});
+await noSheet('le fichier désigné est un macro-modèle (ses emplacements désignent d\'autres documents) : aucune demande de ligne, aucune feuille', { stub: opening({ id: 5, type: 'macro' }) }, requests => requests === 0);
+await noSheet('le fichier désigné est d\'un type que cette version ne connaît pas : aucune demande de ligne, aucune feuille', { stub: opening({ id: 2, type: 'tableur' }) }, requests => requests === 0);
 await noSheet('un document suivi par « suivi des modifications » : aucune feuille (les marques de suivi ne se dessinent pas ici)', { rows: rowsOf({ TrackedChanges: JSON.stringify({ a1: { author: 'A', createdAt: 1 } }) }) });
 await noSheet('un format de page libre (100x200) : aucune feuille', { rows: rowsOf({ Margins: JSON.stringify({ format: '100x200' }) }) });
 await noSheet('un texte vide : aucune feuille', { rows: rowsOf({ Content: '' }) });

@@ -3,18 +3,25 @@
 // (4,6 s sur 7,3) tient tout le démarrage, jusqu'au document qu'elle n'a pas besoin de lire. Ici, la ligne du document désigné et celle des réglages du document, lues par l'interface REST de Grist (js/early-preview.js, une
 // demande chacune, le jeton en lecture seule), prennent la place du cache des modèles (Templates.seedPartial) : le document s'ouvre depuis lui, et la table entière se lit ensuite, en fond (`finish`, à la fin du démarrage).
 //
-// Quand cela se fait : GFS désigne un fichier (ni import, ni lecture de PDF, ni modèle du catalogue), la ligne est un DOCUMENT (pas une présentation, une grille, un e-mail ni un macro-modèle : leurs liens vers d'autres
-// modèles se lisent dans toute la table), son texte ne porte aucun lien vers un autre modèle (tableau lié à une grille, diapositive liée, copie de diapositive ou de page), la table a ses colonnes d'aujourd'hui (une table
-// d'avant les noms anglais passe par la migration de la lecture entière), les réglages du document ont été lus, et la personne n'est pas revenue d'un changement de langue (le modèle qu'elle rouvre est celui du fragment de
-// l'adresse, et il n'est pas forcément la ligne désignée). Au moindre doute, le démarrage est celui d'avant : la table entière se lit tout de suite, comme avant.
+// Quand cela se fait : GFS désigne un fichier (ni import, ni lecture de PDF, ni modèle du catalogue) d'un type que sa seule ligne suffit à ouvrir (un document, une présentation, une grille, un e-mail : consigne 103 de GFS,
+// demande 1, « ces types s'ouvrent aussi depuis leur ligne » ; pas un macro-modèle, dont les emplacements désignent d'autres documents), son texte ne désigne aucun autre modèle (un tableau lié à une grille, une diapositive liée à une
+// présentation ou à la page d'un document : `CITES`), la table a ses colonnes d'aujourd'hui (une table d'avant les noms anglais passe par la lecture entière de la liste), les réglages du document ont été lus, et la
+// personne n'est pas revenue d'un changement de langue (le modèle qu'elle rouvre est celui du fragment de l'adresse, et il n'est pas forcément la ligne désignée). Au moindre doute, le démarrage est celui d'avant : la
+// liste se lit tout de suite, comme avant (par SQL et sans les longs textes quand la table est lourde : js/templates.js, lecture légère), et le fichier se lit ensuite, lui et ceux qu'il désigne, ligne à ligne par numéros.
 //
 // Ce que le cache partiel ne sait pas : les autres documents. Tout geste qui s'en sert (la liste, « Organiser », le ★, l'e-mail lié, un nom à rendre unique, un autre document que GFS demande d'ouvrir) l'attend
 // (Templates.whenComplete), et toute écriture aussi. Le rapport de fluidité (js/perf-trace.js) dit les étapes (`modèles : cache partiel`, `modèles : liste complète`, `ouverture : …`).
 const EarlyOpen = (function () {
-  // Un texte qui parle d'un autre modèle : tableau lié (js/linked-table.js, `data-linked-…`), diapositive liée (js/slide-links.js, `data-link-…`), copie de diapositive ou de page (js/slide-copies.js, js/page-copies.js,
-  // `data-slide-…`). Large à dessein : un faux positif ouvre le document comme avant, un faux négatif lui ferait chercher un modèle que le cache partiel n'a pas.
-  const OTHER_MODELS = /\bdata-(?:linked|link|slide|page)-[a-z-]+\s*=/i;
-  // Au plus ce temps pour que la ligne arrive : au-delà, la table entière se lit sans elle (une ligne qui n'arrive pas ne doit pas retarder la lecture d'avant de plus que cela).
+  // Un texte qui désigne un autre modèle, DONT LE NUMÉRO EST DANS CET ATTRIBUT : le tableau lié à une grille (js/linked-table.js, `data-linked-template`), la diapositive liée à une présentation (js/slide-links.js,
+  // `data-link-model`, `data-slide-lock`) ou à la page d'un document (js/page-copies.js, `data-link-page` : « modèle:jeton:… »), le bloc d'une diapositive qui garde sa source ou son origine (js/slide-copies.js : `data-slide-link`
+  // et `data-slide-from`, un petit JSON qui porte `model`). Les autres attributs `data-slide-…` et `data-page-…` (le numéro, le texte, les mots d'une diapositive, le format, l'orientation et les sauts d'une page) disent la mise en
+  // page du texte lui-même : une présentation en est pleine, ils ne désignent rien. Un faux positif ouvre le fichier comme avant, un faux négatif lui ferait chercher un modèle que le cache partiel n'a pas : dev-tests/
+  // verify-early-open.mjs fait lire à cette liste la même chose que les lecteurs de Templates.declareReferences.
+  const CITES = /\bdata-(?:linked-template|link-model|link-page|slide-lock|slide-link|slide-from)\s*=/i;
+  // Les types que la ligne seule ouvre (js/early-preview.js : ROW_TYPES).
+  const OPENS_FROM_ROW = ['document', 'presentation', 'grille', 'email'];
+  // Au plus ce temps pour que la ligne arrive : au-delà, la table entière se lit sans elle (une ligne qui n'arrive pas ne doit pas retarder la lecture d'avant de plus que cela). Une présentation pèse des Mo : sa ligne a
+  // le temps de sa lecture (EarlyPreview.longReadMs) - sans elle il n'y a rien à ouvrir, et la lire à part, ensuite, la ferait lire deux fois.
   const ROW_WAIT_MS = 2500;
   // 'idle' : pas décidé ; 'partial' : le document s'ouvre depuis son cache ; 'full' : la table entière se lit, comme avant.
   let plan = 'idle';
@@ -30,8 +37,8 @@ const EarlyOpen = (function () {
   async function seedFrom(row) {
     if (!row) return 'pas de ligne désignée';
     if (reopens()) return 'rechargement qui rouvre un modèle';
-    if (row.tpl.typeModele !== 'document') return 'pas un document';
-    if (OTHER_MODELS.test(row.tpl.contenu || '')) return 'texte lié à un autre modèle';
+    if (OPENS_FROM_ROW.indexOf(row.tpl.typeModele) === -1) return 'fichier de type ' + row.tpl.typeModele;
+    if (CITES.test(row.tpl.contenu || '')) return 'texte lié à un autre modèle';
     const settings = await waitFor(row.settings, ROW_WAIT_MS);
     if (!settings) return 'réglages du document illisibles';
     return Templates.seedPartial(row.record, settings) ? '' : 'ligne sans les colonnes d’aujourd’hui';
@@ -41,11 +48,11 @@ const EarlyOpen = (function () {
   async function startupTemplates() {
     let reason = '';
     try {
-      // GFS dit le type du fichier qu'il désigne : une présentation, une grille, un e-mail ou un macro-modèle ne s'ouvre pas depuis sa seule ligne, et la table entière n'attend pas la demande de sa ligne (jeton compris).
+      // GFS dit le type du fichier qu'il désigne : un macro-modèle (ses emplacements désignent d'autres documents) ou un type que cette version ne connaît pas ne s'ouvre pas depuis sa seule ligne, et la liste n'attend
+      // pas la demande de sa ligne (jeton compris).
       await GfsLink.ready;
-      const asked = GfsLink.opening();
-      const kind = asked && asked.fichier && asked.fichier.type;
-      reason = kind && kind !== 'document' ? 'GFS désigne un fichier de type ' + kind : await seedFrom(await waitFor(EarlyPreview.row(), ROW_WAIT_MS));
+      const kind = EarlyPreview.kindOf(GfsLink.opening());
+      reason = !EarlyPreview.covers(kind) ? 'GFS désigne un fichier de type ' + kind : await seedFrom(await waitFor(EarlyPreview.row(), kind && kind !== 'document' ? EarlyPreview.longReadMs : ROW_WAIT_MS));
     } catch (e) { reason = 'erreur : ' + ((e && e.message) || e); }
     if (!reason) {
       plan = 'partial';

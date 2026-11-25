@@ -10,7 +10,14 @@
 // Temporaire dans sa mesure : le rapport de fluidité (js/perf-trace.js) en note chaque étape (`aperçu : …`).
 const EarlyPreview = (function () {
   const TYPES = ['document', ''];              // un modèle sans type est un document (js/templates.js:templateFromRow)
+  // Les types de fichier que GFS peut désigner et que cette ligne seule suffit à ouvrir (consigne 103 de GFS, demande 1 : « que ces types s'ouvrent aussi depuis leur ligne ») : l'aperçu ne se pose que pour un document,
+  // mais la ligne d'une présentation, d'une grille ou d'un e-mail se lit de la même façon et js/early-open.js l'ouvre depuis elle. Un macro-modèle (ses emplacements désignent d'autres documents) et un type que cette
+  // version ne connaît pas gardent la lecture de la liste.
+  const ROW_TYPES = ['document', 'presentation', 'grille', 'email'];
   const READ_TIMEOUT_MS = 8000;
+  // Une présentation pèse des Mo (jusqu'à des dizaines : 38 millions de signes dans une ligne) : sa ligne se lit plus longtemps qu'un document. Au-delà, la liste se lit comme avant et le modèle se lit ensuite, ligne à ligne
+  // (js/templates.js, lecture légère).
+  const LONG_READ_TIMEOUT_MS = 30000;
   const HOST_ID = 'pp-early-preview';
   // Les pages que le widget sait dessiner à la taille d'un format de la liste de js/page-layout.js (portrait, en millimètres) ; un format libre (« 210x297 ») n'a pas d'aperçu.
   const FORMATS_MM = { A3: [297, 420], A4: [210, 297], A5: [148, 210], A6: [105, 148] };
@@ -35,6 +42,16 @@ const EarlyPreview = (function () {
     const id = Number(opening.fichier.id);
     return Number.isInteger(id) && id > 0 ? id : null;
   }
+
+  // Le type de fichier que GFS dit désigner : '' quand il ne le dit pas (un GFS d'avant, ou un fichier sans type : un document).
+  function kindOf(opening) {
+    return opening && opening.fichier && typeof opening.fichier.type === 'string' ? opening.fichier.type : '';
+  }
+  // Vrai quand cette ligne seule suffit à ouvrir un fichier de ce type (`kind` : celui que dit GFS, '' pour un document sans type) ; `row()` et `typesOf` ne lisent que ces types.
+  const covers = kind => !kind || ROW_TYPES.indexOf(kind) !== -1;
+  // Les types de la ligne que la lecture demande : ceux d'un document quand GFS ne dit rien ou dit « document » (une ligne sans type en est un), le type dit par GFS sinon. Le filtre fait que la ligne d'un AUTRE type n'est
+  // même pas envoyée : lire une présentation de 3 Mo pour ouvrir un document n'aurait aucun sens.
+  const typesOf = kind => (!kind || kind === 'document' ? TYPES : [kind]);
 
   // La page (largeur en pixels, marges en pixels) que dit la ligne, ou null : un format libre, une page « selon chaque modèle » ou un sens qu'on ne connaît pas ne se dessinent pas ici.
   function pageOf(margins) {
@@ -107,8 +124,11 @@ const EarlyPreview = (function () {
 
   async function run() {
     await GfsLink.ready;
-    const id = designatedId(GfsLink.opening());
+    const opening = GfsLink.opening();
+    const id = designatedId(opening);
     if (id === null) return end('pas de document désigné');
+    const kind = kindOf(opening);
+    if (!covers(kind)) return end('type de fichier non couvert : ' + kind);
     // Le jeton est parti avant la lecture de la table des modèles ; il n'y a rien d'autre à attendre que lui (il se met en cache : lightRecords le retrouve).
     const token = await tokenReady;
     if (state !== 'reading') return undefined;
@@ -118,7 +138,7 @@ const EarlyPreview = (function () {
     // Les réglages du document partent avec la ligne (la même attente) : ils sont dans la même table, une ligne à part.
     const settings = GristAPI.lightRecords(Templates.TABLE_NAME, null, READ_TIMEOUT_MS, { TemplateType: [Templates.SETTINGS_TYPE] }).then(result => result.records, () => null);
     try {
-      read = await GristAPI.lightRecords(Templates.TABLE_NAME, [id], READ_TIMEOUT_MS, { TemplateType: TYPES });
+      read = await GristAPI.lightRecords(Templates.TABLE_NAME, [id], kind && kind !== 'document' ? LONG_READ_TIMEOUT_MS : READ_TIMEOUT_MS, { TemplateType: typesOf(kind) });
     } catch (e) {
       return end('ligne illisible (' + ((e && (e.status || e.reason)) || 'erreur') + ')');
     }
@@ -126,9 +146,11 @@ const EarlyPreview = (function () {
     if (Templates.hasLoaded()) return end('la table des modèles est déjà arrivée');
     const record = read.records && read.records[0];
     const tpl = record ? Templates.templateFromRecord(record) : null;
-    if (!tpl || (tpl.typeModele !== 'document')) return end('ce n’est pas un document');
-    trace('aperçu : ligne lue', { Ko: Math.round(read.bytes / 1024), ms: Math.round(now() - beganAt) });
+    if (!tpl || ROW_TYPES.indexOf(tpl.typeModele) === -1) return end('ce type de fichier n’est pas couvert');
+    trace('aperçu : ligne lue', { Ko: Math.round(read.bytes / 1024), ms: Math.round(now() - beganAt), type: tpl.typeModele });
     settleRow({ record, tpl, settings });
+    // L'aperçu est la feuille d'un document : une présentation, une grille ou un e-mail s'ouvre depuis sa ligne (js/early-open.js), sans feuille posée par-dessus.
+    if (tpl.typeModele !== 'document') return end('pas un document : pas d’aperçu');
     if (!show(tpl)) return end('rien à montrer');
     state = 'shown';
     trace('aperçu : affiché', { ms: Math.round(now() - beganAt) });
@@ -161,5 +183,5 @@ const EarlyPreview = (function () {
   // Le document est ouvert dans l'éditeur (ou le démarrage est fini, ou échoué) : la feuille s'efface.
   function opened(reason) { end(reason || 'document ouvert'); }
 
-  return { begin, opening, opened, row: () => rowRead, isShown: () => state === 'shown', state: () => state };
+  return { begin, opening, opened, row: () => rowRead, isShown: () => state === 'shown', state: () => state, covers, kindOf, longReadMs: LONG_READ_TIMEOUT_MS };
 })();

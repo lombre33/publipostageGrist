@@ -11,9 +11,12 @@
 //     qui attendait part (un seul document modifié, aucune ligne en plus) ;
 //  4. un appel `ouvrir` de GFS pour un AUTRE document, reçu pendant la lecture, attend la liste puis l'ouvre ;
 //  5. la table entière n'est lue qu'UNE fois (les gestes qui la demandent pendant ce temps partagent la même lecture) ;
-//  6. au moindre doute, le démarrage est celui d'avant (la table entière se lit tout de suite, le document vient d'elle) : un texte lié à un autre modèle, une présentation désignée, une ligne refusée (403),
-//     des réglages illisibles, une table sans les colonnes d'aujourd'hui, un rechargement qui rouvre un modèle (`#pp-open=`), pas de fichier désigné, un import, une app seule (hors GFS) ;
-//  7. une lecture entière qui échoue laisse le document ouvert (le cache partiel n'est pas vidé).
+//  6. au moindre doute, le démarrage est celui d'avant (la table entière se lit tout de suite, le document vient d'elle) : un texte lié à un autre modèle (tableau lié, diapositive liée, page d'un document, bloc de
+//     diapositive qui garde sa source), un macro-modèle désigné, un type inconnu, une ligne refusée (403), des réglages illisibles, une table sans les colonnes d'aujourd'hui, un rechargement qui rouvre un modèle
+//     (`#pp-open=`), pas de fichier désigné, un import, une app seule (hors GFS) ;
+//  7. une lecture entière qui échoue laisse le document ouvert (le cache partiel n'est pas vidé) ;
+//  8. (consigne 103 de GFS, demande 1) une PRÉSENTATION, une GRILLE et un E-MAIL s'ouvrent aussi depuis leur seule ligne (le type que GFS donne filtre la demande : la ligne d'un autre type n'est pas envoyée), avant
+//     la fin de la lecture de la liste ; un texte qui ne fait que porter des attributs de mise en page (`data-slide-number`, `data-page-format`...) ne désigne aucun modèle : il s'ouvre depuis sa ligne aussi.
 // Lancé par run-headless.mjs (groupe Node « earlyOpen », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-early-open.mjs
 import { start, seedModels } from './gfs-page.mjs';
 
@@ -22,13 +25,19 @@ const { check } = t;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const BASE = 'http://grist.test/api/docs/DOC1';
 const ROW_TEXT = 'Texte lu par la seule ligne';
+const SLIDES_TEXT = 'Titre de la présentation lu par sa ligne';
+const EMAIL_TEXT = 'Texte de l\u2019e-mail lu par sa ligne';
+const GRID_TEXT = 'Cellule de la grille lue par sa ligne';
 const SETTINGS = { marqueur: 'reglages-lus-par-rest' };
 
 // Les lignes que « Grist » sert par REST : le document désigné (numéro 2, « Départ B ») avec un texte qui n'est pas celui de la table (« Contenu B »), pour qu'on voie d'où il vient, une présentation, et la ligne des
 // réglages du document.
 const rowsOf = (extra = {}) => [
   { id: 2, fields: Object.assign({ Name: 'Départ B', TemplateType: 'document', Margins: '', HeaderFooter: '', IsDefault: false, ModifiedAt: 1790000000, Content: '<h1>' + ROW_TEXT + '</h1><p>Un paragraphe</p>' }, extra) },
-  { id: 6, fields: { Name: 'Futur', TemplateType: 'presentation', Content: '<p>PRESENTATION LOURDE</p>' } },
+  { id: 6, fields: { Name: 'Futur', TemplateType: 'presentation', Content: '<h1>' + SLIDES_TEXT + '</h1><p>Une diapositive</p>' } },
+  { id: 4, fields: { Name: 'Départ E email', TemplateType: 'email', Content: '<p>' + EMAIL_TEXT + '</p>', Subject: 'Objet lu par la ligne', To: 'a@exemple.fr' } },
+  { id: 7, fields: { Name: 'Grille de départ', TemplateType: 'grille', Content: '<table><tbody><tr><td><p>' + GRID_TEXT + '</p></td></tr></tbody></table>' } },
+  { id: 5, fields: { Name: 'Départ M macro', TemplateType: 'macro', Content: JSON.stringify({ slots: [{ type: 'fixed', modeleId: 2 }] }) } },
   { id: 9, fields: { Name: 'Réglages du document', TemplateType: 'reglages', Content: JSON.stringify(SETTINGS) } },
 ];
 const opening = (id = 2, type = 'document', raison = 'explorateur') => ({ contextDelayMs: 300, ouverture: { fichier: { id, type }, type, dossier: '', raison } });
@@ -144,10 +153,15 @@ async function asBefore(label, options, extra) {
   return view;
 }
 const bContent = view => /Contenu B/.test(view.text || '');
-await asBefore('un texte lié à un autre modèle (diapositive liée) : la table entière se lit, le document vient d\'elle', { rows: rowsOf({ Content: '<p data-link-mode="push">liée</p>' }) }, bContent);
+await asBefore('un texte lié à un autre modèle (diapositive liée, `data-link-model`) : la table entière se lit, le document vient d\'elle', { rows: rowsOf({ Content: '<p data-link-model="6" data-link-mode="push">liée</p>' }) }, bContent);
 await asBefore('un tableau lié à une grille (`data-linked-template`) : de même', { rows: rowsOf({ Content: '<table data-linked-template="3"><tr><td>x</td></tr></table>' }) }, bContent);
-await asBefore('une copie de diapositive (`data-slide-source`) : de même', { rows: rowsOf({ Content: '<p><img data-slide-source="{}" src="x"></p>' }) }, bContent);
-await asBefore('GFS désigne une présentation : la table entière se lit', { stub: opening(6, 'presentation') });
+await asBefore('un bloc de diapositive qui garde sa source (`data-slide-link`, un JSON qui porte le modèle) : de même', { rows: rowsOf({ Content: '<p><img data-slide-link=\'{"model":6,"key":"abcdefgh"}\' src="x"></p>' }) }, bContent);
+await asBefore('un bloc de diapositive qui sait d\'où il vient (`data-slide-from`) : de même', { rows: rowsOf({ Content: '<p><img data-slide-from=\'{"model":6,"rank":0,"h":"x"}\' src="x"></p>' }) }, bContent);
+await asBefore('la diapositive d\'une page de document (`data-link-page`) : de même', { rows: rowsOf({ Content: '<p data-link-page="3:abcdefgh:p1:0:x:1">page</p>' }) }, bContent);
+await asBefore('une diapositive qui en verrouille une autre (`data-slide-lock`) : de même', { rows: rowsOf({ Content: '<p data-slide-lock="6">verrouillée</p>' }) }, bContent);
+await asBefore('GFS désigne un macro-modèle (ses emplacements désignent d\'autres documents) : la table entière se lit', { stub: opening(5, 'macro') });
+await asBefore('GFS désigne un fichier d\'un type que cette version ne connaît pas : la table entière se lit', { stub: opening(2, 'tableur') });
+await asBefore('GFS dit « document » mais la ligne désignée est une présentation (le filtre ne la rend pas) : la table entière se lit', { stub: opening(6, 'document') });
 await asBefore('Grist refuse la ligne (HTTP 403) : la table entière se lit', { status: 403 }, bContent);
 await asBefore('les réglages du document ne se lisent pas (HTTP 500) : la table entière se lit', { settingsStatus: 500 }, bContent);
 await asBefore('une table sans le texte (colonnes d\'avant les noms anglais) : la table entière se lit', { rows: rowsOf({ Content: undefined }) }, bContent);
@@ -168,5 +182,37 @@ await isComplete(failing.app);
 const afterRetry = await look(failing.app);
 check('la lecture suivante réussit : la liste est complète (6 documents) et le document ouvert est resté celui de l\'écran', afterRetry.complete === true && afterRetry.cached === 6 && afterRetry.currentId === 2 && String(afterRetry.selected) === '2', afterRetry);
 await failing.context.close();
+
+// --- 8. Une présentation, une grille et un e-mail s'ouvrent aussi depuis leur seule ligne (consigne 103 de GFS, demande 1) ---
+// La table (6 s) porte un autre texte que la ligne : on voit d'où vient celui de l'écran. La grille n'est pas dans la table de départ : on l'y ajoute (numéro 7), comme Grist la servirait.
+const GRID_SEED = `\nadd(7, 'Grille de départ', '<table><tbody><tr><td><p>Cellule de la table</p></td></tr></tbody></table>', false, 'grille'); stub.state.nextRowId.Publipostage_Modeles = 8;`;
+async function fromRow(label, { id, type, text, extensions, seed = '', rows = rowsOf(), lines = 6, extra } = {}) {
+  const run = await openIt({ stub: Object.assign(opening(id, type), extensions ? { extensions } : {}), rows, seed, ready: false });
+  await isReady(run.app);
+  const readyAfter = Date.now() - run.startedAt;
+  const view = await look(run.app);
+  check(label + ' : ouvert BIEN avant la fin de la lecture de la liste (6 s), depuis sa seule ligne (plan « document seul », cache d\'une ligne)', readyAfter < 5000 && view.plan === 'partial' && view.complete === false && view.cached === 1 && view.currentId === id, { readyAfter, plan: view.plan, complete: view.complete, cached: view.cached, currentId: view.currentId });
+  check(label + ' : l\'éditeur porte le texte de SA LIGNE (REST), pas celui de la table', text.test(view.text || '') && !/Cellule de la table|Contenu futur|Contenu E/.test(view.text || ''), view.text);
+  if (extra) await extra(run, view);
+  await isComplete(run.app);
+  await sleep(1500);
+  const done = await look(run.app);
+  check(label + ' : la liste arrive (' + lines + ' lignes), le fichier ouvert reste courant et garde le texte de l\'écran', done.complete === true && done.cached === lines && done.currentId === id && text.test(done.text || ''), { complete: done.complete, cached: done.cached, currentId: done.currentId, text: done.text });
+  await run.context.close();
+  return done;
+}
+await fromRow('une présentation désignée (type « presentation », extension « diapositives » active)', { id: 6, type: 'presentation', text: new RegExp(SLIDES_TEXT), extensions: ['graphique', 'diapositives'] });
+await fromRow('une grille désignée (type « grille »)', { id: 7, type: 'grille', text: new RegExp(GRID_TEXT), seed: GRID_SEED, lines: 7 });
+await fromRow('un e-mail désigné (type « email »)', {
+  id: 4, type: 'email', text: new RegExp(EMAIL_TEXT.replace(/[’]/g, '.')),
+  extra: async (run) => {
+    const fields = await run.app.evaluate(() => ({ subject: (document.getElementById('v2-email-subject') || {}).textContent, to: (document.getElementById('v2-email-to') || {}).textContent }));
+    check('un e-mail désigné : l\'objet et le destinataire viennent de sa ligne', /Objet lu par la ligne/.test(fields.subject || '') && /a@exemple\.fr/.test(fields.to || ''), fields);
+  },
+});
+// Une présentation dont le texte porte ses marques de mise en page (numéro, mots, saut) sans désigner aucun autre modèle : elle s'ouvre depuis sa ligne ; un document qui porte `data-page-format` aussi.
+const layoutOnly = '<h1>' + SLIDES_TEXT + '</h1><p data-slide-number="1" data-slide-words="[]" data-slide-text="x" data-slide-break="true" data-page-format="A4" data-page-orientation="landscape" data-page-break-before="true">Mise en page</p>';
+await fromRow('une présentation qui ne porte que des marques de mise en page (`data-slide-…`, `data-page-…`)', { id: 6, type: 'presentation', text: new RegExp(SLIDES_TEXT), extensions: ['graphique', 'diapositives'], rows: rowsOf({}).map(row => (row.id === 6 ? { id: 6, fields: Object.assign({}, row.fields, { Content: layoutOnly }) } : row)) });
+await fromRow('un document dont le texte ne porte que des marques de mise en page (`data-page-format`, `data-slide-source` d\'un bloc qui garde son HTML)', { id: 2, type: 'document', text: /Texte lu par la seule ligne/, rows: rowsOf({ Content: '<h1>' + ROW_TEXT + '</h1><p data-page-format="A4" data-page-orientation="portrait">Page</p><p><img data-slide-source=\'{"h":"x","m":{},"r":1,"t":2}\' src="x"></p>' }) });
 
 t.finish();
