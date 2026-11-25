@@ -1,15 +1,18 @@
 #!/usr/bin/env node
-// La bêta figée avec son bandeau (consigne 070 de Grist Factory Suite).
+// La bêta figée avec son bandeau (consigne 070 de Grist Factory Suite) et son garde-fou (consigne 102).
 //
 // Le dépôt public garde dans beta/ une copie de la bêta 1.0.0-beta.1 (voir « La bêta figée » dans README.md). Elle reste SANS correctif, avec UN bandeau en plus : « Attention : widget en version bêta.
 // Nous vous conseillons de migrer vers la version 1.1. », un bouton « Découvrir les nouveautés » qui ouvre, dans un nouvel onglet, la page des nouveautés de la version 1 (nouveautes.html, à la racine du
 // site), et une croix. Le bandeau est fait de deux fichiers de ce dépôt, outils/depot-propre/beta/beta-bandeau.js et beta-bandeau.css, que cet outil ajoute à la copie (js/beta-bandeau.js et
 // css/beta-bandeau.css) avec deux lignes dans son index.html : la feuille juste avant </head>, le script juste avant </body>, après main.js, chacun avec `?v=` et les huit premiers chiffres de son empreinte.
+// Le garde-fou (consigne 102, choix du porteur du 25/11 : « une dernière bêta qui ne recrée pas les anciennes tables ») est un troisième fichier, outils/depot-propre/beta/beta-garde.js, posé en js/beta-garde.js avec UNE ligne de plus
+// dans index.html : juste avant js/table-consent.js, donc avant le démarrage anticipé de la bêta. Devant un document que la version 1 a déjà mis à jour (ses tables portent des noms anglais), la bêta n'écrit plus rien, ne
+// recrée aucune ancienne table et dit d'ouvrir la dernière version. Sa feuille est celle du bandeau (css/beta-bandeau.css).
 // Rien d'autre de beta/ ne change : tout le reste est, octet pour octet, ce que l'étiquette de la bêta porte. L'outil NE POUSSE JAMAIS et ne committe rien.
 //
-//   node beta-bandeau.mjs --poser <clone public> [--etiquette v1.0.0-beta.1]      (ré)écrit beta/ dans le clone : les fichiers de l'étiquette + le bandeau (publier.sh le fait à chaque publication)
-//   node beta-bandeau.mjs --verifier <clone public> [--etiquette ...] [--arbre]    beta/ du dernier commit (ou, avec --arbre, du dossier de travail) est EXACTEMENT l'étiquette + le bandeau
-//   node beta-bandeau.mjs --ecarts <clone public> [--etiquette ...]               beta/ du dernier commit est l'étiquette, avec ou sans bandeau (d'une version quelconque) et rien d'autre : ce que publier.sh vérifie avant de recomposer
+//   node beta-bandeau.mjs --poser <clone public> [--etiquette v1.0.0-beta.1]      (ré)écrit beta/ dans le clone : les fichiers de l'étiquette + le bandeau + le garde-fou (publier.sh le fait à chaque publication)
+//   node beta-bandeau.mjs --verifier <clone public> [--etiquette ...] [--arbre]    beta/ du dernier commit (ou, avec --arbre, du dossier de travail) est EXACTEMENT l'étiquette + le bandeau + le garde-fou
+//   node beta-bandeau.mjs --ecarts <clone public> [--etiquette ...]               beta/ du dernier commit est l'étiquette, avec ou sans bandeau ni garde-fou (d'une version quelconque) et rien d'autre : ce que publier.sh vérifie avant de recomposer
 // L'étiquette par défaut est celle de PP_BETA_ETIQUETTE, sinon v1.0.0-beta.1. Code de sortie 1, avec la raison, quand beta/ n'est pas ce qu'elle doit être.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -24,35 +27,42 @@ export const SOURCES = join(ICI, 'beta');
 export const BETA_PARTIES = ['index.html', 'css', 'js', 'img', 'templates-gallery', 'LICENSE'];
 export const BANDEAU_JS = 'js/beta-bandeau.js';
 export const BANDEAU_CSS = 'css/beta-bandeau.css';
+export const GARDE_JS = 'js/beta-garde.js';
 
-// Les deux fichiers du bandeau, lus avec des fins de ligne `\n` (une copie de travail qui les convertit, sous Windows, donnerait sinon une autre empreinte, donc une autre `?v=`).
+// Les fichiers du bandeau et du garde-fou, lus avec des fins de ligne `\n` (une copie de travail qui les convertit, sous Windows, donnerait sinon une autre empreinte, donc une autre `?v=`).
 export function sources() {
   const lire = nom => Buffer.from(readFileSync(join(SOURCES, nom), 'utf8').replace(/\r\n/g, '\n'), 'utf8');
-  return { js: lire('beta-bandeau.js'), css: lire('beta-bandeau.css') };
+  return { js: lire('beta-bandeau.js'), css: lire('beta-bandeau.css'), garde: lire('beta-garde.js') };
 }
 const empreinte = octets => createHash('sha256').update(octets).digest('hex').slice(0, 8);
 
-// Les deux lignes ajoutées à index.html : la version (`?v=`) est l'empreinte du fichier, si bien qu'un bandeau modifié ne se lit pas dans le cache du navigateur.
+// Les trois lignes ajoutées à index.html : la version (`?v=`) est l'empreinte du fichier, si bien qu'un bandeau ou un garde-fou modifié ne se lit pas dans le cache du navigateur.
 export function balises(src = sources()) {
   return {
     css: `<link rel="stylesheet" href="${BANDEAU_CSS}?v=${empreinte(src.css)}">`,
     js: `<script src="${BANDEAU_JS}?v=${empreinte(src.js)}"></script>`,
+    garde: `<script src="${GARDE_JS}?v=${empreinte(src.garde)}"></script>`,
   };
 }
 const LIGNE_CSS = /<link rel="stylesheet" href="css\/beta-bandeau\.css\?v=[0-9a-f]{8}">\n/g;
 const LIGNE_JS = /<script src="js\/beta-bandeau\.js\?v=[0-9a-f]{8}"><\/script>\n/g;
+const LIGNE_GARDE = /<script src="js\/beta-garde\.js\?v=[0-9a-f]{8}"><\/script>\n/g;
+// La ligne de la bêta devant laquelle se pose le garde-fou : le script qui branche la question « Créer les tables du widget ? », chargé avant le démarrage anticipé (la première lecture, la première création).
+const ANCRE_GARDE = /<script src="js\/table-consent\.js[^"]*"><\/script>\n/g;
 
-// La page sans les deux lignes du bandeau (de n'importe quelle version) : l'index.html de l'étiquette, quand le reste n'a pas bougé.
-export function sansBandeau(page) { return page.replace(LIGNE_CSS, '').replace(LIGNE_JS, ''); }
-// La page de l'étiquette avec les deux lignes : la feuille sur sa propre ligne juste avant </head>, le script sur la sienne juste avant </body>.
+// La page sans les trois lignes du bandeau et du garde-fou (de n'importe quelle version) : l'index.html de l'étiquette, quand le reste n'a pas bougé.
+export function sansBandeau(page) { return page.replace(LIGNE_CSS, '').replace(LIGNE_JS, '').replace(LIGNE_GARDE, ''); }
+// La page de l'étiquette avec les trois lignes : la feuille sur sa propre ligne juste avant </head>, le script du bandeau sur la sienne juste avant </body>, le garde-fou sur la sienne juste avant js/table-consent.js.
 export function avecBandeau(page, src = sources()) {
-  if (sansBandeau(page) !== page) throw new Error('index.html porte déjà des lignes du bandeau : la composition part de la page de l\'étiquette');
+  if (sansBandeau(page) !== page) throw new Error('index.html porte déjà des lignes du bandeau ou du garde-fou : la composition part de la page de l\'étiquette');
   for (const fin of ['\n</head>', '\n</body>']) {
     const n = page.split(fin).length - 1;
     if (n !== 1) throw new Error(`index.html de la bêta devrait avoir exactement une ligne ${fin.trim()} (${n} trouvée(s)) : le bandeau ne sait pas où se poser`);
   }
-  const { css, js } = balises(src);
-  return page.replace('\n</head>', () => `\n${css}\n</head>`).replace('\n</body>', () => `\n${js}\n</body>`);
+  const ancres = page.match(ANCRE_GARDE) || [];
+  if (ancres.length !== 1) throw new Error(`index.html de la bêta devrait avoir exactement une ligne <script src="js/table-consent.js…"> (${ancres.length} trouvée(s)) : le garde-fou ne sait pas où se poser`);
+  const { css, js, garde } = balises(src);
+  return page.replace('\n</head>', () => `\n${css}\n</head>`).replace('\n</body>', () => `\n${js}\n</body>`).replace(ANCRE_GARDE, ligne => `${garde}\n${ligne}`);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -93,7 +103,7 @@ function contenuGit(clone, blob) { return gitOctets(clone, ['cat-file', 'blob', 
 const egaux = (a, b) => !!a && !!b && a.mode === b.mode && a.blob === b.blob;
 const racine = chemin => chemin.split('/')[0];
 
-// Ce que beta/ doit porter, vu comme une liste : celle de l'étiquette, avec index.html recomposé et les deux fichiers du bandeau en plus.
+// Ce que beta/ doit porter, vu comme une liste : celle de l'étiquette, avec index.html recomposé et les trois fichiers du bandeau et du garde-fou en plus.
 function attenduAvecBandeau(clone, etiquette, algo) {
   const attendu = listerGit(clone, etiquette, BETA_PARTIES);
   const page = attendu.get('index.html');
@@ -103,6 +113,7 @@ function attenduAvecBandeau(clone, etiquette, algo) {
   attendu.set('index.html', { mode: page.mode, blob: blobDe(composee, algo) });
   attendu.set(BANDEAU_JS, { mode: '100644', blob: blobDe(src.js, algo) });
   attendu.set(BANDEAU_CSS, { mode: '100644', blob: blobDe(src.css, algo) });
+  attendu.set(GARDE_JS, { mode: '100644', blob: blobDe(src.garde, algo) });
   return attendu;
 }
 
@@ -112,7 +123,7 @@ function ecartsEntre(attendu, reel) {
   return [...chemins].filter(chemin => !egaux(attendu.get(chemin), reel.get(chemin))).sort();
 }
 
-// beta/ du dernier commit (ou du dossier de travail) = l'étiquette + le bandeau, au bit près : la liste des chemins qui en diffèrent.
+// beta/ du dernier commit (ou du dossier de travail) = l'étiquette + le bandeau + le garde-fou, au bit près : la liste des chemins qui en diffèrent.
 export function verifier(clone, etiquette, { arbre = false } = {}) {
   const algo = algorithme(clone);
   const attendu = attenduAvecBandeau(clone, etiquette, algo);
@@ -120,7 +131,7 @@ export function verifier(clone, etiquette, { arbre = false } = {}) {
   return ecartsEntre(attendu, reel);
 }
 
-// beta/ du dernier commit = l'étiquette, sans bandeau ou avec un bandeau d'une version quelconque (ses deux fichiers et ses deux lignes ne comptent pas), et rien d'autre :
+// beta/ du dernier commit = l'étiquette, sans bandeau ni garde-fou ou avec ceux d'une version quelconque (leurs trois fichiers et leurs trois lignes ne comptent pas), et rien d'autre :
 // { differentes : les parties du site (index.html, css, js…) qui diffèrent, enTrop : les entrées que la bêta n'avait pas }.
 export function ecarts(clone, etiquette) {
   const algo = algorithme(clone);
@@ -128,6 +139,7 @@ export function ecarts(clone, etiquette) {
   const reel = listerGit(clone, 'HEAD:beta');
   reel.delete(BANDEAU_JS);
   reel.delete(BANDEAU_CSS);
+  reel.delete(GARDE_JS);
   const page = reel.get('index.html');
   if (page) {
     const octets = contenuGit(clone, page.blob);
@@ -158,6 +170,7 @@ export function poserDepuisDossier(source, destination, src = sources()) {
   writeFileSync(join(destination, 'index.html'), composee);
   writeFileSync(join(destination, BANDEAU_JS), src.js);
   writeFileSync(join(destination, BANDEAU_CSS), src.css);
+  writeFileSync(join(destination, GARDE_JS), src.garde);
 }
 export function poser(clone, etiquette) {
   const extrait = mkdtempSync(join(tmpdir(), 'beta-etiquette-'));
@@ -170,7 +183,7 @@ export function poser(clone, etiquette) {
     rmSync(extrait, { recursive: true, force: true });
   }
   const ecartsApres = verifier(clone, etiquette, { arbre: true });
-  if (ecartsApres.length) throw new Error('beta/ écrite n\'est pas l\'étiquette + le bandeau (' + ecartsApres.slice(0, 4).join(', ') + ')');
+  if (ecartsApres.length) throw new Error('beta/ écrite n\'est pas l\'étiquette + le bandeau + le garde-fou (' + ecartsApres.slice(0, 4).join(', ') + ')');
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -187,7 +200,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
     if (mode === '--poser') {
       poser(clone, etiquette);
-      console.log(`beta/ écrite dans ${clone} : les fichiers de ${etiquette} et le bandeau (js/beta-bandeau.js, css/beta-bandeau.css, deux lignes dans index.html). Rien n'est ajouté à l'index, rien n'est committé ni poussé.`);
+      console.log(`beta/ écrite dans ${clone} : les fichiers de ${etiquette}, le bandeau (js/beta-bandeau.js, css/beta-bandeau.css) et le garde-fou (js/beta-garde.js), avec trois lignes de plus dans index.html. Rien n'est ajouté à l'index, rien n'est committé ni poussé.`);
     } else if (mode === '--verifier') {
       const differents = verifier(clone, etiquette, { arbre: args.includes('--arbre') });
       if (differents.length === 0) console.log(`beta/ est ${etiquette} avec son bandeau, et rien d'autre.`);
@@ -199,7 +212,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     } else {
       const { differentes, enTrop } = ecarts(clone, etiquette);
       if (differentes.length) {
-        console.error(`beta/ n'est pas identique aux fichiers du site de ${etiquette} (la bêta figée ne se corrige pas, on la repose telle que l'étiquette la porte, avec le bandeau que beta-bandeau.mjs y ajoute) :\n` + differentes.map(partie => `  beta/${partie}`).join('\n'));
+        console.error(`beta/ n'est pas identique aux fichiers du site de ${etiquette} (la bêta figée ne se corrige pas, on la repose telle que l'étiquette la porte, avec le bandeau et le garde-fou que beta-bandeau.mjs y ajoute) :\n` + differentes.map(partie => `  beta/${partie}`).join('\n'));
         process.exit(1);
       }
       if (enTrop.length) {

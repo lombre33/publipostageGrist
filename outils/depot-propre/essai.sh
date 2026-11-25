@@ -62,9 +62,9 @@ HTML
   echo 'SECURITY_RACINE_DEV_ESSAI' > SECURITY.md
   # La copie figée de l'éditeur (consigne 066 de GFS) : du code de tiers construit par l'outil du kit, que publier.sh fait partir avec la page (PUBLIES) ; le faux en porte un module, ses licences et son manifeste.
   mkdir -p vendor/editeur; echo 'export default 1;' > vendor/editeur/prosemirror.js; echo 'licences' > vendor/editeur/LICENCES.txt; echo '{}' > vendor/editeur/COPIE.json
-  # Les outils, avec le bandeau de la bêta figée (beta-bandeau.mjs et les deux fichiers de beta/) : controles.mjs et publier.sh les lisent à côté d'eux.
+  # Les outils, avec le bandeau et le garde-fou de la bêta figée (beta-bandeau.mjs et les trois fichiers de beta/) : controles.mjs et publier.sh les lisent à côté d'eux.
   cp "$ICI/publier.sh" "$ICI/controles.mjs" "$ICI/beta-bandeau.mjs" outils/depot-propre/
-  cp "$ICI"/beta/beta-bandeau.js "$ICI"/beta/beta-bandeau.css outils/depot-propre/beta/
+  cp "$ICI"/beta/beta-bandeau.js "$ICI"/beta/beta-bandeau.css "$ICI"/beta/beta-garde.js outils/depot-propre/beta/
   cp -r "$ICI"/public/* outils/depot-propre/public/
   # La carte du code cite chaque fichier du widget : le faux dépôt les porte (vides, pages .html comprises), pour que ses références tiennent.
   grep -oE '`(js|css|extensions)/[A-Za-z0-9_./-]+\.(js|css|html)`' "$ICI/public/CARTE_DU_CODE.md" | tr -d '`' | sort -u | while read -r f; do [ -e "$f" ] || { mkdir -p "$(dirname "$f")"; echo "/* $f */" > "$f"; }; done
@@ -95,9 +95,12 @@ git init -q -b main "$T/propre-src"
   echo '# alpha' > README.md; echo old > index.html
   # La bêta figée : beta/ porte les fichiers du site de la bêta (une page, sa feuille de style, sa version, une image, un catalogue, la licence). L'étiquette de la bêta les porte à la racine :
   # son arbre est celui de beta/ (un commit orphelin, comme l'étiquette v1.0.0-beta.1 du vrai dépôt public, dont l'arbre est celui du site). Sa page a, comme celle de la vraie bêta, </head> et </body>
-  # chacun en début de ligne : c'est là que beta-bandeau.mjs pose les deux lignes du bandeau (consigne 070 de GFS), la feuille avant </head>, le script avant </body>.
+  # chacun en début de ligne : c'est là que beta-bandeau.mjs pose les deux lignes du bandeau (consigne 070 de GFS), la feuille avant </head>, le script avant </body>. Elle charge aussi, comme la vraie,
+  # js/grist-api.js puis js/table-consent.js : le garde-fou de la consigne 102 se pose entre les deux, une ligne avant celle de table-consent.js.
   mkdir -p beta/css beta/js beta/img beta/templates-gallery
-  printf '<!doctype html>\n<html>\n<head>\n<title>bêta</title>\n<link rel="stylesheet" href="css/style.css">\n</head>\n<body>\n<img src="img/logo.jpg">\n<script src="js/version.js"></script>\n</body>\n</html>\n' > beta/index.html
+  printf '<!doctype html>\n<html>\n<head>\n<title>bêta</title>\n<link rel="stylesheet" href="css/style.css">\n</head>\n<body>\n<img src="img/logo.jpg">\n<script src="js/grist-api.js?v=0.1"></script>\n<script src="js/table-consent.js?v=0.1"></script>\n<script src="js/version.js"></script>\n</body>\n</html>\n' > beta/index.html
+  echo '/* grist-api */' > beta/js/grist-api.js
+  echo '/* table-consent */' > beta/js/table-consent.js
   echo 'body { margin: 1px; }' > beta/css/style.css
   echo "const PP_VERSION = '1.0.0-beta.1';" > beta/js/version.js
   echo jpg > beta/img/logo.jpg
@@ -178,11 +181,12 @@ vrai "la date est écrite en toutes lettres" grep -q "4 octobre 2026" "$P/README
 vrai "la sauvegarde .bundle existe" test -s "$T/sortie1/publication-1.0.0-beta.1.bundle"
 vrai "le clone public est propre" test -z "$(git -C "$P" status --porcelain)"
 vrai "nouveautes.html (la page des nouveautés de la version 1) part à la racine du dépôt public, avec la version 1" test -s "$P/nouveautes.html" -a -n "$(git -C "$P" ls-tree --name-only HEAD | grep -x 'nouveautes.html')"
-# La bêta figée (consigne 070 de GFS) : l'étiquette de la bêta, sans correctif, avec un bandeau en plus - deux fichiers (js/beta-bandeau.js, css/beta-bandeau.css) et deux lignes de index.html. Rien d'autre n'a bougé.
-vrai "la bêta figée n'a pas bougé, sauf son bandeau : beta/ est l'étiquette de la bêta, octet pour octet, plus le bandeau de outils/depot-propre/beta/ (beta-bandeau.mjs --verifier), et rien d'autre" node "$ICI/beta-bandeau.mjs" --verifier "$P"
-vrai "... ses fichiers sont ceux de l'étiquette (version, feuille de style, image, catalogue, licence)" bash -c "for f in js/version.js css/style.css img/logo.jpg templates-gallery/catalogue.json LICENSE; do test \"\$(git -C '$P' rev-parse HEAD:beta/\$f)\" = \"\$(git -C '$P' rev-parse '$PP_BETA_ETIQUETTE:'\$f)\" || exit 1; done"
-vrai "... et la page n'a que deux lignes de plus, celles du bandeau : la feuille avant </head>, le script avant </body>" bash -c "test \"\$(diff <(git -C '$P' show '$PP_BETA_ETIQUETTE:index.html') <(git -C '$P' show HEAD:beta/index.html) | grep -c '^<')\" = 0 && test \"\$(diff <(git -C '$P' show '$PP_BETA_ETIQUETTE:index.html') <(git -C '$P' show HEAD:beta/index.html) | grep -c '^>')\" = 2 && git -C '$P' show HEAD:beta/index.html | grep -B1 -x '</head>' | head -1 | grep -q 'css/beta-bandeau.css?v=' && git -C '$P' show HEAD:beta/index.html | grep -B1 -x '</body>' | head -1 | grep -q 'js/beta-bandeau.js?v='"
-vrai "le bandeau pose ses deux fichiers dans beta/, ceux de outils/depot-propre/beta/" bash -c "cmp -s '$T/dev/outils/depot-propre/beta/beta-bandeau.js' '$P/beta/js/beta-bandeau.js' && cmp -s '$T/dev/outils/depot-propre/beta/beta-bandeau.css' '$P/beta/css/beta-bandeau.css'"
+# La bêta figée (consignes 070 et 102 de GFS) : l'étiquette de la bêta, sans correctif, avec un bandeau et un garde-fou en plus - trois fichiers (js/beta-bandeau.js, css/beta-bandeau.css, js/beta-garde.js) et trois lignes de index.html. Rien d'autre n'a bougé.
+vrai "la bêta figée n'a pas bougé, sauf son bandeau et son garde-fou : beta/ est l'étiquette de la bêta, octet pour octet, plus le bandeau et le garde-fou de outils/depot-propre/beta/ (beta-bandeau.mjs --verifier), et rien d'autre" node "$ICI/beta-bandeau.mjs" --verifier "$P"
+vrai "... ses fichiers sont ceux de l'étiquette (version, feuille de style, image, catalogue, licence, et les deux scripts devant lesquels le garde-fou se pose)" bash -c "for f in js/version.js css/style.css img/logo.jpg templates-gallery/catalogue.json LICENSE js/grist-api.js js/table-consent.js; do test \"\$(git -C '$P' rev-parse HEAD:beta/\$f)\" = \"\$(git -C '$P' rev-parse '$PP_BETA_ETIQUETTE:'\$f)\" || exit 1; done"
+vrai "... et la page n'a que trois lignes de plus, celles du bandeau et du garde-fou : la feuille avant </head>, le script du bandeau avant </body>, celui du garde-fou juste avant js/table-consent.js (et après js/grist-api.js)" bash -c "test \"\$(diff <(git -C '$P' show '$PP_BETA_ETIQUETTE:index.html') <(git -C '$P' show HEAD:beta/index.html) | grep -c '^<')\" = 0 && test \"\$(diff <(git -C '$P' show '$PP_BETA_ETIQUETTE:index.html') <(git -C '$P' show HEAD:beta/index.html) | grep -c '^>')\" = 3 && git -C '$P' show HEAD:beta/index.html | grep -B1 -x '</head>' | head -1 | grep -q 'css/beta-bandeau.css?v=' && git -C '$P' show HEAD:beta/index.html | grep -B1 -x '</body>' | head -1 | grep -q 'js/beta-bandeau.js?v=' && git -C '$P' show HEAD:beta/index.html | grep -B1 'js/table-consent.js' | head -1 | grep -q 'js/beta-garde.js?v=' && git -C '$P' show HEAD:beta/index.html | grep -B2 'js/table-consent.js' | head -1 | grep -q 'js/grist-api.js'"
+vrai "le bandeau et le garde-fou posent leurs trois fichiers dans beta/, ceux de outils/depot-propre/beta/" bash -c "cmp -s '$T/dev/outils/depot-propre/beta/beta-bandeau.js' '$P/beta/js/beta-bandeau.js' && cmp -s '$T/dev/outils/depot-propre/beta/beta-bandeau.css' '$P/beta/css/beta-bandeau.css' && cmp -s '$T/dev/outils/depot-propre/beta/beta-garde.js' '$P/beta/js/beta-garde.js'"
+vrai "... et le garde-fou refuse d'écrire (consigne 102 : « ne recrée pas les anciennes tables ») : le fichier posé porte son refus, la phrase de la consigne et le « non » d'avance à la question de création" bash -c "grep -q 'tablesDeclined = true' '$P/beta/js/beta-garde.js' && grep -q 'Ce document a été mis à jour par une version plus récente : ouvrez la dernière version.' '$P/beta/js/beta-garde.js' && grep -q 'setTableConsent' '$P/beta/js/beta-garde.js'"
 vrai "... et le bouton du bandeau ouvre une page qui existe dans le dépôt public (../nouveautes.html depuis beta/)" bash -c "grep -q \"const NEWS_PAGE = '../nouveautes.html'\" '$P/beta/js/beta-bandeau.js' && test -s '$P/nouveautes.html'"
 
 echo "publier.sh : garde contre l'écrasement"
@@ -260,8 +264,24 @@ NJS="$(grep -oEm1 '[0-9]+ fichiers dans `js/`' "$P/CARTE_DU_CODE.md" | grep -oE 
 LJS="$(grep -oEm1 '\([0-9][0-9 ]* lignes :' "$P/CARTE_DU_CODE.md" | grep -oE '[0-9][0-9 ]*[0-9]')"
 LTREE="$(cat "$P"/js/*.js | wc -l)"
 muter "un nombre de fichiers de js/ périmé dans la carte du code" "annonce $((NJS - 1)) et $NJS fichiers dans js/" "sed -i 's/$NJS fichiers dans/$((NJS - 1)) fichiers dans/' CARTE_DU_CODE.md"
-NFAM="$(grep -oEm1 '\([0-9]+ fichiers,' "$P/CARTE_DU_CODE.md" | grep -oE '[0-9]+')"
-muter "un nombre de fichiers par famille périmé dans la carte du code" "annonce $((NFAM - 1)) fichiers, son tableau en cite $NFAM" "sed -i 's/($NFAM fichiers,/($((NFAM - 1)) fichiers,/' CARTE_DU_CODE.md"
+# Le titre de la première famille dit un nombre (NFAM_TITRE), son tableau en cite un autre (NFAM) : le titre de la carte du dépôt de développement n'est recompté (numeros-carte.mjs --fix) qu'avant une publication,
+# il peut en être resté loin. L'essai part donc du nombre que le tableau cite (celui que controles.mjs compte : les fichiers de js/ de la première colonne) et pose au titre un nombre qui n'est aucun des deux.
+NFAM_TITRE="$(grep -oEm1 '\([0-9]+ fichiers,' "$P/CARTE_DU_CODE.md" | grep -oE '[0-9]+')"
+cat > "$T/nfam.mjs" <<'FINNFAM'
+import { readFileSync } from 'node:fs';
+const text = readFileSync(process.argv[2], 'utf8');
+for (const block of text.split(/^### /m).slice(1)) {
+  if (!/\((\d+) (?:fichiers|files),/.test(block.split('\n')[0])) continue;
+  const owned = new Set();
+  for (const row of block.split(/^#{1,2} /m)[0].split('\n')) {
+    if (row.startsWith('| `')) for (const match of row.split('|')[1].matchAll(/`(js\/[A-Za-z0-9_.-]+\.js)`/g)) owned.add(match[1]);
+  }
+  console.log(owned.size);
+  break;
+}
+FINNFAM
+NFAM="$(node "$T/nfam.mjs" "$P/CARTE_DU_CODE.md")"
+muter "un nombre de fichiers par famille périmé dans la carte du code" "annonce $((NFAM + 5)) fichiers, son tableau en cite $NFAM" "sed -i 's/($NFAM_TITRE fichiers,/($((NFAM + 5)) fichiers,/' CARTE_DU_CODE.md"
 # Les lignes d'une famille se comparent à celles de ses fichiers (ici, des fichiers d'une ligne : tout nombre annoncé au-delà de la marge est signalé).
 LFAM="$(grep -oEm1 '^### .*\([0-9]+ fichiers, [0-9][0-9 ]* lignes\)' "$P/CARTE_DU_CODE.md" | grep -oE '[0-9][0-9 ]* lignes\)$' | grep -oE '^[0-9][0-9 ]*[0-9]')"
 muter "un nombre de lignes par famille périmé dans la carte du code" "annonce 900 lignes, ses fichiers en comptent" "sed -i 's/, $LFAM lignes)/, 900 lignes)/' CARTE_DU_CODE.md"
@@ -336,6 +356,14 @@ muter "un bandeau dont la feuille est citée à la version d'un autre fichier (?
 muter "un bandeau dont la feuille est après </head>" "la feuille du bandeau doit être dans <head>" "perl -0pi -e 's#(<link rel=\"stylesheet\" href=\"css/beta-bandeau\.css\?v=[0-9a-f]{8}\">\n)(</head>\n)#\$2\$1#' beta/index.html"
 muter "un bandeau dont le script n'est plus le dernier de la page (il doit se poser après main.js)" "le script du bandeau doit être le dernier script de la page" "perl -0pi -e 's#(<script src=\"js/version\.js\"></script>\n)(<script src=\"js/beta-bandeau\.js\?v=[0-9a-f]{8}\"></script>\n)#\$2\$1#' beta/index.html"
 muter "un bandeau dont le bouton ouvre une page absente de l'arbre" "cette page n'est pas dans l'arbre" "rm nouveautes.html"
+# Le garde-fou de la bêta (consigne 102 de GFS : devant un document que la version 1 a déjà mis à jour, la bêta n'écrit plus rien et dit d'ouvrir la dernière version) : beta/ le porte tel que
+# outils/depot-propre/beta/ l'écrit, chargé après js/grist-api.js (il l'enveloppe) et avant js/table-consent.js (donc avant le démarrage anticipé de la bêta) ; absent, retouché ou mal posé, il se voit.
+muter "un garde-fou dont le script manque dans beta/" "beta/js/beta-garde.js : le garde-fou de la bêta est absent" "rm beta/js/beta-garde.js"
+muter "un garde-fou retouché à la main dans beta/" "beta/js/beta-garde.js n'est pas celui de outils/depot-propre/beta/" "echo '/* retouche */' >> beta/js/beta-garde.js"
+muter "un garde-fou dont la ligne a disparu de beta/index.html" "le script du garde-fou .* devrait y être une fois" "sed -i '/js\/beta-garde.js/d' beta/index.html"
+muter "un garde-fou cité à la version d'un autre fichier (?v= périmé)" "le script du garde-fou .* devrait y être une fois, à la version de son fichier" "sed -i 's/beta-garde.js?v=[0-9a-f]\{8\}/beta-garde.js?v=00000000/' beta/index.html"
+muter "un garde-fou chargé après js/table-consent.js (la bêta aurait déjà posé sa question)" "le script du garde-fou doit se charger avant js/table-consent.js" "perl -0pi -e 's#(<script src=\"js/beta-garde\.js\?v=[0-9a-f]{8}\"></script>\n)(<script src=\"js/table-consent\.js\?v=0\.1\"></script>\n)#\$2\$1#' beta/index.html"
+muter "un garde-fou chargé avant js/grist-api.js (il n'aurait rien à envelopper)" "le script du garde-fou doit se charger après js/grist-api.js" "perl -0pi -e 's#(<script src=\"js/grist-api\.js\?v=0\.1\"></script>\n)(<script src=\"js/beta-garde\.js\?v=[0-9a-f]{8}\"></script>\n)#\$2\$1#' beta/index.html"
 MUTER_OPTS=""
 renvois() { node "$C" "$1" --version 1.0.0-beta.2 | grep 'un renvoi à un dossier' | grep -oE ' : [0-9]+ ligne' | grep -oE '[0-9]+' || echo 0; }
 rm -rf "$T/mut"; cp -a "$P" "$T/mut"; rm -rf "$T/mut/.git"; echo '/* voir planning et dev-tests */' >> "$T/mut/beta/css/style.css"
@@ -359,14 +387,15 @@ beta_refus "refuse une beta/ qui porte une entrée que la bêta n'avait pas" "be
 beta_refus "refuse quand l'étiquette de la bêta est introuvable" "l'étiquette etiquette-inconnue de la bêta est absente" "echo x >> README.md" "PP_BETA_ETIQUETTE=etiquette-inconnue"
 beta_refus "passe la copie de la version qui part à controles.mjs, qui refuse une beta/ qui n'est pas la 1.0.0-beta.1" "beta/js/version.js annonce 1.0.0, la bêta figée est la 1.0.0-beta.1" "copie_de_la_version" "PP_BETA_ETIQUETTE=copie-de-la-version"
 
-echo "beta-bandeau.mjs : le bandeau de la bêta figée (consigne 070 de GFS)"
+echo "beta-bandeau.mjs : le bandeau et le garde-fou de la bêta figée (consignes 070 et 102 de GFS)"
 BB="$ICI/beta-bandeau.mjs"
-# Un clone public neuf (celui du début : sa bêta figée est l'étiquette, sans bandeau, comme celle du vrai dépôt public avant la consigne 070), sur lequel chaque essai pose, vérifie ou abîme beta/.
+# Un clone public neuf (celui du début : sa bêta figée est l'étiquette, sans bandeau ni garde-fou, comme celle du vrai dépôt public avant la consigne 070), sur lequel chaque essai pose, vérifie ou abîme beta/.
 bandeau_clone() { rm -rf "$T/clone3"; git clone -q "$T/propre-src" "$T/clone3"; }
 bandeau_clone
-vrai "--ecarts accepte beta/ telle que l'étiquette la porte, sans bandeau" node "$BB" --ecarts "$T/clone3"
+vrai "--ecarts accepte beta/ telle que l'étiquette la porte, sans bandeau ni garde-fou" node "$BB" --ecarts "$T/clone3"
 SORTIE="$(node "$BB" --verifier "$T/clone3" 2>&1)"; STATUT=$?
-attend "--verifier refuse une beta/ sans bandeau, et nomme ses deux fichiers" "beta/js/beta-bandeau.js" "$SORTIE"
+attend "--verifier refuse une beta/ sans bandeau, et nomme ses fichiers" "beta/js/beta-bandeau.js" "$SORTIE"
+attend "... dont celui du garde-fou" "beta/js/beta-garde.js" "$SORTIE"
 attend "... et la ligne de sa page" "beta/index.html" "$SORTIE"
 vrai "... avec un code de sortie 1" test "$STATUT" = 1
 node "$BB" --poser "$T/clone3" >/dev/null
@@ -377,14 +406,16 @@ node "$BB" --poser "$T/clone3" >/dev/null
 vrai "--poser une seconde fois n'ajoute et ne retire rien (même résultat)" test "$APRES_1" = "$(cd "$T/clone3" && find beta -type f | sort | xargs cat | openssl dgst -sha256)"
 (cd "$T/clone3" && G add -A && G commit -qm "bandeau")
 vrai "une fois committée, beta/ passe --verifier" node "$BB" --verifier "$T/clone3"
-vrai "... et --ecarts (avec ou sans bandeau)" node "$BB" --ecarts "$T/clone3"
-# Un bandeau d'une autre version (un correctif du bandeau posé depuis) : publier.sh l'accepte, il le recompose ; --verifier, lui, dit qu'il n'est plus le bon.
-(cd "$T/clone3" && echo '/* bandeau d une autre version */' >> beta/js/beta-bandeau.js && sed -i 's/beta-bandeau.js?v=[0-9a-f]\{8\}/beta-bandeau.js?v=00000000/' beta/index.html && G commit -qam "bandeau d'une autre version")
-vrai "--ecarts accepte un bandeau d'une autre version : publier.sh le recompose" node "$BB" --ecarts "$T/clone3"
-attend "--verifier dit que ce bandeau n'est plus le bon" "beta/js/beta-bandeau.js" "$(node "$BB" --verifier "$T/clone3" 2>&1)"
+vrai "... et --ecarts (avec ou sans bandeau ni garde-fou)" node "$BB" --ecarts "$T/clone3"
+# Un bandeau et un garde-fou d'une autre version (un correctif posé depuis) : publier.sh les accepte, il les recompose ; --verifier, lui, dit qu'ils ne sont plus les bons.
+(cd "$T/clone3" && echo '/* bandeau d une autre version */' >> beta/js/beta-bandeau.js && sed -i 's/beta-bandeau.js?v=[0-9a-f]\{8\}/beta-bandeau.js?v=00000000/' beta/index.html && echo '/* garde-fou d une autre version */' >> beta/js/beta-garde.js && sed -i 's/beta-garde.js?v=[0-9a-f]\{8\}/beta-garde.js?v=00000000/' beta/index.html && G commit -qam "bandeau et garde-fou d'une autre version")
+vrai "--ecarts accepte un bandeau et un garde-fou d'une autre version : publier.sh les recompose" node "$BB" --ecarts "$T/clone3"
+SORTIE="$(node "$BB" --verifier "$T/clone3" 2>&1)"
+attend "--verifier dit que ce bandeau n'est plus le bon" "beta/js/beta-bandeau.js" "$SORTIE"
+attend "... et que ce garde-fou n'est plus le bon" "beta/js/beta-garde.js" "$SORTIE"
 node "$BB" --poser "$T/clone3" >/dev/null
-vrai "--poser le remplace par le bandeau d'aujourd'hui" node "$BB" --verifier "$T/clone3" --arbre
-# La bêta figée ne se corrige pas : un fichier de l'étiquette retouché, un fichier de plus, un fichier de moins, la page retouchée ailleurs que par les deux lignes du bandeau.
+vrai "--poser les remplace par le bandeau et le garde-fou d'aujourd'hui" node "$BB" --verifier "$T/clone3" --arbre
+# La bêta figée ne se corrige pas : un fichier de l'étiquette retouché, un fichier de plus, un fichier de moins, la page retouchée ailleurs que par les trois lignes du bandeau et du garde-fou.
 retouche_refusee() { # description, motif attendu, retouche de beta/ dans le clone
   bandeau_clone; node "$BB" --poser "$T/clone3" >/dev/null
   (cd "$T/clone3" && eval "$3" && G add -A && G commit -qm "retouche")
@@ -397,25 +428,34 @@ retouche_refusee() { # description, motif attendu, retouche de beta/ dans le clo
 retouche_refusee "une feuille de style de la bêta retouchée" "beta/css" "echo '/* correctif */' >> beta/css/style.css"
 retouche_refusee "un fichier de la bêta retiré" "beta/img" "git rm -rq beta/img"
 retouche_refusee "un fichier que la bêta n'avait pas" "beta/ porte des entrées que la bêta n'avait pas" "echo x > beta/NOTES.md"
-retouche_refusee "la page de la bêta retouchée ailleurs que par les lignes du bandeau" "beta/index.html" "sed -i 's#<title>bêta</title>#<title>bêta corrigée</title>#' beta/index.html"
-# Où poser les deux lignes : une page de bêta sans ligne </body> (ou en double) n'est pas modifiée au hasard, l'outil s'arrête et dit pourquoi.
+retouche_refusee "un script de la bêta devant lequel le garde-fou se pose, retouché" "beta/js" "echo '/* correctif */' >> beta/js/table-consent.js"
+retouche_refusee "la page de la bêta retouchée ailleurs que par les lignes du bandeau et du garde-fou" "beta/index.html" "sed -i 's#<title>bêta</title>#<title>bêta corrigée</title>#' beta/index.html"
+# Où poser les trois lignes : une page de bêta sans ligne </body> (ou en double) n'est pas modifiée au hasard, l'outil s'arrête et dit pourquoi.
 bandeau_clone
 (cd "$T/clone3" && sed -i '/^<\/body>$/d' beta/index.html && G commit -qam "sans </body>" && G tag sans-body "$(echo x | G commit-tree HEAD:beta)")
 SORTIE="$(node "$BB" --poser "$T/clone3" --etiquette sans-body 2>&1)"; STATUT=$?
 attend "--poser s'arrête devant une page sans ligne </body>, et le dit" "exactement une ligne </body>" "$SORTIE"
 vrai "... avec un code de sortie 1" test "$STATUT" = 1
 vrai "... et beta/ du clone n'a pas été touchée (rien d'écrit à moitié)" test -z "$(git -C "$T/clone3" status --porcelain)"
+# Le garde-fou se pose devant la ligne de js/table-consent.js : une page de bêta qui n'en a pas n'est pas modifiée au hasard non plus.
+bandeau_clone
+(cd "$T/clone3" && sed -i '/js\/table-consent.js/d' beta/index.html && G commit -qam "sans table-consent.js" && G tag sans-consent "$(echo x | G commit-tree HEAD:beta)")
+SORTIE="$(node "$BB" --poser "$T/clone3" --etiquette sans-consent 2>&1)"; STATUT=$?
+attend "--poser s'arrête devant une page sans ligne js/table-consent.js (le garde-fou ne sait pas où se poser), et le dit" "exactement une ligne <script src=\"js/table-consent.js" "$SORTIE"
+vrai "... avec un code de sortie 1" test "$STATUT" = 1
+vrai "... et beta/ du clone n'a pas été touchée (rien d'écrit à moitié)" test -z "$(git -C "$T/clone3" status --porcelain)"
 vrai "... et --poser sans clone ni option affiche l'usage (code 2)" bash -c "node '$BB' --poser 2>/dev/null; test \$? = 2"
 
-echo "publier.sh : le bandeau suit le dépôt de développement"
-# Un correctif du bandeau (outils/depot-propre/beta/ du dépôt de développement) part à la publication suivante, sans rien toucher d'autre dans beta/.
+echo "publier.sh : le bandeau et le garde-fou suivent le dépôt de développement"
+# Un correctif du bandeau ou du garde-fou (outils/depot-propre/beta/ du dépôt de développement) part à la publication suivante, sans rien toucher d'autre dans beta/.
 git -C "$P" push -q origin main v1.0.0-beta.2
-(cd "$T/dev" && sed -i 's/beta\.2/beta.3/' js/version.js && echo '/* correctif du bandeau */' >> outils/depot-propre/beta/beta-bandeau.css && G commit -qam "version, bandeau corrigé" && git push -q origin main)
+(cd "$T/dev" && sed -i 's/beta\.2/beta.3/' js/version.js && echo '/* correctif du bandeau */' >> outils/depot-propre/beta/beta-bandeau.css && echo '/* correctif du garde-fou */' >> outils/depot-propre/beta/beta-garde.js && G commit -qam "version, bandeau et garde-fou corrigés" && git push -q origin main)
 SORTIE="$(publier --version 1.0.0-beta.3 --sortie "$T/sortie6")"
-attend "publie avec le bandeau corrigé" "étiquette v1.0.0-beta.3 prêts" "$SORTIE"
+attend "publie avec le bandeau et le garde-fou corrigés" "étiquette v1.0.0-beta.3 prêts" "$SORTIE"
 vrai "beta/ porte le bandeau corrigé (la feuille de style du dépôt de développement, octet pour octet)" cmp -s "$T/dev/outils/depot-propre/beta/beta-bandeau.css" "$P/beta/css/beta-bandeau.css"
 vrai "... avec la version de sa feuille mise à jour dans la page (les huit premiers chiffres de l'empreinte du fichier)" grep -qF "css/beta-bandeau.css?v=$(openssl dgst -sha256 -r "$T/dev/outils/depot-propre/beta/beta-bandeau.css" | cut -c1-8)\"" "$P/beta/index.html"
-vrai "... et beta/ est le bandeau du dépôt de développement + l'étiquette de la bêta, rien d'autre" node "$T/dev/outils/depot-propre/beta-bandeau.mjs" --verifier "$P"
+vrai "beta/ porte le garde-fou corrigé (le script du dépôt de développement, octet pour octet), avec la version de son script mise à jour dans la page" bash -c "cmp -s '$T/dev/outils/depot-propre/beta/beta-garde.js' '$P/beta/js/beta-garde.js' && grep -qF \"js/beta-garde.js?v=\$(openssl dgst -sha256 -r '$T/dev/outils/depot-propre/beta/beta-garde.js' | cut -c1-8)\\\"\" '$P/beta/index.html'"
+vrai "... et beta/ est le bandeau et le garde-fou du dépôt de développement + l'étiquette de la bêta, rien d'autre" node "$T/dev/outils/depot-propre/beta-bandeau.mjs" --verifier "$P"
 vrai "... le reste de beta/ n'a pas bougé (js/version.js est celui de l'étiquette)" test "$(git -C "$P" rev-parse HEAD:beta/js/version.js)" = "$(git -C "$P" rev-parse "$PP_BETA_ETIQUETTE:js/version.js")"
 
 echo

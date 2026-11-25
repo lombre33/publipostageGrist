@@ -9,8 +9,8 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 |---|---|
 | `publier.sh` | Remplace dans un clone du dépôt public les fichiers publiés par ceux du dépôt de développement (le kit de Grist Factory, `kit/`, un sous-module, part en fichiers : css, js et licence, au commit que le dépôt de développement épingle), pose les documents et les captures de `public/`, lance les contrôles, committe et étiquette. |
 | `controles.mjs` | Les contrôles sur l'arbre à publier : une ERREUR empêche le commit, un AVERTISSEMENT se relit. |
-| `beta-bandeau.mjs` | La bêta figée avec son bandeau « version bêta » (consigne 070 de GFS) : `--poser` écrit `beta/` dans le clone public (les fichiers de l'étiquette de la bêta + le bandeau, dans le dossier de travail seulement), `--verifier` et `--ecarts` la relisent (voir « Le bandeau de la bêta »). `publier.sh` le lance à chaque publication ; il ne committe ni ne pousse jamais. |
-| `beta/` | Les deux fichiers du bandeau, `beta-bandeau.js` et `beta-bandeau.css` : ils ne partent pas tels quels, `beta-bandeau.mjs` les pose dans `beta/js/` et `beta/css/` du dépôt public. |
+| `beta-bandeau.mjs` | La bêta figée avec son bandeau « version bêta » (consigne 070 de GFS) et son garde-fou (consigne 102) : `--poser` écrit `beta/` dans le clone public (les fichiers de l'étiquette de la bêta + le bandeau + le garde-fou, dans le dossier de travail seulement), `--verifier` et `--ecarts` la relisent (voir « Le bandeau de la bêta » et « Le garde-fou de la bêta »). `publier.sh` le lance à chaque publication ; il ne committe ni ne pousse jamais. |
+| `beta/` | Les trois fichiers de la bêta qui ne sont pas d'elle : le bandeau (`beta-bandeau.js`, `beta-bandeau.css`) et le garde-fou (`beta-garde.js`). Ils ne partent pas tels quels, `beta-bandeau.mjs` les pose dans `beta/js/` et `beta/css/` du dépôt public. |
 | `essai.sh` | Les essais de ces scripts, de `beta-bandeau.mjs` et de `numeros-carte.mjs` sur de faux dépôts (sans réseau, rien n'est poussé). À relancer après toute modification d'un des quatre. |
 | `numeros-carte.mjs` | Recompte les nombres de `public/CARTE_DU_CODE.md`, en français et en anglais (le volume de `js/`, des extensions et des feuilles de style, les familles, `js/main.js`) d'après le dépôt de développement : `node outils/depot-propre/numeros-carte.mjs` dit ce qui changerait, `--fix` réécrit la carte. |
 | `public/` | Les documents publics : `README.md` (bilingue), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `PATCH_NOTES.md` (la note de version : une puce par fonction, en français puis en anglais), `NOTICE`, `CARTE_DU_CODE.md` (la carte du code, bilingue). `{{VERSION}}`, `{{DATE}}`, `{{DATE_FR}}` et `{{DATE_EN}}` y sont remplacés à la publication. `public/screenshots/` porte les captures du README (des `.png`), posées telles quelles dans `screenshots/` du dépôt public : une capture du même nom est remplacée, les autres sont gardées. |
@@ -61,7 +61,8 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
    `https://grist-factory.github.io/Publipostage-Plus/` charge sans erreur dans un document Grist de test.
    `…/Publipostage-Plus/beta/` montre le bandeau « Attention : widget en version bêta… » (consigne 070 de GFS), et son
    bouton « Découvrir les nouveautés » ouvre `…/Publipostage-Plus/nouveautes.html` dans un nouvel onglet : la même
-   publication porte les deux, aucun envoi à part.
+   publication porte les deux, aucun envoi à part. Elle porte aussi le garde-fou de la bêta (consigne 102) : `…/beta/js/beta-garde.js`
+   existe, et la page `…/beta/index.html` le charge juste avant `js/table-consent.js`.
 
 La sortie du script (`fichiers.txt`, `resume.txt`, `controles.txt` et `publication-X.Y.Z.bundle`, une
 sauvegarde du commit) est écrite dans le dossier donné par `--sortie`, ou dans un dossier temporaire dont le
@@ -100,7 +101,7 @@ chemin est affiché.
 - D'écraser ce que le dépôt public a reçu depuis la dernière étiquette (une contribution acceptée là-bas et
   pas reportée ici) : reporter d'abord le changement dans le dépôt de développement, ou `--ecraser`.
 - Un clone public dont `beta/`, la copie figée de la bêta, manque, n'est pas identique aux fichiers du site de
-  l'étiquette de la bêta (au bandeau près, de n'importe quelle version) ou porte une entrée de trop ; un document de
+  l'étiquette de la bêta (au bandeau et au garde-fou près, de n'importe quelle version) ou porte une entrée de trop ; un document de
   `public/` nommé `beta` (voir « La bêta figée »).
 - De committer quand les contrôles ont une erreur, ou sans identité. Il remet alors le clone public à son
   état d'origine.
@@ -125,7 +126,8 @@ Avec `--beta-figee` (que `publier.sh` donne ; `codeHygiene` non : l'arbre qu'il 
 `beta/index.html` manque, si `beta/js/version.js` n'annonce pas `1.0.0-beta.1` (une copie de la version qui part) ou si la page de `beta/` cite un fichier qui n'y est pas.
 Il lit aussi son bandeau : ERREUR si `beta/js/beta-bandeau.js` ou `beta/css/beta-bandeau.css` manque ou n'est pas, à l'octet près, celui de `outils/depot-propre/beta/` ; si une des deux lignes
 du bandeau n'est pas, une fois, dans `beta/index.html` à la version de son fichier (`?v=`) ; si la feuille n'est pas dans `<head>` ou si le script n'est pas le dernier de la page ; ou si la page que
-son bouton ouvre (`../nouveautes.html`) n'est pas dans l'arbre.
+son bouton ouvre (`../nouveautes.html`) n'est pas dans l'arbre. Et son garde-fou : ERREUR si `beta/js/beta-garde.js` manque ou n'est pas, à l'octet près, celui de `outils/depot-propre/beta/` ; si sa ligne
+n'est pas, une fois, dans `beta/index.html` à la version de son fichier ; ou si elle n'est pas avant `js/table-consent.js` (et après `js/grist-api.js`, qu'il enveloppe).
 Le renvoi à un dossier non publié ne compte pas les lignes de `beta/` : le code de la bêta les cite, et il ne se corrige pas.
 
 Ces contrôles ne tournent pas qu'à l'envoi : à chaque correction, `codeHygiene` (`dev-tests/verify-code-hygiene.mjs`, section 26) assemble dans un dossier temporaire l'arbre que `publier.sh` publierait
@@ -158,8 +160,8 @@ noreply du compte public, jamais l'adresse personnelle) ; pas d'étiquette pour 
 `…/beta/js/version.js` doit montrer `1.0.0-beta.1`, et le widget chargé par cette adresse dans un document Grist de test, Réglages > Crédits, la même version.
 
 `publier.sh` la vérifie avant toute chose (`beta` n'est ni dans `PUBLIES` ni dans les documents de `public/`) : `beta/` doit être là et
-identique, octet pour octet (empreintes git de chaque entrée), à ce que l'étiquette de la bêta porte, sans entrée de plus, au bandeau près (voir plus bas) ; `PP_BETA_ETIQUETTE` nomme une autre étiquette
-(les essais de `essai.sh` s'en servent). Il la recompose ensuite à l'étape 4 (les fichiers de l'étiquette + le bandeau d'aujourd'hui), et `controles.mjs --beta-figee` relit l'arbre préparé, bandeau compris.
+identique, octet pour octet (empreintes git de chaque entrée), à ce que l'étiquette de la bêta porte, sans entrée de plus, au bandeau et au garde-fou près (voir plus bas) ; `PP_BETA_ETIQUETTE` nomme une autre étiquette
+(les essais de `essai.sh` s'en servent). Il la recompose ensuite à l'étape 4 (les fichiers de l'étiquette + le bandeau et le garde-fou d'aujourd'hui), et `controles.mjs --beta-figee` relit l'arbre préparé, bandeau et garde-fou compris.
 Une bêta retouchée à la main, ou prise sur `main` plutôt que sur l'étiquette, est refusée : on la repose telle que l'étiquette la porte. Pour retirer le dossier un jour : `git rm -r beta` côté public, puis retirer le contrôle (la
 vérification de `publier.sh`, `beta-bandeau.mjs`, le bloc « bêta figée » de `controles.mjs`, `--beta-figee` et leurs essais).
 
@@ -175,18 +177,45 @@ ajoute à `beta/` du clone public (`js/beta-bandeau.js`, `css/beta-bandeau.css`)
 (après `main.js`), chacun suivi de `?v=` et des huit premiers chiffres de l'empreinte de son fichier. Rien d'autre de `beta/` ne change.
 
 ```
-node outils/depot-propre/beta-bandeau.mjs --poser <clone public>      (ré)écrit beta/ : les fichiers de l'étiquette + le bandeau (dossier de travail seulement)
-node outils/depot-propre/beta-bandeau.mjs --verifier <clone public>   beta/ du dernier commit est l'étiquette + le bandeau, au bit près (--arbre : celle du dossier de travail)
-node outils/depot-propre/beta-bandeau.mjs --ecarts <clone public>     beta/ est l'étiquette, avec ou sans bandeau (d'une version quelconque), et rien d'autre
+node outils/depot-propre/beta-bandeau.mjs --poser <clone public>      (ré)écrit beta/ : les fichiers de l'étiquette + le bandeau + le garde-fou (dossier de travail seulement)
+node outils/depot-propre/beta-bandeau.mjs --verifier <clone public>   beta/ du dernier commit est l'étiquette + le bandeau + le garde-fou, au bit près (--arbre : celle du dossier de travail)
+node outils/depot-propre/beta-bandeau.mjs --ecarts <clone public>     beta/ est l'étiquette, avec ou sans bandeau ni garde-fou (d'une version quelconque), et rien d'autre
 ```
 
 L'outil ne committe rien et ne pousse jamais. `publier.sh` le lance à chaque publication (`--ecarts` à l'étape 1, `--poser` à l'étape 4) : un seul envoi porte la version 1, `nouveautes.html` et le bandeau, si bien qu'aucune
-adresse ne répond 404 entre deux envois, et un bandeau corrigé dans ce dépôt part à la publication suivante. Il n'y a rien à poser à la main : la copie sans bandeau déjà en ligne reçoit le sien au premier `publier.sh` qui suit.
+adresse ne répond 404 entre deux envois, et un bandeau corrigé dans ce dépôt part à la publication suivante. Il n'y a rien à poser à la main : la copie sans bandeau déjà en ligne reçoit le sien, et son garde-fou, au premier `publier.sh` qui suit.
 Le dépôt public se pousse depuis la machine d'Antoine, jamais depuis le nuage.
 
 Limites à dire (forum) : le retour à la bêta n'est sûr que tant qu'aucun contenu propre à la V1 n'est enregistré dans le modèle (la bêta efface signets, exposants et indices,
 « sinon afficher ») ; chaque personne change l'adresse du widget dans Grist ; les préférences gardées dans le navigateur (`pp_*`) sont partagées avec la V1, même origine ;
 aucun correctif, aucune suite.
+
+### Le garde-fou de la bêta (consigne 102 de GFS)
+
+La bêta ne connaît que les noms d'avant (`Publipostage_Modeles`, `_Commentaires`, `_LiensTables`…). Devant un document que la version 1 a déjà mis à jour (ses tables portent leurs noms anglais :
+`Publipostage_Templates`, `_TableLinks`, `_TemplatePreferences`, `_Comments`, `_Abbreviations`, `_PageFormats`), elle ne trouvait aucune de ses tables, posait la question « Créer les tables du widget dans ce
+document ? » puis les recréait, vides, à côté de celles de la version 1 (sans poser de question quand `Publipostage_UserProbe` y était, la seule table que les deux séries nomment pareil) : deux séries de
+tables dans le même document, chaque version n'en voyant qu'une. Choix d'Antoine du 25/11 (carte « Publier une dernière Beta qui ne recrée pas les anciennes tables ? », réponse « Faire la dernière
+Beta ») : la bêta reste sans correctif, avec **un garde-fou en plus**, le troisième fichier de ce dossier.
+
+`outils/depot-propre/beta/beta-garde.js` (sa couche pleine page prend ses règles dans `beta-bandeau.css`) est posé par `beta-bandeau.mjs` en `beta/js/beta-garde.js`, avec **une** ligne de plus dans `beta/index.html` :
+juste avant `js/table-consent.js`, donc après `js/grist-api.js` (qu'il enveloppe) et avant le démarrage anticipé de la bêta (la première lecture, la première création, la première question), chargé avec
+`?v=` et les huit premiers chiffres de l'empreinte de son fichier. Il n'enveloppe que trois appels que la bêta fait déjà, sans rien changer d'autre :
+
+- `grist.docApi.listTables` : la liste rendue est inchangée, mais dès qu'elle porte un nom anglais, le garde-fou se déclenche ;
+- `grist.docApi.applyUserActions` : une fois déclenché, toute écriture est refusée par l'erreur `tablesDeclined`, celle d'une personne qui répond « Ne pas créer » (les gestes de la bêta s'arrêtent sans
+  message d'échec) ; avant, la création d'une table du widget relit d'abord la liste (un autre onglet a pu poser les noms anglais depuis la dernière lecture) ;
+- `GristAPI.setTableConsent` : la question « Créer les tables du widget ? » reçoit « non » d'avance, sans fenêtre.
+
+Une couche pleine page (`role="alertdialog"`, tout le reste de la page `inert`, y compris ce que la bêta ajoute ensuite) dit « Ce document a été mis à jour par une version plus récente : ouvrez la dernière
+version. » (en anglais : « This document was updated by a more recent version: open the latest version. »), puis donne l'adresse de la dernière version (le dossier au-dessus de `beta/`), dans la langue de la bêta
+(`I18n.getLang()`, suivie quand la personne la change). Devant un document aux noms d'avant, ou neuf, rien ne change : la bêta est la bêta.
+
+Le garde-fou n'est pas de la bêta : l'étiquette ne le porte pas, la publication le pose à chaque fois, avec le bandeau. La bêta déjà en ligne le reçoit au premier `publier.sh` qui suit (rien à poser à la main) ; `beta/js/beta-garde.js`
+doit alors exister sur le site. Ce que le garde-fou ne fait pas : il ne répare rien dans un document qui porte déjà les deux séries de tables (le bouton « Réunir » de la version 1 s'en charge), et il ne protège
+que les personnes qui ouvrent la bêta APRÈS la publication.
+Essais : `node dev-tests/run-headless.mjs betaGuardMouse` (la bêta composée comme la publication la compose, avec le faux Grist, 139 vérifications ; échoue sur la bêta d'avant), `betaBannerMouse` (la composition
+compte trois fichiers) et `bash outils/depot-propre/essai.sh` (la composition, les contrôles, la page sans ligne `js/table-consent.js`).
 
 ## Pourquoi un commit de plus
 

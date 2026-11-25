@@ -10,11 +10,12 @@
 #
 # Ce que fait le script, dans l'ordre :
 #   1. vérifie que le dépôt de développement est propre et sur origin/main, et que le clone public est propre et à jour, avec sa copie figée de la bêta (beta/, posée à la main une fois) identique
-#      aux fichiers du site de l'étiquette de la bêta (v1.0.0-beta.1, ou celle que PP_BETA_ETIQUETTE nomme), avec ou sans le bandeau de la consigne 070 de GFS, et rien d'autre ;
+#      aux fichiers du site de l'étiquette de la bêta (v1.0.0-beta.1, ou celle que PP_BETA_ETIQUETTE nomme), avec ou sans le bandeau de la consigne 070 de GFS et le garde-fou de la 102, et rien d'autre ;
 #   2. refuse toute entrée de la racine du dépôt de développement qu'il ne connaît pas (PUBLIES ou EXCLUS ci-dessous) : un nouveau dossier ne part jamais par oubli ;
 #   3. refuse d'écraser des changements faits dans le dépôt public depuis la dernière étiquette vX.Y.Z (contribution acceptée là-bas et pas reportée ici) ;
 #   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent), puis recompose beta/ :
-#      les fichiers de l'étiquette de la bêta, sans correctif, et le bandeau « version bêta » (outils/depot-propre/beta/, posé par beta-bandeau.mjs) : un seul envoi porte la version 1 et le bandeau ;
+#      les fichiers de l'étiquette de la bêta, sans correctif, le bandeau « version bêta » et le garde-fou « document mis à jour par une version plus récente » (outils/depot-propre/beta/, posés par beta-bandeau.mjs) :
+#      un seul envoi porte la version 1, le bandeau et le garde-fou ;
 #      le kit de Grist Factory (kit/, un sous-module du dépôt de développement) part en fichiers, ceux du commit que le dépôt de développement épingle (css, js et la licence),
 #      sans .gitmodules : le dépôt public n'a pas de sous-module ; les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
 #   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, PATCH_NOTES, NOTICE, CARTE_DU_CODE),
@@ -111,8 +112,9 @@ git -C "$PROPRE" fetch --quiet --tags origin main || die "git fetch origin main 
 
 # La bêta figée : beta/ du dépôt public garde, à une adresse à part (…/Publipostage-Plus/beta/), les fichiers du site de la bêta pour les personnes dont un ancien modèle ne se rouvre pas bien dans
 # la version courante, SANS correctif ; la consigne 070 de GFS y ajoute un bandeau « version bêta » (js/beta-bandeau.js, css/beta-bandeau.css et deux lignes de index.html : outils/depot-propre/beta/,
-# posé par beta-bandeau.mjs). beta/ est posée à la main une fois (outils/depot-propre/README.md, « La bêta figée ») ; ce script la vérifie ici, puis la recompose à l'étape 4 : l'étiquette de la bêta + le
-# bandeau d'aujourd'hui. Elle doit être là, et identique à ce que l'étiquette de la bêta porte (le bandeau, de la version qu'il avait, mis à part) : une copie prise ailleurs (de main, par exemple) ou
+# posé par beta-bandeau.mjs), la 102 un garde-fou (js/beta-garde.js et une ligne de index.html : devant un document que la version 1 a déjà mis à jour, la bêta n'écrit plus rien et ne recrée pas les anciennes tables).
+# beta/ est posée à la main une fois (outils/depot-propre/README.md, « La bêta figée ») ; ce script la vérifie ici, puis la recompose à l'étape 4 : l'étiquette de la bêta + le
+# bandeau et le garde-fou d'aujourd'hui. Elle doit être là, et identique à ce que l'étiquette de la bêta porte (le bandeau et le garde-fou, de la version qu'ils avaient, mis à part) : une copie prise ailleurs (de main, par exemple) ou
 # retouchée à la main ferait croire à qui la garde qu'il a la bêta telle quelle. Un dossier (ou un fichier) se compare par son empreinte git : mêmes octets et mêmes droits, ou rien.
 BETA_ETIQUETTE="${PP_BETA_ETIQUETTE:-v1.0.0-beta.1}"
 git -C "$PROPRE" rev-parse -q --verify "refs/tags/$BETA_ETIQUETTE" >/dev/null \
@@ -198,9 +200,9 @@ fi
 MODIFIE=1
 for x in "${PUBLIES[@]}"; do rm -rf "${PROPRE:?}/$x"; done
 git -C "$DEV" archive --format=tar HEAD "${PUBLIES[@]}" | tar -x -C "$PROPRE"
-# La bêta figée est recomposée à chaque publication : les fichiers de l'étiquette de la bêta et le bandeau de outils/depot-propre/beta/ (un bandeau modifié dans le dépôt de développement se pose à la
-# publication suivante ; rien d'autre de beta/ ne change jamais). nouveautes.html, que le bouton du bandeau ouvre, part dans la même publication : un seul envoi, aucune adresse qui répond 404.
-node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" >/dev/null || die "le bandeau n'a pas pu être posé dans beta/ (beta-bandeau.mjs --poser, voir le message au-dessus)"
+# La bêta figée est recomposée à chaque publication : les fichiers de l'étiquette de la bêta, le bandeau et le garde-fou de outils/depot-propre/beta/ (un bandeau ou un garde-fou modifié dans le dépôt de développement
+# se pose à la publication suivante ; rien d'autre de beta/ ne change jamais). nouveautes.html, que le bouton du bandeau ouvre, part dans la même publication : un seul envoi, aucune adresse qui répond 404.
+node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" >/dev/null || die "le bandeau et le garde-fou n'ont pas pu être posés dans beta/ (beta-bandeau.mjs --poser, voir le message au-dessus)"
 # `git archive` ne descend pas dans un sous-module (il laisse un dossier vide) : le kit vient de son propre commit épinglé.
 mkdir -p "$PROPRE/kit"
 git -C "$DEV/kit" archive --format=tar "$KIT_COMMIT" "${KIT_PARTIES[@]}" | tar -x -C "$PROPRE/kit"

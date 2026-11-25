@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Le bandeau de la bêta figée (outils/depot-propre/beta/beta-bandeau.js et .css, posés dans beta/ par outils/depot-propre/beta-bandeau.mjs ; consigne 070 de GFS) à la VRAIE souris, dans le panneau de 700x400 :
 // « Attention : widget en version bêta. Nous vous conseillons de migrer vers la version 1.1. », le bouton « Découvrir les nouveautés » (nouveautes.html dans un nouvel onglet) et une croix.
-// La bêta est COMPOSÉE comme la publication la compose (la copie figée 1.0.0-beta.1 + les deux fichiers du bandeau + deux lignes d'index.html), servie avec la V1 à côté (/Publipostage-Plus/beta/ et
+// La bêta est COMPOSÉE comme la publication la compose (la copie figée 1.0.0-beta.1 + les deux fichiers du bandeau + le garde-fou de la consigne 102 + trois lignes d'index.html), servie avec la V1 à côté (/Publipostage-Plus/beta/ et
 // /Publipostage-Plus/, comme le site public), SOUS SA VRAIE POLITIQUE DE SÉCURITÉ (pas de `bypassCSP`), avec le faux Grist de dev-tests/grist-stub.js et le miroir hors ligne des CDN. La copie figée vient du
 // commit de développement dont elle est la copie (ddea35d1, 05/10, version 1.0.0-beta.1), lue par `git archive` ; un dépôt qui n'a pas cet historique donne le dossier d'une bêta SANS bandeau dans PP_BETA_SOURCE.
 // Ce que ça vérifie :
-//  0) la bêta composée est la bêta figée + css/beta-bandeau.css + js/beta-bandeau.js + deux lignes d'index.html : rien d'autre ne change, rien ne manque ;
+//  0) la bêta composée est la bêta figée + css/beta-bandeau.css + js/beta-bandeau.js + js/beta-garde.js + trois lignes d'index.html : rien d'autre ne change, rien ne manque (le garde-fou a son propre essai : verify-beta-guard.mjs) ;
 //  1) cinq ouvertures à 700x400 : français clair (système clair), anglais sombre (système sombre), français avec le sombre CHOISI (pp_theme) sur un système clair, anglais avec le clair choisi sur un système
 //     sombre, français sombre du système : le bandeau est le premier élément de la page, une seule fois, avec EXACTEMENT les textes de la consigne dans la langue du widget (français et anglais), le bouton
 //     qui pointe ../nouveautes.html?lang=fr|en en `_blank` avec `noopener noreferrer`, la croix, aucune icône emoji ; il est entier dans le panneau, en haut, sur toute la largeur, son texte ne sort pas ;
@@ -402,8 +402,8 @@ try {
   const changed = frozen.filter(file => composed.includes(file) && Buffer.compare(readFileSync(join(SRC, file)), readFileSync(join(SITE, 'beta', file))) !== 0);
   const frozenVersion = (/PP_VERSION\s*=\s*'([^']+)'/.exec(readFileSync(join(SRC, 'js', 'version.js'), 'utf8')) || [])[1];
   check('la copie figée est la bêta 1.0.0-beta.1 (js/version.js), sans un fichier du bandeau', frozenVersion === '1.0.0-beta.1' && !frozen.includes(tool.BANDEAU_JS) && !frozen.includes(tool.BANDEAU_CSS), { version: frozenVersion });
-  check('la bêta composée = la bêta figée + css/beta-bandeau.css + js/beta-bandeau.js + deux lignes d\'index.html : rien d\'autre ne change, rien ne manque',
-    JSON.stringify(added) === JSON.stringify([tool.BANDEAU_CSS, tool.BANDEAU_JS]) && missing.length === 0 && JSON.stringify(changed) === '["index.html"]'
+  check('la bêta composée = la bêta figée + css/beta-bandeau.css + js/beta-bandeau.js + js/beta-garde.js + trois lignes d\'index.html : rien d\'autre ne change, rien ne manque',
+    JSON.stringify(added) === JSON.stringify([tool.BANDEAU_CSS, tool.BANDEAU_JS, tool.GARDE_JS].sort()) && missing.length === 0 && JSON.stringify(changed) === '["index.html"]'
       && tool.sansBandeau(readFileSync(join(SITE, 'beta', 'index.html'), 'utf8')) === readFileSync(join(SRC, 'index.html'), 'utf8'), { added, missing, changed });
 
   await serve();

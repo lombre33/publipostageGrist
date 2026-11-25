@@ -1,7 +1,8 @@
 /* Le bandeau de la bêta figée (consigne 070 de Grist Factory Suite, js/beta-bandeau.js) : ajouté à la bêta à la publication, avec une ligne dans index.html ; le reste de beta/ est celui de
    l'étiquette v1.0.0-beta.1. Rien que des jetons de css/style.css de la bêta : clair, sombre choisi et sombre du système suivent le thème de la bêta, et le texte garde 4,5:1 au moins
    sur son fond dans les trois (texte sur --accent-soft, texte blanc sur --accent-solid). Il est le premier enfant de <body>, une colonne : il prend sa hauteur et #app, qui rétrécit
-   de la même hauteur (min-height: 0), la barre du haut et le menu des modèles restent entiers dessous. Une ligne tant que la place le permet, le texte passe ensuite à la ligne. */
+   de la même hauteur (min-height: 0), la barre du haut et le menu des modèles restent entiers dessous. Une ligne tant que la place le permet, le texte passe ensuite à la ligne.
+   Cette feuille porte aussi la couche du garde-fou (consigne 102, js/beta-garde.js) : voir tout en bas. */
 #pp-beta-banner {
   flex: 0 0 auto;
   box-sizing: border-box;
@@ -62,3 +63,38 @@
   #pp-beta-banner .pp-beta-banner-link { order: 3; }
 }
 @media print { #pp-beta-banner { display: none; } }
+
+/* Le garde-fou (consigne 102, js/beta-garde.js) : devant un document qu'une version plus récente a déjà mis à jour, une couche pleine page recouvre la bêta et dit d'ouvrir la dernière version ;
+   la bêta ne crée ni n'écrit plus rien dessous. Mêmes jetons que le bandeau (clair, sombre choisi et sombre du système) : le texte garde 4,5:1 au moins sur son fond dans les trois. */
+#pp-beta-guard {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2147483000;
+  display: flex;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font-ui);
+}
+#pp-beta-guard .pp-beta-guard-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 460px;
+  margin: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  outline: none;
+}
+#pp-beta-guard .pp-beta-guard-lead { margin: 0 0 10px; font-size: 16px; line-height: 1.35; font-weight: 700; }
+#pp-beta-guard .pp-beta-guard-text { margin: 0 0 8px; color: var(--text-muted); }
+#pp-beta-guard .pp-beta-guard-link { color: var(--accent-ink); font-weight: 600; overflow-wrap: anywhere; }
+#pp-beta-guard .pp-beta-guard-link:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+@media print { #pp-beta-guard { display: none; } }

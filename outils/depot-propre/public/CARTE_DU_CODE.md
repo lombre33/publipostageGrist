@@ -423,7 +423,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`, `css/gfs-ambiance.css
 ne charge rien d'eux. `kit/` est le kit de Grist Factory, repris tel quel avec sa licence (des feuilles de style et des
 modules que ses applications se partagent) : le widget n'en importe que `ambiance-message.js`, `ambiance-pose.js`, `correcteurs-message.js`, `correcteurs-pose.js` et `violations-pose.js`
 (qui importent `once.js` et, pour la dernière, `violations-message.js`), et seulement quand GFS l'héberge. `beta/` est la bêta 1.0.0-beta.1 telle qu'elle a été
-publiée, gardée à son adresse (voir le [README](README.md)), avec un bandeau en plus (`beta/js/beta-bandeau.js` et `beta/css/beta-bandeau.css`, que sa page `beta/index.html` charge) : cette carte décrit la version courante, pas elle. Le
+publiée, gardée à son adresse (voir le [README](README.md)), avec un bandeau et un garde-fou en plus (`beta/js/beta-bandeau.js`, `beta/css/beta-bandeau.css` et `beta/js/beta-garde.js`, que sa page `beta/index.html` charge : le garde-fou lui fait refuser d'écrire dans un document que la version courante a déjà mis à jour) : cette carte décrit la version courante, pas elle. Le
 dépôt de développement du projet garde en plus ses tests, ses outils de publication et ses notes de conception, qui
 ne sont pas publiés ici.
 
@@ -908,7 +908,7 @@ the documents' font.
 `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `PATCH_NOTES.md`, `NOTICE`, `LICENSE` and this file. The page
 loads none of them. `kit/` is Grist Factory's kit, taken as it is with its licence (style sheets and modules that its
 apps share): the widget imports only `ambiance-message.js`, `ambiance-pose.js`, `correcteurs-message.js`, `correcteurs-pose.js` and `violations-pose.js`
-(which import `once.js` and, for the last one, `violations-message.js`), and only when GFS hosts it. `beta/` is the 1.0.0-beta.1 beta as it was published, kept at its address (see the [README](README.md)), with a banner added (`beta/js/beta-bandeau.js` and `beta/css/beta-bandeau.css`, which its page `beta/index.html` loads):
+(which import `once.js` and, for the last one, `violations-message.js`), and only when GFS hosts it. `beta/` is the 1.0.0-beta.1 beta as it was published, kept at its address (see the [README](README.md)), with a banner and a safeguard added (`beta/js/beta-bandeau.js`, `beta/css/beta-bandeau.css` and `beta/js/beta-garde.js`, which its page `beta/index.html` loads: the safeguard makes it refuse to write into a document that the current version has already updated):
 this map describes the current version, not that one. The project's development repository also keeps its tests, its
 publication tools and its design notes, which are not published here.
 
