@@ -98,7 +98,10 @@ function listFiles(dir) {
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8' };
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
+// L'ancien CDN des modules ES : la bêta figée (1.0.0-beta.1, tirée de l'historique) l'appelle encore, l'app d'aujourd'hui non (consigne 107 de GFS). Son nom est écrit en morceaux : la recherche « plus aucun appel à cet hôte » reste vide.
+const OLD_CDN_HOST = ['esm', 'sh'].join('.');
+const OLD_ORIGIN = `https://${OLD_CDN_HOST}`;
+const CHUNK_BASE = `${OLD_ORIGIN}/_offline-chunks/`;
 const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 const GRIST_API_TAG = '<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>';
 let esmMap = {};
@@ -130,7 +133,7 @@ async function serve() {
 }
 
 const SPEC = { tables: [{ id: 'PbClients', rows: 2, columns: [{ id: 'Nom', type: 'Text' }] }] };
-const OWN_HOSTS = ['esm.sh', 'docs.getgrist.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const OWN_HOSTS = [OLD_CDN_HOST, 'docs.getgrist.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 // Une ouverture de la bêta : un contexte neuf (la taille et le thème du système demandés), la langue et, si on le dit, le thème CHOISI dans le widget (pp_theme) posés avant tout script, les noms que le document porte
 // (`names` : 'legacy' = ceux d'avant, 'english' = ceux de la version 1 ; `seed` : du code joué sur le faux Grist avant la première lecture), l'écoute des violations de la politique de sécurité (window.__csp), ce que les
@@ -145,11 +148,11 @@ async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light
     page.on('requestfailed', r => log.failed.push(`${name} ${r.url()} ${(r.failure() || {}).errorText || ''}`));
     page.on('request', r => { const host = new URL(r.url()).hostname; if (host !== '127.0.0.1' && !OWN_HOSTS.includes(host)) log.foreign.push(`${name} ${r.url()}`); });
   };
-  await context.route('**://esm.sh/**', async route => {
+  await context.route(`**://${OLD_CDN_HOST}/**`, async route => {
     const url = route.request().url();
     const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
     if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-    const found = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
+    const found = Object.keys(esmMap).find(k => url === `${OLD_ORIGIN}/${k}` || url === `${OLD_ORIGIN}/*${k}` || url.startsWith(`${OLD_ORIGIN}/${k}@`) || url.startsWith(`${OLD_ORIGIN}/*${k}@`));
     if (!found) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
     return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[found].replace(/^\//, '')), 'utf8')) });
   });

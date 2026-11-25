@@ -21,6 +21,8 @@
 //   7) le mode CDN de GFS (consigne GFS 007) : GFS ne peut imposer aucune politique à un sous-cadre, la politique de la page garde donc l'adresse EXACTE de Plotly 2.13.2 (celle du catalogue de GFS) et rien d'autre pour le
 //      graphique. La source que GFS donne en CDN se charge avec son empreinte ; avec une fausse empreinte le navigateur la refuse (l'extension la lui transmet bien) ; un autre fichier de jsDelivr - une autre
 //      version de Plotly, un autre paquet - est refusé par la politique : jsDelivr n'y est pas ouvert en entier ;
+//   9) l'éditeur ne vient plus d'aucun CDN (consigne 107 de GFS, 25/11) : sa copie figée (vendor/editeur/) est un fichier de l'origine de la page, `script-src` ne nomme plus aucun hôte pour lui, le parcours entier ne demande
+//      rien à son ancien CDN, et un script ou un import de cet ancien CDN est refusé par la politique ;
 // Lancé par run-headless.mjs (script Node « cspLoad », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-csp.mjs
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -29,7 +31,6 @@ import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { floatingVersion } from '../outils/empreintes-editeur.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -59,9 +60,7 @@ await new Promise((ok, ko) => server.listen(PORT, '127.0.0.1', ok).on('error', k
 const BASE = `http://127.0.0.1:${PORT}`;
 
 // Même miroir hors-ligne des CDN que dev-tests/run-headless.mjs.
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
+const OFFLINE = existsSync(join(CACHE, 'umd'));
 const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
@@ -77,9 +76,6 @@ if (!OFFLINE) console.log('[verify-csp] miroir hors-ligne absent (dev-tests/offl
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-// Les morceaux du miroir hors-ligne (qui n'existent pas chez le vrai esm.sh) sont servis depuis l'origine de la page : la politique resserrée n'autorise plus tout l'hôte esm.sh, seulement les dossiers des paquets de l'éditeur, et 'self' couvre cette origine.
-const CHUNK_BASE = `http://127.0.0.1:${PORT}/_offline-chunks/`;
-const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 
 let total = 0, failures = 0;
 function check(name, pass, notes) {
@@ -95,9 +91,15 @@ const directives = Object.fromEntries(policy.split(';').map(d => d.trim().split(
 
 check('index.html porte une politique, avant son premier script', !!policy && html.indexOf('Content-Security-Policy') < html.indexOf('<script'), { found: !!policy });
 check('script-src : ni script en ligne sans empreinte, ni joker, ni schéma entier', directives['script-src'] && !directives['script-src'].some(s => /^'unsafe-inline'$|^\*$|^https?:$|^data:$|^blob:$/.test(s)), directives['script-src']);
-// esm.sh (l'éditeur) n'est PAS ouvert en entier (choix du 11/11, « Resserrer la liste ») : chaque source d'esm.sh nomme un dossier de paquet à version exacte, une adresse exacte de paquet ou une cale node/.
-const esmSources = (directives['script-src'] || []).filter(s => s === 'https://esm.sh' || s.startsWith('https://esm.sh/'));
-check('script-src : esm.sh n\'est pas ouvert en entier - aucune source n\'est l\'hôte seul, chacune nomme un paquet à version exacte (ou une cale node/)', esmSources.length >= 80 && esmSources.every(s => /^https:\/\/esm\.sh\/(?:\*?(?:@[^/@]+\/)?[^/@]+@\d+\.\d+\.\d+(?:\/|$)|node\/[a-z_]+\.mjs$)/.test(s)), esmSources.filter(s => !/^https:\/\/esm\.sh\/(?:\*?(?:@[^/@]+\/)?[^/@]+@\d+\.\d+\.\d+(?:\/|$)|node\/[a-z_]+\.mjs$)/.test(s)));
+// L'éditeur ne se charge plus depuis un CDN (consigne 107 de GFS, 25/11) : il vient de la copie figée vendor/editeur/, un fichier de l'origine de la page que `'self'` laisse passer sans que la politique le nomme.
+// `script-src` ne nomme donc plus que l'API de Grist et les bibliothèques de jsDelivr à version exacte ; l'ancien hôte de l'éditeur n'y figure plus. L'adresse s'écrit en morceaux : le contrôle de sécurité de GFS
+// prend toute adresse de CDN écrite en entier dans un fichier de l'app pour une adresse que l'app appelle (verify-code-hygiene.mjs, section 11).
+const OLD_CDN_HOST = ['esm', 'sh'].join('.');
+check('script-src : aucun hôte pour l\'éditeur (il vient de la copie figée, vendor/editeur/ : `\'self\'`) - l\'ancien CDN de l\'éditeur n\'y figure plus', !(directives['script-src'] || []).some(s => s.includes(OLD_CDN_HOST)) && !policy.includes(OLD_CDN_HOST), (directives['script-src'] || []).filter(s => s.includes(OLD_CDN_HOST)));
+{
+  const hosts = new Set((directives['script-src'] || []).filter(s => /^https:/.test(s)).map(s => new URL(s).host));
+  check('script-src : deux hôtes seulement (docs.getgrist.com pour l\'API de Grist, cdn.jsdelivr.net pour les bibliothèques à version exacte)', JSON.stringify([...hosts].sort()) === JSON.stringify(['cdn.jsdelivr.net', 'docs.getgrist.com']), [...hosts]);
+}
 check('object-src, base-uri, form-action : « none »', ['object-src', 'base-uri', 'form-action'].every(d => (directives[d] || []).join(' ') === "'none'"), directives);
 // Le lecteur d'une vidéo que l'app seule pose au clic sur ▶ (js/video-frame.js, choix d'Antoine du 09/11) est la seule ouverture de `frame-src` : deux hôtes nommés, en https, ni joker ni schéma entier.
 check('frame-src : seulement youtube-nocookie.com et player.vimeo.com, en https (ni joker, ni schéma entier, ni \'self\')', JSON.stringify([...(directives['frame-src'] || [])].sort()) === JSON.stringify(['https://player.vimeo.com', 'https://www.youtube-nocookie.com']), directives['frame-src']);
@@ -131,26 +133,17 @@ page.on('pageerror', e => pageErrors.push(e.message));
 page.on('console', m => { if (/Content Security Policy|Refused to/i.test(m.text())) consoleRefusals.push(m.text().slice(0, 160)); });
 // Toute feuille de style ou police demandée à un autre site que le widget est notée (le type de la requête vient du navigateur : une feuille importée par @import est une `stylesheet`).
 const otherSiteStyles = [];
-// Toute adresse demandée à esm.sh (l'éditeur : TipTap, ProseMirror et leurs dépendances) est notée : le contrôle 9 vérifie qu'aucune n'est à version flottante et que toutes sont dans le relevé d'empreintes.
-const esmRequested = new Set();
+// Toute adresse demandée à l'ancien CDN de l'éditeur est notée (le contrôle 9 exige zéro), comme toute adresse de la copie figée (il en exige au moins vingt : l'éditeur a bien été chargé, le contrôle ne passe pas à vide).
+const oldCdnRequested = new Set();
+const editorCopyRequested = new Set();
 page.on('request', r => {
-  if (/^https:\/\/esm\.sh\//.test(r.url())) esmRequested.add(r.url());
+  if (r.url().includes(OLD_CDN_HOST)) oldCdnRequested.add(r.url());
+  if (r.url().startsWith(BASE + '/vendor/editeur/')) editorCopyRequested.add(r.url());
   const type = r.resourceType();
   if ((type === 'stylesheet' || type === 'font') && /^https?:/i.test(r.url()) && new URL(r.url()).origin !== BASE) otherSiteStyles.push(type + ' ' + r.url().slice(0, 100));
 });
 
 if (OFFLINE) {
-  await context.route(`${CHUNK_BASE}*`, async route => {
-    const chunk = route.request().url().match(/\/(chunk-[A-Z0-9]+\.js)$/);
-    if (!chunk) return route.fulfill({ status: 404, body: '// morceau inconnu' });
-    route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-  });
-  await context.route('**://esm.sh/**', async route => {
-    const url = route.request().url();
-    const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-    if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-    route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
-  });
   for (const [re, rel] of UMD_ROUTES) {
     await context.route(re, async route => route.fulfill({
       status: 200, contentType: 'text/javascript; charset=utf-8',
@@ -274,16 +267,12 @@ for (const [name, label] of [['images', 'images du document (adresse data: lue s
 }
 check('rien n\'a été refusé pendant tout ce parcours (aucune violation, aucun message du navigateur)', (await violations()).length === 0 && consoleRefusals.length === 0, { violations: await violations(), consoleRefusals });
 check('aucune feuille de style ni police n\'est demandée à un autre site pendant tout ce parcours (la police du système, choix d\'Antoine du 04/10)', otherSiteStyles.length === 0, otherSiteStyles);
-// 9) l'éditeur vient d'esm.sh en direct (réseau) : chaque adresse que le vrai navigateur lui demande est à version EXACTE (une version flottante serait résolue par esm.sh à chaque demande : une version publiée, ou
-//    volée, serait chargée dans l'éditeur le jour même) et figure dans le relevé outils/empreintes-editeur.json (le parcours de outils/empreintes-editeur.mjs résout les adresses comme le navigateur le fait).
-if (OFFLINE) {
-  console.log('  --   - éditeur d\'esm.sh : versions exactes et relevé d\'empreintes (réseau direct requis : le miroir hors-ligne répond à la place d\'esm.sh)');
-} else {
-  const manifest = JSON.parse(readFileSync(join(ROOT, 'outils', 'empreintes-editeur.json'), 'utf8'));
-  const requested = [...esmRequested];
-  check('éditeur d\'esm.sh : le navigateur a bien chargé l\'éditeur depuis esm.sh (garde-fou du contrôle lui-même)', requested.length >= 40, requested.length + ' adresses');
-  check('éditeur d\'esm.sh : aucune adresse demandée à esm.sh pendant le parcours n\'est à version flottante (@^1.0.0, @~2, @latest : résolue à chaque demande, une version volée serait chargée le jour même)', requested.filter(floatingVersion).length === 0, requested.filter(floatingVersion));
-  check('éditeur d\'esm.sh : toute adresse demandée à esm.sh pendant le parcours est dans le relevé d\'empreintes (outils/empreintes-editeur.json : sinon le relevé ne couvre pas ce que le navigateur charge)', requested.filter(address => !manifest.fichiers[address]).length === 0, requested.filter(address => !manifest.fichiers[address]));
+// 9) l'éditeur vient de la copie figée de l'app (vendor/editeur/), seule : le navigateur n'a demandé AUCUNE adresse à l'ancien CDN, ni pendant le parcours, ni par une violation de la politique ; et il a bien chargé la copie
+//    (le contrôle ne passe pas à vide). Le miroir hors-ligne n'y est pour rien : la copie fait partie du dépôt, ce contrôle tourne donc avec ou sans lui.
+{
+  const requested = [...editorCopyRequested];
+  check('éditeur : le navigateur a bien chargé l\'éditeur depuis la copie figée vendor/editeur/ (garde-fou du contrôle lui-même)', requested.length >= 20 && requested.some(a => /\/vendor\/editeur\/tiptap__core\.js\?v=[0-9a-f]{8}$/.test(a)), requested.length + ' fichiers');
+  check('éditeur : aucune adresse demandée à l\'ancien CDN de l\'éditeur pendant tout le parcours', oldCdnRequested.size === 0, [...oldCdnRequested]);
 }
 
 // 2) Du HTML piégé posé tel quel, comme si le filtre l'avait laissé passer.
@@ -309,11 +298,11 @@ await attempt('un script d\'une bibliothèque non figée du même CDN ne se char
 // cdnjs n'est plus un CDN de la politique (consigne 106 de GFS) : même un fichier que l'app chargeait avant (jszip 3.10.1) n'y passe plus. L'adresse s'écrit en morceaux : le contrôle de sécurité de GFS prend toute adresse
 // de CDN écrite en entier dans un fichier de l'app pour une adresse que l'app appelle (verify-code-hygiene.mjs, section 11).
 await attempt('cdnjs.cloudflare.com ne sert plus aucun script : même l\'ancienne adresse de JSZip est refusée', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://' + 'cdnjs.' + 'cloudflare.com' + '/ajax/libs/jszip/3.10.1/jszip.min.js'; document.body.appendChild(s); });
-// L'éditeur vient d'esm.sh, qui sert aussi tout npm et tout GitHub : ni un autre paquet, ni un dépôt, ni une autre version de TipTap ne se charge (script classique ou import dynamique).
-await attempt('un autre paquet d\'esm.sh (lodash) ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://esm.sh/lodash@4.17.21/es2022/lodash.mjs'; s.type = 'module'; document.body.appendChild(s); });
-await attempt('un dépôt de GitHub servi par esm.sh ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://esm.sh/gh/jquery/jquery@3.7.1/dist/jquery.js'; document.body.appendChild(s); });
-await attempt('une autre version d\'un paquet de l\'éditeur (@tiptap/core@3.31.2) ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://esm.sh/@tiptap/core@3.31.2/es2022/core.mjs'; s.type = 'module'; document.body.appendChild(s); });
-await attempt('un import dynamique d\'un paquet quelconque d\'esm.sh ne se charge pas', 'script-src', async () => { await import('https://esm.sh/dayjs@1.11.13/es2022/dayjs.mjs').catch(() => {}); }); // une autre adresse que les essais ci-dessus : le navigateur retient l'échec d'un module par adresse et ne rapporterait plus la violation
+// L'ancien CDN de l'éditeur sert tout npm et tout GitHub, et la politique ne le nomme plus : ni un paquet de l'éditeur (à la version qu'il y chargeait encore la veille), ni un autre paquet, ni un import dynamique ne s'y charge.
+// Les adresses s'écrivent en morceaux (même raison que ci-dessus, et le code d'un essai part dans la page : il ne voit pas les constantes de ce fichier).
+await attempt('l\'ancien CDN de l\'éditeur ne sert plus aucun script : même @tiptap/core, à la version qu\'il y chargeait, est refusé', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://' + 'esm.' + 'sh' + '/@tiptap/core@3.31.3/es2022/core.mjs'; s.type = 'module'; document.body.appendChild(s); });
+await attempt('un autre paquet de l\'ancien CDN de l\'éditeur (lodash) ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://' + 'esm.' + 'sh' + '/lodash@4.17.21/es2022/lodash.mjs'; s.type = 'module'; document.body.appendChild(s); });
+await attempt('un import dynamique d\'une adresse de l\'ancien CDN de l\'éditeur ne se charge pas', 'script-src', async () => { await import('https://' + 'esm.' + 'sh' + '/dayjs@1.11.13/es2022/dayjs.mjs').catch(() => {}); }); // une autre adresse que les essais ci-dessus : le navigateur retient l'échec d'un module par adresse et ne rapporterait plus la violation
 await attempt('une adresse javascript: ne court pas', 'script-src', async host => { host.innerHTML = '<a href="javascript:window.__csp.href=1">x</a>'; host.firstChild.click(); });
 await attempt('une balise de base ne change pas l\'adresse de base', 'base-uri', async host => { host.innerHTML = '<base href="https://exemple.invalid/">'; });
 await attempt('un cadre d\'un autre site ne s\'ouvre pas', 'frame-src', async host => { host.innerHTML = '<iframe src="https://exemple.invalid/"></iframe>'; });

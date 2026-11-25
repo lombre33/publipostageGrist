@@ -90,13 +90,13 @@ if (has('.gitmodules')) fail('.gitmodules présent : le dépôt public n\'a pas 
   if (cited.length) for (const file of KIT_FILES) if (!has(file)) fail(`${cited.join(', ')} cite le kit, mais ${file} est absent de l'arbre (publier.sh doit y poser le kit : css, js et LICENSE)`);
 }
 
-// La copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS) : si la page en cite des modules (sa carte « gfs-carte-copie »), le dossier part avec elle, avec ses licences et son manifeste - sinon la case
-// « Éditeur hors ligne » de Réglages rendrait une page sans éditeur.
+// La copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, son SEUL mode depuis la consigne 107) : si la carte d'importation de la page en cite des modules, le dossier part avec elle, avec ses licences et son manifeste -
+// sinon la page n'aurait pas d'éditeur.
 if (has('index.html')) {
-  const copyMap = (read('index.html').match(/<script type="application\/json" id="gfs-carte-copie">([\s\S]*?)<\/script>/) || [])[1];
+  const copyMap = (read('index.html').match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1];
   if (copyMap !== undefined) {
     let cited = [];
-    try { cited = [...new Set(Object.values(JSON.parse(copyMap).imports).filter(address => address.startsWith('./vendor/')).map(address => address.slice(2).replace(/\?.*$/, '')))]; } catch (e) { fail('index.html : la carte de la copie (gfs-carte-copie) n\'est pas du JSON'); }
+    try { cited = [...new Set(Object.values(JSON.parse(copyMap).imports).filter(address => address.startsWith('./vendor/')).map(address => address.slice(2).replace(/\?.*$/, '')))]; } catch (e) { fail('index.html : la carte d\'importation n\'est pas du JSON'); }
     for (const rel of cited) if (!has(rel)) fail(`index.html cite ${rel} (la copie de l'éditeur), mais il est absent de l'arbre (publier.sh doit y poser vendor)`);
     if (cited.length) for (const rel of ['vendor/editeur/LICENCES.txt', 'vendor/editeur/COPIE.json']) if (!has(rel)) fail(`${rel} est absent de l'arbre : la copie de l'éditeur part avec ses licences et son manifeste (consigne 066 de GFS)`);
   }
@@ -403,7 +403,6 @@ if (has('README.md')) {
     pp_french_typography: ['typographie française à la frappe', 'french typography while typing'],
     pp_word_count: ['compteur de mots', 'word counter'],
     pp_last_mode: ['dernier mode choisi (édition ou lecture)', 'last mode chosen (edit or read)'],
-    pp_editeur_copie: ['éditeur hors ligne', 'offline editor'],
     pp_trigger_char: ['touches', 'keys'],
     pp_expansion_char: ['touches', 'keys'],
     pp_shortcuts: ['raccourcis', 'shortcuts'],

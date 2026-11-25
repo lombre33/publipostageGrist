@@ -57,15 +57,11 @@ const server = createServer(async (req, res) => {
 await new Promise((ok, ko) => server.listen(PORT, '127.0.0.1', ok).on('error', ko));
 const BASE = `http://127.0.0.1:${PORT}`;
 
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
+const OFFLINE = existsSync(join(CACHE, 'umd'));
 if (!OFFLINE) console.log('[verify-editor-blank-tail-mouse] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
-const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 
 let total = 0, failures = 0;
 function check(name, pass, notes) {
@@ -80,14 +76,6 @@ const page = await context.newPage();
 const pageErrors = [];
 page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
 if (OFFLINE) {
-  await page.route('**://esm.sh/**', async route => {
-    const url = route.request().url();
-    const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-    if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-    const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-    if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-    route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
-  });
   await page.addInitScript(() => {
     Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, get: () => '', set: () => {} });
   });

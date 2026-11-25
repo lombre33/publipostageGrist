@@ -252,8 +252,8 @@ const Editor = (function () {
   const loadedLibraries = () => librariesLoaded;
   async function importLibraries() {
     // TipTap et ProseMirror se chargent par import() : leurs classes n'existent pas avant. Aucune dépendance d'ordre entre ces modules (chacun
-    // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau vers
-    // esm.sh et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
+    // n'alimente que sa propre variable) : ils partent en parallèle plutôt qu'en `await` séquentiels, car un import() est une requête réseau (un fichier de
+    // vendor/editeur/, la copie rangée avec l'app) et la cascade ajoutait jusqu'à 1 à 2 s au démarrage sur une connexion lente ou à cache froid.
     const [
       { Editor: TiptapEditor, Extension, Node, Mark, mergeAttributes, InputRule, getHTMLFromFragment, commands: coreCommands },
       { StarterKit },

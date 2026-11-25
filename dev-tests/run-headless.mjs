@@ -488,7 +488,7 @@ const NODE_SCRIPTS = {
   earlyPreview: 'verify-early-preview.mjs', // L'APERÇU DE LECTURE du démarrage (js/early-preview.js, 23/11, « document lisible d'abord ») : tant que la table des modèles se lit (4 s), la feuille du document que GFS ouvre se pose en lecture seule (sa ligne seule, par REST, le jeton parti AVANT la grosse lecture) ; inerte, nettoyée, effacée à l'ouverture réelle ; rien ne se pose au moindre doute (import, lecture de PDF, présentation, 403, suivi, format libre, table déjà arrivée) ; port 9221
   allegement: 'verify-allegement.mjs', // LA PUBLICATION ALLÉGÉE (outils/alleger-publication.mjs, 24/11) : les fichiers de l'app sans leurs commentaires (−32 % compressé), PROUVÉS sans changement de code (arbre acorn identique, mêmes lignes) ; textes piégés, preuve prise en défaut, arbre réel, ce que l'outil ne touche pas, et l'app qui démarre depuis les fichiers allégés (PP_SITE_OVERLAY). Port 9226.
   earlyOpen: 'verify-early-open.mjs', // L'OUVERTURE DU DOCUMENT SEUL (js/early-open.js, 24/11) : GFS désigne un document, sa seule ligne (REST) le fait ouvrir pendant que la table des modèles entière (42 Mo chez une personne) se lit en fond ; tout ce qui a besoin de la liste l'attend ; au moindre doute, le démarrage est celui d'avant. Port 9224.
-  earlyLibs: 'verify-early-libs.mjs', // le DÉPART ANTICIPÉ des bibliothèques de l'éditeur (index.html `window.__earlyLibs`, 23/11 : les 21 import() de importLibraries partent avec les premiers scripts, plus après les 280) : la liste est celle de js/editor.js, les modules sont les mêmes que ceux de l'éditeur (rien ne se charge deux fois), le premier fichier d'esm.sh est demandé avant que js/editor.js s'exécute, l'éditeur démarre comme avant
+  earlyLibs: 'verify-early-libs.mjs', // le DÉPART ANTICIPÉ des bibliothèques de l'éditeur (index.html `window.__earlyLibs`, 23/11 : les 21 import() de importLibraries partent avec les premiers scripts, plus après les 280) : la liste est celle de js/editor.js, les modules sont les mêmes que ceux de l'éditeur (rien ne se charge deux fois), le premier fichier de la copie figée de l'éditeur est demandé avant que js/editor.js s'exécute, l'éditeur démarre comme avant
   openCost: 'verify-open-cost.mjs', // le COÛT de la pose par morceaux d'un gros texte (20/11, « accélérer l'ouverture d'une grosse présentation » : 79 diapositives sous Firefox, 5,9 s puis 47,7 s, chaque appel de `Editor.appendHTML` plus long que le précédent ; `EditorCore.appendedFrom`, js/anchors.js `normalize`, js/editor-nodes.js `dropEmptiedValues`, `FrameSleep.passes` (la passe qui reprend où elle s'était arrêtée), `ImportPlacing.stepBudgetFor`), sans rien changer à ce qu'on voit : un morceau ajouté à la fin ne fait plus parcourir tout ce qui le précède (même nombre de nœuds sur 150 et sur 2 000 cadres, une frappe reste parcourue en entier), le texte est celui d'un chargement d'un bloc à l'octet près (adresse déjà prise, nom sans adresse, signet enfoui), le sommeil des cadres reprend sa passe et finit comme une ouverture d'un bloc, le pas grandit avec le texte posé (port 9215)
   ooxmlImportGolden: 'verify-ooxml-import-golden.mjs', // l'AVANT / APRÈS des imports Word et PowerPoint : ce que chaque import rend d'un même fichier ne change pas (dev-tests/ooxml-import-golden.json, dev-tests/ooxml-import-recorder.js ; `--update` quand le changement est voulu) ; rejoue les 10 groupes qui importent un fichier : ~80 s
   pptxImportMouse: 'verify-pptx-import-mouse.mjs', // l'import d'un fichier PowerPoint (js/pptx-import.js, ligne « Importer un PowerPoint… » du menu « + », js/main.js `onImportPptx`, extension « diapositives » ; demande du 22/10 : la parité avec PowerPoint, « import »), GFS simulé, vraie souris et vrai sélecteur de fichier, 700x400, français clair puis anglais sombre : la ligne du menu, le sélecteur réduit aux présentations (annuler ne change rien), le moteur demandé au réseau une seule fois, une présentation reprise en entier (miniatures, page 960 x 540, texte, carte, tableau, image, trait, cadre sélectionnable, aucun point rouge), « Modifications non enregistrées » après le choix du fichier, la fenêtre du rapport (genres, ordre, pluriels, dix-huit lignes qui défilent, bouton, retour à l'éditeur), la page du fichier (4:3 = 720 x 540), les fichiers refusés (pas un zip, zip sans présentation, ancien .ppt, sans diapositive, plus de 150 Mo : message entier dans le coin d'état, aucune fenêtre), la ligne grisée sans l'extension (widget seul : fenêtre explicative ; GFS : appel `installer`)
@@ -675,9 +675,8 @@ const NODE_SCRIPTS = {
   colorMathUnit: 'unit-color-math.mjs', // Node pur (vm) : js/color-math.js (code # tapé, couleur CSS relue, aller-retour teinte-saturation-valeur, encre lisible) et les données de js/color-palette.js (palette de cinq rangées de dix)
   gristApiCoreUnit: 'unit-grist-api-core.mjs', // Node pur (vm + faux docApi) : js/grist-api.js, le cœur - ensureTable et createWriteQueue (pris par les modules du widget), init (souscriptions onRecord « shown » et « normal », options, lien, accès), detectTableId, types, choix et colonnes montrées tirés des métadonnées
   attachmentAccessUnit: 'unit-attachment-access.mjs', // Node pur (vm + faux docApi) : js/grist-api.js, l'accès aux pièces jointes - jeton demandé en lecture seule, identifiant (data-attachment-id d'un modèle) accepté seulement s'il est un numéro, jamais glissé dans le chemin de l'adresse sinon ; l'image d'un identifiant refusé garde son src
-  editorFingerprintsUnit: 'unit-editor-fingerprints.mjs', // Node pur (faux esm.sh en mémoire) : outils/empreintes-editeur.mjs, le relevé des empreintes du code de l'éditeur (point sécurité du 06/11) - une adresse à version flottante (@^1.0.0 : esm.sh la résout à chaque demande), un fichier figé qui change d'un octet, un fichier nouveau ou disparu, des navigateurs qui reçoivent des octets différents sont des écarts ; un fichier non figé qui change est « à regarder » ; la carte d'importation remplace une adresse flottante par sa version exacte
   bibliothequesListe: 'verify-bibliotheques-liste.mjs', // Node, sans réseau : la liste unique des bibliothèques (package.json, consignes 063 et 067 de GFS) relue par l'outil du kit (kit/outils/bibliotheques.mjs --verifier) - la liste, le catalogue et la page commités sont cohérents ; une version montée dans la liste sans relancer l'outil, une version ou une source de script-src changée à la main dans index.html, une empreinte du catalogue changée, le ?v= du kit changé dans la page seule sont refusés et nommés ; la copie figée de l'éditeur (vendor/editeur, consigne 066) aussi : un fichier dont l'empreinte n'est plus celle de COPIE.json, une version de la liste montée sans refaire la copie, la carte « copie » de la page changée à la main, la copie absente ; le miroir des essais (consigne 063, lot C : `--miroir` le refait d'après la liste) : son plan pose les 13 fichiers UMD, construit les 33 modules ES de la carte et écrit les mêmes paquets aux mêmes versions que la liste. Sauté (0/0 passés) quand le sous-module kit/ n'est pas récupéré
-  editorCopy: 'verify-editor-copy.mjs', // Chromium (vraie souris, faux GFS, hors ligne), SANS contournement de la politique de sécurité : la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS) et la case « Éditeur hors ligne » de Réglages - les deux chemins de la page (sans `copie` : la carte d'esm.sh, aucun module de la copie demandé ; avec `copie=editeur` dans l'adresse, ou la clé `pp_editeur_copie` du navigateur : la carte de la copie, plus de trente modules tous répondus, aucune requête vers esm.sh) écrivent au vrai clavier (Entrée, gras) sans une violation de la politique ; la case libre seule, grisée avec sa raison quand l'adresse ou GFS décide ; le geste (la clé écrite, « Rechargez la page » tant que le choix n'est pas ce qui est chargé, « Recharger maintenant » qui demande quoi faire du texte non enregistré, Ctrl + Z) ; le cadre isolé de GFS (origine nulle, stockage refusé). Échoue sur le code d'avant la 066 (une seule carte : `copie=editeur` n'y change rien)
+  editorCopy: 'verify-editor-copy.mjs', // Chromium (vraie souris, faux GFS, hors ligne), SANS contournement de la politique de sécurité : la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS), son SEUL mode depuis la consigne 107 - l'éditeur démarre de vendor/editeur/ (plus de trente modules tous répondus, aucune requête vers l'ancien CDN ni vers un autre site, aucune violation) et s'écrit au vrai clavier (Entrée, gras), seul, hébergé par GFS, puis dans son cadre isolé (origine nulle, stockage refusé) ; la case « Éditeur hors ligne » de Réglages est cochée ET grisée avec sa phrase (français, anglais, clair, sombre) et un clic n'y change rien ; l'ancien choix (`copie=editeur` dans l'adresse, la clé `pp_editeur_copie` du navigateur) ne lit plus rien. Échoue sur le code d'avant la 107 (l'éditeur venait de l'ancien CDN)
   scriptLoaderUnit: 'unit-script-loader.mjs', // Node pur (vm) : js/export-common.js, le chargeur de scripts des exports (audit externe du 04/10, C-EXFIL-05) - un script ne vient que d'un des deux CDN de la politique de sécurité du contenu, en https et avec son empreinte SRI, ou du dépôt ; faux CDN, http, javascript:, data:, empreinte absente refusés sans toucher au document ; les sept bibliothèques du widget passent la règle
   userNameChipMouse: 'verify-user-name-chip-mouse.mjs', // puce « Nom de l’utilisateur » à la vraie souris à 700x400, en français et en anglais : ligne juste après l'email dans la liste « # » (Calcul reste atteignable), un clic la pose, le nom en Lecture à côté de l'email, « [Nom indisponible] » / « [Name unavailable] » en rouge sans nom
   rowNumberChipMouse: 'verify-row-number-chip-mouse.mjs', // puce « N° de ligne » à la vraie souris à 700x400, en français et en anglais : ligne juste après le nom de l'utilisateur dans la liste « # », un clic la pose dans la première case d'une ligne de tableau répétée par une Boucle, 1, 2, 3 en Lecture dans l'ordre des lignes, en-tête non numéroté, puce toujours dans le modèle au retour
@@ -780,9 +779,7 @@ const BASE = `http://127.0.0.1:${port}`;
 // Si dev-tests/.offline-cache a été construit (offline-deps.sh), on détourne chaque URL CDN vers le
 // fichier local équivalent. Sinon on laisse passer : dans un environnement qui joint les CDN, le
 // harnais tourne tel quel et ce bloc ne sert à rien.
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
+const OFFLINE = existsSync(join(CACHE, 'umd'));
 const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
@@ -802,16 +799,6 @@ if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/of
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-
-// Les bundles esbuild s'importent entre eux en RELATIF (`from "./chunk-XXXX.js"`). Servis sous des
-// URL de base différentes (https://esm.sh/@tiptap/core@3.31.3 d'un côté, https://esm.sh/*prosemirror-model@1.25.11
-// de l'autre), ces imports relatifs résolvent vers DEUX URL distinctes pour le même chunk - donc deux
-// instances du même module. Symptôme exact observé : "Can not convert <> to a Fragment (looks like
-// multiple versions of prosemirror-model were loaded)", et un `instanceof` qui échoue entre deux
-// copies de ProseMirror. Réécrire chaque import de chunk vers une URL ABSOLUE unique règle le
-// problème à la racine : une URL = un module, quelle que soit l'entrée qui l'a demandé.
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
-const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 
 const DEV_FILES = ['helpers', 'runner'];
 
@@ -872,18 +859,6 @@ async function runGroup(name, probeExpr, lang) {
   page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
 
   if (OFFLINE) {
-    // L'importmap de index.html pointe vers esm.sh : on ne la réécrit PAS (le harnais doit rester
-    // une copie fidèle de index.html), on détourne les requêtes qu'elle produit.
-    await page.route('**://esm.sh/**', async route => {
-      const url = route.request().url();
-      const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-      if (chunk) {
-        return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-      }
-      const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-      if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-      route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
-    });
     for (const [re, rel] of UMD_ROUTES) {
       await page.route(re, async route => route.fulfill({
         status: 200,

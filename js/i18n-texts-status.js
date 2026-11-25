@@ -349,7 +349,6 @@ const I18nTextsStatus = {
   'firstContact.network.list': { fr: 'La liste complète des adresses est dans le README.', en: 'The full list of addresses is in the README.' },
   'firstContact.slow.title': { fr: 'Le chargement est long', en: 'Loading is taking a while' },
   'firstContact.slow.intro': { fr: 'Le widget n’a pas fini de démarrer. Une connexion lente peut suffire ; sinon, votre réseau (pare-feu, proxy) bloque sans doute l’une de ces adresses :', en: 'The widget has not finished starting. A slow connection may be enough; otherwise your network (firewall, proxy) is probably blocking one of these addresses:' },
-  'firstContact.host.editor': { fr: 'l’éditeur de texte, nécessaire au démarrage', en: 'the text editor, needed to start' },
   'firstContact.host.grist': { fr: 'l’API de Grist, nécessaire au démarrage', en: 'the Grist API, needed to start' },
   'firstContact.host.exports': { fr: 'les exports PDF, Word et Excel, au premier export', en: 'PDF, Word and Excel exports, on first export' },
   'firstContact.error.title': { fr: 'Le widget n’a pas pu démarrer', en: 'The widget could not start' },

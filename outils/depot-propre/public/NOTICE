@@ -29,16 +29,16 @@ indiquée, à la version indiquée (sauf l'API de Grist). Elles gardent leur pro
 These libraries are not copied into this repository: the browser downloads them from the address
 shown, at the version shown (except the Grist API). They keep their own license.
 
-Exception : une copie hors ligne de l'éditeur (TipTap, ProseMirror, @floating-ui/dom,
-prosemirror-suggest-changes et leurs dépendances) est rangée dans le dossier vendor/editeur/, construite
-et minifiée d'après les versions ci-dessous ; la licence et les droits de chaque paquet de la copie sont
-dans vendor/editeur/LICENCES.txt (tous sous licence MIT). Le navigateur la charge à la place d'esm.sh
-quand la personne choisit « Éditeur hors ligne » dans Réglages.
-Exception: an offline copy of the editor (TipTap, ProseMirror, @floating-ui/dom,
-prosemirror-suggest-changes and their dependencies) is stored in the vendor/editeur/ folder, built and
-minified from the versions below; the license and copyright of every package in the copy are in
-vendor/editeur/LICENCES.txt (all MIT-licensed). The browser loads it instead of esm.sh when the person
-chooses "Offline editor" in Settings.
+Exception : l'éditeur (TipTap, ProseMirror, @floating-ui/dom, prosemirror-suggest-changes et leurs
+dépendances) est rangé avec l'application, dans le dossier vendor/editeur/ : une copie construite et
+minifiée d'après les versions ci-dessous, que le navigateur charge sans rien demander à un autre site
+(c'est le seul mode de l'éditeur) ; la licence et les droits de chaque paquet de la copie sont dans
+vendor/editeur/LICENCES.txt (tous sous licence MIT).
+Exception: the editor (TipTap, ProseMirror, @floating-ui/dom, prosemirror-suggest-changes and their
+dependencies) is stored with the application, in the vendor/editeur/ folder: a copy built and minified
+from the versions below, which the browser loads without asking any other site for anything (it is the
+editor's only mode); the license and copyright of every package in the copy are in
+vendor/editeur/LICENCES.txt (all MIT-licensed).
 
 Grist plugin API (grist-plugin-api.js)
   Licence / License : Apache License 2.0 (https://github.com/gristlabs/grist-core)
@@ -48,24 +48,24 @@ Grist plugin API (grist-plugin-api.js)
 TipTap 3.31.3 (@tiptap/core et extensions / and extensions)
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2025, Tiptap GmbH
-  Origine / Source : esm.sh
+  Origine / Source : npm (vendor/editeur/)
 
 ProseMirror : prosemirror-model 1.25.11, -state 1.4.4, -view 1.42.3, -transform 1.12.0, -commands 1.7.1,
 -keymap 1.2.3, -history 1.5.0, -schema-list 1.5.1, -tables 1.8.5, -gapcursor 1.4.1, -dropcursor 1.8.2,
 -inputrules 1.5.1, -changeset 2.4.1, orderedmap 2.1.1, rope-sequence 1.3.4, w3c-keyname 2.2.8
   Licence / License : MIT
   Droits / Copyright : Copyright (C) 2015-2017 by Marijn Haverbeke and others
-  Origine / Source : esm.sh
+  Origine / Source : npm (vendor/editeur/)
 
 @floating-ui/dom 1.6.12
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2021-present Floating UI contributors
-  Origine / Source : esm.sh
+  Origine / Source : npm (vendor/editeur/)
 
 @handlewithcare/prosemirror-suggest-changes 0.1.8
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2025 Handle with Care Collective
-  Origine / Source : esm.sh
+  Origine / Source : npm (vendor/editeur/)
 
 pdfmake 0.2.7 (et ses polices vfs_fonts / and its vfs_fonts fonts)
   Licence / License : MIT (les polices : voir le point 3 / the fonts: see section 3)

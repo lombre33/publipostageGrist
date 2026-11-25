@@ -16,9 +16,8 @@ const FirstContact = (function () {
   const REPO = 'https://github.com/grist-factory/Publipostage-Plus';
   const PUBLIC_ADDRESS = 'https://grist-factory.github.io/Publipostage-Plus/'; // celle que le README donne à coller dans Grist
   const ANCHORS = { install: { fr: '#installation-dans-grist', en: '#installing-in-grist' }, limits: { fr: '#limites-connues', en: '#known-limitations' } };
-  // Les adresses dont dépend le widget, avec ce qu'elles servent à faire (README, « Dépendances »).
+  // Les adresses d'autres sites dont dépend le widget, avec ce qu'elles servent à faire (README, « Dépendances »). L'éditeur n'en fait plus partie : il démarre depuis une copie rangée avec l'app (consigne 107 de GFS).
   const HOSTS = [
-    { host: 'esm.sh', why: 'firstContact.host.editor' },
     { host: 'docs.getgrist.com', why: 'firstContact.host.grist' },
     { host: 'cdn.jsdelivr.net', why: 'firstContact.host.exports' },
   ];
@@ -196,6 +195,10 @@ const FirstContact = (function () {
     if (!started || kind === 'outside') return;
     finished = true;
     clearTimeout(slowTimer);
+    // Ouvert seul dans un onglet, sans réponse de Grist : la consigne « hors de Grist » (start(), au bout de OUTSIDE_WAIT_MS) prime sur l'erreur de démarrage et
+    // ne doit pas être précédée de son éclair. Une page ouverte depuis un fichier du disque (le dépôt téléchargé) est dans ce cas : le navigateur y refuse de
+    // charger la copie de l'éditeur rangée à côté (des modules ne se lisent pas depuis file://), l'erreur est immédiate et n'apprend rien à la personne.
+    if (alone() && !gristAnswered()) return;
     const message = String((error && error.message) || error || '');
     show(DOWNLOAD_FAILED.test(message) ? 'network' : 'error', message);
   }

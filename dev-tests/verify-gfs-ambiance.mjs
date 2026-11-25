@@ -161,7 +161,9 @@ const soloLight = await open({ hosted: false });
 await settle(soloLight.app);
 const baseLight = { chrome: flat(await looksOf(soloLight.app, CHROME)), paper: flat(await looksOf(soloLight.app, PAPER)), fit: await fitOf(soloLight.app), state: await stateOf(soloLight.app), print: await printOf(soloLight.app), status: await statusOf(soloLight.app) };
 const baseWindow = await windowOf(soloLight.page, soloLight.app);
-check('l\'app seule ne demande jamais le kit (ni le lecteur du message, ni la pose)', soloLight.requests.filter(url => /\/kit\//.test(url)).length === 0, soloLight.requests.filter(url => /\/kit\//.test(url)));
+// La feuille de la fenêtre des noms (kit/css/names-update.css, consigne 104) est une feuille que index.html pose toujours ; elle ne parle ni à GFS ni à l'ambiance : seuls le lecteur du message et la pose sont du kit que l'app seule ne demande pas.
+const soloKit = soloLight.requests.filter(url => /\/kit\//.test(url) && !/\/kit\/css\/names-update\.css(\?|$)/.test(url));
+check('l\'app seule ne demande jamais le kit (ni le lecteur du message, ni la pose)', soloKit.length === 0, soloKit);
 check('l\'app seule : aucun jeton d\'ambiance sur <html>, aucune marque', Object.keys(baseLight.state.posed).length === 0 && (await marksOf(soloLight.app)).id === null && !(await marksOf(soloLight.app)).forme, baseLight.state.posed);
 check('l\'app seule : la fenêtre de Réglages a l\'arrondi de la charte (8px), sans filet, titre en gras', baseWindow.radius === '8px' && baseWindow.stripeImage === 'none' && baseWindow.titleWeight === '700' && baseWindow.titleCase === 'none', baseWindow);
 await closeOf(soloLight);

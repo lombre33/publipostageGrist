@@ -11,7 +11,7 @@
 //    la langue de la page, et ne se ferme pas par Échap ; rien de tout cela avec `?dev` dans l'adresse ni quand Grist répond ; l'adresse donnée est celle du dossier de la
 //    page là où elle est servie (site public = celle du README, autre hébergement, serveur local), sans fichier, paramètres ni ancre, et celle du site public pour une page
 //    ouverte depuis un fichier du disque ;
-//  - « réseau bloqué » : un module de l'éditeur qui ne se télécharge pas, ou le script de l'API Grist absent d'un cadre, ouvre la fenêtre qui liste les adresses à
+//  - « réseau bloqué » : un fichier de l'éditeur (vendor/editeur/) qui ne se télécharge pas, ou le script de l'API Grist absent d'un cadre, ouvre la fenêtre qui liste les adresses à
 //    autoriser, le message du navigateur à la demande, « Recharger la page » (qui recharge pour de bon, et le widget démarre quand l'adresse est rouverte) ;
 //  - « démarrage trop long » (30 s sans erreur) : mêmes adresses, « Continuer d'attendre » ou Échap la ferment, elle se ferme d'elle-même quand le widget est prêt ;
 //  - « erreur » : une autre erreur de démarrage montre son message ; la fenêtre est un vrai dialogue (role, aria-modal, titre), tient dans le panneau, titre et
@@ -71,9 +71,7 @@ const server = createServer(async (req, res) => {
 await new Promise((ok, ko) => server.listen(PORT, '127.0.0.1', ok).on('error', ko));
 const BASE = `http://127.0.0.1:${PORT}`;
 
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
+const OFFLINE = existsSync(join(CACHE, 'umd'));
 const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
@@ -86,19 +84,6 @@ if (!OFFLINE) console.log('[verify-first-contact] miroir hors-ligne absent (dev-
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
-const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
-// Une requête vers esm.sh servie comme d'habitude : par le miroir hors-ligne s'il existe, par le réseau sinon.
-async function serveEsm(route) {
-  if (!OFFLINE) return route.continue();
-  const url = route.request().url();
-  const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-  if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-  const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-  if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-  return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
-}
-
 let total = 0, failures = 0;
 function check(name, pass, notes) {
   total++;
@@ -110,7 +95,7 @@ const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hi
 const pageErrors = [];
 
 // Une page neuve (son propre contexte : ni stockage ni horloge partagés) sur le harnais, avec ce qu'un scénario règle AVANT le démarrage :
-//  - esm : 'serve' (défaut), 'abort' (réseau qui refuse esm.sh) ou 'hold' (requêtes laissées sans réponse jusqu'à `release()`) ;
+//  - files : 'serve' (défaut), 'abort' (réseau qui refuse les fichiers de l'éditeur, vendor/editeur/ : ce que le widget télécharge pour démarrer) ou 'hold' (requêtes laissées sans réponse jusqu'à `release()`) ;
 //  - languages : les langues que se donne le navigateur (navigator.languages, lu par dev-tests/grist-stub.js) ; locale : celle du navigateur lui-même (quand le faux Grist
 //    n'est pas chargé) ; stored : valeur de pp_lang déjà enregistrée ;
 //  - noGrist : Grist ne répond jamais à onOptions (le widget ouvert seul dans un onglet) ;
@@ -118,16 +103,16 @@ const pageErrors = [];
 //  - denyStorage : localStorage refuse tout (navigation privée, stockage bloqué) ;
 //  - origin : l'adresse où la page est SERVIE (le site public, une copie ailleurs) : ses fichiers viennent du serveur local mais le navigateur croit les lire de là ;
 //    `path` est ce qui suit dans la barre d'adresse (nom du fichier, paramètres, ancre) ; file : la page est ouverte depuis un fichier du disque (file://).
-async function openPage({ esm = 'serve', locale, languages, stored, noGrist = false, clock = false, denyStorage = false, query = '', wait = 'load', width = WIDTH, height = HEIGHT, frame = false, blockStub = false, origin = '', path = '', file = false } = {}) {
+async function openPage({ files = 'serve', locale, languages, stored, noGrist = false, clock = false, denyStorage = false, query = '', wait = 'load', width = WIDTH, height = HEIGHT, frame = false, blockStub = false, origin = '', path = '', file = false } = {}) {
   const context = await browser.newContext({ bypassCSP: true, viewport: { width, height }, permissions: ['clipboard-read', 'clipboard-write'], ...(locale ? { locale } : {}) });
   const page = await context.newPage();
-  const state = { context, page, esm, held: [], consoleLines: [], errors: [], opened: [] };
+  const state = { context, page, files, held: [], consoleLines: [], errors: [], opened: [] };
   page.on('pageerror', e => { state.errors.push(e.message); if (!denyStorage) pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('console', m => state.consoleLines.push({ type: m.type(), text: m.text() }));
-  await page.route('**://esm.sh/**', route => {
-    if (state.esm === 'abort') return route.abort('failed');
-    if (state.esm === 'hold') { state.held.push(route); return undefined; }
-    return serveEsm(route);
+  await page.route('**/vendor/editeur/**', route => {
+    if (state.files === 'abort') return route.abort('failed');
+    if (state.files === 'hold') { state.held.push(route); return undefined; }
+    return route.fallback();
   });
   if (OFFLINE) {
     for (const [re, rel] of UMD_ROUTES) {
@@ -138,7 +123,7 @@ async function openPage({ esm = 'serve', locale, languages, stored, noGrist = fa
   await page.route('**://fonts.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
   await page.route('**://fonts.gstatic.com/**', route => route.fulfill({ status: 200, body: '' }));
   if (blockStub) await page.route('**/dev-tests/grist-stub.js', route => route.abort('failed'));
-  state.release = async () => { state.esm = 'serve'; await Promise.all(state.held.splice(0).map(serveEsm)); };
+  state.release = async () => { state.files = 'serve'; await Promise.all(state.held.splice(0).map(route => route.continue())); };
   if (languages) await page.addInitScript(l => { window.__browserLanguages = l; }, languages);
   if (stored) await page.addInitScript(v => { try { localStorage.setItem('pp_lang', v); } catch (e) { /* rien */ } }, stored);
   if (denyStorage) await page.addInitScript(() => { Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new Error('stockage refusé'); } }); });
@@ -319,10 +304,10 @@ const TEXT = {
     reload: 'Reload the page', wait: 'Keep waiting', readme: 'Read the installation guide', copy: 'Copy', copied: 'Copied', technical: 'Technical message', then: 'Then reload the page.',
   },
 };
-const HOSTS = ['esm.sh', 'docs.getgrist.com', 'cdn.jsdelivr.net'];
+const HOSTS = ['docs.getgrist.com', 'cdn.jsdelivr.net'];
 const INSTALL = { fr: REPO + '#installation-dans-grist', en: REPO + '#installing-in-grist' };
 const LIMITS = { fr: REPO + '#limites-connues', en: REPO + '#known-limitations' };
-const NETWORK_MESSAGE = 'Failed to fetch dynamically imported module: https://esm.sh/@tiptap/core@3.31.3/es2022/core.mjs';
+const NETWORK_MESSAGE = `Failed to fetch dynamically imported module: ${BASE}/vendor/editeur/tiptap__core.js?v=7a287e83`;
 const LOOKS = [['light', 'fr'], ['dark', 'fr'], ['light', 'en'], ['dark', 'en']];
 
 // Les constats communs à toute fenêtre de premier contact, ouverte dans la sorte `kind`, avec les boutons `buttons` (libellés, dans l'ordre) : un dialogue
@@ -484,7 +469,7 @@ await section('Réseau bloqué et erreur de démarrage (fenêtre ouverte par mai
     await P.page.evaluate(m => FirstContact.failed(new Error(m)), NETWORK_MESSAGE);
     await P.page.waitForTimeout(200);
     const net = await checkWindow(P, `${T} réseau`, 'network', lang, [t.reload]);
-    check(`${T} réseau : les quatre adresses à autoriser, dans l’ordre, chacune avec ce qu’elle sert à faire`,
+    check(`${T} réseau : les deux adresses à autoriser, dans l’ordre, chacune avec ce qu’elle sert à faire`,
       JSON.stringify(net.hosts) === JSON.stringify(HOSTS) && net.hostLines.every(l => / : \S/.test(l)), { hosts: net.hosts, lines: net.hostLines });
     check(`${T} réseau : « ${t.then} », puis le lien vers la liste complète (README, dans la langue), ouvert dans un autre onglet sans lien avec la page`,
       net.paragraphs.includes(t.then) && net.links.length === 1 && net.links[0].href === LIMITS[lang] && net.links[0].target === '_blank' && /noopener/.test(net.links[0].rel), { paragraphs: net.paragraphs, links: net.links });
@@ -602,18 +587,18 @@ await section('Adresse donnée hors de Grist', async () => {
 // ============================================================================================================================================================
 // 5. Réseau bloqué pour de bon : l'éditeur ne se télécharge pas, puis l'adresse est rouverte et « Recharger la page » remet le widget en marche.
 // ============================================================================================================================================================
-await section('Réseau bloqué (esm.sh refusé)', async () => {
-  const C = await openPage({ esm: 'abort' });
+await section('Réseau bloqué (fichiers de l’éditeur refusés)', async () => {
+  const C = await openPage({ files: 'abort' });
   await waitWindow(C, 30000);
   const blocked = await checkWindow(C, 'réseau bloqué', 'network', 'fr', [TEXT.fr.reload]);
-  check('réseau bloqué : les quatre adresses sont listées et le message du navigateur est dans les détails',
-    JSON.stringify(blocked.hosts) === JSON.stringify(HOSTS) && !!blocked.details && /esm\.sh/.test(blocked.details.text) && blocked.details.text.length > 10, { hosts: blocked.hosts, details: blocked.details });
+  check('réseau bloqué : les deux adresses sont listées et le message du navigateur, qui nomme le fichier de l’éditeur refusé, est dans les détails',
+    JSON.stringify(blocked.hosts) === JSON.stringify(HOSTS) && !!blocked.details && /\/vendor\/editeur\//.test(blocked.details.text) && blocked.details.text.length > 10, { hosts: blocked.hosts, details: blocked.details });
   const blockedMessage = (await describe(C)).details.text;
   console.log('       message du navigateur : ' + blockedMessage.slice(0, 140));
   const statusAfterFailure = await C.page.evaluate(() => document.getElementById('status-msg').textContent);
   check('... et le coin d’état dit lui aussi que le chargement a échoué', /^Erreur au chargement du widget/.test(statusAfterFailure), statusAfterFailure);
   await C.page.evaluate(() => { window.__avant = 'avant le rechargement'; });
-  C.esm = 'serve'; // le pare-feu a été ouvert
+  C.files = 'serve'; // le pare-feu a été ouvert
   const reloadedC = C.page.waitForEvent('load', { timeout: 60000 });
   await realClick(C, WINDOW + ' .var-modal-primary', 0);
   await reloadedC;
@@ -627,7 +612,7 @@ await section('Réseau bloqué (esm.sh refusé)', async () => {
   const D = await openPage({ frame: true, blockStub: true, locale: 'fr-FR' });
   await waitWindow(D, 15000);
   const noApi = await checkWindow(D, 'API Grist absente', 'network', 'fr', [TEXT.fr.reload], { inFrame: true });
-  check('API Grist absente : les quatre adresses sont listées, le script manquant est nommé dans les détails',
+  check('API Grist absente : les deux adresses sont listées, le script manquant est nommé dans les détails',
     JSON.stringify(noApi.hosts) === JSON.stringify(HOSTS) && !!noApi.details && /grist-plugin-api\.js/.test(noApi.details.text), { hosts: noApi.hosts, details: noApi.details });
   await closePage(D);
 });
@@ -635,7 +620,7 @@ await section('Réseau bloqué (esm.sh refusé)', async () => {
 // ============================================================================================================================================================
 // 6. Démarrage trop long : 30 s sans erreur, horloge pilotée par le test.
 // ============================================================================================================================================================
-await section('Démarrage trop long (esm.sh sans réponse)', async () => {
+await section('Démarrage trop long (fichiers de l’éditeur sans réponse)', async () => {
   const waitStart = async s => {
     await s.page.waitForFunction(() => typeof FirstContact !== 'undefined' && document.readyState !== 'loading', null, { timeout: 30000 });
     await s.page.waitForTimeout(300);
@@ -648,14 +633,14 @@ await section('Démarrage trop long (esm.sh sans réponse)', async () => {
   check('un widget prêt à temps n’affiche jamais la fenêtre « chargement long », même 2 minutes plus tard', !(await displayed(E0, WINDOW)));
   await closePage(E0);
 
-  const E1 = await openPage({ clock: true, esm: 'hold', wait: 'commit' });
+  const E1 = await openPage({ clock: true, files: 'hold', wait: 'commit' });
   await waitStart(E1);
   await E1.page.clock.fastForward(29000);
   await E1.page.waitForTimeout(300);
   check('à 29 s sans erreur, la fenêtre n’est pas encore là', !(await displayed(E1, WINDOW)));
   await E1.page.clock.fastForward(2000);
   await waitWindow(E1);
-  const E1EN = await openPage({ clock: true, esm: 'hold', wait: 'commit', stored: 'en' }); // son jumeau anglais, amené au même point : une page qui DÉMARRE en anglais
+  const E1EN = await openPage({ clock: true, files: 'hold', wait: 'commit', stored: 'en' }); // son jumeau anglais, amené au même point : une page qui DÉMARRE en anglais
   await waitStart(E1EN);
   await E1EN.page.clock.fastForward(31000);
   await waitWindow(E1EN);
@@ -666,7 +651,7 @@ await section('Démarrage trop long (esm.sh sans réponse)', async () => {
     await setTheme(P, theme);
     await P.page.waitForTimeout(150);
     const slow = await checkWindow(P, T, 'slow', lang, [t.wait, t.reload]);
-    check(`${T} : les quatre adresses, le lien vers la liste complète, ni message technique ni « ${t.then} »`,
+    check(`${T} : les deux adresses, le lien vers la liste complète, ni message technique ni « ${t.then} »`,
       JSON.stringify(slow.hosts) === JSON.stringify(HOSTS) && slow.links.length === 1 && slow.links[0].href === LIMITS[lang] && slow.details === null && !slow.paragraphs.includes(t.then), { hosts: slow.hosts, links: slow.links, details: slow.details });
     await shot(P, `lent-${theme}-${lang}`);
   }
@@ -682,7 +667,7 @@ await section('Démarrage trop long (esm.sh sans réponse)', async () => {
   await closePage(E1);
 
   // Échap la ferme aussi (clavier de la fenêtre) ; « Recharger la page » recharge.
-  const E2 = await openPage({ clock: true, esm: 'hold', wait: 'commit' });
+  const E2 = await openPage({ clock: true, files: 'hold', wait: 'commit' });
   await waitStart(E2);
   await E2.page.clock.fastForward(31000);
   await waitWindow(E2);
@@ -690,7 +675,7 @@ await section('Démarrage trop long (esm.sh sans réponse)', async () => {
   await closePage(E2);
 
   // Le widget finit de démarrer pendant que la fenêtre est ouverte : elle se ferme d'elle-même.
-  const E3 = await openPage({ clock: true, esm: 'hold', wait: 'commit' });
+  const E3 = await openPage({ clock: true, files: 'hold', wait: 'commit' });
   await waitStart(E3);
   await E3.page.clock.fastForward(31000);
   await waitWindow(E3);
@@ -721,7 +706,7 @@ await section('Langue au premier lancement', async () => {
     { name: 'stockage refusé, navigateur anglais : le navigateur', languages: ['en-US'], denyStorage: true, expect: 'en', noStore: true },
   ];
   for (const c of CASES) {
-    const L = await openPage({ languages: c.languages, stored: c.stored, denyStorage: c.denyStorage, esm: 'abort', wait: 'domcontentloaded' });
+    const L = await openPage({ languages: c.languages, stored: c.stored, denyStorage: c.denyStorage, files: 'abort', wait: 'domcontentloaded' });
     const r = await L.page.evaluate(() => {
       let stored;
       try { stored = localStorage.getItem('pp_lang'); } catch (e) { stored = 'refusé'; }
@@ -732,7 +717,7 @@ await section('Langue au premier lancement', async () => {
     await closePage(L);
   }
   // Un choix fait dans Réglages est gardé, et l'emporte au lancement suivant.
-  const M = await openPage({ languages: ['fr-FR'], esm: 'abort', wait: 'domcontentloaded' });
+  const M = await openPage({ languages: ['fr-FR'], files: 'abort', wait: 'domcontentloaded' });
   await M.page.evaluate(() => I18n.storeLang('en'));
   const kept = await M.page.evaluate(() => localStorage.getItem('pp_lang'));
   await M.page.reload({ waitUntil: 'domcontentloaded' });

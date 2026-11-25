@@ -8,7 +8,7 @@
 // Il ne prend QUE le module de pose du kit, jamais `kit/js/violations.js` (`Violations.start()`) ni `kit/js/violations-start.js` : ceux-là démarreraient le lien du kit à côté de celui de l'app, et deux liens dans un même cadre numérotent
 // chacun leurs appels depuis 1 et se prendraient les réponses (comme pour l'ambiance, js/gfs-ambiance.js, et les correcteurs, js/gfs-correcteurs.js). Le lien donné à `createViolations` est donc `GfsLink` (`hosted`, `tell`).
 // Il est le deuxième script de la page, juste après js/gfs-link.js (le premier, qui lui donne `GfsLink`) : une violation qui arrive avant le démarrage n'est pas vue, et le module de pose, petit et de la même origine, se charge pendant que
-// les autres scripts se chargent encore, bien avant les modules de l'éditeur que la page demande à esm.sh.
+// les autres scripts se chargent encore, bien avant les modules de l'éditeur que la page demande à sa copie rangée (vendor/editeur/).
 //   - Hébergée (adresse avec `gfs=`) seulement : seule, rien n'est chargé, rien n'est écouté et rien n'est dit dans la console.
 //   - Le module de pose ne se charge pas (le dépôt de l'app sans son kit, un réseau qui le coupe) : le relais ne démarre pas, GFS n'est pas averti et l'app le dit une fois dans la console. La page n'en est pas moins protégée.
 //   GfsViolations.ready     résolue (jamais rejetée) quand le relais a démarré, ou qu'il ne démarre pas (seule, module absent) ; l'app n'a pas à l'attendre pour s'afficher

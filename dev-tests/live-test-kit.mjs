@@ -35,10 +35,8 @@ async function regenerateHarness() {
   await writeFile(join(ROOT, '_test-harness.html'), html.replace('<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>', '<script src="dev-tests/grist-stub.js"></script>'));
 }
 
-// La page de test qui ne dépend pas du réseau : les modules d'esm.sh et les bibliothèques de jsDelivr viennent du miroir hors-ligne quand il existe.
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
+// La page de test qui ne dépend pas du réseau : les bibliothèques de jsDelivr viennent du miroir hors-ligne quand il existe (l'éditeur, lui, vient de la copie figée de l'app, vendor/editeur/).
+const OFFLINE = existsSync(join(CACHE, 'umd'));
 const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
@@ -47,11 +45,6 @@ const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@[\d.]+\/dist\/jszip\.min\.js$/, 'umd/jszip.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
 ] : [];
-// Les morceaux du miroir hors-ligne (qui n'existent pas chez le vrai esm.sh) sont servis depuis l'origine de la page, sous /_offline-chunks/ : la politique resserrée (11/11) n'autorise plus tout l'hôte esm.sh, seulement
-// les dossiers des paquets de l'éditeur, et 'self' couvre cette origine. Sous la vraie politique (verify-live-gfs.mjs), des morceaux demandés à esm.sh étaient refusés et l'éditeur ne démarrait pas.
-const CHUNK_PATH = '/_offline-chunks/';
-const absoluteChunks = (code, base) => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${base}${CHUNK_PATH}${file}"`);
-
 export const liveFileExists = existsSync(LIVE_FILE);
 // L'empreinte du fichier assemblé que le GFS simulé donne (sha384, comme les contrats de GFS 2.6 point 9).
 export const liveIntegrity = liveFileExists ? 'sha384-' + createHash('sha384').update(readFileSync(LIVE_FILE)).digest('base64') : '';
@@ -107,13 +100,6 @@ export async function startKit({ port, tag = 'live' }) {
         res.end(await readFile(LIVE_FILE));
         return;
       }
-      if (urlPath.startsWith(CHUNK_PATH)) {
-        const chunk = urlPath.slice(CHUNK_PATH.length);
-        if (!OFFLINE || !/^chunk-[A-Z0-9]+\.js$/.test(chunk)) { res.writeHead(404).end('morceau inconnu'); return; }
-        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
-        res.end(absoluteChunks(await readFile(join(CACHE, 'esm', chunk), 'utf8'), `http://127.0.0.1:${port}`));
-        return;
-      }
       const filePath = join(ROOT, normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
       if (!filePath.startsWith(ROOT)) { res.writeHead(403).end(); return; }
       const info = await stat(filePath);
@@ -151,12 +137,6 @@ export async function startKit({ port, tag = 'live' }) {
     page.on('dialog', async (dialog) => { natives.push(dialog.type() + ' : ' + dialog.message()); await dialog.dismiss(); });
     page.on('pageerror', (e) => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
     if (OFFLINE) {
-      await page.route('**://esm.sh/**', async (route) => {
-        const url = route.request().url();
-        const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-        if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-        route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8'), base) });
-      });
       for (const [re, rel] of UMD_ROUTES) {
         await page.route(re, async route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: await readFile(join(CACHE, rel), 'utf8') }));
       }

@@ -318,7 +318,7 @@ muter "un code qui cite le kit alors que le relais des appels bloqués (consigne
 muter "un code qui cite le kit alors que la fenêtre de mise à jour des noms (consigne 104) manque" "cite le kit, mais kit/js/names-update/window.js est absent" "echo \"import('../kit/js/names-update/index.js');\" >> js/main.js; rm kit/js/names-update/window.js"
 muter "un code qui cite le kit alors que la feuille de style de la fenêtre des noms manque" "cite le kit, mais kit/css/names-update.css est absent" "echo \"import('../kit/js/names-update/index.js');\" >> js/main.js; rm kit/css/names-update.css"
 vrai "un code qui cite le kit, ses fichiers présents, passe" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; echo \"import('../kit/js/ambiance-pose.js');\" >> '$T/mut/js/main.js'; node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
-# La page qui cite la copie de l'éditeur (sa carte « gfs-carte-copie », consigne 066 de GFS) : le module cité, les licences et le manifeste doivent être dans l'arbre, sinon la case « Éditeur hors ligne » rendrait une page sans éditeur.
+# La page qui cite la copie de l'éditeur (sa carte d'importation, consigne 066 de GFS ; seul mode de l'éditeur depuis la consigne 107) : le module cité, les licences et le manifeste doivent être dans l'arbre, sinon la page n'aurait pas d'éditeur.
 # (La carte est un script en ligne : la politique de sécurité de la page en porte l'empreinte, que le petit script pose avec elle.)
 cat > "$T/poser-carte-copie.mjs" <<'JS'
 import fs from 'node:fs';
@@ -326,7 +326,7 @@ import crypto from 'node:crypto';
 const json = JSON.stringify({ imports: { editeur: './vendor/editeur/prosemirror.js?v=1' } });
 let html = fs.readFileSync('index.html', 'utf8');
 const hash = crypto.createHash('sha256').update(json).digest('base64');
-html = html.replace('</head>', `<script type="application/json" id="gfs-carte-copie">${json}</script></head>`).replace('; object-src', ` 'sha256-${hash}'; object-src`);
+html = html.replace('</head>', `<script type="importmap">${json}</script></head>`).replace('; object-src', ` 'sha256-${hash}'; object-src`);
 fs.writeFileSync('index.html', html);
 JS
 CARTE_COPIE="node '$T/poser-carte-copie.mjs'"

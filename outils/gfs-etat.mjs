@@ -93,8 +93,10 @@ export function measure() {
   const hashes = script.filter(s => s.startsWith("'sha256-"));
   const inline = inlineHashes(html);
   const strangers = hashes.filter(h => !inline.has(h));
-  const cards = Object.fromEntries([...html.matchAll(/<script type="application\/json" id="gfs-carte-(cdn|copie)">([\s\S]*?)<\/script>/g)]
-    .map(m => [m[1], Object.keys(JSON.parse(m[2]).imports || {}).length]));
+  // La carte d'importation : une seule balise `<script type="importmap">` (depuis la consigne 107 de GFS, l'éditeur n'a plus de carte de CDN), dont les entrées vont à la copie de l'éditeur ou au kit.
+  const importMap = (html.match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1];
+  const imports = importMap ? Object.values(JSON.parse(importMap).imports || {}) : [];
+  const cards = { total: imports.length, editeur: imports.filter(a => a.startsWith('./vendor/editeur/')).length, kit: imports.filter(a => a.startsWith('./kit/')).length };
 
   const exts = {};
   for (const f of tracked().filter(f => f.startsWith('extensions/'))) {
@@ -121,7 +123,7 @@ export function measure() {
     `- mots de stockage du navigateur · ${sum(counts.storage)} · ${where(counts.storage)}`,
     `- politique de contenu d'\`index.html\` · ${Object.keys(policy).length} directives · ${Object.keys(policy).join(', ')} ; \`script-src\` : ${script.length} sources dont ${hashes.length} empreintes \`sha256-\`, ` +
       `${strangers.length ? `dont ${strangers.length} qui ne sont celles d'aucun script en ligne` : 'toutes celles de scripts en ligne d\'`index.html`'}`,
-    `- cartes d'importation d'\`index.html\` · ${cards.cdn ?? 0} entrées pour le CDN, ${cards.copie ?? 0} pour la copie`,
+    `- carte d'importation d'\`index.html\` · ${cards.total} entrées : ${cards.editeur} vers la copie de l'éditeur (\`vendor/editeur\`), ${cards.kit} vers le kit`,
     `- extensions · ${Object.keys(exts).length} · ${Object.entries(exts).sort(([a], [b]) => (a < b ? -1 : 1)).map(([n, e]) => `${n} ${e.files} fichiers, ${e.bytes} octets, ${Math.round(e.bytes / 1000)} Ko`).join(' ; ')}`,
     `- ce que \`js/grist-api.js\` rend · ${api ? api[1].split(',').length : 0} noms`,
     `- registre des tables (\`js/schema-columns.js\`) · ${reg.length} tables et ${reg.reduce((n, t) => n + t.columns.length, 0)} colonnes · ${reg.map(t => `${t.id} ${t.columns.length}`).join(', ')}`,

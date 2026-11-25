@@ -31,7 +31,7 @@ Pour qui relit le code : où est quoi, et par où commencer. Les nombres de lign
   assemblé (Yjs et les extensions de TipTap qui s'en servent) ; pour la lecture d'un PDF, un seul module aussi
   (pdf.js et son moteur). Les modules sont chargés par `<script type="module">` avec leur empreinte, que ni la
   carte d'importation ni la politique de sécurité du contenu ne nomment.
-- **L'éditeur** (TipTap sur ProseMirror) se charge par `import()` depuis l'import map de `index.html` : celle des CDN (`esm.sh`), ou celle de sa copie figée (`vendor/editeur/`, avec ses licences et son manifeste d'empreintes) quand l'adresse dit `copie=editeur` ou que la case « Éditeur hors ligne » de Réglages est cochée ; un petit script en ligne pose l'une des deux avant tout le reste.
+- **L'éditeur** (TipTap sur ProseMirror) se charge par `import()` depuis l'import map de `index.html`, qui nomme les fichiers de sa copie figée (`vendor/editeur/`, avec ses licences et son manifeste d'empreintes) : c'est son seul mode, il ne demande rien à un autre site.
   **Chaque export** charge sa bibliothèque au premier usage, avec une empreinte (SRI) que le navigateur
   vérifie.
 - **Les données** : les modèles et les réglages vivent dans des tables `Publipostage_*` du document Grist ;
@@ -395,7 +395,7 @@ fenêtre de `js/` (`css/callout.css` pour `js/callout.js`, `css/gfs-ambiance.css
 - **Grist Factory Suite** : seulement quand l'adresse du widget porte `gfs=` (GFS l'héberge), `js/gfs-link.js` écrit
   au cadre parent (le contexte, `installer`, `stockage.ecrire`, `barre.masquer`, la réponse à l'appel `ouvrir`, et `ranger`, un PDF que l'app vient de fabriquer, seulement quand la personne a choisi « Ranger dans GFS ») et lit ce que GFS lui envoie (les événements
   `extensions`, `langue`, `barre` et `ambiance`, l'appel `ouvrir`), après avoir vérifié d'où il vient ; seul, le widget n'écrit ni n'écoute aucun message.
-- **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), l'éditeur (`esm.sh`), les
+- **Le réseau** : le script de l'API de Grist (`docs.getgrist.com`), les
   bibliothèques d'export et le lecteur de l'import Markdown au premier usage (`cdn.jsdelivr.net`), les moteurs
   d'export du widget et les fichiers d'une extension (même site, `extensions/`), et la bibliothèque d'une extension à l'adresse que GFS donne (Plotly pour le graphique de la page et ECharts pour le graphique créé, avec leur
   empreinte ; le module assemblé de l'écriture en direct et celui de la lecture d'un PDF, par `<script type="module">` dans `Extensions.loadModuleLibrary`), tous les autres chargés par `ExportCommon.loadScriptOnce`, les deux modules de l'ambiance du kit de GFS (même site, `kit/js/`, par `import()` et la carte d'importation de `index.html`, seulement quand GFS héberge le widget), le catalogue de la galerie (même site, `fetch` dans
@@ -528,7 +528,7 @@ For anyone reading the code: what is where, and where to start. Line counts are 
   module (Yjs and the TipTap extensions that use it); for PDF reading, a single module too (pdf.js and its engine). The
   modules are loaded by `<script type="module">` with their integrity hash, which neither the import map nor the content
   security policy names.
-- **The editor** (TipTap on ProseMirror) is loaded with `import()` from the import map of `index.html`: the CDN one (`esm.sh`), or the one for its frozen copy (`vendor/editeur/`, with its licenses and its hash manifest) when the address says `copie=editeur` or the “Offline editor” checkbox in Settings is ticked; a small inline script sets one of the two before anything else.
+- **The editor** (TipTap on ProseMirror) is loaded with `import()` from the import map of `index.html`, which names the files of its frozen copy (`vendor/editeur/`, with its licenses and its hash manifest): it is its only mode, it asks no other site for anything.
   **Each export** loads its library on first use, with an integrity hash (SRI) that the browser checks.
 - **The data**: templates and settings live in `Publipostage_*` tables of the Grist document; display
   preferences (language, theme, shortcuts…) in the browser.
@@ -884,7 +884,7 @@ the documents' font.
   the parent frame (the context, `installer`, `stockage.ecrire`, `barre.masquer`, the answer to the `ouvrir` call, and `ranger`, a PDF the app has just made, only when the person chose “Save to GFS”) and reads what GFS sends it (the
   `extensions`, `langue`, `barre` and `ambiance` events, the `ouvrir` call), after checking where it comes from; alone, the widget writes and listens to
   no message.
-- **The network**: the Grist API script (`docs.getgrist.com`), the editor (`esm.sh`), the export libraries and
+- **The network**: the Grist API script (`docs.getgrist.com`), the export libraries and
   the Markdown import reader on first use (`cdn.jsdelivr.net`), the widget's own export engines and an
   extension's files (same site, `extensions/`), and an extension's library at the address GFS gives (Plotly for the page chart and ECharts for the created chart, with their
   integrity hash; the assembled live-editing module and the PDF-reading one, by `<script type="module">` in `Extensions.loadModuleLibrary`), all the others loaded by `ExportCommon.loadScriptOnce`, the two ambiance modules of GFS's kit (same site, `kit/js/`, by `import()` and the import map of `index.html`, only when GFS hosts the widget), the gallery catalog (same site, `fetch` in `js/template-gallery.js`), and the reading of an image (`fetch` or

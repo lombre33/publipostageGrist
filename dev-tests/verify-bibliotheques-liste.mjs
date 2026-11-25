@@ -4,12 +4,12 @@
 // essai, sur la liste et la page telles qu'elles sont commitées, puis sur des copies où l'on défait UNE chose à la fois (ce que ferait une version montée à la main, une source ajoutée à la main) :
 //  1) la liste, le catalogue et la page commités sont cohérents : code 0, « liste, catalogue et politique cohérents » ;
 //  2) une version montée dans la liste sans relancer l'outil : refusée, la bibliothèque nommée ;
-//  3) une version montée à la main dans la carte d'importation d'index.html : l'écart est nommé (la carte est écrite par l'outil, jamais à la main) ;
+//  3) une adresse de la carte d'importation d'index.html changée à la main : l'écart est nommé (la carte est écrite par l'outil, jamais à la main) ;
 //  4) une source de script-src retirée à la main, ou une source ajoutée à la main (une adresse qui n'est ni dans la liste ni dans le catalogue) : les deux écarts sont nommés ;
 //  5) une empreinte du catalogue changée : le code qui écrit la même empreinte n'est plus d'accord, le fichier est nommé ;
 //  6) le ?v= du kit changé dans la page sans l'être dans la liste (gfs.carte.fixes) : refusé ;
 //  7) la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS ; gfs.copie dans la liste) : un fichier de la copie dont l'empreinte n'est plus celle de COPIE.json est nommé ; une version de la liste montée sans refaire la copie
-//     est un écart nommé (« refaire la copie (--copies) ») ; la carte « copie » de la page changée à la main est un écart nommé ; la copie absente est dite non construite.
+//     est un écart nommé (« refaire la copie (--copies) ») ; l'empreinte d'un fichier de la copie dans la carte d'importation de la page changée à la main est un écart nommé ; la copie absente est dite non construite.
 // Le kit est un sous-module : sans lui (`git submodule update --init kit`), l'essai est SAUTÉ et le dit (0/0 passés) - la forme de la liste, ses versions exactes, le miroir des essais et la carte contre la liste se
 // gardent sans lui dans codeHygiene (§ 38).
 // Lancé par run-headless.mjs (groupe Node « bibliothequesListe », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-bibliotheques-liste.mjs
@@ -47,7 +47,7 @@ const copy = (edit, vendor = 'lien') => {
   edit(dir);
   return dir;
 };
-// Remplace `from` par `to` ; `from` doit y être exactement `times` fois (une fois par défaut ; deux pour ce que la page dit dans ses deux cartes, celle du CDN et celle de la copie).
+// Remplace `from` par `to` ; `from` doit y être exactement `times` fois (une fois par défaut ; deux pour un texte que la page dit deux fois).
 const change = (dir, file, from, to, times = 1) => {
   const path = join(dir, file);
   const text = readFileSync(path, 'utf8');
@@ -62,11 +62,13 @@ try {
   const bumped = verify(copy(dir => change(dir, 'package.json', '"marked": "15.0.12"', '"marked": "15.0.13"')));
   check('une version montée dans la liste sans relancer l\'outil est refusée, la bibliothèque nommée (marked)', bumped.status === 1 && /marked/.test(bumped.err), `${bumped.status} ${bumped.err}`.slice(0, 300));
 
-  const handMap = verify(copy(dir => change(dir, 'index.html', '"prosemirror-state": "https://esm.sh/*prosemirror-state@1.4.4"', '"prosemirror-state": "https://esm.sh/*prosemirror-state@1.4.5"')));
-  check('une version montée à la main dans la carte d\'importation du CDN d\'index.html est un écart nommé (la carte est écrite par l\'outil du kit)', handMap.status === 1 && /index\.html : à changer dans la carte du CDN : prosemirror-state/.test(handMap.err), `${handMap.status} ${handMap.err}`.slice(0, 300));
+  const handMap = verify(copy(dir => change(dir, 'index.html', 'prosemirror-state.js?v=', 'prosemirror-state.js?v=0000')));
+  check('une adresse de la carte d\'importation d\'index.html changée à la main est un écart nommé (la carte est écrite par l\'outil du kit)', handMap.status === 1 && /index\.html : à changer dans la carte d'importation : prosemirror-state/.test(handMap.err), `${handMap.status} ${handMap.err}`.slice(0, 300));
 
-  const dropped = verify(copy(dir => change(dir, 'index.html', 'https://esm.sh/linkifyjs@4.4.0 ', '')));
-  check('une source de script-src retirée à la main est un écart nommé (« à ajouter à script-src »)', dropped.status === 1 && /à ajouter à script-src : https:\/\/esm\.sh\/linkifyjs@4\.4\.0/.test(dropped.err), `${dropped.status} ${dropped.err}`.slice(0, 300));
+  // La source retirée est lue dans la page (la première adresse de script de jsDelivr de script-src) : une adresse de CDN n'est jamais écrite en entier dans un essai (la recherche d'adresses de GFS lit aussi dev-tests/).
+  const dropSource = (/https:\/\/cdn\.jsdelivr\.net\/npm\/plotly[^\s'"]+/.exec(readFileSync(join(ROOT, 'index.html'), 'utf8')) || [''])[0];
+  const dropped = verify(copy(dir => change(dir, 'index.html', `${dropSource} `, '')));
+  check('une source de script-src retirée à la main est un écart nommé (« à ajouter à script-src »)', dropSource !== '' && dropped.status === 1 && dropped.err.includes(`à ajouter à script-src : ${dropSource}`), `${dropped.status} ${dropped.err}`.slice(0, 300));
 
   const added = verify(copy(dir => change(dir, 'index.html', 'script-src \'self\' \'unsafe-eval\' ', 'script-src \'self\' \'unsafe-eval\' https://autre.exemple/x.js ')));
   check('une source ajoutée à la main dans script-src (ni dans la liste ni dans le catalogue) est un écart nommé (« à retirer de script-src »)', added.status === 1 && /à retirer de script-src : https:\/\/autre\.exemple\/x\.js/.test(added.err), `${added.status} ${added.err}`.slice(0, 300));
@@ -76,8 +78,8 @@ try {
   const integrity = verify(copy(dir => change(dir, 'bibliotheques/catalogue.json', catalogue.cdn.integrite, flipped)));
   check('une empreinte changée dans le catalogue ne s\'accorde plus avec celle que le code écrit à côté de l\'adresse : le fichier de js/ est nommé', integrity.status === 1 && /js\/native-libs\.js/.test(integrity.err) && /empreinte/.test(integrity.err), `${integrity.status} ${integrity.err}`.slice(0, 300));
 
-  const pin = verify(copy(dir => change(dir, 'index.html', 'ambiance-pose.js?v=', 'ambiance-pose.js?v=deadbee#', 2)));
-  check('le ?v= du kit changé dans la page (ses deux cartes) sans l\'être dans la liste (gfs.carte.fixes) est refusé', pin.status === 1 && /kit\/ambiance-pose/.test(pin.err), `${pin.status} ${pin.err}`.slice(0, 300));
+  const pin = verify(copy(dir => change(dir, 'index.html', 'ambiance-pose.js?v=', 'ambiance-pose.js?v=deadbee#')));
+  check('le ?v= du kit changé dans la page sans l\'être dans la liste (gfs.carte.fixes) est refusé', pin.status === 1 && /kit\/ambiance-pose/.test(pin.err), `${pin.status} ${pin.err}`.slice(0, 300));
 
   // La copie figée de l'éditeur (consigne 066).
   const manifest = JSON.parse(readFileSync(join(ROOT, 'vendor', 'editeur', 'COPIE.json'), 'utf8'));
@@ -91,7 +93,7 @@ try {
   check('une version de la liste montée sans refaire la copie est un écart nommé (le paquet, « refaire la copie (--copies) »)', staleCopy.status === 1 && /prosemirror-model : la copie a /.test(staleCopy.err) && /refaire la copie \(--copies\)/.test(staleCopy.err), `${staleCopy.status} ${staleCopy.err}`.slice(0, 400));
 
   const copyMap = verify(copy(dir => change(dir, 'index.html', 'prosemirror-model.js?v=', 'prosemirror-model.js?v=0000')));
-  check('une adresse de la carte « copie » de la page changée à la main est un écart nommé (la carte est écrite par l\'outil du kit)', copyMap.status === 1 && /index\.html : à changer dans la carte de la copie : prosemirror-model/.test(copyMap.err), `${copyMap.status} ${copyMap.err}`.slice(0, 300));
+  check('l\'empreinte d\'un fichier de la copie dans la carte d\'importation de la page changée à la main est un écart nommé (la carte est écrite par l\'outil du kit)', copyMap.status === 1 && /index\.html : à changer dans la carte d'importation : prosemirror-model/.test(copyMap.err), `${copyMap.status} ${copyMap.err}`.slice(0, 300));
 
   const missing = verify(copy(() => {}, 'absente'));
   check('une copie absente (vendor/ non récupéré) est dite non construite, avec la commande qui la construit', missing.status === 1 && /vendor\/editeur\/COPIE\.json absent/.test(missing.err) && /--copies/.test(missing.err), `${missing.status} ${missing.err}`.slice(-300));

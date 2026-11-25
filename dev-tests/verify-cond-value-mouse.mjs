@@ -56,9 +56,7 @@ const server = createServer(async (req, res) => {
 await new Promise((ok, ko) => server.listen(PORT, '127.0.0.1', ok).on('error', ko));
 const BASE = `http://127.0.0.1:${PORT}`;
 
-const esmMapPath = join(CACHE, 'esm-map.json');
-const OFFLINE = existsSync(esmMapPath);
-const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
+const OFFLINE = existsSync(join(CACHE, 'umd'));
 const UMD_ROUTES = OFFLINE ? [
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
@@ -72,8 +70,6 @@ if (!OFFLINE) console.log('[verify-cond-value-mouse] miroir hors-ligne absent (d
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
-const CHUNK_BASE = 'https://esm.sh/_offline-chunks/';
-const absoluteChunks = code => code.replace(/(from\s*|import\s*)"\.\/(chunk-[A-Z0-9]+\.js)"/g, (_, kw, file) => `${kw}"${CHUNK_BASE}${file}"`);
 
 // COND_VALUE_SHOTS=<dossier> : enregistre des captures aux moments clés, à relire à l'œil (comme COND_TEXT_SHOTS pour le bloc).
 const SHOTS = process.env.COND_VALUE_SHOTS || '';
@@ -95,14 +91,6 @@ async function openWidget(colorScheme) {
   page.on('pageerror', e => { pageErrors.push(e.message); console.log('[pageerror]', e.message); });
   page.on('dialog', d => { pageErrors.push('boîte inattendue : ' + d.message()); d.accept().catch(() => {}); });
   if (OFFLINE) {
-    await page.route('**://esm.sh/**', async route => {
-      const url = route.request().url();
-      const chunk = url.match(/\/(chunk-[A-Z0-9]+\.js)$/);
-      if (chunk) return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(CACHE, 'esm', chunk[1]), 'utf8')) });
-      const spec = Object.keys(esmMap).find(k => url === `https://esm.sh/${k}` || url === `https://esm.sh/*${k}` || url.startsWith(`https://esm.sh/${k}@`) || url.startsWith(`https://esm.sh/*${k}@`));
-      if (!spec) return route.fulfill({ status: 404, body: `// pas de miroir local pour ${url}` });
-      route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: absoluteChunks(await readFile(join(ROOT, esmMap[spec].replace(/^\//, '')), 'utf8')) });
-    });
     for (const [re, rel] of UMD_ROUTES) {
       await page.route(re, async route => route.fulfill({
         status: 200, contentType: 'text/javascript; charset=utf-8',

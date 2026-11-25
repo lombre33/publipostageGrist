@@ -64,9 +64,9 @@ contribution de leur côté : elle paraît alors dans la version suivante (voir 
 - **Cache du navigateur** : un fichier de `css/` ou de `js/` modifié monte son numéro `?v=` dans
   `index.html`, sinon les navigateurs gardent l'ancienne version.
 - **Sécurité de la page** : `index.html` porte une politique de sécurité du contenu. Si vous modifiez
-  l'un des scripts en ligne de la page (trois scripts et deux cartes d'importation), mettez à jour son
+  l'un des scripts en ligne de la page (trois scripts et la carte d'importation), mettez à jour son
   empreinte `sha256-…` dans cette politique (la console du navigateur affiche celle qui est attendue). Une nouvelle bibliothèque tierce
-  s'ajoute à la politique, en version figée (jamais `@latest`) et, hors `esm.sh`, avec une intégrité SRI.
+  s'ajoute à la politique, en version figée (jamais `@latest`) et avec une intégrité SRI.
   Pas d'`eval`, pas de police ni de feuille de style d'un autre site : l'interface prend la police du
   système.
 - **Pas de nouvelle dépendance sans raison** : le widget n'a pas d'étape de build, et chaque
@@ -143,9 +143,9 @@ the next version (see the [CHANGELOG](CHANGELOG.md)).
 - **Browser cache**: a modified file in `css/` or `js/` bumps its `?v=` number in `index.html`,
   otherwise browsers keep the old version.
 - **Page security**: `index.html` carries a Content Security Policy. If you change one of the page's
-  inline scripts (three scripts and two import maps), update its `sha256-…` hash in that policy (the
+  inline scripts (three scripts and the import map), update its `sha256-…` hash in that policy (the
   browser console shows the expected one). A new third-party library is added to the policy, at a pinned version (never
-  `@latest`) and, apart from `esm.sh`, with an SRI integrity hash. No `eval`, no font or stylesheet
+  `@latest`) and with an SRI integrity hash. No `eval`, no font or stylesheet
   from another site: the interface uses the system font.
 - **No new dependency without a reason**: the widget has no build step, and every library is one more
   network call for people who use it in an administration.

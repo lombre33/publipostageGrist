@@ -7,7 +7,7 @@
 <!-- Politique de sécurité du contenu (contrôle du 04/10, AUDIT_CODE.md §3.2) : même si du HTML piégé échappait au filtre (js/html-sanitize.js), le navigateur refuse tout script en ligne, tout
      gestionnaire d'événement, toute adresse javascript:, tout script d'une autre adresse que celles-ci (l'adresse entière quand la bibliothèque est figée), tout cadre sauf ceux de YouTube (youtube-nocookie.com) et de Vimeo (player.vimeo.com), tout objet, formulaire et toute
      balise de base. Ces deux cadres sont la SEULE ouverture de `frame-src` : le lecteur d'une vidéo que l'app seule (sans GFS) pose au clic sur ▶ (js/video-frame.js, choix du 09/11 : une baisse de sécurité voulue, deux sites nommés) ; hébergée par GFS, l'app ne pose aucun cadre. Les trois scripts en ligne de cette page y sont cités par leur empreinte : en modifier un (la carte d'importation comprise) change son empreinte. Cette politique est ÉCRITE par l'outil du kit, d'après la liste
-     des bibliothèques de l'app (package.json à la racine, section gfs) : node kit/outils/bibliotheques.mjs la réécrit, empreintes comprises, et dev-tests/verify-code-hygiene.mjs (groupe codeHygiene) refuse l'écart ; rien ne s'y change à la main. esm.sh n'est PAS ouvert en entier (choix du 11/11, « Resserrer la liste ») : seuls les paquets de l'éditeur, à leur version exacte, et quatre cales node/*.mjs d'esm.sh y sont nommés, un chemin par paquet, pris du relevé outils/empreintes-editeur.json (node outils/empreintes-editeur.mjs --ecrire, réseau, ou --poser-politique, sans réseau, les écrivent dans la liste, gfs.politique.scriptSrc de package.json, puis l'outil du kit les reporte ici ; --politique les affiche) ; un autre paquet, un dépôt GitHub servi par esm.sh ou une autre version de TipTap ne se charge pas. 'unsafe-eval' reste, faute de mieux : le fichier
+     des bibliothèques de l'app (package.json à la racine, section gfs) : node kit/outils/bibliotheques.mjs la réécrit, empreintes comprises, et dev-tests/verify-code-hygiene.mjs (groupe codeHygiene) refuse l'écart ; rien ne s'y change à la main. L'éditeur ne demande plus rien à un autre site (consigne 107 de GFS, 25/11) : TipTap et ProseMirror viennent de la copie figée de l'app (vendor/editeur/, servie par 'self'), et la carte d'importation qui la nomme est citée ici par son empreinte, comme les autres scripts en ligne. 'unsafe-eval' reste, faute de mieux : le fichier
      que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle de développement dont chaque module s'évalue par eval(), et sans lui l'objet grist n'existe pas (dev-tests/verify-csp.mjs charge
      le vrai fichier). FERMÉE depuis le 24/11 (« plus aucun appel externe dans la politique », décision du porteur) : `default-src 'none'`, puis chaque famille d'appels est NOMMÉE, et rien d'autre ne sort.
      Styles : 'self' et 'unsafe-inline' (l'éditeur écrit des attributs `style`). Polices : 'self' et data: (celles de css/roboto-fonts.css sont dans la feuille ; aucune police ne vient d'un autre site : l'interface
@@ -22,49 +22,14 @@
      que GFS héberge (même origine) passe par 'self' sans rien nommer. ECharts (le graphique créé, même extension) est dans le même cas : echarts@6.1.0/dist/echarts.min.js, l'adresse exacte du catalogue de GFS pour
      son mode CDN. Une bibliothèque d'extension à venir : l'adresse exacte que GFS donne, une par bibliothèque, jamais écrite de la main de l'app. -->
 <meta http-equiv="Content-Security-Policy" content="
-  script-src 'self' 'unsafe-eval' https://esm.sh/*orderedmap@2.1.1 https://esm.sh/*orderedmap@2.1.1/ https://esm.sh/*prosemirror-changeset@2.4.1
-    https://esm.sh/*prosemirror-changeset@2.4.1/ https://esm.sh/*prosemirror-commands@1.7.1 https://esm.sh/*prosemirror-commands@1.7.1/
-    https://esm.sh/*prosemirror-dropcursor@1.8.2 https://esm.sh/*prosemirror-dropcursor@1.8.2/ https://esm.sh/*prosemirror-gapcursor@1.4.1
-    https://esm.sh/*prosemirror-gapcursor@1.4.1/ https://esm.sh/*prosemirror-history@1.5.0 https://esm.sh/*prosemirror-history@1.5.0/
-    https://esm.sh/*prosemirror-inputrules@1.5.1 https://esm.sh/*prosemirror-inputrules@1.5.1/ https://esm.sh/*prosemirror-keymap@1.2.3
-    https://esm.sh/*prosemirror-keymap@1.2.3/ https://esm.sh/*prosemirror-model@1.25.11 https://esm.sh/*prosemirror-model@1.25.11/
-    https://esm.sh/*prosemirror-schema-list@1.5.1 https://esm.sh/*prosemirror-schema-list@1.5.1/ https://esm.sh/*prosemirror-state@1.4.4
-    https://esm.sh/*prosemirror-state@1.4.4/ https://esm.sh/*prosemirror-tables@1.8.5 https://esm.sh/*prosemirror-tables@1.8.5/
-    https://esm.sh/*prosemirror-transform@1.12.0 https://esm.sh/*prosemirror-transform@1.12.0/ https://esm.sh/*prosemirror-view@1.42.3
-    https://esm.sh/*prosemirror-view@1.42.3/ https://esm.sh/*rope-sequence@1.3.4 https://esm.sh/*rope-sequence@1.3.4/
-    https://esm.sh/*w3c-keyname@2.2.8 https://esm.sh/*w3c-keyname@2.2.8/ https://esm.sh/@floating-ui/core@1.8.0
-    https://esm.sh/@floating-ui/core@1.8.0/ https://esm.sh/@floating-ui/dom@1.6.12 https://esm.sh/@floating-ui/dom@1.6.12/
-    https://esm.sh/@floating-ui/dom@1.8.0 https://esm.sh/@floating-ui/dom@1.8.0/ https://esm.sh/@floating-ui/utils@0.2.12
-    https://esm.sh/@floating-ui/utils@0.2.12/ https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8
-    https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8/ https://esm.sh/@tiptap/core@3.31.3 https://esm.sh/@tiptap/core@3.31.3/
-    https://esm.sh/@tiptap/extension-blockquote@3.31.3/ https://esm.sh/@tiptap/extension-bold@3.31.3/
-    https://esm.sh/@tiptap/extension-code-block@3.31.3/ https://esm.sh/@tiptap/extension-code@3.31.3/ https://esm.sh/@tiptap/extension-document@3.31.3
-    https://esm.sh/@tiptap/extension-document@3.31.3/ https://esm.sh/@tiptap/extension-font-family@3.31.3
-    https://esm.sh/@tiptap/extension-font-family@3.31.3/ https://esm.sh/@tiptap/extension-hard-break@3.31.3/
-    https://esm.sh/@tiptap/extension-heading@3.31.3/ https://esm.sh/@tiptap/extension-horizontal-rule@3.31.3/
-    https://esm.sh/@tiptap/extension-italic@3.31.3/ https://esm.sh/@tiptap/extension-link@3.31.3/ https://esm.sh/@tiptap/extension-list@3.31.3/
-    https://esm.sh/@tiptap/extension-paragraph@3.31.3/ https://esm.sh/@tiptap/extension-placeholder@3.31.3
-    https://esm.sh/@tiptap/extension-placeholder@3.31.3/ https://esm.sh/@tiptap/extension-strike@3.31.3/
-    https://esm.sh/@tiptap/extension-table-cell@3.31.3 https://esm.sh/@tiptap/extension-table-cell@3.31.3/
-    https://esm.sh/@tiptap/extension-table-header@3.31.3 https://esm.sh/@tiptap/extension-table-header@3.31.3/
-    https://esm.sh/@tiptap/extension-table-row@3.31.3 https://esm.sh/@tiptap/extension-table-row@3.31.3/ https://esm.sh/@tiptap/extension-table@3.31.3
-    https://esm.sh/@tiptap/extension-table@3.31.3/ https://esm.sh/@tiptap/extension-task-item@3.31.3
-    https://esm.sh/@tiptap/extension-task-item@3.31.3/ https://esm.sh/@tiptap/extension-task-list@3.31.3
-    https://esm.sh/@tiptap/extension-task-list@3.31.3/ https://esm.sh/@tiptap/extension-text-align@3.31.3
-    https://esm.sh/@tiptap/extension-text-align@3.31.3/ https://esm.sh/@tiptap/extension-text-style@3.31.3
-    https://esm.sh/@tiptap/extension-text-style@3.31.3/ https://esm.sh/@tiptap/extension-text@3.31.3/
-    https://esm.sh/@tiptap/extension-underline@3.31.3 https://esm.sh/@tiptap/extension-underline@3.31.3/ https://esm.sh/@tiptap/extensions@3.31.3/
-    https://esm.sh/@tiptap/starter-kit@3.31.3 https://esm.sh/@tiptap/starter-kit@3.31.3/ https://esm.sh/@tiptap/suggestion@3.31.3
-    https://esm.sh/@tiptap/suggestion@3.31.3/ https://esm.sh/linkifyjs@4.4.0 https://esm.sh/linkifyjs@4.4.0/ https://esm.sh/node/async_hooks.mjs
-    https://esm.sh/node/events.mjs https://esm.sh/node/process.mjs https://esm.sh/node/tty.mjs https://docs.getgrist.com/grist-plugin-api.js
+  script-src 'self' 'unsafe-eval' https://docs.getgrist.com/grist-plugin-api.js
     https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
     https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js
     https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
     https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js
     https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/pdfmake.min.js https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/vfs_fonts.js
     https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-PQw3IQLgd0dR0RTrBGSQFI4v7yZxxYwbYLE+Guh7R3o='
-    'sha256-D5wXoqN2G2EczO5C6j617exQ5KR3AMPgcxXae//k964=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-xTUZEJxo1/2r9+85gB31spSbdAlOXS8a437NbktJhVI='
     'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-Ju+vNoncsiRhUbNSxr1nwqCkvJGIjcELvN5FaeZc+xw=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none';
   default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:;
@@ -80,34 +45,20 @@
      CHAQUE ouverture du widget avant ce changement, y compris quand
      l'utilisateur n'exporte jamais de PDF (signalé par l'utilisateur : 1-2s
      d'attente à l'ouverture). -->
-<!-- Import map : necessaire pour charger TipTap/ProseMirror sans bundler
-     local (absent de l'environnement de dev) - fixe explicitement UNE SEULE
-     instance de chaque paquet prosemirror-* partage entre @tiptap/core et
-     les extensions, sans quoi ProseMirror leve "Adding different instances
-     of a keyed plugin". Inclut aussi les sous-chemins @tiptap/pm/* : le
-     bundle esm.sh de @tiptap/core importe ProseMirror via des URLs absolues
-     (ex. /@tiptap/pm@3.31.3/es2022/model.mjs), jamais via un specificateur nu -
-     sans ces entrees, ces sous-chemins echappent totalement a l'import map et
-     chargent une AUTRE instance de prosemirror-model, provoquant un crash
-     silencieux de la touche Entree (RangeError "multiple versions of
-     prosemirror-model", cf. commit qui a corrige cette regression).
-     Un script classique (pas type="module") peut resoudre ces specifiers nus
-     via import() dynamique - cf. commentaire en tete de js/editor.js.
-     Cette carte est ECRITE par l'outil du kit (node kit/outils/bibliotheques.mjs) d'apres la liste des bibliotheques (package.json a la racine : dependencies pour les versions, gfs.carte pour la carte) :
-     une version change dans la liste, jamais ici, et l'outil refait la carte, la politique de securite ci-dessus et le catalogue bibliotheques/catalogue.json.
-     Les huit entrees qui suivent celles du kit (@floating-ui, linkifyjs ; « fixes » de la liste) figent des VERSIONS FLOTTANTES : les paquets de TipTap et de floating-ui les demandent sous la forme `@^1.0.0` ou `@^4.3.3`, qu'esm.sh resout
-     a chaque demande (cache de dix minutes) vers la derniere version publiee : sans ces entrees, une version nouvelle de linkifyjs ou de floating-ui, publiee OU VOLEE sur npm, se serait chargee
-     dans l'editeur le jour meme, avec l'acces complet au document. Chacune renvoie vers la version exacte que l'adresse flottante donnait le 10/11 (meme fichier final, meme texte, cache immuable).
-     outils/empreintes-editeur.mjs --verifier refuse toute adresse flottante du parcours ; dev-tests/verify-code-hygiene.mjs garde le releve hors ligne.
+<!-- Import map : charge TipTap/ProseMirror depuis la COPIE FIGEE de l'editeur (vendor/editeur/ : des fichiers construits une fois par `node kit/outils/bibliotheques.mjs --copies` d'apres les versions de la liste ;
+     vendor/editeur/COPIE.json dit les paquets et l'empreinte de chaque fichier), sans bundler local et sans rien demander a un autre site. C'est le SEUL mode de l'editeur (consigne 107 de GFS, 25/11) : le CDN
+     qui le servait ne rendait pas les octets de npm et chargeait jusqu'a sept copies de ProseMirror. La carte fixe explicitement UNE SEULE instance de chaque paquet prosemirror-* partage entre @tiptap/core et les
+     extensions, sans quoi ProseMirror leve "Adding different instances of a keyed plugin" (ou, a la touche Entree, RangeError "multiple versions of prosemirror-model"). Les sous-chemins @tiptap/pm/* sont des fichiers
+     de la copie comme les autres.
+     Un script classique (pas type="module") peut resoudre ces specifiers nus via import() dynamique - cf. commentaire en tete de js/editor.js.
+     Cette carte est ECRITE par l'outil du kit (node kit/outils/bibliotheques.mjs --copies) d'apres la liste des bibliotheques (package.json a la racine : dependencies pour les versions, gfs.carte pour la carte, gfs.copie pour la copie) :
+     une version change dans la liste, jamais ici, et l'outil refait la copie, la carte, la politique de securite ci-dessus et le catalogue bibliotheques/catalogue.json.
      Les sept premieres entrees sont celles du kit de Grist Factory (sous-module kit/ ; consigne 041 de GFS : l'ambiance choisie dans GFS, consigne 068 : les correcteurs du navigateur coupes, consigne 084 : le relais des appels bloques, consigne 104 : la fenetre commune de mise a jour des noms) : un module du kit n'a qu'UNE adresse par page
      (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js (les lecteurs des messages), js/gfs-ambiance.js, js/gfs-correcteurs.js et js/gfs-violations.js (les poses) les importent par ce nom, jamais par un chemin (la pose des violations importe elle-meme kit/js/violations-message.js et kit/js/once.js, par un chemin relatif : une seule adresse chacun, donc pas d'entree). Le ?v= est le debut du commit que le depot
      epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec. Seule kit/i18n n'en a pas : la fenetre des noms (kit/names-update) importe ../i18n.js, c'est-a-dire kit/js/i18n.js tout court, et js/names-update.js (la passerelle de la fenetre)
      y regle la langue de l'app : une seule adresse, donc une seule instance, celle que la fenetre lit.
-     Depuis la consigne 066 de GFS, la page porte DEUX cartes en donnees : celle-ci (gfs-carte-cdn) et gfs-carte-copie, les memes noms vers les modules de vendor/editeur/ (la copie figee de l'editeur, construite
-     par `node kit/outils/bibliotheques.mjs --copies` d'apres les memes versions). Le script qui les suit en pose UNE seule dans la page, avant tout le reste (Firefox n'en prend qu'une) : la copie quand l'adresse
-     dit copie=editeur (GFS la met quand la personne l'a choisie) ou quand la cle pp_editeur_copie du navigateur vaut « copie » (Reglages > Theme > Editeur hors ligne, js/settings.js), le CDN sinon.
-     Rien de ces deux cartes ni du script ne s'ecrit a la main : l'outil les refait avec leurs empreintes dans la politique ci-dessus. -->
-<script type="application/json" id="gfs-carte-cdn">
+     Rien de cette carte ne s'ecrit a la main : l'outil la refait avec son empreinte dans la politique ci-dessus. -->
+<script type="importmap">
 {
   "imports": {
     "kit/ambiance-message": "./kit/js/ambiance-message.js?v=6a20f9d",
@@ -117,84 +68,6 @@
     "kit/i18n": "./kit/js/i18n.js",
     "kit/names-update": "./kit/js/names-update/index.js?v=6a20f9d",
     "kit/violations-pose": "./kit/js/violations-pose.js?v=6a20f9d",
-    "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.8?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.12?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.8/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.12/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
-    "https://esm.sh/linkifyjs@^4.3.3?target=es2022": "https://esm.sh/linkifyjs@4.4.0?target=es2022",
-    "prosemirror-model": "https://esm.sh/*prosemirror-model@1.25.11",
-    "orderedmap": "https://esm.sh/*orderedmap@2.1.1",
-    "prosemirror-state": "https://esm.sh/*prosemirror-state@1.4.4",
-    "prosemirror-transform": "https://esm.sh/*prosemirror-transform@1.12.0",
-    "prosemirror-view": "https://esm.sh/*prosemirror-view@1.42.3",
-    "rope-sequence": "https://esm.sh/*rope-sequence@1.3.4",
-    "prosemirror-history": "https://esm.sh/*prosemirror-history@1.5.0",
-    "prosemirror-keymap": "https://esm.sh/*prosemirror-keymap@1.2.3",
-    "w3c-keyname": "https://esm.sh/*w3c-keyname@2.2.8",
-    "prosemirror-commands": "https://esm.sh/*prosemirror-commands@1.7.1",
-    "prosemirror-schema-list": "https://esm.sh/*prosemirror-schema-list@1.5.1",
-    "prosemirror-tables": "https://esm.sh/*prosemirror-tables@1.8.5",
-    "prosemirror-gapcursor": "https://esm.sh/*prosemirror-gapcursor@1.4.1",
-    "prosemirror-dropcursor": "https://esm.sh/*prosemirror-dropcursor@1.8.2",
-    "prosemirror-inputrules": "https://esm.sh/*prosemirror-inputrules@1.5.1",
-    "prosemirror-changeset": "https://esm.sh/*prosemirror-changeset@2.4.1",
-    "@tiptap/core": "https://esm.sh/@tiptap/core@3.31.3",
-    "@tiptap/starter-kit": "https://esm.sh/@tiptap/starter-kit@3.31.3",
-    "@tiptap/extension-document": "https://esm.sh/@tiptap/extension-document@3.31.3",
-    "@tiptap/extension-underline": "https://esm.sh/@tiptap/extension-underline@3.31.3",
-    "@tiptap/extension-text-align": "https://esm.sh/@tiptap/extension-text-align@3.31.3",
-    "@tiptap/extension-text-style": "https://esm.sh/@tiptap/extension-text-style@3.31.3",
-    "@tiptap/extension-font-family": "https://esm.sh/@tiptap/extension-font-family@3.31.3",
-    "@tiptap/extension-table": "https://esm.sh/@tiptap/extension-table@3.31.3",
-    "@tiptap/extension-table-row": "https://esm.sh/@tiptap/extension-table-row@3.31.3",
-    "@tiptap/extension-table-cell": "https://esm.sh/@tiptap/extension-table-cell@3.31.3",
-    "@tiptap/extension-table-header": "https://esm.sh/@tiptap/extension-table-header@3.31.3",
-    "@tiptap/extension-task-list": "https://esm.sh/@tiptap/extension-task-list@3.31.3",
-    "@tiptap/extension-task-item": "https://esm.sh/@tiptap/extension-task-item@3.31.3",
-    "@tiptap/extension-placeholder": "https://esm.sh/@tiptap/extension-placeholder@3.31.3",
-    "@tiptap/suggestion": "https://esm.sh/@tiptap/suggestion@3.31.3",
-    "@floating-ui/dom": "https://esm.sh/@floating-ui/dom@1.6.12",
-    "@handlewithcare/prosemirror-suggest-changes": "https://esm.sh/@handlewithcare/prosemirror-suggest-changes@0.1.8",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/model.mjs": "https://esm.sh/*prosemirror-model@1.25.11",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/state.mjs": "https://esm.sh/*prosemirror-state@1.4.4",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/view.mjs": "https://esm.sh/*prosemirror-view@1.42.3",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/transform.mjs": "https://esm.sh/*prosemirror-transform@1.12.0",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/keymap.mjs": "https://esm.sh/*prosemirror-keymap@1.2.3",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/commands.mjs": "https://esm.sh/*prosemirror-commands@1.7.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/schema-list.mjs": "https://esm.sh/*prosemirror-schema-list@1.5.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/tables.mjs": "https://esm.sh/*prosemirror-tables@1.8.5",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/gapcursor.mjs": "https://esm.sh/*prosemirror-gapcursor@1.4.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/dropcursor.mjs": "https://esm.sh/*prosemirror-dropcursor@1.8.2",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/inputrules.mjs": "https://esm.sh/*prosemirror-inputrules@1.5.1",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/history.mjs": "https://esm.sh/*prosemirror-history@1.5.0",
-    "https://esm.sh/@tiptap/pm@3.31.3/es2022/changeset.mjs": "https://esm.sh/*prosemirror-changeset@2.4.1",
-    "https://esm.sh/prosemirror-state@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-state@1.4.4",
-    "https://esm.sh/prosemirror-transform@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-transform@1.12.0",
-    "https://esm.sh/prosemirror-view@^1.0.0?target=es2022": "https://esm.sh/*prosemirror-view@1.42.3"
-  }
-}
-</script>
-<script type="application/json" id="gfs-carte-copie">
-{
-  "imports": {
-    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=6a20f9d",
-    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=6a20f9d",
-    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=6a20f9d",
-    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=6a20f9d",
-    "kit/i18n": "./kit/js/i18n.js",
-    "kit/names-update": "./kit/js/names-update/index.js?v=6a20f9d",
-    "kit/violations-pose": "./kit/js/violations-pose.js?v=6a20f9d",
-    "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.8?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.12?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.8/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
-    "https://esm.sh/@floating-ui/utils@^0.2.12/dom?target=es2022": "https://esm.sh/@floating-ui/utils@0.2.12/dom?target=es2022",
-    "https://esm.sh/linkifyjs@^4.3.3?target=es2022": "https://esm.sh/linkifyjs@4.4.0?target=es2022",
     "prosemirror-model": "./vendor/editeur/prosemirror-model.js?v=ff62a9a2",
     "orderedmap": "./vendor/editeur/orderedmap.js?v=6cd0b6e1",
     "prosemirror-state": "./vendor/editeur/prosemirror-state.js?v=f90b686c",
@@ -230,17 +103,6 @@
     "@handlewithcare/prosemirror-suggest-changes": "./vendor/editeur/handlewithcare__prosemirror-suggest-changes.js?v=4fd9ad50"
   }
 }
-</script>
-<script>
-(function () {
-  var fonction = "editeur", cle = "pp_editeur_copie", copie = false;
-  try { copie = (new URLSearchParams(location.search).get('copie') || '').split(',').indexOf(fonction) >= 0; } catch (e) { /* adresse illisible : le CDN */ }
-  try { if (!copie && cle !== null) copie = localStorage.getItem(cle) === 'copie'; } catch (e) { /* stockage indisponible : le CDN */ }
-  var carte = document.createElement('script');
-  carte.type = 'importmap';
-  carte.textContent = document.getElementById(copie ? 'gfs-carte-copie' : 'gfs-carte-cdn').textContent;
-  document.head.appendChild(carte);
-})();
 </script>
 <script>
 (function () {
@@ -367,8 +229,8 @@
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.9">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.27">
-<link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.17">
+<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.28">
+<link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.18">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.13">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.2">
 <link rel="preload" as="script" href="js/i18n-texts-pivot.js?v=0.3">
@@ -476,7 +338,7 @@
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
 <link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.14">
-<link rel="preload" as="script" href="js/settings.js?v=0.33">
+<link rel="preload" as="script" href="js/settings.js?v=0.34">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.29">
 <link rel="preload" as="script" href="js/modal-base.js?v=0.8">
@@ -484,7 +346,7 @@
 <link rel="preload" as="script" href="js/batch-failures.js?v=0.3">
 <link rel="preload" as="script" href="js/view-source.js?v=0.2">
 <link rel="preload" as="script" href="js/batch-scope.js?v=0.5">
-<link rel="preload" as="script" href="js/first-contact.js?v=0.8">
+<link rel="preload" as="script" href="js/first-contact.js?v=0.10">
 <link rel="preload" as="script" href="js/whats-new.js?v=0.5">
 <link rel="preload" as="script" href="js/external-images.js?v=0.11">
 <link rel="preload" as="script" href="js/print-export.js?v=0.13">
@@ -1293,19 +1155,13 @@
           </div>
           <p class="settings-access-hint" id="settings-etat-hint"></p>
         </section>
-        <!-- Éditeur hors ligne (js/settings.js:syncOfflineEditor, consigne 066 de GFS) : l'éditeur démarre depuis la copie rangée dans vendor/editeur au lieu d'esm.sh. Le script de index.html choisit la carte d'importation avant tout le reste : la case écrit la clé du navigateur (pp_editeur_copie) et le changement attend un rechargement. Hébergée par GFS, ou quand l'adresse du widget demande déjà la copie (copie=editeur), la case est grisée, montre ce qui est en vigueur, et une phrase dit où se fait le choix ; cachées autrement. -->
+        <!-- Éditeur hors ligne (consignes 066 et 107 de GFS) : l'éditeur démarre depuis la copie rangée dans vendor/editeur, qui est son SEUL mode pour l'instant (rien ne le charge plus d'un autre site). La case reste, cochée et grisée, et la phrase dit pourquoi : rien n'est à écrire ni à lire dans le navigateur, la page est écrite ainsi (js/settings.js ne s'en occupe plus). -->
         <section class="settings-section settings-theme-section" aria-labelledby="settings-offline-editor-title">
           <h4 class="settings-section-title" id="settings-offline-editor-title" data-i18n="settings.offlineEditor.title">Éditeur hors ligne</h4>
-          <p class="settings-panel-intro" data-i18n="settings.offlineEditor.intro">L’éditeur de texte se télécharge depuis esm.sh à chaque démarrage. Sa copie hors ligne, rangée avec l’app, le fait démarrer sans rien demander à esm.sh : utile derrière un pare-feu qui bloque ce site.</p>
-          <label class="settings-alt-reminder" id="settings-offline-editor-label" for="settings-offline-editor"><input type="checkbox" id="settings-offline-editor" aria-describedby="settings-offline-editor-hint"><span data-i18n="settings.offlineEditor.label">Utiliser la copie hors ligne de l’éditeur</span></label>
+          <p class="settings-panel-intro" data-i18n="settings.offlineEditor.intro">L’éditeur de texte démarre depuis une copie rangée avec l’app : il ne demande rien à un autre site, même derrière un pare-feu.</p>
+          <label class="settings-alt-reminder is-disabled" id="settings-offline-editor-label" for="settings-offline-editor"><input type="checkbox" id="settings-offline-editor" checked disabled aria-describedby="settings-offline-editor-hint settings-offline-editor-only-mode"><span data-i18n="settings.offlineEditor.label">Utiliser la copie hors ligne de l’éditeur</span></label>
           <p class="settings-access-hint" id="settings-offline-editor-hint" data-i18n="settings.offlineEditor.hint">Les exports PDF, Word et Excel gardent leurs propres bibliothèques, téléchargées au premier export.</p>
-          <p class="settings-access-hint" id="settings-offline-editor-per-browser" data-i18n="settings.offlineEditor.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème, et prend effet au prochain démarrage.</p>
-          <p class="settings-access-hint" id="settings-offline-editor-gfs-note" data-i18n="settings.offlineEditor.gfsNote" hidden>Dans Grist Factory Suite, ce choix se fait dans la fenêtre « Apps et extensions » (ligne Éditeur) et prend effet au prochain démarrage de l’app.</p>
-          <p class="settings-access-hint" id="settings-offline-editor-address-note" data-i18n="settings.offlineEditor.addressNote" hidden>L’adresse du widget demande déjà la copie (copie=editeur) : pour choisir ici, retirez ce paramètre de l’adresse.</p>
-          <p class="settings-trigger-reload-notice" id="settings-offline-editor-reload-notice" hidden>
-            <span data-i18n="settings.triggerKey.reloadNotice">Rechargez la page pour appliquer ce changement.</span>
-            <button type="button" id="settings-offline-editor-reload-btn" data-i18n="settings.triggerKey.reloadButton">Recharger maintenant</button>
-          </p>
+          <p class="settings-access-hint" id="settings-offline-editor-only-mode" data-i18n="settings.offlineEditor.onlyMode">L’éditeur est servi par la copie de l’application : c’est son seul mode pour l’instant.</p>
         </section>
       </div>
       <div class="settings-panel" data-settings-panel="triggerKey" hidden>
@@ -1583,8 +1439,8 @@
 <script src="js/i18n-texts-review.js?v=0.9"></script>
 <script src="js/i18n-texts-slides.js?v=0.6"></script>
 <script src="js/i18n-texts-motion.js?v=0.3"></script>
-<script src="js/i18n-texts-settings.js?v=0.27"></script>
-<script src="js/i18n-texts-status.js?v=0.17"></script>
+<script src="js/i18n-texts-settings.js?v=0.28"></script>
+<script src="js/i18n-texts-status.js?v=0.18"></script>
 <script src="js/i18n-texts-variables.js?v=0.13"></script>
 <script src="js/i18n-texts-eml.js?v=0.2"></script>
 <script src="js/i18n-texts-pivot.js?v=0.3"></script>
@@ -1719,7 +1575,7 @@
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
 <script src="js/template-gallery-modal.js?v=0.14"></script>
-<script src="js/settings.js?v=0.33"></script>
+<script src="js/settings.js?v=0.34"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.29"></script>
 <script src="js/modal-base.js?v=0.8"></script>
@@ -1727,7 +1583,7 @@
 <script src="js/batch-failures.js?v=0.3"></script>
 <script src="js/view-source.js?v=0.2"></script>
 <script src="js/batch-scope.js?v=0.5"></script>
-<script src="js/first-contact.js?v=0.8"></script>
+<script src="js/first-contact.js?v=0.10"></script>
 <script src="js/whats-new.js?v=0.5"></script>
 <script src="js/external-images.js?v=0.11"></script>
 <script src="js/print-export.js?v=0.13"></script>

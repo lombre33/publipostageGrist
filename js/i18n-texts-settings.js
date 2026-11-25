@@ -219,31 +219,21 @@ const I18nTextsSettings = {
   },
   'state.style.status.applied': { fr: 'Style de l’État appliqué aux titres de ce modèle.', en: 'State style applied to this template’s headings.' },
   'state.style.status.same': { fr: 'Les titres de ce modèle ont déjà le style de l’État.', en: 'This template’s headings already have the State style.' },
-  // Éditeur hors ligne (js/settings.js, consigne 066 de GFS) : une section de l'onglet Thème, la barre des onglets étant pleine. Le rechargement reprend les textes de l'onglet Insertion (settings.triggerKey.reload*).
+  // Éditeur hors ligne (index.html, consignes 066 et 107 de GFS) : une section de l'onglet Thème, la barre des onglets étant pleine. Depuis la 107 la copie rangée avec l'app est le SEUL mode de l'éditeur : la case est cochée et grisée dans la page même, et `onlyMode` dit pourquoi.
   'settings.offlineEditor.title': { fr: 'Éditeur hors ligne', en: 'Offline editor' },
   'settings.offlineEditor.intro': {
-    fr: 'L’éditeur de texte se télécharge depuis esm.sh à chaque démarrage. Sa copie hors ligne, rangée avec l’app, le fait démarrer sans rien demander à esm.sh : utile derrière un pare-feu qui bloque ce site.',
-    en: 'The text editor is downloaded from esm.sh at every start. Its offline copy, stored with the app, lets it start without asking esm.sh for anything: useful behind a firewall that blocks that site.',
+    fr: 'L’éditeur de texte démarre depuis une copie rangée avec l’app : il ne demande rien à un autre site, même derrière un pare-feu.',
+    en: 'The text editor starts from a copy stored with the app: it asks no other site for anything, even behind a firewall.',
   },
   'settings.offlineEditor.label': { fr: 'Utiliser la copie hors ligne de l’éditeur', en: 'Use the offline copy of the editor' },
   'settings.offlineEditor.hint': {
     fr: 'Les exports PDF, Word et Excel gardent leurs propres bibliothèques, téléchargées au premier export.',
     en: 'PDF, Word and Excel exports keep their own libraries, downloaded at the first export.',
   },
-  'settings.offlineEditor.perBrowser': {
-    fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème, et prend effet au prochain démarrage.',
-    en: 'This choice is specific to this browser, like the language and the theme, and takes effect at the next start.',
+  'settings.offlineEditor.onlyMode': {
+    fr: 'L’éditeur est servi par la copie de l’application : c’est son seul mode pour l’instant.',
+    en: 'The editor is served by the application’s own copy: it is its only mode for now.',
   },
-  'settings.offlineEditor.gfsNote': {
-    fr: 'Dans Grist Factory Suite, ce choix se fait dans la fenêtre « Apps et extensions » (ligne Éditeur) et prend effet au prochain démarrage de l’app.',
-    en: 'In Grist Factory Suite, this choice is made in the “Apps and extensions” window (Editor row) and takes effect the next time the app starts.',
-  },
-  'settings.offlineEditor.addressNote': {
-    fr: 'L’adresse du widget demande déjà la copie (copie=editeur) : pour choisir ici, retirez ce paramètre de l’adresse.',
-    en: 'The widget’s address already asks for the copy (copie=editeur): to choose here, remove that parameter from the address.',
-  },
-  'settings.offlineEditor.on': { fr: 'allumé', en: 'on' },
-  'settings.offlineEditor.off': { fr: 'éteint', en: 'off' },
   // Le rappel à l'export (js/alt-reminder.js), réglage « Accessibilité » allumé.
   'altReminder.title': { fr: 'Images sans texte alternatif', en: 'Images without alternative text' },
   'altReminder.message': {

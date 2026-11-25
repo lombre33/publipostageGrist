@@ -117,7 +117,7 @@ const TrackChanges = (function () {
 
   // Charge la bibliothèque et ses compagnons dans `lib` (cf. TrackChangesCore).
   async function loadLibrary() {
-    // applySuggestionsInRange et revertSuggestionsInRange existent dans le paquet npm source mais pas dans le bundle ESM esm.sh réellement chargé
+    // applySuggestionsInRange et revertSuggestionsInRange existent dans le paquet npm source mais pas dans le bundle ESM de la copie figée réellement chargé (vendor/editeur/)
     // ici : les importer casserait le chargement du module entier, sans erreur visible. applySuggestion et revertSuggestion appelés avec un id
     // `undefined` (utilisés partout dans le suivi) font le même travail : toutes les suggestions de la plage.
     const {

@@ -77,16 +77,15 @@
 //      dev-tests/ambiance-exceptions.json (le papier, l'état, le type, les repères de capture : ce que l'ambiance ne doit pas changer).
 //  32. un nom que le guide Grist.Gouv juge pauvre : une variable déclarée `a`, `b`, `c`, `d`, `f`, `z`, `data`, `tmp`, `val`, `obj`, `arr`, `ret`... (`e`, `x`, `y`, `i`, `j`, `k`, `n` restent permis) ou une fonction
 //      déclarée d'une ou deux lettres, dans le code du widget (gw audit du 04/11, point B-NOM-01 ; les fichiers de Slides+, de la fenêtre « Nouveautés » et du pont GFS en sont exclus pour l'instant).
-//  35. le code de l'éditeur que le widget charge depuis esm.sh (TipTap, ProseMirror, leurs dépendances : une centaine de fichiers) sans que le navigateur le contrôle : le relevé outils/empreintes-editeur.json ne correspond
-//      plus à la carte d'importation d'index.html (une entrée changée sans refaire le relevé), contient une adresse à VERSION FLOTTANTE (`@^1.0.0` : esm.sh la résout à chaque demande, une version npm publiée ou volée
-//      se chargerait le jour même), un fichier non figé autre qu'une cale `node/*.mjs` d'esm.sh, ou une entrée de la carte que rien n'importe et qui ne répond pas, ou des sources d'esm.sh de `script-src` ou de la liste des bibliothèques (package.json) qui ne sont pas celles du relevé (point sécurité du 06/11, risque « chaîne d'approvisionnement ») ;
+//  35. l'éditeur ne vient plus d'un autre site (consigne 107 de GFS) : la page n'a qu'UNE carte d'importation, ordinaire, dont chaque module de l'éditeur est un fichier de vendor/editeur/ (rien d'un CDN, pas de carte en
+//      données ni de script qui en choisit une) ; la liste des bibliothèques (package.json) n'a plus d'origine de CDN pour l'éditeur et dit que la copie est son seul mode (gfs.copie.cdn: null) ; ni index.html, ni sa politique, ni la liste, ni le code, les essais,
+//      les outils et les documents de l'app ne nomment l'ancien CDN ; le relevé d'empreintes de ses fichiers (outils/empreintes-editeur.*) n'existe plus, ni rien qui lise encore l'ancien choix (la clé `pp_editeur_copie`, `copie=editeur`) ;
 //  36. l'inventaire des écritures dans le document Grist (`applyUserActions`, le widget a l'accès complet) : un fichier de plus qui écrit, une action de plus dans un fichier qui écrit déjà, une écriture dans une table
 //      de Grist (`_grist_…`) ou une suppression de table hors des endroits connus, une écriture « widget » (tables Publipostage_*) qui vise autre chose que ses tables (point sécurité du 06/11, risque « accès complet ») ;
 //  38. la liste unique des bibliothèques (package.json à la racine, consignes 063 et 067 de GFS) : elle perd sa forme, une version n'y est plus exacte, le miroir des essais n'est plus décrit par elle (gfs.miroir : refait par l'outil du kit, sans seconde liste commitée) ou dit
 //      une autre version qu'elle, la carte d'importation d'index.html dit une autre version qu'elle, le catalogue (bibliotheques/catalogue.json) n'a plus une entrée à la version de chaque bibliothèque de la liste.
-//  39. la copie figée de l'éditeur (vendor/editeur, consigne 066 de GFS, construite par l'outil du kit) : un fichier du dossier n'est plus celui de son manifeste, une version de la carte monte dans la liste sans que la copie
-//      soit refaite, la carte « copie » de la page ne nomme plus chaque module à l'empreinte de son fichier, une licence qui n'est plus compatible avec la GPL-3.0 de l'app arrive avec un paquet, la clé du stockage de la
-//      liste n'est plus celle que la case « Éditeur hors ligne » de Réglages écrit.
+//  39. la copie figée de l'éditeur, seul mode de l'éditeur (vendor/editeur, consignes 066 et 107 de GFS, construite par l'outil du kit) : un fichier du dossier n'est plus celui de son manifeste, une version de la carte monte dans la liste sans que la copie
+//      soit refaite, la carte d'importation de la page ne nomme plus chaque module à l'empreinte de son fichier, une licence qui n'est plus compatible avec la GPL-3.0 de l'app arrive avec un paquet.
 //  40. les tables et les colonnes du widget qui se disent en français ailleurs que dans le registre de js/schema-columns.js (Publipostage_Modeles, Contenu, Jeton, ModeleId, Utilisateur...), ou qui reçoivent un
 //      libellé différent de leur identifiant : la table ou la colonne serait créée en double, ou lue à vide, sur un document passé à l'anglais (demande du 16/11 : identifiant = libellé).
 //  41. les bibliothèques natives par fonction (consigne 065 de GFS) : la copie de GFS ou le CDN, sept fonctions, chaque bibliothèque dans une seule, sa version, son adresse et son empreinte égales à celles de la liste et du catalogue.
@@ -106,10 +105,13 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { check, summarizeAndExit } from './unit-harness.mjs';
-import { esmImports, importMapDigest, importMapText, copyMapText, floatingVersion, scriptSources } from '../outils/empreintes-editeur.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = rel => readFileSync(join(ROOT, rel), 'utf8');
+// La carte d'importation d'une page : UNE balise ordinaire (consigne 107 de GFS : la copie de l'éditeur est son seul mode, plus de carte de CDN ni de script de choix) ; son texte, ou null.
+const importMapText = html => (/<script type="importmap">([\s\S]*?)<\/script>/.exec(html) || [])[1] || null;
+// L'ancien CDN de l'éditeur : son nom est écrit en morceaux, pour que la recherche « plus un seul appel à cet hôte » (`grep`, ou le contrôle de GFS) ne trouve pas ce fichier lui-même.
+const OLD_CDN_HOST = ['esm', 'sh'].join('.');
 
 // ============================================================================
 // 30. Le site de GitHub Pages garde les deux fichiers de sa racine, et le dépôt public reçoit .nojekyll (consigne 037 de GFS ; « Les deux » d'Antoine du 03/11)
@@ -609,7 +611,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // Antoine ; (b) une bibliothèque chargée depuis une adresse que la politique ne cite pas échoue sans bruit au premier export qui la demande ; (c) une empreinte ou une adresse que plus rien n'utilise est un reste
 // qui ouvre la politique pour rien. dev-tests/verify-csp.mjs (script Node `cspLoad`) joue la politique dans un vrai navigateur, ce contrôle-ci garde ses deux listes à jour sans navigateur.
 {
-  const CDN_SCRIPT_HOSTS = 'cdnjs\\.cloudflare\\.com|cdn\\.jsdelivr\\.net|esm\\.sh|unpkg\\.com|docs\\.getgrist\\.com';
+  const CDN_SCRIPT_HOSTS = 'cdnjs\\.cloudflare\\.com|cdn\\.jsdelivr\\.net|unpkg\\.com|docs\\.getgrist\\.com';
   const raw = read('index.html');
   // Les commentaires d'index.html parlent de <script> et d'adresses : blanchis à longueur égale, ils ne comptent pas, et les positions restent celles du texte brut (dont on prend le contenu à hacher).
   const page = raw.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
@@ -694,7 +696,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       'lancer node outils/precharger-scripts.mjs');
   }
 
-  // (b) Chaque adresse de bibliothèque que le widget charge est permise ; (c) chaque adresse permise sert encore. Une source avec un chemin est exacte, une source sans chemin ouvre tout son hôte (esm.sh).
+  // (b) Chaque adresse de bibliothèque que le widget charge est permise ; (c) chaque adresse permise sert encore. Une source avec un chemin est exacte, une source sans chemin ouvre tout son hôte.
   const permits = (source, address) => {
     const s = new URL(source);
     const u = new URL(address);
@@ -704,17 +706,15 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const noteLoaded = (address, file) => { if (!loaded.has(address)) loaded.set(address, file); };
   // La politique cite ses propres adresses : sans la blanchir, chacune se compterait comme chargée par la page.
   const policyTag = meta ? page.slice(meta.index, page.indexOf('>', meta.index) + 1) : '';
-  // Les CLÉS de la carte d'importation (« https://esm.sh/prosemirror-state@^1.0.0?target=es2022 ») sont des adresses que la carte REMPLACE : le navigateur ne les demande jamais, la politique n'a pas à les permettre.
-  const pageOutsidePolicy = page.replace(policyTag, policyTag.replace(/[^\n]/g, ' ')).replace(/"https:\/\/esm\.sh\/[^"]*"\s*:/g, m => m.replace(/[^\n]/g, ' '));
+  const pageOutsidePolicy = page.replace(policyTag, policyTag.replace(/[^\n]/g, ' '));
   for (const m of pageOutsidePolicy.matchAll(new RegExp(`https://(?:${CDN_SCRIPT_HOSTS})/[^\\s"'<>)\\\\]*`, 'g'))) noteLoaded(m[0], 'index.html');
   for (const rel of jsFiles) {
     for (const m of noCommentsJs(read(rel)).matchAll(new RegExp(`https://(?:${CDN_SCRIPT_HOSTS})/[^\\s"'\`)\\\\]*\\.m?js`, 'g'))) noteLoaded(m[0], rel);
   }
   const refused = [...loaded].filter(([address]) => !hostSources.some(source => permits(source, address))).map(([address, file]) => `${file} : ${address}`);
-  check('politique : chaque bibliothèque que le widget charge depuis un CDN (index.html, js/) est permise par script-src - sinon sa fonction échoue sans bruit chez Antoine', loaded.size >= 10 && refused.length === 0, '\n    ' + refused.join('\n    ') + '\n    à ajouter à script-src : l\'adresse entière (esm.sh : l\'hôte)');
+  check('politique : chaque bibliothèque que le widget charge depuis un CDN (index.html, js/) est permise par script-src - sinon sa fonction échoue sans bruit chez Antoine', loaded.size >= 10 && refused.length === 0, '\n    ' + refused.join('\n    ') + '\n    à ajouter à script-src : l\'adresse entière');
   // Les adresses des bibliothèques d'extension (EXTENSION_LIBRARY_ADDRESSES) ne sont chargées par aucun script de l'app : GFS les donne à l'extension, la politique ne fait que les permettre.
-  // Les sources d'esm.sh (un chemin par paquet de l'éditeur, dont les dépendances que seul esm.sh nomme) ne sont pas toutes écrites dans index.html : la section 35 les compare au relevé, adresse pour adresse.
-  const unused = hostSources.filter(source => !Object.values(EXTENSION_LIBRARY_ADDRESSES).includes(source) && !source.startsWith('https://esm.sh') && ![...loaded.keys()].some(address => permits(source, address)));
+  const unused = hostSources.filter(source => !Object.values(EXTENSION_LIBRARY_ADDRESSES).includes(source) && ![...loaded.keys()].some(address => permits(source, address)));
   check('politique : aucune adresse de script-src que plus aucun script ne charge', unused.length === 0, '\n    à retirer de script-src : ' + unused.join(' '));
 
   // html2pdf.js 0.10.1 embarquait un jsPDF et un DOMPurify périmés (failles connues, rapport du 04/10) pour des qualités d'export grisées dans l'interface : il a été retiré avec elles.
@@ -723,13 +723,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('politique : html2pdf.js (jsPDF et DOMPurify périmés) n\'est chargé par aucun fichier de js/ ni par index.html - le remettre, c\'est d\'abord le mettre à jour', html2pdfRefs.length === 0, html2pdfRefs.join(', '));
 
   // Le contrôle de sécurité de GFS (controle-securite.mjs, règle S5) lit tous les fichiers .js, .mjs et .html de l'app (hors kit/, vendor/, node_modules/) et prend toute adresse de CDN écrite EN ENTIER pour une adresse que l'app
-  // appelle : écrite et non déclarée dans GFS-ETAT.md, elle fait passer S5 à « non tenue ». Un essai qui REFUSE une adresse (cdnjs depuis la consigne 106) l'écrit donc en morceaux, comme unit-script-loader.mjs et verify-csp.mjs.
+  // appelle : écrite et non déclarée dans GFS-ETAT.md, elle fait passer S5 à « non tenue ». Un essai qui REFUSE une adresse (cdnjs depuis la consigne 106, l'ancien CDN de l'éditeur depuis la 107) l'écrit donc en morceaux, comme unit-script-loader.mjs, verify-csp.mjs et verify-editor-copy.mjs.
   {
-    const unusedCdn = /https:\/\/(?:cdnjs\.cloudflare\.com|unpkg\.com|cdn\.skypack\.dev|ga\.jspm\.io)\/[^\s'"`)<>\\]+/g;
+    const unusedCdn = /https:\/\/(?:cdnjs\.cloudflare\.com|unpkg\.com|cdn\.skypack\.dev|ga\.jspm\.io|esm\.sh)\/[^\s'"`)<>\\]+/g;
     const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26 }).stdout.split('\0').filter(rel => /\.(m?js|html)$/.test(rel) && !/^(kit|vendor|node_modules)\//.test(rel) && !/(^|\/)node_modules\//.test(rel) && !rel.startsWith('dev-tests/.offline-cache/'));
     const written = [];
     for (const rel of tracked) for (const m of read(rel).matchAll(unusedCdn)) written.push(`${rel} : ${m[0]}`);
-    check('politique : aucun fichier de l\'app n\'écrit en entier l\'adresse d\'un CDN qu\'elle n\'appelle pas (cdnjs, unpkg, skypack, jspm) : le contrôle de GFS la prendrait pour une adresse appelée et non déclarée (S5) - un essai qui la refuse l\'écrit en morceaux', tracked.length > 300 && written.length === 0, '\n    ' + written.slice(0, 6).join('\n    '));
+    check('politique : aucun fichier de l\'app n\'écrit en entier l\'adresse d\'un CDN qu\'elle n\'appelle pas (cdnjs, unpkg, skypack, jspm, et l\'ancien CDN de l\'éditeur) : le contrôle de GFS la prendrait pour une adresse appelée et non déclarée (S5) - un essai qui la refuse l\'écrit en morceaux', tracked.length > 300 && written.length === 0, '\n    ' + written.slice(0, 6).join('\n    '));
   }
 }
 
@@ -799,7 +799,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const scriptSrc = (policy.match(/script-src([^;]*);/) || [])[1] || '';
   const allowed = [...new Set([...scriptSrc.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].map(m => m[1]))].sort();
   const listed = [...noCommentsJs(read('js/first-contact.js')).matchAll(/host:\s*'([^']+)'/g)].map(m => m[1]).sort();
-  check('premier contact : la fenêtre « réseau bloqué » (HOSTS de js/first-contact.js) liste exactement les sites dont la politique de sécurité du contenu laisse charger des scripts', allowed.length >= 3 && JSON.stringify(allowed) === JSON.stringify(listed), `politique : ${allowed.join(', ')} ; fenêtre : ${listed.join(', ')}`);
+  check('premier contact : la fenêtre « réseau bloqué » (HOSTS de js/first-contact.js) liste exactement les sites dont la politique de sécurité du contenu laisse charger des scripts', allowed.length >= 2 && JSON.stringify(allowed) === JSON.stringify(listed), `politique : ${allowed.join(', ')} ; fenêtre : ${listed.join(', ')}`);
 }
 
 // ============================================================================
@@ -1154,11 +1154,11 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // nulle) le refuse, et ce cadre est le seul endroit où la demande portait aussi.
   const reload = (settings.match(/function reloadKeepingTemplate\(language, openId\) \{[\s\S]*?\n  \}/) || [''])[0];
   const take = (settings.match(/function takeReopenId\(\) \{[\s\S]*?\n  \}/) || [''])[0];
-  check('réouverture : reloadKeepingTemplate laisse l\u2019identifiant du modèle ouvert dans le fragment de l\u2019adresse (history.replaceState) AVANT de recharger, et la langue, la touche de déclenchement et l\u2019éditeur hors ligne passent par lui',
+  check('réouverture : reloadKeepingTemplate laisse l\u2019identifiant du modèle ouvert dans le fragment de l\u2019adresse (history.replaceState) AVANT de recharger, et la langue et la touche de déclenchement passent par lui (le bouton de l\u2019éditeur hors ligne n\u2019existe plus : consigne 107)',
     reload !== '' && reload.indexOf('Templates.getCurrentId()') !== -1 && reload.indexOf("'pp-open='") !== -1 && reload.indexOf("'#' + parts.join('&')") !== -1 && reload.indexOf('history.replaceState(') !== -1 && reload.indexOf('location.reload()') > reload.indexOf('history.replaceState(')
       && /async function reloadAfterQuestion\(leave\) \{[^}]*askBeforeLeaving\(\)[^}]*\n\s*reloadKeepingTemplate\(\);/.test(settings), reload);
-  check('réouverture : les deux boutons « Recharger maintenant » de Réglages (la touche de déclenchement, l\u2019éditeur hors ligne) posent d\u2019abord la question « Enregistrer / Abandonner / Annuler » quand du texte attend (reloadAfterQuestion), jamais un rechargement sans elle',
-    (settings.match(/reloadBtn\.addEventListener\('click', \(\) => reloadAfterQuestion\(leave\)\)/g) || []).length === 2 && !/reloadBtn\.addEventListener\('click', reloadKeepingTemplate\)/.test(settings) && /wireTriggerChar\(leave\);/.test(settings), 'js/settings.js');
+  check('réouverture : le bouton « Recharger maintenant » de Réglages (celui de la touche de déclenchement : la case de l\u2019éditeur hors ligne n\u2019en a plus, consigne 107) pose d\u2019abord la question « Enregistrer / Abandonner / Annuler » quand du texte attend (reloadAfterQuestion), jamais un rechargement sans elle',
+    (settings.match(/reloadBtn\.addEventListener\('click', \(\) => reloadAfterQuestion\(leave\)\)/g) || []).length === 1 && !/reloadBtn\.addEventListener\('click', reloadKeepingTemplate\)/.test(settings) && /wireTriggerChar\(leave\);/.test(settings), 'js/settings.js');
   check('réouverture : takeReopenId lit le fragment, l\u2019efface aussitôt (history.replaceState) et ne touche à aucun autre fragment ; il n\u2019écrit ni ne lit aucun stockage du navigateur',
     take !== '' && settings.includes(String.raw`const REOPEN_HASH = /^#(?:pp-open=(\d+)(?:&pp-lang=(?:fr|en))?|pp-lang=(?:fr|en))$/;`) && take.indexOf('history.replaceState(') !== -1 && !/(?:local|session)Storage|indexedDB|document\.cookie/.test(reload + take), take);
   check('réouverture : js/main.js lit ce fragment (Settings.takeReopenId) avant le modèle que GFS désigne, la ligne, la vue et le ★, qui passent après lui',
@@ -1542,7 +1542,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const policy = (page.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
   // La page sans sa politique : l'adresse de Plotly n'a de place que dans la politique (consigne 007) ; partout ailleurs dans la page - une balise <script src>, un <link> -, elle n'a rien à faire.
   const pageWithoutPolicy = page.replace(/<meta http-equiv="Content-Security-Policy" content="[^"]*"/, '<meta csp>');
-  const importMap = importMapText(page) || ''; // la carte des CDN : une balise importmap, ou le bloc `gfs-carte-cdn` de la page à deux cartes (copie de l'éditeur, 066)
+  const importMap = importMapText(page) || ''; // la carte d'importation : une seule balise ordinaire (la copie de l'éditeur est son seul mode, consigne 107)
   // Les bibliothèques de l'app : ce que la liste de la racine nomme comme paquets et bibliothèques de CDN (pas `gfs.politique.scriptSrc`, où l'adresse de Plotly est écrite à la main, par la consigne 007), et le petit script qui assemble
   // les deux fichiers de GFS ; le miroir des essais, lui, est refait d'après la liste.
   const rootList = JSON.parse(read('package.json'));
@@ -2015,7 +2015,6 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const modules = existsSync(join(ROOT, '.gitmodules')) ? read('.gitmodules') : '';
   const importMap = (() => { try { return JSON.parse(importMapText(index)).imports; } catch (e) { return {}; } })();
   const kitEntries = Object.entries(importMap).filter(([name]) => name.startsWith('kit/'));
-  const copyKitEntries = (() => { try { return Object.entries(JSON.parse(copyMapText(index)).imports).filter(([name]) => name.startsWith('kit/')); } catch (e) { return []; } })(); // la carte de la copie de l'éditeur (066) porte les mêmes
   const pin7 = pin.slice(0, 7);
   const expectedKit = [
     ...['ambiance-message', 'ambiance-pose', 'correcteurs-message', 'correcteurs-pose'].map(name => [`kit/${name}`, `./kit/js/${name}.js?v=${pin7}`]),
@@ -2025,9 +2024,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   ];
   check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message`, `kit/ambiance-pose`, `kit/correcteurs-message`, `kit/correcteurs-pose`, `kit/i18n` (sans ?v), `kit/names-update` et `kit/violations-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
     pin !== '' && /\[submodule "kit"\]\s+path = kit\s+url = https:\/\/github\.com\/lombre33\/grist-factory-kit\.git/.test(modules)
-      && JSON.stringify(kitEntries) === JSON.stringify(expectedKit)
-      && JSON.stringify(copyKitEntries) === JSON.stringify(kitEntries),
-    JSON.stringify({ pin: pin.slice(0, 7), kitEntries, copyKitEntries }));
+      && JSON.stringify(kitEntries) === JSON.stringify(expectedKit),
+    JSON.stringify({ pin: pin.slice(0, 7), kitEntries }));
 
   // (2) rien n'importe un autre module du kit
   const importers = [['index.html', index], ...[...jsFiles].map(rel => [rel, read(rel)])];
@@ -2176,7 +2174,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 // 34. La fiche de crise de SECURITY.md nomme chaque site d'où le widget charge du code (point sécurité du 06/11)
 // ============================================================================
-// Si `esm.sh`, un CDN ou le compte qui publie est compromis, le widget (accès complet au document) devient un moyen de lire et d'écrire tout le document : SECURITY.md dit ce que l'équipe fait, dans l'ordre.
+// Si un CDN, un hébergeur ou le compte qui publie est compromis, le widget (accès complet au document) devient un moyen de lire et d'écrire tout le document : SECURITY.md dit ce que l'équipe fait, dans l'ordre.
 // La fiche doit rester juste quand la politique de sécurité du contenu (index.html) change : chaque site qu'elle laisse charger un script y est nommé, en français et en anglais.
 {
   const policy = (read('index.html').match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
@@ -2190,58 +2188,42 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('fiche de crise : SECURITY.md porte la section « Si un site tiers ou un compte est compromis » et son pendant anglais, avec leurs cinq étapes numérotées (prévenir, couper la source, reprendre le compte, mesurer, corriger)',
     [french, english].every(text => text.length > 800 && /^1\. /m.test(text) && /^5\. /m.test(text)), `${french.length} / ${english.length} caractères`);
   check(`fiche de crise : elle nomme chaque site que la politique de sécurité du contenu laisse charger du code (${hosts.join(', ')}), en français et en anglais`,
-    hosts.length >= 4 && hosts.every(host => french.includes(host) && english.includes(host)), hosts.filter(host => !french.includes(host) || !english.includes(host)).join(', '));
+    hosts.length >= 2 && hosts.every(host => french.includes(host) && english.includes(host)), hosts.filter(host => !french.includes(host) || !english.includes(host)).join(', '));
 }
 
 // ============================================================================
-// 35. Le code de l'éditeur chargé depuis esm.sh est relevé, et rien n'y flotte (point sécurité du 06/11, risque « chaîne d'approvisionnement »)
+// 35. L'éditeur ne vient plus d'un autre site : plus un seul appel à l'ancien CDN, nulle part (consigne 107 de GFS, 25/11)
 // ============================================================================
-// L'éditeur (TipTap, ProseMirror et leurs dépendances) vient d'esm.sh, et s'exécute avec l'accès complet au document. L'héberger dans le dépôt est refusé (choix d'Antoine du 05/10), la politique de sécurité du
-// contenu ouvre l'hôte en entier et la carte d'importation ne porte aucune empreinte : esm.sh peut donc changer ce que le widget exécute sans qu'aucun contrôle ne le voie. Deux gardes :
-//   - rien ne FLOTTE : une adresse `@^1.0.0` (celles que TipTap et floating-ui demandent à leurs dépendances) est résolue par esm.sh à chaque demande ; sans entrée de la carte qui la renvoie vers la version
-//     exacte, une version publiée (ou volée) sur npm serait chargée dans l'éditeur le jour même. Le relevé de outils/empreintes-editeur.mjs (le parcours de ce que la carte fait charger, avec trois navigateurs)
-//     n'en contient aucune, et dev-tests/verify-csp.mjs vérifie dans un vrai navigateur, esm.sh en direct, que le widget n'en demande aucune ;
-//   - le relevé est celui de la carte : la carte change (une version, un module), le relevé se refait (`node outils/empreintes-editeur.mjs --ecrire`, réseau), sinon `--verifier` ne parlerait plus de ce que la
-//     page charge. Ce contrôle-ci ne demande aucun réseau : il garde le relevé ; c'est `--verifier` (à lancer de temps en temps, ou quand esm.sh a un incident) qui compare le relevé à ce qu'esm.sh sert.
+// L'éditeur (TipTap, ProseMirror et leurs dépendances) s'exécute avec l'accès complet au document. Il venait d'un CDN public, dont un relevé d'empreintes (outils/empreintes-editeur.*) gardait ce qui change sans prévenir ;
+// depuis la 107 il démarre TOUJOURS depuis la copie figée rangée avec l'app (vendor/editeur/, section 39) : aucun octet de l'éditeur ne vient plus d'un autre site, la politique de sécurité n'a plus une source pour lui, le relevé
+// n'a plus d'objet. Ce contrôle garde que rien ne revient : la page n'a qu'UNE carte d'importation, ordinaire ; la liste n'a plus d'origine de CDN pour l'éditeur et dit que la copie est son seul mode ; ni la page, ni sa politique,
+// ni la liste, ni le code, les essais, les outils et les documents de l'app ne nomment l'ancien CDN (le contrôle de sécurité de GFS, règle S5, lit tous les fichiers .js, .mjs et .html de l'app : un seul nom écrit en entier et
+// non déclaré la fait passer à « non tenue ») ; les outils du relevé n'existent plus ; rien ne lit l'ancien choix (la clé `pp_editeur_copie`, `copie=editeur` dans l'adresse).
 {
   const index = read('index.html');
-  const imports = esmImports(index);
-  const manifestPath = join(ROOT, 'outils', 'empreintes-editeur.json');
-  const manifest = existsSync(manifestPath) ? JSON.parse(read('outils/empreintes-editeur.json')) : null;
-  check('éditeur d\'esm.sh : le relevé outils/empreintes-editeur.json existe et porte au moins quatre-vingts fichiers relevés avec trois navigateurs (`node outils/empreintes-editeur.mjs --ecrire` le refait)',
-    !!manifest && Object.keys(manifest.fichiers || {}).length >= 80 && (manifest.navigateurs || []).length >= 3, manifest ? `${Object.keys(manifest.fichiers).length} fichiers, ${(manifest.navigateurs || []).length} navigateurs` : 'relevé absent');
-  if (manifest) {
-    check('éditeur d\'esm.sh : le relevé est celui de la carte d\'importation d\'index.html (une entrée changée ou ajoutée : `node outils/empreintes-editeur.mjs --ecrire`, réseau, refait le relevé ; il refuse d\'écrire s\'il reste une adresse flottante)',
-      manifest.carteImportEsmSha256 === importMapDigest(imports), `relevé ${String(manifest.carteImportEsmSha256).slice(0, 12)}, carte ${importMapDigest(imports).slice(0, 12)}`);
-    const roots = [...new Set(Object.values(imports).filter(value => value.startsWith('https://esm.sh/')))].map(value => new URL(value).href);
-    check('éditeur d\'esm.sh : chaque adresse que la carte fait charger est dans le relevé', roots.every(root => manifest.fichiers[root]), roots.filter(root => !manifest.fichiers[root]).join(' '));
-    const floating = Object.keys(manifest.fichiers).filter(address => floatingVersion(address));
-    check('éditeur d\'esm.sh : aucune adresse du relevé n\'est à version flottante (`@^1.0.0`, `@~2`, `@latest` : esm.sh la résout à chaque demande, une version volée serait chargée dans l\'éditeur le jour même) - une entrée de la carte la renvoie vers la version exacte',
-      floating.length === 0, floating.join(' '));
-    const looseKeys = Object.entries(imports).filter(([key, value]) => key.startsWith('https://esm.sh/') && floatingVersion(key) && (!value.startsWith('https://esm.sh/') || floatingVersion(value))).map(([key]) => key);
-    check('éditeur d\'esm.sh : chaque entrée de la carte qui remplace une adresse flottante la renvoie vers une version exacte', looseKeys.length === 0, looseKeys.join(' '));
-    const loose = Object.entries(manifest.fichiers).filter(([, entry]) => entry.fige === false).map(([address]) => address);
-    check('éditeur d\'esm.sh : les seuls fichiers que esm.sh ne fige pas (cache immuable d\'un an) sont ses propres cales node/*.mjs - un fichier de paquet non figé change sans prévenir', loose.length > 0 && loose.every(address => new URL(address).pathname.startsWith('/node/')), loose.join(' '));
-    // Une entrée de la carte qui ne répond pas (@tiptap/pm : le paquet n'a que des sous-chemins) ne doit rester que si rien ne l'importe : le jour où du code l'importerait, l'éditeur ne démarrerait plus.
-    const dead = Object.entries(imports).filter(([, value]) => manifest.fichiers[new URL(value).href] && manifest.fichiers[new URL(value).href].statut).map(([key]) => key);
-    const importedDead = dead.filter(key => jsFiles.some(rel => new RegExp(`(?:from\\s*|import\\s*\\(?\\s*)['"]${key.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}['"]`).test(noCommentsJs(read(rel)))));
-    check('éditeur d\'esm.sh : une entrée de la carte dont l\'adresse ne répond pas (le relevé la note « statut ») n\'est importée par aucun fichier de js/ ni d\'extensions/', importedDead.length === 0, importedDead.join(' '));
-    // La politique de sécurité du contenu ne nomme PAS esm.sh en entier (choix d'Antoine du 11/11, « Resserrer la liste ») : sans cela, n'importe quel paquet d'npm ou dépôt de GitHub que sert esm.sh pourrait
-    // s'exécuter si un filtre cédait. Ses sources sont, une à une, celles que le relevé donne : un dossier par paquet de l'éditeur à sa version exacte, quatre cales d'esm.sh. Le relevé change (une version, un module) :
-    // `node outils/empreintes-editeur.mjs --ecrire` (réseau) ou `--poser-politique` (sans réseau) les remettent à jour dans la liste des bibliothèques (package.json, gfs.politique.scriptSrc), puis l'outil du kit
-    // (`node kit/outils/bibliotheques.mjs`) réécrit le script-src d'index.html d'après elle : un seul écrivain pour la page (consigne 063 de GFS).
-    const list = existsSync(join(ROOT, 'package.json')) ? JSON.parse(read('package.json')) : null;
-    const listed = ((list && list.gfs && list.gfs.politique && list.gfs.politique.scriptSrc) || []).filter(token => token === 'https://esm.sh' || token.startsWith('https://esm.sh/')).sort();
-    const policy = (index.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/) || [])[1] || '';
-    const scriptTokens = ((policy.split(';').map(d => d.trim().split(/\s+/)).find(d => d[0] === 'script-src')) || []).slice(1);
-    const inPolicy = scriptTokens.filter(token => token === 'https://esm.sh' || token.startsWith('https://esm.sh/')).sort();
-    const wanted = scriptSources(Object.keys(manifest.fichiers).filter(address => !manifest.fichiers[address].statut));
-    check('éditeur d\'esm.sh : script-src ne nomme pas l\'hôte « https://esm.sh » en entier', !scriptTokens.includes('https://esm.sh'), 'https://esm.sh seul ouvre tout npm et tout GitHub');
-    check('éditeur d\'esm.sh : les sources d\'esm.sh de la liste des bibliothèques (package.json, gfs.politique.scriptSrc) sont exactement celles du relevé (`node outils/empreintes-editeur.mjs --poser-politique` les réécrit dans la liste, sans réseau)',
-      JSON.stringify(listed) === JSON.stringify(wanted), `à ajouter : ${wanted.filter(source => !listed.includes(source)).join(' ') || '-'} ; à retirer : ${listed.filter(source => !wanted.includes(source)).join(' ') || '-'}`);
-    check('éditeur d\'esm.sh : les sources d\'esm.sh de script-src sont exactement celles du relevé, donc celles de la liste (la page est écrite par l\'outil du kit : `node kit/outils/bibliotheques.mjs` la réécrit d\'après la liste, après `--poser-politique`)',
-      JSON.stringify(inPolicy) === JSON.stringify(wanted), `à ajouter : ${wanted.filter(source => !inPolicy.includes(source)).join(' ') || '-'} ; à retirer : ${inPolicy.filter(source => !wanted.includes(source)).join(' ') || '-'}`);
-  }
+  const list = JSON.parse(read('package.json'));
+  const gfs35 = list.gfs || {};
+  const maps = [...index.matchAll(/<script type="importmap">/g)].length;
+  const imports35 = (() => { try { return JSON.parse(importMapText(index)).imports; } catch (e) { return {}; } })();
+  const editorEntries = Object.entries(imports35).filter(([key]) => !key.startsWith('kit/'));
+  const offTarget = editorEntries.filter(([, target]) => !/^\.\/vendor\/editeur\/[\w.-]+\.js\?v=[0-9a-f]{8}$/.test(target)).map(([key, target]) => `${key} : ${target}`);
+  check('éditeur : la page n\'a qu\'UNE carte d\'importation, ordinaire (ni carte de CDN en données `gfs-carte-cdn` ou `gfs-carte-copie`, ni script qui en choisit une), et chaque module de l\'éditeur y est un fichier de vendor/editeur/ à son empreinte',
+    maps === 1 && editorEntries.length >= 30 && offTarget.length === 0 && !index.includes('gfs-carte-cdn') && !index.includes('gfs-carte-copie') && !/carte\.type\s*=\s*['"]importmap['"]/.test(index),
+    JSON.stringify({ cartes: maps, modules: editorEntries.length, ailleurs: offTarget.slice(0, 3) }));
+  check('éditeur : la liste des bibliothèques (package.json) n\'a plus d\'origine de CDN ni de plages pour l\'éditeur (gfs.carte.origine, gfs.carte.plages) et dit que la copie est son seul mode (gfs.copie.cdn: null)',
+    !!gfs35.carte && gfs35.carte.origine === undefined && gfs35.carte.plages === undefined && !!gfs35.copie && gfs35.copie.cdn === null && gfs35.copie.dossier === 'vendor/editeur',
+    JSON.stringify({ origine: gfs35.carte && gfs35.carte.origine, plages: gfs35.carte && gfs35.carte.plages, cdn: gfs35.copie && gfs35.copie.cdn }));
+  // Les fichiers de l'app qui ne doivent plus nommer l'ancien CDN : la page, la liste, le code, les essais, les outils et les documents publics (l'historique des changements, CHANGELOG.md, garde les mots de son époque).
+  const scope = /^(?:index\.html|nouveautes\.html|package\.json|README\.md|SECURITY\.md|bibliotheques\/|css\/|extensions\/|js\/|dev-tests\/|outils\/|\.github\/)/;
+  const textual = /\.(?:m?js|html|json|md|sh|css|ya?ml|txt)$|(?:^|\/)NOTICE$/;
+  const tracked35 = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26 }).stdout.split('\0')
+    .filter(rel => rel && scope.test(rel) && textual.test(rel) && !/(^|\/)CHANGELOG\.md$/.test(rel) && !rel.startsWith('dev-tests/.offline-cache/') && existsSync(join(ROOT, rel)));
+  const naming = tracked35.filter(rel => read(rel).includes(OLD_CDN_HOST));
+  check('éditeur : plus un fichier de l\'app (page et sa politique, liste, code, essais, outils, documents publics) ne nomme l\'ancien CDN de l\'éditeur - un seul nom écrit en entier fait passer la règle S5 du contrôle de GFS à « non tenue »', tracked35.length > 500 && naming.length === 0, naming.slice(0, 8).join(' ; '));
+  const gone = ['outils/empreintes-editeur.mjs', 'outils/empreintes-editeur.json', 'dev-tests/unit-editor-fingerprints.mjs', 'prototypes'].filter(rel => existsSync(join(ROOT, rel)));
+  check('éditeur : le relevé d\'empreintes de l\'ancien CDN (outils/empreintes-editeur.mjs et .json, son essai unitaire) et prototypes/ (qui chargeaient l\'éditeur depuis lui) n\'existent plus', gone.length === 0, gone.join(' '));
+  const readers = [['index.html', index], ...jsFiles.map(rel => [rel, noCommentsJs(read(rel))])].filter(([, text]) => /pp_editeur_copie|copie=editeur/.test(text)).map(([rel]) => rel);
+  check('éditeur : rien dans index.html, js/ ni extensions/ ne lit plus l\'ancien choix (la clé `pp_editeur_copie` du navigateur, `copie=editeur` dans l\'adresse)', readers.length === 0, readers.join(', '));
 }
 
 // ============================================================================
@@ -2355,9 +2337,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const gfs = (list && list.gfs) || {};
   const deps = list ? { ...(list.devDependencies || {}), ...(list.dependencies || {}) } : {};
   const EXACT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-  const escapeRe = text => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-  check('liste des bibliothèques : package.json existe à la racine, privé, avec la section gfs que lit l\'outil du kit (page index.html, carte d\'esm.sh, politique, bibliothèques)',
-    !!list && list.private === true && gfs.page === 'index.html' && !!gfs.carte && gfs.carte.origine === 'https://esm.sh' && Array.isArray(gfs.politique && gfs.politique.scriptSrc) && Object.keys(gfs.bibliotheques || {}).length >= 9,
+  check('liste des bibliothèques : package.json existe à la racine, privé, avec la section gfs que lit l\'outil du kit (page index.html, carte d\'importation, politique, bibliothèques)',
+    !!list && list.private === true && gfs.page === 'index.html' && !!gfs.carte && gfs.carte.origine === undefined && Array.isArray(gfs.politique && gfs.politique.scriptSrc) && Object.keys(gfs.bibliotheques || {}).length >= 9,
     list ? JSON.stringify({ private: list.private, page: gfs.page, origine: gfs.carte && gfs.carte.origine, scriptSrc: Array.isArray(gfs.politique && gfs.politique.scriptSrc), bibliotheques: Object.keys(gfs.bibliotheques || {}).length }) : 'package.json absent');
   const notExact = Object.entries(deps).filter(([, version]) => !EXACT.test(version)).map(([name, version]) => `${name}@${version}`);
   check('liste des bibliothèques : chaque version de dependencies et de devDependencies est exacte (ni ^, ni ~, ni latest : le navigateur ne résout aucune plage, et l\'outil du kit les refuse)', Object.keys(deps).length >= 40 && notExact.length === 0, notExact.join(' ') || `${Object.keys(deps).length} paquets`);
@@ -2381,19 +2362,19 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('liste des bibliothèques : le miroir des essais de ce poste (dev-tests/.offline-cache/package.json, écrit par --miroir), s\'il y en a un, dit les mêmes paquets aux mêmes versions que la liste - sinon il est resté à d\'anciennes versions : `bash dev-tests/offline-deps.sh` (un miroir périmé donne un faux vert aux essais d\'export)',
     apart.length === 0, apart.join(' ; ') || (mirror === null ? 'pas de miroir sur ce poste' : `${Object.keys(mirror).length} paquets`));
   const imports = (() => { try { return JSON.parse(importMapText(read('index.html'))).imports; } catch (e) { return {}; } })();
-  const named = [...(gfs.carte && gfs.carte.paquets || []), ...Object.keys(gfs.carte && gfs.carte.sousChemins || {})];
-  const mapOff = named.filter(name => !Object.entries(imports).some(([key, value]) => new RegExp(`/\\*?${escapeRe(name)}@${escapeRe(deps[name] || '?')}(?:[/?]|$)`).test(key === name ? value : key)));
-  check('liste des bibliothèques : la carte d\'importation d\'index.html nomme, pour chacun des paquets de la liste qu\'elle écrit (gfs.carte.paquets et sousChemins), la version de la liste - une version montée dans la liste sans relancer l\'outil du kit (ou montée à la main dans la page) se voit ici', named.length >= 30 && mapOff.length === 0, mapOff.join(' ') || `${named.length} paquets`);
+  const named = gfs.carte && gfs.carte.paquets || [];
+  const mapOff = named.filter(name => !/^\.\/vendor\/editeur\/[\w.-]+\.js\?v=[0-9a-f]{8}$/.test(imports[name] || ''));
+  check('liste des bibliothèques : la carte d\'importation d\'index.html nomme chacun des paquets de la liste qu\'elle écrit (gfs.carte.paquets), chacun vers un fichier de la copie figée à son empreinte - leurs versions sont celles de la copie, que la section 39 compare à la liste : une version montée dans la liste sans refaire la copie (ou une adresse montée à la main dans la page) se voit', named.length >= 30 && mapOff.length === 0, mapOff.join(' ') || `${named.length} paquets`);
   const catalogue = existsSync(join(ROOT, 'bibliotheques', 'catalogue.json')) ? JSON.parse(read('bibliotheques/catalogue.json')).bibliotheques || [] : [];
   const missing = Object.entries(gfs.bibliotheques || {}).filter(([id, spec]) => !catalogue.some(entry => entry.id === id && entry.version === deps[spec.paquet] && entry.cdn && /^sha384-[A-Za-z0-9+/]{64}$/.test(entry.cdn.integrite || ''))).map(([id]) => id);
   check('liste des bibliothèques : le catalogue (bibliotheques/catalogue.json, écrit par l\'outil du kit) a une entrée par bibliothèque de la liste, à la version de la liste, avec son empreinte sha384', Object.keys(gfs.bibliotheques || {}).length >= 9 && missing.length === 0, missing.join(' ') || `${catalogue.length} entrées`);
 }
 
 // ============================================================================
-// 39. La copie figée de l'éditeur : le dossier, sa liste, la page et la case de Réglages disent la même chose (consigne 066 de GFS)
+// 39. La copie figée de l'éditeur, seul mode de l'éditeur : le dossier, sa liste et la page disent la même chose (consignes 066 et 107 de GFS)
 // ============================================================================
-// Un client qui ferme le réseau coche « Éditeur hors ligne » : la page pose alors la carte « copie » (modules de vendor/editeur/) au lieu de celle des CDN. Ce code s'exécute dans la page avec l'accès complet au
-// document, comme celui d'esm.sh : il est construit par l'outil du kit (node kit/outils/bibliotheques.mjs --copies, réseau : npm) d'après les versions de la liste, jamais écrit à la main, et son manifeste
+// L'éditeur démarre toujours depuis la copie (modules de vendor/editeur/) : plus de carte de CDN, plus de choix dans Réglages (la case « Éditeur hors ligne » est cochée et grisée, index.html). Ce code s'exécute dans la page
+// avec l'accès complet au document : il est construit par l'outil du kit (node kit/outils/bibliotheques.mjs --copies, réseau : npm) d'après les versions de la liste, jamais écrit à la main, et son manifeste
 // (COPIE.json) donne l'empreinte de chaque fichier. Ce contrôle ne lance pas l'outil (le kit est un sous-module qui n'est pas toujours là : son --verifier le redit dans le groupe bibliothequesListe) ; il garde, sans lui,
 // qu'aucun fichier du dossier n'a été touché depuis la construction, que la copie est celle des versions de la liste, que la page nomme chaque module à l'empreinte de son fichier, et que les licences venues avec les
 // paquets sont de celles que la GPL-3.0 de l'app accepte.
@@ -2405,8 +2386,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const manifest = existsSync(join(ROOT, folder, 'COPIE.json')) ? JSON.parse(read(`${folder}/COPIE.json`)) : null;
   const sha384 = bytes => `sha384-${createHash('sha384').update(bytes).digest('base64')}`;
   const onDisk = existsSync(join(ROOT, folder)) ? readdirSync(join(ROOT, folder)).filter(name => name.endsWith('.js')).sort() : [];
-  check('copie de l\'éditeur : la liste la déclare (gfs.copie : fonction « editeur », dossier vendor/editeur, clé pp_editeur_copie) et le dossier a son manifeste (COPIE.json), ses licences (LICENCES.txt) et plus de trente modules',
-    !!spec && spec.fonction === 'editeur' && spec.dossier === 'vendor/editeur' && spec.cle === 'pp_editeur_copie' && !!manifest && manifest.fonction === 'editeur' && existsSync(join(ROOT, folder, 'LICENCES.txt')) && onDisk.length >= 40,
+  check('copie de l\'éditeur : la liste la déclare comme son seul mode (gfs.copie : fonction « editeur », dossier vendor/editeur, cdn: null) et le dossier a son manifeste (COPIE.json), ses licences (LICENCES.txt) et plus de trente modules',
+    !!spec && spec.fonction === 'editeur' && spec.dossier === 'vendor/editeur' && spec.cdn === null && !!manifest && manifest.fonction === 'editeur' && existsSync(join(ROOT, folder, 'LICENCES.txt')) && onDisk.length >= 40,
     JSON.stringify({ spec, manifest: !!manifest, fichiers: onDisk.length }));
   const touched = manifest ? Object.entries(manifest.fichiers).filter(([name, hash]) => !existsSync(join(ROOT, folder, name)) || sha384(readFileSync(join(ROOT, folder, name))) !== hash).map(([name]) => name) : ['COPIE.json absent'];
   const extra = manifest ? onDisk.filter(name => !(name in manifest.fichiers)) : [];
@@ -2414,7 +2395,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const named = (list.gfs && list.gfs.carte && list.gfs.carte.paquets) || [];
   const behind = manifest ? named.filter(name => manifest.paquets[name] !== deps[name]).map(name => `${name} : copie ${manifest.paquets[name] || '-'}, liste ${deps[name] || '-'}`) : ['manifeste absent'];
   check('copie de l\'éditeur : chaque paquet de la carte (gfs.carte.paquets) est dans la copie à la version de la liste - une version montée dans la liste demande de refaire la copie (`--copies`, réseau)', named.length >= 30 && behind.length === 0, behind.join(' ; ') || `${named.length} paquets`);
-  const copyImports = (() => { try { return JSON.parse(copyMapText(read('index.html'))).imports; } catch (e) { return {}; } })();
+  const copyImports = (() => { try { return JSON.parse(importMapText(read('index.html'))).imports; } catch (e) { return {}; } })();
   const fixes = (list.gfs && list.gfs.carte && list.gfs.carte.fixes) || {};
   const moduleOf = name => name.replace('@', '').replace('/', '__');
   const wrong = manifest ? named.filter(name => {
@@ -2423,7 +2404,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     return copyImports[name] !== want;
   }) : named;
   const stray = Object.keys(copyImports).filter(key => !named.includes(key) && !(key in fixes));
-  check('copie de l\'éditeur : la carte « copie » de la page (gfs-carte-copie) donne à chaque module de la carte son fichier de vendor/editeur, avec les huit premiers chiffres de son empreinte en `?v=`, et rien d\'autre que les entrées fixes de la liste (gfs.carte.fixes)',
+  check('copie de l\'éditeur : la carte d\'importation de la page donne à chaque module de la carte son fichier de vendor/editeur, avec les huit premiers chiffres de son empreinte en `?v=`, et rien d\'autre que les entrées fixes de la liste (gfs.carte.fixes)',
     named.length >= 30 && wrong.length === 0 && stray.length === 0, [...wrong.map(name => `${name} : adresse inattendue`), ...stray.map(key => `${key} : entrée en trop`)].join(' ; '));
   const licences = existsSync(join(ROOT, folder, 'LICENCES.txt')) ? read(`${folder}/LICENCES.txt`) : '';
   const heads = [...licences.matchAll(/^== (\S+)@(\S+) : (.+?) ==$/gm)].map(match => ({ name: match[1], version: match[2], licence: match[3] }));

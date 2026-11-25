@@ -10,7 +10,7 @@
 //  - la mémoire de la page quand le navigateur la donne (Chromium : `performance.memory`), la machine et la taille du document ;
 //  - LE JOURNAL D'OUVERTURE (23/11, « explorer des pistes pour que l'ouverture soit encore plus rapide » : tous les documents, le démarrage du widget, le changement de document par le menu) : chaque appel à Grist
 //    (`grist.docApi` : lecture d'une table, écriture, jeton) avec sa durée et ce qu'il porte, cumulé par appel dans le rapport, de quoi voir ce que le démarrage et les relectures de l'enregistrement automatique
-//    lisent ; les fichiers du chargement (les plus lents, ceux servis sans transfert, le dernier reçu de chaque site : l'éditeur arrive-t-il de esm.sh après les scripts ?) ; le temps de chaque document ouvert
+//    lisent ; les fichiers du chargement (les plus lents, ceux servis sans transfert, le dernier reçu de chaque site : l'éditeur, servi par la copie de l'app, arrive-t-il longtemps après les scripts ?) ; le temps de chaque document ouvert
 //    depuis le menu (`menu : document choisi`, `document ouvert`).
 const PerfTrace = (function () {
   const T0 = performance.now();
@@ -381,7 +381,7 @@ const PerfTrace = (function () {
     return lines;
   }
   // Les fichiers du chargement : les plus lents, ceux servis sans transfert (le cache du navigateur : seulement pour ceux de la page, un autre site ne donne pas sa taille), et pour chaque site le dernier fichier reçu
-  // (l'éditeur vient de esm.sh : s'il arrive longtemps après les scripts, la page l'attend).
+  // (l'éditeur vient de vendor/editeur/, avec l'app : s'il arrive longtemps après les scripts, la page l'attend).
   function fileFacts() {
     try {
       const all = performance.getEntriesByType('resource');
