@@ -103,7 +103,8 @@ export function measure() {
     exts[name].files += 1;
     exts[name].bytes += statSync(join(ROOT, f)).size;
   }
-  const api = /\n  return \{ (init, .*?) \};\n\}\)\(\);/s.exec(read('js/grist-api.js'));
+  // La liste des noms que rend `GristAPI` : le premier nom peut changer (`rowsOf, init, ...` depuis le 25/11), la forme `return { a, b, ... };` ferme le fichier.
+  const api = /\n  return \{ ([A-Za-z_$][\w$]*, .*?) \};\n\}\)\(\);/s.exec(read('js/grist-api.js'));
   const reg = registry(read('js/schema-columns.js'));
   const docs = reg.find(t => t.id === 'Publipostage_Templates');
 
