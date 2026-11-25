@@ -143,6 +143,37 @@ async function unit(app) {
       onlyLast: /<img class="editor-image" src="blob:[^"]+" alt=""><\/p>$/.test(kept.html) } : null;
     // Rien à alléger.
     out.none = [HeavyImages.lighten(''), HeavyImages.lighten(null), HeavyImages.lighten(tag(small).repeat(400)), HeavyImages.lighten(quoted + broken + video)].map(value => value === null);
+    // 25/11 : une adresse `blob:` ne se fabrique que pour une photo reconnue à ses OCTETS, et son type est celui des octets, jamais celui que l'adresse annonce (une adresse `blob:` garde l'origine de la page).
+    const ascii = text => Array.from(text, c => c.charCodeAt(0));
+    const base64Of = (head, size) => { const bytes = new Uint8Array(size); bytes.set(head); let text = ''; for (let i = 0; i < bytes.length; i += 4096) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 4096)); return btoa(text); };
+    const SIZE = 7000;   // 7 000 octets font plus de 9 000 caractères en base64 : une image lourde
+    const typeOf = (label, head, size = SIZE) => { const found = HeavyImages.lighten(tag('data:image/' + label + ';base64,' + base64Of(head, size))); const type = found ? found.images[0].blob.type : null; if (found) found.release(); return type; };
+    const heads = {
+      png: [0x89, ...ascii('PNG'), 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, ...ascii('IHDR')],
+      jpeg: [0xff, 0xd8, 0xff, 0xe0, 0, 0x10, ...ascii('JFIF'), 0],
+      gif: [...ascii('GIF89a'), 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      webp: [...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WEBP'), ...ascii('VP8 ')],
+      avif: [0, 0, 0, 0x1c, ...ascii('ftypavif'), 0, 0, 0, 0, ...ascii('mif1avif')],
+      avifCompat: [0, 0, 0, 0x1c, ...ascii('ftypmif1'), 0, 0, 0, 0, ...ascii('mif1avif')],
+      bmp: [0x42, 0x4d, 0, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, 40, 0, 0, 0],
+    };
+    out.raster = {
+      png: typeOf('png', heads.png), jpeg: typeOf('jpeg', heads.jpeg), gif: typeOf('gif', heads.gif), webp: typeOf('webp', heads.webp), avif: typeOf('avif', heads.avif), avifCompat: typeOf('avif', heads.avifCompat), bmp: typeOf('bmp', heads.bmp),
+      // Le type est celui des octets : une photo PNG qui se dit JPEG, ou qui se dit d'un genre inventé, reçoit un fichier PNG.
+      mislabeled: typeOf('jpeg', heads.png),
+      invented: typeOf('x-evil', heads.png),
+      // Pas des photos : un texte qui se dit PNG, un dessin SVG (avec son script), un « BM » sans l'en-tête d'un BMP, une signature PNG tronquée.
+      html: typeOf('png', ascii('<html><script>window.__pwned = 1</script></html>')),
+      svg: typeOf('svg+xml', ascii('<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><script>window.__pwned = 2</script></svg>')),
+      bmpText: typeOf('bmp', ascii('BM ce texte ressemble à un BMP de loin')),
+      partial: typeOf('png', [0x89, ...ascii('PNG'), 0x0d, 0x0a, 0x1a]),
+    };
+    // Une photo reconnue et un dessin SVG dans le même texte : seule la photo change, le dessin reste écrit tel quel (aucune adresse `blob:` pour lui).
+    const svgText = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><desc>' + 'x'.repeat(7000) + '</desc></svg>';
+    const svgSrc = 'data:image/svg+xml;base64,' + btoa(svgText);
+    const pair = HeavyImages.lighten(tag(heavyA) + tag(svgSrc));
+    out.pair = pair ? { images: pair.images.length, svgKept: pair.html.indexOf(svgSrc) !== -1, onePhoto: (pair.html.match(/src="blob:/g) || []).length === 1 } : null;
+    if (pair) pair.release();
     // Libérer.
     if (one) {
       const before = await readableUrl(one.images[0].url);
@@ -166,6 +197,13 @@ async function unit(app) {
     !!seen.kept && seen.kept.images === 1 && seen.kept.small && seen.kept.quoted && seen.kept.broken && seen.kept.video && seen.kept.onlyLast, seen.kept);
   check('rien à alléger (texte vide, images légères seulement, rien de lisible) : null', seen.none.every(Boolean), seen.none);
   check('`release()` rend les adresses : elles ne se lisent plus (appelée deux fois sans erreur)', seen.release.before === true && seen.release.after === false, seen.release);
+  const photos = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', avifCompat: 'image/avif', bmp: 'image/bmp' };
+  check('une adresse `blob:` n’est fabriquée que pour une photo reconnue à ses octets : PNG, JPEG, GIF, WebP, AVIF (marque principale ou compatible) et BMP reçoivent chacun un fichier de leur vrai type',
+    Object.keys(photos).every(name => seen.raster[name] === photos[name]), seen.raster);
+  check('le type du fichier est celui des octets, jamais celui de l’adresse : une photo PNG qui se dit JPEG, ou d’un genre inventé, reçoit un fichier PNG', seen.raster.mislabeled === 'image/png' && seen.raster.invented === 'image/png', seen.raster);
+  check('ce qui n’est pas une photo ne reçoit aucune adresse `blob:` et reste écrit dans le texte : un texte qui se dit PNG, un dessin SVG, un « BM » sans en-tête de BMP, une signature PNG tronquée',
+    ['html', 'svg', 'bmpText', 'partial'].every(name => seen.raster[name] === null), seen.raster);
+  check('une photo et un dessin SVG dans le même texte : seule la photo change d’adresse, le dessin reste écrit tel quel', !!seen.pair && seen.pair.images === 1 && seen.pair.svgKept && seen.pair.onePhoto, seen.pair);
 }
 
 async function run() {

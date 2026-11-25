@@ -1701,9 +1701,19 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     check('images lourdes : `HeavyImages.lighten` n\'est appelée que par le départ du diaporama (extensions/diapositives/slide-show.js), jamais pour un diaporama aux diapositives liées (`data-link-slide` : leur texte se compare à sa source), et ce qu\'elle rend est libéré par `stop` ou par le départ qui n\'a pas abouti',
       lighteners.join() === 'extensions/diapositives/slide-show.js' && /const light = source\.indexOf\('data-link-slide'\) === -1 \? HeavyImages\.lighten\(source\) : null;/.test(starter) && (starter.match(/HeavyImages\.lighten\(/g) || []).length === 1
         && /function stop\(\) \{[\s\S]*?current\.root\.remove\(\);\s*if \(current\.light\) current\.light\.release\(\);/.test(starter) && /if \(light && !handed\) light\.release\(\);/.test(starter), lighteners);
-    check('images lourdes : la fenêtre du diaporama ne prend que des fichiers d\'image (`Blob` de type `image/…`) annoncés sous une adresse `blob:`, leur donne une adresse à elle (`URL.createObjectURL`) et ne change que les balises <img> qui portaient l\'adresse annoncée ; ces adresses sont rendues quand le rendu est retiré',
-      /image\.url\.indexOf\('blob:'\) !== 0 \|\| !\(image\.blob instanceof Blob\) \|\| !\/\^image\\\/\[\\w\.\+-\]\+\$\/\.test\(image\.blob\.type\)/.test(sender) && /own\.set\(image\.url, URL\.createObjectURL\(image\.blob\)\)/.test(sender)
+    check('images lourdes : la fenêtre du diaporama ne prend que des PHOTOS (`Blob` de type PNG, JPEG, GIF, WebP, AVIF ou BMP, jamais un dessin SVG : une adresse `blob:` garde l\'origine de la page) annoncées sous une adresse `blob:`, leur donne une adresse à elle (`URL.createObjectURL`) et ne change que les balises <img> qui portaient l\'adresse annoncée ; ces adresses sont rendues quand le rendu est retiré',
+      /const PHOTO_TYPES = \/\^image\\\/\(\?:png\|jpeg\|gif\|webp\|avif\|bmp\)\$\/;/.test(sender) && /image\.url\.indexOf\('blob:'\) !== 0 \|\| !\(image\.blob instanceof Blob\) \|\| !PHOTO_TYPES\.test\(image\.blob\.type\)/.test(sender) && /own\.set\(image\.url, URL\.createObjectURL\(image\.blob\)\)/.test(sender)
         && /content\.querySelectorAll\('img\[src\]'\)/.test(sender) && /const remove = \(\) => \{ host\.remove\(\); own\.forEach\(\(url\) => \{ URL\.revokeObjectURL\(url\); \}\); \};/.test(sender) && (sender.match(/createObjectURL\(/g) || []).length === 1, 'extensions/diapositives/slide-window.js');
+    // `blob:` et `data:` gardés mais resserrés (25/11, « on les garde, mais peut-on renforcer leur sécurité ? ») : une adresse `blob:` garde l'origine de la page, donc (1) le type d'un fichier qu'on lui donne vient des OCTETS
+    // de l'image (`rasterTypeOf`), jamais de l'étiquette de son adresse ; (2) seules quatre fichiers savent fabriquer une adresse `blob:` (un cinquième est une nouvelle porte, à ouvrir en connaissance de cause).
+    const heavy = noCommentsJs(read('js/heavy-images.js'));
+    check('images lourdes : le type du fichier `blob:` est celui de ses octets (`rasterTypeOf` : PNG, JPEG, GIF, WebP, AVIF, BMP), un fichier qui n\'en est pas une est refusé et reste écrit dans le texte ; l\'étiquette de l\'adresse ne donne jamais le type',
+      /function rasterTypeOf\(bytes\)/.test(heavy) && /const type = rasterTypeOf\(bytes\);\s*if \(!type\) throw new Error\(/.test(heavy) && /new Blob\(\[bytes\], \{ type \}\)/.test(heavy)
+        && !/type: 'image\/' \+/.test(heavy) && !/subtype/.test(heavy) && (heavy.match(/createObjectURL\(/g) || []).length === 1, 'js/heavy-images.js');
+    const BLOB_MAKERS = ['extensions/diapositives/slide-window.js', 'js/export-common.js', 'js/heavy-images.js', 'js/image-io.js'].sort();
+    const makers = jsFiles.filter(rel => /URL\s*\.\s*createObjectURL\s*\(/.test(noCommentsJs(read(rel)))).sort();
+    check('adresses `blob:` : quatre fichiers seulement en fabriquent (le téléchargement d\'un export, les images lourdes du diaporama, le décodage d\'une image, la fenêtre du diaporama) ; une cinquième porte s\'ajoute ici en connaissance de cause, avec son type de fichier et sa libération',
+      makers.join() === BLOB_MAKERS.join(), makers);
   }
 
   // L'envoi public : le dossier part avec le reste.

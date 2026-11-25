@@ -9,6 +9,10 @@
 //    nomme à son tour et remplace chaque adresse par la sienne (extensions/diapositives/slide-window.js:unpack).
 //  - LE TEXTE N'EST JAMAIS LU CARACTÈRE PAR CARACTÈRE : la recherche saute d'un attribut `src` au guillemet qui le ferme (`indexOf`, natif). Une expression régulière qui validait chaque caractère du
 //    base64 prenait 0,3 s sur 38 Mo ; c'est le décodage (`Uint8Array.fromBase64`, sinon `atob`) qui refuse une image mal écrite, et elle reste alors telle quelle dans le texte.
+//  - UNE ADRESSE `blob:` NE SE FABRIQUE QUE POUR UNE PHOTO RECONNUE À SES OCTETS (25/11, « on garde data: et blob:, mais renforce leur sécurité ») : une adresse `blob:` garde l'origine de la page (une `data:` en a une
+//    à elle, sans rien), donc un fichier que le navigateur ouvrirait seul (clic droit « Ouvrir l'image dans un nouvel onglet ») s'y lirait comme un document. Le type du fichier est celui que disent ses premiers
+//    octets (PNG, JPEG, GIF, WebP, AVIF, BMP), jamais l'étiquette de l'adresse : un dessin SVG, un fichier qui se dit image sans en être une, un type inconnu ne reçoivent pas d'adresse `blob:` et restent
+//    écrits dans le texte, comme une image mal écrite. Le seul autre fabricant d'adresses `blob:` pour une image (extensions/diapositives/slide-window.js) ne prend que ces mêmes types.
 // Script classique, sans dépendance : rien d'autre que le navigateur.
 const HeavyImages = (function () {
   const MIN_CHARS = 8192;          // en dessous, une image ne pèse pas : elle reste écrite dans le texte
@@ -26,8 +30,28 @@ const HeavyImages = (function () {
     return close === -1 || close > at;
   }
 
-  // Les octets d'une image écrite en base64, en fichier. `Uint8Array.fromBase64` (natif) quand le navigateur l'a ; sinon `atob`, octet par octet. Un base64 mal écrit lève une erreur.
-  function blobOf(subtype, base64) {
+  // Le genre d'une image d'après ses PREMIERS OCTETS, jamais d'après l'étiquette de son adresse : la liste fermée des photos que le navigateur montre (PNG, JPEG, GIF, WebP, AVIF, BMP), sinon null (un dessin
+  // SVG, un texte, un type inconnu, un fichier trop court). Rien d'autre ne reçoit d'adresse `blob:` (voir l'en-tête).
+  const BMP_HEADERS = [12, 40, 52, 56, 64, 108, 124];  // la taille de l'en-tête DIB d'un BMP, aux octets 14 à 17 : « BM » seul ne suffit pas à reconnaître un BMP
+  function rasterTypeOf(bytes) {
+    if (!bytes || bytes.length < 18) return null;
+    const at = (offset, text) => { for (let i = 0; i < text.length; i += 1) if (bytes[offset + i] !== text.charCodeAt(i)) return false; return true; };
+    if (bytes[0] === 0x89 && at(1, 'PNG') && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png';
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+    if (at(0, 'GIF87a') || at(0, 'GIF89a')) return 'image/gif';
+    if (at(0, 'RIFF') && at(8, 'WEBP')) return 'image/webp';
+    if (at(4, 'ftyp')) {
+      // Les marques d'un fichier AVIF (norme ISO) : la principale, puis celles qu'il dit compatibles, quatre octets chacune dans les 32 premiers.
+      for (let offset = 8; offset + 4 <= Math.min(bytes.length, 32); offset += 4) if (at(offset, 'avif') || at(offset, 'avis')) return 'image/avif';
+      return null;
+    }
+    if (bytes[0] === 0x42 && bytes[1] === 0x4d && BMP_HEADERS.indexOf(bytes[14] | (bytes[15] << 8) | (bytes[16] << 16) | (bytes[17] << 24)) !== -1) return 'image/bmp';
+    return null;
+  }
+
+  // Les octets d'une image écrite en base64, en fichier. `Uint8Array.fromBase64` (natif) quand le navigateur l'a ; sinon `atob`, octet par octet. Un base64 mal écrit lève une erreur, comme un fichier qui n'est
+  // pas une photo reconnue à ses octets : son type est celui de ces octets (rasterTypeOf), pas celui que l'adresse annonce.
+  function blobOf(base64) {
     let bytes;
     if (typeof Uint8Array.fromBase64 === 'function') {
       bytes = Uint8Array.fromBase64(base64);
@@ -36,7 +60,9 @@ const HeavyImages = (function () {
       bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
     }
-    return new Blob([bytes], { type: 'image/' + subtype.toLowerCase() });
+    const type = rasterTypeOf(bytes);
+    if (!type) throw new Error('pas une photo reconnue');
+    return new Blob([bytes], { type });
   }
 
   // Le fichier de l'adresse `src` : { url, blob }, ou null quand elle ne se lit pas. La même image deux fois (un logo sur chaque diapositive) n'est qu'un fichier : `made` les retrouve par une clé courte -
@@ -52,7 +78,7 @@ const HeavyImages = (function () {
     if (same) return same.file;
     let file = null;
     try {
-      const blob = blobOf(head[1], src.slice(from));
+      const blob = blobOf(src.slice(from));
       file = { url: URL.createObjectURL(blob), blob };
     } catch (e) { file = null; }
     known.push({ src, file });

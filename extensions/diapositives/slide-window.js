@@ -168,12 +168,14 @@ const SlideWindow = (function () {
     return fragment;
   }
   // Les images lourdes du rendu reçu (`pack` : `images`) : chaque fichier prend une adresse de CETTE page, et les balises <img> de `content` qui portaient son adresse dans l'app la reçoivent. Rend ces
-  // adresses, que le rendu libère quand il est retiré. Ce qui arrive reste une donnée : seul un fichier d'image est pris (une image ne s'exécute pas, même vectorielle, dans une balise <img>), sous une
-  // adresse `blob:` annoncée, et seule une balise <img> qui porte exactement cette adresse change.
+  // adresses, que le rendu libère quand il est retiré. Ce qui arrive reste une donnée : seule une PHOTO est prise (PNG, JPEG, GIF, WebP, AVIF, BMP : les types que js/heavy-images.js donne à ses fichiers d'après leurs
+  // octets ; une adresse `blob:` garde l'origine de la page, donc jamais un dessin SVG ni un type inattendu, qu'un onglet ouvert sur l'adresse lirait comme un document), sous une adresse `blob:` annoncée, et seule
+  // une balise <img> qui porte exactement cette adresse change.
+  const PHOTO_TYPES = /^image\/(?:png|jpeg|gif|webp|avif|bmp)$/;
   function adoptImages(content, images) {
     const own = new Map();
     (Array.isArray(images) ? images : []).forEach((image) => {
-      if (!image || typeof image.url !== 'string' || image.url.indexOf('blob:') !== 0 || !(image.blob instanceof Blob) || !/^image\/[\w.+-]+$/.test(image.blob.type) || own.has(image.url)) return;
+      if (!image || typeof image.url !== 'string' || image.url.indexOf('blob:') !== 0 || !(image.blob instanceof Blob) || !PHOTO_TYPES.test(image.blob.type) || own.has(image.url)) return;
       own.set(image.url, URL.createObjectURL(image.blob));
     });
     if (own.size) content.querySelectorAll('img[src]').forEach((img) => { const mine = own.get(img.getAttribute('src')); if (mine) img.setAttribute('src', mine); });
