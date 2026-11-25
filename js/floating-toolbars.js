@@ -1222,6 +1222,17 @@ const FloatingToolbars = (function () {
     return { wire: wireToolbar };
   }
 
+  // Les trois boutons Jour / Mois / Année d'une barre de date, écrits UNE seule fois pour la barre d'une bulle et celle de la puce « Date du jour » : leurs lettres suivent la langue de
+  // la page (J M A en français, D M Y en anglais, cf. dev-tests/verify-code-hygiene.mjs). `action` : le début de leur action (« date-part », « chip-date-part ») ; `pressed` : la barre
+  // de la puce donne à chaque bouton son nom accessible et son état allumé (aria-pressed), celle d'une bulle les pose à l'ouverture.
+  function dateSegmentButtons(action, pressed) {
+    const parts = { day: ['varFmt.showDay', 'varFmt.dayLetter'], month: ['varFmt.showMonth', 'varFmt.monthLetter'], year: ['varFmt.showYear', 'varFmt.yearLetter'] };
+    return Object.keys(parts).map(part => {
+      const title = I18n.t(parts[part][0]);
+      return `<button data-action="${action}:${part}" title="${title}"${pressed ? ` aria-label="${title}" aria-pressed="true"` : ''}>${I18n.t(parts[part][1])}</button>`;
+    }).join('');
+  }
+
   function createVariableToolbarHtml() {
     // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non)
 
@@ -1265,9 +1276,7 @@ const FloatingToolbars = (function () {
         '</div>',
         '<div data-var-panel="date" hidden>',
         '<span class="v2-varfmt-seg">',
-        `<button data-action="date-part:day" title="${I18n.t('varFmt.showDay')}">${I18n.t('varFmt.dayLetter')}</button>`,
-        `<button data-action="date-part:month" title="${I18n.t('varFmt.showMonth')}">${I18n.t('varFmt.monthLetter')}</button>`,
-        `<button data-action="date-part:year" title="${I18n.t('varFmt.showYear')}">${I18n.t('varFmt.yearLetter')}</button>`,
+        dateSegmentButtons('date-part', false),
         '</span>',
         `<select data-role="date-preset" title="${I18n.t('varFmt.datePreset')}">${dateOptions}</select>`,
         // L'heure : pour une colonne « Date et heure » seulement (showVariableFormatPanels) ; « Sans heure » est l'écriture d'avant ce réglage.
@@ -1728,38 +1737,73 @@ const FloatingToolbars = (function () {
   }
 
   // La barre flottante d'une puce (date, heure, email, nom, n° de ligne) pour UN éditeur (celui du document ou celui d'un champ texte, comme createVariableToolbar) : « Mise en forme
-  // conditionnelle » (js/conditional-style-window.js), et pour la puce « Heure actuelle » seule la liste « Heure » d'une bulle sur une colonne « Date et heure » (VariableFormat.timeChoices :
-  // 14:30, 14 h 30, 2:30 PM, 2:30pm), sans « Sans heure » - une puce écrit toujours une heure. Une puce sans réglage écrit sur 24 heures (« 14:30 »), comme avant ce choix : choisir cette écriture
-  // retire le réglage (`data-chip-time`) au lieu de l'enregistrer, le modèle garde sa forme d'avant. Dans un champ texte (Objet, À…), qui écrit une ligne sans mise en forme, seule la puce
-  // « Heure actuelle » a une barre, avec son bouton de mise en forme grisé et sa raison ; les autres puces n'y en ont pas.
+  // conditionnelle » (js/conditional-style-window.js), et les réglages d'écriture que la bulle d'une colonne de même nature a déjà.
+  // - La puce « Heure actuelle » : la liste « Heure » d'une bulle sur une colonne « Date et heure » (VariableFormat.timeChoices : 14:30, 14 h 30, 2:30 PM, 2:30pm), sans « Sans heure » - une puce
+  //   écrit toujours une heure. Une puce sans réglage écrit sur 24 heures (« 14:30 »), comme avant ce choix : choisir cette écriture retire le réglage (`data-chip-time`) au lieu de l'enregistrer,
+  //   le modèle garde sa forme d'avant.
+  // - La puce « Date du jour » : ceux de la bulle d'une colonne Date - les boutons J / M / A, la liste des écritures (VariableFormat.chipDateChoices : « 12/09/2026 », « 2026-09-12 », « 12 septembre
+  //   2026 »...) et « Lettres ». Le réglage est un seul attribut (`data-chip-date`, VariableFormat.chipDateFormat) ; une puce qui ne règle rien n'en a pas et écrit « 12/09/2026 », comme avant ce choix :
+  //   revenir à cette écriture, relâcher « Lettres » et rallumer J, M et A retire l'attribut.
+  // Dans un champ texte (Objet, À…), qui écrit une ligne sans mise en forme, seules ces deux puces ont une barre, avec leur bouton de mise en forme grisé et sa raison ; les autres puces n'y en ont pas.
   function createTimeChipToolbar(editor, options) {
     const inField = !!(options && options.field);
     const DEFAULT_STYLE = 'colon';
+    const DATE_PARTS = ['day', 'month', 'year'];
     function selectedChip() {
       const node = editor.state.selection.node;
       // Un smiley a sa propre barre (createEmojiChipToolbar : sa grille de choix), jamais celle-ci.
-      return node && node.type.name === 'smartChip' && node.attrs.kind !== EmojiChip.KIND && (!inField || node.attrs.kind === 'time') ? { node, pos: editor.state.selection.from } : null;
+      return node && node.type.name === 'smartChip' && node.attrs.kind !== EmojiChip.KIND && (!inField || node.attrs.kind === 'time' || node.attrs.kind === 'date') ? { node, pos: editor.state.selection.from } : null;
     }
     function chipToolbarHtml() {
       const items = VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+      const dateItems = VariableFormat.chipDateChoices().map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+      const parts = dateSegmentButtons('chip-date-part', true);
       const title = I18n.t('varToolbar.style');
       return `<select data-role="chip-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}">${items}</select>`
+        + '<div data-chip-panel="date" hidden>'
+        + `<span class="v2-varfmt-seg">${parts}</span>`
+        + `<select data-role="chip-date" title="${I18n.t('varFmt.datePreset')}" aria-label="${I18n.t('varFmt.datePreset')}">${dateItems}</select>`
+        + `<button data-action="chip-date-words" title="${I18n.t('varFmt.wordsDateTitle')}" aria-label="${I18n.t('varFmt.wordsDateTitle')}" aria-pressed="false">${I18n.t('varFmt.wordsButton')}</button>`
+        + '<span class="v2-floating-sep"></span>'
+        + '</div>'
         + `<button data-action="chip-style" title="${title}" aria-label="${title}">${Icons.svg('varStyle')}</button>`;
     }
-    function onTimeChipInput(role, value) {
+    // Pose le réglage de date de la puce : un réglage qui ne règle rien est retiré (la puce retrouve la forme d'avant ce choix), une clé laissée à `undefined` aussi.
+    function setChipDate(chip, patch) {
+      const next = Object.assign({}, VariableFormat.chipDateFormat(chip.node.attrs.date), patch);
+      Object.keys(next).forEach(key => { if (next[key] === undefined) delete next[key]; });
+      EditorCore.patchNodeAndReselect(editor, chip.pos, Object.assign({}, chip.node.attrs, { date: VariableFormat.chipDateFormat(next) }));
+    }
+    function onChipInput(role, value) {
       const chip = selectedChip();
-      if (!chip || chip.node.attrs.kind !== 'time' || role !== 'chip-time') return;
-      EditorCore.patchNodeAndReselect(editor, chip.pos, Object.assign({}, chip.node.attrs, { time: value === DEFAULT_STYLE ? null : value }));
+      if (!chip) return;
+      if (chip.node.attrs.kind === 'time' && role === 'chip-time') {
+        EditorCore.patchNodeAndReselect(editor, chip.pos, Object.assign({}, chip.node.attrs, { time: value === DEFAULT_STYLE ? null : value }));
+      } else if (chip.node.attrs.kind === 'date' && role === 'chip-date') {
+        setChipDate(chip, { preset: value === VariableFormat.CHIP_DATE_START.key ? undefined : value });
+      }
     }
     function onAction(action) {
       const chip = selectedChip();
-      if (chip && action === 'chip-style' && !inField) ConditionalStyleWindow.openAt(editor, chip.pos);
+      if (!chip) return;
+      if (action === 'chip-style') { if (!inField) ConditionalStyleWindow.openAt(editor, chip.pos); return; }
+      if (chip.node.attrs.kind !== 'date') return;
+      const format = VariableFormat.chipDateFormat(chip.node.attrs.date) || {};
+      if (action === 'chip-date-words') { setChipDate(chip, { words: format.words ? undefined : true }); return; }
+      if (action.indexOf('chip-date-part:') !== 0) return;
+      const part = action.slice('chip-date-part:'.length);
+      if (DATE_PARTS.indexOf(part) === -1) return;
+      // Le dernier composant allumé ne se relâche pas (la date serait vide) ; rallumer un composant retire sa clé.
+      const shown = DATE_PARTS.filter(name => format[name] !== false);
+      if (shown.length === 1 && shown[0] === part) return;
+      setChipDate(chip, { [part]: format[part] === false ? undefined : false });
     }
     function wire() {
-      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-timechip-toolbar', chipToolbarHtml(), onAction, onTimeChipInput);
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-timechip-toolbar', chipToolbarHtml(), onAction, onChipInput);
       EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
       const ui = controlsOf(panel);
       const select = panel.el.querySelector('select[data-role="chip-time"]');
+      const datePanel = panel.el.querySelector('[data-chip-panel="date"]');
       const check = ({ transaction } = {}) => {
         // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
         if (transaction && transaction.getMeta('blur')) return;
@@ -1769,8 +1813,22 @@ const FloatingToolbars = (function () {
         // Éditeur masqué (Lecture, résumé d'un macro-modèle) : cf. createVariableToolbar.
         if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
         const isTime = chip.node.attrs.kind === 'time';
+        const isDate = chip.node.attrs.kind === 'date';
         select.hidden = !isTime;
+        datePanel.hidden = !isDate;
         if (isTime) select.value = VariableFormat.timeChoiceOf(chip.node.attrs.time) || DEFAULT_STYLE;
+        if (isDate) {
+          // La barre dit ce que la puce écrit : l'écriture de départ tant que rien n'est réglé, un composant relâché ou « Lettres » allumés comme ceux d'une bulle.
+          const format = VariableFormat.chipDateFormat(chip.node.attrs.date) || {};
+          ui.setField('select[data-role="chip-date"]', VariableFormat.chipDateChoiceOf(format.preset));
+          DATE_PARTS.forEach(part => {
+            const shown = format[part] !== false;
+            ui.setActive('chip-date-part:' + part, shown);
+            ui.button('chip-date-part:' + part).setAttribute('aria-pressed', shown ? 'true' : 'false');
+          });
+          ui.setActive('chip-date-words', !!format.words);
+          ui.button('chip-date-words').setAttribute('aria-pressed', format.words ? 'true' : 'false');
+        }
         const title = I18n.t(inField ? 'varToolbar.styleInField' : 'varToolbar.style');
         ui.setDisabled('chip-style', inField, title);
         ui.button('chip-style').setAttribute('aria-label', title);

@@ -739,6 +739,250 @@
     },
   });
 
+  // --- La puce « Date du jour » : les réglages d'une bulle sur une colonne Date (25/11, « la date du jour n'a pas d'option de mise en forme de date ») ---
+  // Sans réglage, la puce écrit « 12/09/2026 » comme avant, dans les deux langues ; son réglage (`data-chip-date`, du JSON : { preset?, day?, month?, year?, words? }) est celui d'une bulle sur une colonne
+  // Date (VariableFormat.DATE_PRESETS, les boutons J / M / A, « Lettres »), et une barre au clic de la puce (js/floating-toolbars.js:createTimeChipToolbar) le choisit, dans le document comme dans un champ texte
+  // (suite fieldEditor). Le jour est celui de l'appareil : ces cas le figent au samedi 12 septembre 2026.
+  const dateChipHtml = (date, extra) => {
+    const el = document.createElement('span');
+    el.className = 'smart-chip';
+    el.setAttribute('contenteditable', 'false');
+    el.setAttribute('data-chip-kind', 'date');
+    if (date !== undefined) el.setAttribute('data-chip-date', typeof date === 'string' ? date : JSON.stringify(date));
+    Object.keys(extra || {}).forEach(name => el.setAttribute(name, extra[name]));
+    el.textContent = 'date';
+    return el.outerHTML;
+  };
+  const readDate = (date, extra) => atClock(23, 30, () => previewText('<p>' + dateChipHtml(date, extra) + '</p>'));
+
+  cases.push({
+    id: 'chip_date_writes_the_chosen_style',
+    description: 'La puce « Date du jour » écrit le jour de l\'appareil dans son réglage (data-chip-date) comme une bulle sur une colonne Date : sans réglage - ou avec un réglage vide, illisible ou inconnu - « 12/09/2026 » comme avant ; chaque préréglage (« 12/9/26 », « 2026-09-12 », « 12 sept. 2026 », « 12 septembre 2026 », avec le jour de la semaine) ; le jour, le mois ou l\'année relâchés ; « Lettres » ; les trois composants relâchés ne laissent pas une date vide ; le réglage de l\'heure n\'agit pas sur la date et celui de la date n\'agit pas sur l\'heure ; en anglais « 12/09/2026 » reste l\'écriture de départ, « 09/12/2026 » est un préréglage',
+    run: async (h) => {
+      await h.resetEditor();
+      const rows = [];
+      for (const [label, date, expected] of [
+        ['sans réglage : comme avant', undefined, '12/09/2026'], ['réglage vide', '{}', '12/09/2026'], ['JSON illisible', '{pas du json', '12/09/2026'], ['réglage qui n\'est pas un objet', '"iso"', '12/09/2026'],
+        ['préréglage inconnu', { preset: 'bogus' }, '12/09/2026'], ['clé inconnue', { colour: 'red' }, '12/09/2026'], ['jour « vrai » : ne dit rien', { day: true }, '12/09/2026'],
+        ['« 12/09/2026 » choisi en français', { preset: 'dmy_slash_full' }, '12/09/2026'], ['« 12/9/26 »', { preset: 'dmy_slash_short' }, '12/9/26'], ['ISO', { preset: 'iso' }, '2026-09-12'],
+        ['« 12 sept. 2026 »', { preset: 'd_mmm_yyyy' }, '12 sept. 2026'], ['« 12 septembre 2026 »', { preset: 'd_mmmm_yyyy' }, '12 septembre 2026'],
+        ['jour de la semaine abrégé', { preset: 'ddd_d_mmm_yyyy' }, 'sam. 12 sept. 2026'], ['jour de la semaine en entier', { preset: 'dddd_d_mmmm_yyyy' }, 'samedi 12 septembre 2026'],
+        ['mois relâché', { month: false }, '12/2026'], ['jour et mois relâchés', { day: false, month: false }, '2026'], ['année relâchée', { year: false }, '12/09'],
+        ['mois en lettres sans jour', { preset: 'd_mmmm_yyyy', day: false }, 'septembre 2026'], ['mois en lettres sans année', { preset: 'd_mmmm_yyyy', year: false }, '12 septembre'],
+        ['les trois composants relâchés : la date entière', { day: false, month: false, year: false }, '12/09/2026'],
+        ['« Lettres »', { words: true }, 'douze/neuf/deux mille vingt-six'], ['« Lettres » avec le mois écrit', { preset: 'd_mmmm_yyyy', words: true }, 'douze septembre deux mille vingt-six'],
+      ]) rows.push([label, await readDate(date), expected]);
+      rows.push(['l\'heure réglée sur la date n\'agit pas', await readDate(undefined, { 'data-chip-time': 'ampm' }), '12/09/2026'],
+        ['la date réglée sur l\'heure n\'agit pas', await atClock(23, 30, () => previewText('<p>' + chipHtml('time').replace('contenteditable', 'data-chip-date=\'{"preset":"iso"}\' contenteditable') + '</p>')), '23:30']);
+      // Le jour est celui de l'appareil à minuit passé comme à la veille de minuit : jamais celui d'un autre fuseau.
+      rows.push(['une minute après minuit', await atClock(0, 1, () => previewText('<p>' + dateChipHtml({ preset: 'iso' }) + '</p>')), '2026-09-12'], ['une minute avant minuit', await atClock(23, 59, () => previewText('<p>' + dateChipHtml({ preset: 'iso' }) + '</p>')), '2026-09-12']);
+      const first = async hour => { const RealDate = window.Date; const frozen = new RealDate(2026, 11, 1, hour, 0, 0).getTime(); window.Date = class extends RealDate { constructor(...args) { if (args.length) super(...args); else super(frozen); } static now() { return frozen; } }; try { return await previewText('<p>' + dateChipHtml({ preset: 'd_mmmm_yyyy' }) + ' ' + dateChipHtml({ preset: 'd_mmmm_yyyy', words: true }) + '</p>'); } finally { window.Date = RealDate; } };
+      rows.push(['le premier du mois s\'écrit « 1er », « premier » en lettres', await first(10), '1er décembre 2026 premier décembre deux mille vingt-six']);
+      const en = await inLang('en', async () => {
+        const out = [];
+        for (const [label, date, expected] of [
+          ['sans réglage : jour d\'abord comme avant', undefined, '12/09/2026'], ['« 09/12/2026 » est un préréglage', { preset: 'dmy_slash_full' }, '09/12/2026'], ['« 9/12/26 »', { preset: 'dmy_slash_short' }, '9/12/26'],
+          ['« September 12, 2026 »', { preset: 'd_mmmm_yyyy' }, 'September 12, 2026'], ['jour de la semaine en entier', { preset: 'dddd_d_mmmm_yyyy' }, 'Saturday, September 12, 2026'],
+          ['« Lettres »', { words: true }, 'twelve/nine/two thousand twenty-six'], ['mois relâché', { month: false }, '12/2026'],
+        ]) out.push(['en anglais : ' + label, await readDate(date), expected]);
+        return out;
+      });
+      const failed = wrongRows(rows.concat(en));
+      return { pass: failed.length === 0, notes: JSON.stringify(failed) };
+    },
+  });
+
+  cases.push({
+    id: 'chip_date_setting_comes_back_from_the_html_and_no_other_chip_carries_it',
+    description: 'Le réglage d\'une puce « Date du jour » est enregistré dans le modèle (data-chip-date) et relu tel quel ; une puce sans réglage - ou dont le réglage ne règle rien - s\'enregistre comme avant, sans cet attribut ; un préréglage inconnu, une clé inconnue et une valeur qui ne dit rien sont écartés ; une autre puce (l\'heure) ne le porte pas, même collée avec lui ; la puce d\'un champ texte l\'écrit de la même façon',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>' + dateChipHtml({ preset: 'iso', month: false, words: true }) + ' ' + dateChipHtml() + ' ' + dateChipHtml({ preset: 'bogus', colour: 'red', day: true }) + ' ' + chipHtml('time').replace('contenteditable', 'data-chip-date=\'{"preset":"iso"}\' contenteditable') + '</p>');
+      await h.sleep(100);
+      const html = Editor.getHTML();
+      const written = html.match(/data-chip-date="[^"]*"/g) || [];
+      const nodes = [];
+      EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'smartChip') nodes.push(node.attrs.kind + ':' + JSON.stringify(node.attrs.date)); });
+      const html2 = Editor.getHTML();
+      const element = (kind, date) => { const el = document.createElement('span'); el.className = 'smart-chip'; el.setAttribute('data-chip-kind', kind); if (date) el.setAttribute('data-chip-date', date); return el; };
+      const json = JSON.stringify;
+      const checks = {
+        written: json(written) === json(['data-chip-date="{&quot;preset&quot;:&quot;iso&quot;,&quot;month&quot;:false,&quot;words&quot;:true}"']),
+        nodes: json(nodes) === json(['date:{"preset":"iso","month":false,"words":true}', 'date:null', 'date:null', 'time:null']),
+        stable: html2 === html,
+        plainChip: /data-chip-kind="date"(?! data-chip-date)[^>]*>/.test(html) && !/data-chip-kind="time"[^>]*data-chip-date/.test(html),
+        attrsOf: json([EditorNodes.smartChipAttrsOf(element('date', '{"preset":"iso"}')), EditorNodes.smartChipAttrsOf(element('date')), EditorNodes.smartChipAttrsOf(element('date', '{}')), EditorNodes.smartChipAttrsOf(element('time', '{"preset":"iso"}')), EditorNodes.smartChipAttrsOf(element('email', '{"words":true}'))])
+          === json([{ kind: 'date', date: { preset: 'iso' } }, { kind: 'date' }, { kind: 'date' }, { kind: 'time' }, { kind: 'email' }]),
+        htmlOf: EditorNodes.smartChipHtml({ kind: 'date', date: { preset: 'iso' } }).includes('data-chip-date="{&quot;preset&quot;:&quot;iso&quot;}"') && !EditorNodes.smartChipHtml({ kind: 'date' }).includes('data-chip-date')
+          && !EditorNodes.smartChipHtml({ kind: 'date', date: null }).includes('data-chip-date') && !EditorNodes.smartChipHtml({ kind: 'date', date: {} }).includes('data-chip-date') && !EditorNodes.smartChipHtml({ kind: 'time', date: { preset: 'iso' } }).includes('data-chip-date'),
+        field: (() => {
+          const stored = FieldCodec.toStored([{ text: 'Le ' }, { chip: { kind: 'date', date: { preset: 'iso' } } }]);
+          const back = FieldCodec.itemsOf(stored);
+          return FieldCodec.isRich(stored) && stored.includes('data-chip-date') && json(back[1].chip) === json({ kind: 'date', date: { preset: 'iso' } })
+            && !FieldCodec.sameItems([{ chip: { kind: 'date' } }], [{ chip: { kind: 'date', date: { preset: 'iso' } } }]) && FieldCodec.sameItems([{ chip: { kind: 'date' } }], [{ chip: { kind: 'date', date: null } }])
+            && FieldCodec.sameItems([{ chip: { kind: 'date', date: { preset: 'iso' } } }], [{ chip: { kind: 'date', date: { preset: 'iso' } } }]);
+        })(),
+      };
+      const failed = Object.keys(checks).filter(key => !checks[key]);
+      return { pass: failed.length === 0, notes: failed.join(', ') || json({ html, nodes, written }) };
+    },
+  });
+
+  // La barre de la puce « Date du jour » : sélectionnée (un clic), elle montre les boutons J / M / A, la liste des écritures et « Lettres » d'une bulle sur une colonne Date, sur ce que la puce écrit.
+  const dateBars = () => Array.from(document.querySelectorAll('.v2-timechip-toolbar.visible'));
+  const datePanel = () => (dateBars()[0] ? dateBars()[0].querySelector('[data-chip-panel="date"]') : null);
+  const dateSelect = () => (dateBars()[0] ? dateBars()[0].querySelector('select[data-role="chip-date"]') : null);
+  const dateButton = action => (dateBars()[0] ? dateBars()[0].querySelector('button[data-action="' + action + '"]') : null);
+  const dateSetting = () => { const found = []; EditorCore.getEditor().state.doc.descendants(node => { if (node.type.name === 'smartChip' && node.attrs.kind === 'date') found.push(node.attrs.date); }); return found[0]; };
+  const chooseDate = async (h, value) => { const select = dateSelect(); select.value = value; select.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(80); };
+  // Un clic de la souris sur un bouton de la barre : la barre agit au mousedown (EditorCore.createFloatingPanel), qui n'ôte pas la sélection de l'éditeur.
+  const pressDate = async (h, action) => { const button = dateButton(action); button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true })); await h.sleep(80); };
+  const stateOfDateBar = () => ({
+    panelShown: !!datePanel() && !datePanel().hidden, timeHidden: dateBars()[0] ? dateBars()[0].querySelector('select[data-role="chip-time"]').hidden : null,
+    value: dateSelect() && dateSelect().value, parts: ['day', 'month', 'year'].map(part => dateButton('chip-date-part:' + part).classList.contains('is-active') + '/' + dateButton('chip-date-part:' + part).getAttribute('aria-pressed')),
+    words: dateButton('chip-date-words').classList.contains('is-active') + '/' + dateButton('chip-date-words').getAttribute('aria-pressed'),
+  });
+
+  cases.push({
+    id: 'chip_date_bar_opens_on_the_chip_and_sets_the_writing',
+    description: 'Un clic sur la puce « Date du jour » ouvre sa barre : J, M et A allumés, la liste des écritures (12/09/2026, 12/9/26, 2026-09-12, 12 sept. 2026...) sur « 12/09/2026 » tant que rien n\'est réglé - sans doublon, la même écriture n\'y est qu\'une fois -, « Lettres » éteint ; choisir une écriture, relâcher un composant ou allumer « Lettres » la pose sans fermer la barre, la Lecture l\'écrit, le dernier composant allumé ne se relâche pas, revenir à l\'écriture de départ retire l\'attribut, un seul « Annuler » rend le réglage d\'avant ; l\'heure et l\'e-mail ont leur barre sans ces réglages',
+    run: async (h) => {
+      const ed = await selectChip(h, 'date');
+      if (!ed) return { pass: false, notes: 'puce introuvable' };
+      const steps = {};
+      steps.open = Object.assign({ bars: dateBars().length, options: Array.from(dateSelect().options).map(o => o.value + '=' + o.textContent), title: dateSelect().title, partTitles: ['day', 'month', 'year'].map(part => dateButton('chip-date-part:' + part).title), wordsTitle: dateButton('chip-date-words').title }, stateOfDateBar());
+      await chooseDate(h, 'iso');
+      steps.iso = Object.assign({ date: dateSetting(), open: dateBars().length, stored: /data-chip-date="[^"]*iso/.test(Editor.getHTML()), read: await atClock(23, 30, () => previewText(Editor.getHTML())) }, stateOfDateBar());
+      await pressDate(h, 'chip-date-part:month');
+      steps.noMonth = Object.assign({ date: dateSetting(), read: await atClock(23, 30, () => previewText(Editor.getHTML())) }, stateOfDateBar());
+      await pressDate(h, 'chip-date-part:day');
+      steps.onlyYear = Object.assign({ date: dateSetting() }, stateOfDateBar());
+      await pressDate(h, 'chip-date-part:year');
+      steps.lastStays = Object.assign({ date: dateSetting() }, stateOfDateBar());
+      await pressDate(h, 'chip-date-part:month');
+      await pressDate(h, 'chip-date-part:day');
+      steps.allBack = Object.assign({ date: dateSetting() }, stateOfDateBar());
+      await pressDate(h, 'chip-date-words');
+      steps.words = Object.assign({ date: dateSetting(), read: await atClock(23, 30, () => previewText(Editor.getHTML())) }, stateOfDateBar());
+      await pressDate(h, 'chip-date-words');
+      steps.wordsOff = Object.assign({ date: dateSetting() }, stateOfDateBar());
+      await chooseDate(h, 'dmy_chip');
+      steps.reset = Object.assign({ date: dateSetting(), stored: /data-chip-date/.test(Editor.getHTML()) }, stateOfDateBar());
+      await chooseDate(h, 'd_mmmm_yyyy');
+      steps.long = Object.assign({ date: dateSetting(), read: await atClock(23, 30, () => previewText(Editor.getHTML())) }, stateOfDateBar());
+      // ProseMirror groupe les gestes faits à moins de 500 ms : la pause fait du dernier geste son propre pas d'historique.
+      await h.sleep(700);
+      await pressDate(h, 'chip-date-words');
+      ed.commands.undo();
+      await h.sleep(120);
+      steps.undone = Object.assign({ date: dateSetting() }, stateOfDateBar());
+      const timeEd = await selectChip(h, 'time');
+      steps.timeChip = { bars: dateBars().length, selected: !!timeEd && !!timeEd.state.selection.node, panel: stateOfDateBar().panelShown, timeList: dateBars()[0] ? !dateBars()[0].querySelector('select[data-role="chip-time"]').hidden : null };
+      const mailEd = await selectChip(h, 'email');
+      steps.emailChip = { bars: dateBars().length, selected: !!mailEd && !!mailEd.state.selection.node, panel: stateOfDateBar().panelShown, timeList: dateBars()[0] ? !dateBars()[0].querySelector('select[data-role="chip-time"]').hidden : null };
+      await selectChip(h, 'date');
+      EditorCore.getEditor().commands.setTextSelection(1);
+      await h.sleep(120);
+      steps.deselected = { bars: dateBars().length };
+      const json = JSON.stringify;
+      const checks = {
+        open: steps.open.bars === 1 && json(steps.open.options) === json(['dmy_chip=12/09/2026', 'dmy_slash_short=12/9/26', 'iso=2026-09-12', 'd_mmm_yyyy=12 sept. 2026', 'd_mmmm_yyyy=12 septembre 2026', 'ddd_d_mmm_yyyy=mar. 12 sept. 2026', 'dddd_d_mmmm_yyyy=mardi 12 septembre 2026'])
+          && steps.open.title === 'Format de date' && steps.open.panelShown && steps.open.timeHidden && steps.open.value === 'dmy_chip' && json(steps.open.parts) === json(['true/true', 'true/true', 'true/true']) && steps.open.words === 'false/false'
+          && json(steps.open.partTitles) === json(['Afficher/masquer le jour', 'Afficher/masquer le mois', 'Afficher/masquer l’année']) && steps.open.wordsTitle === 'Écriture en toutes lettres',
+        iso: json(steps.iso.date) === json({ preset: 'iso' }) && steps.iso.value === 'iso' && steps.iso.open === 1 && steps.iso.stored && steps.iso.read.startsWith('Le ') && steps.iso.read.includes('2026-09-12'),
+        noMonth: json(steps.noMonth.date) === json({ preset: 'iso', month: false }) && json(steps.noMonth.parts) === json(['true/true', 'false/false', 'true/true']) && steps.noMonth.read.includes('2026-12'),
+        onlyYear: json(steps.onlyYear.date) === json({ preset: 'iso', day: false, month: false }) && json(steps.onlyYear.parts) === json(['false/false', 'false/false', 'true/true']),
+        lastStays: json(steps.lastStays.date) === json({ preset: 'iso', day: false, month: false }) && json(steps.lastStays.parts) === json(['false/false', 'false/false', 'true/true']),
+        allBack: json(steps.allBack.date) === json({ preset: 'iso' }) && json(steps.allBack.parts) === json(['true/true', 'true/true', 'true/true']),
+        words: json(steps.words.date) === json({ preset: 'iso', words: true }) && steps.words.words === 'true/true' && steps.words.read.includes('deux mille vingt-six-neuf-douze'),
+        wordsOff: json(steps.wordsOff.date) === json({ preset: 'iso' }) && steps.wordsOff.words === 'false/false',
+        reset: steps.reset.date === null && steps.reset.value === 'dmy_chip' && !steps.reset.stored,
+        long: json(steps.long.date) === json({ preset: 'd_mmmm_yyyy' }) && steps.long.value === 'd_mmmm_yyyy' && steps.long.read.includes('12 septembre 2026'),
+        undo: json(steps.undone.date) === json({ preset: 'd_mmmm_yyyy' }) && steps.undone.words === 'false/false',
+        // Les autres puces ont aussi une barre (« Mise en forme conditionnelle », js/conditional-style-window.js), sans les réglages de la date.
+        noDateSettingsOnOthers: steps.timeChip.selected && steps.timeChip.bars === 1 && steps.timeChip.panel === false && steps.timeChip.timeList === true && steps.emailChip.selected && steps.emailChip.bars === 1 && steps.emailChip.panel === false && steps.emailChip.timeList === false,
+        closes: steps.deselected.bars === 0,
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: json({ checks, steps }) };
+    },
+  });
+
+  cases.push({
+    id: 'chip_date_bar_in_an_english_page_lists_each_writing_once',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : la liste « Date format » de la puce « Today’s date » propose « 12/09/2026 » (l\'écriture de départ, jour d\'abord, comme avant), « 09/12/2026 » (un préréglage), « 9/12/26 », « 2026-09-12 », « Sep 12, 2026 »... - chaque écriture une fois -, sur « 12/09/2026 » tant que rien n\'est réglé ; choisir « 09/12/2026 » pose le préréglage et la Lecture écrit « 09/12/2026 », revenir à « 12/09/2026 » le retire ; « Lettres » s\'appelle « Words »',
+    run: async (h) => {
+      await h.resetEditor();
+      Editor.setHTML('<p>' + dateChipHtml() + '</p>');
+      await h.sleep(150);
+      const ed = EditorCore.getEditor();
+      document.querySelector('.tiptap').focus();
+      let pos = -1;
+      ed.state.doc.descendants((node, p) => { if (node.type.name === 'smartChip') pos = p; });
+      ed.commands.setNodeSelection(pos);
+      await h.sleep(150);
+      const seen = Object.assign({ lang: I18n.getLang(), options: dateSelect() ? Array.from(dateSelect().options).map(o => o.value + '=' + o.textContent) : null, title: dateSelect() && dateSelect().title, wordsLabel: dateButton('chip-date-words') && dateButton('chip-date-words').textContent, label: document.querySelector('.tiptap .smart-chip') && document.querySelector('.tiptap .smart-chip').textContent }, stateOfDateBar());
+      seen.readStart = await atClock(23, 30, () => previewText(Editor.getHTML()));
+      await chooseDate(h, 'dmy_slash_full');
+      seen.us = { date: dateSetting(), value: dateSelect().value, read: await atClock(23, 30, () => previewText(Editor.getHTML())) };
+      await chooseDate(h, 'dmy_chip');
+      seen.back = { date: dateSetting(), value: dateSelect().value, read: await atClock(23, 30, () => previewText(Editor.getHTML())) };
+      const json = JSON.stringify;
+      const checks = {
+        lang: seen.lang === 'en', label: seen.label === 'Today’s date',
+        options: json(seen.options) === json(['dmy_chip=12/09/2026', 'dmy_slash_full=09/12/2026', 'dmy_slash_short=9/12/26', 'iso=2026-09-12', 'd_mmm_yyyy=Sep 12, 2026', 'd_mmmm_yyyy=September 12, 2026', 'ddd_d_mmm_yyyy=Sat, Sep 12, 2026', 'dddd_d_mmmm_yyyy=Saturday, September 12, 2026']),
+        title: seen.title === 'Date format', wordsLabel: seen.wordsLabel === 'Words', start: seen.value === 'dmy_chip' && seen.readStart === '12/09/2026',
+        us: json(seen.us.date) === json({ preset: 'dmy_slash_full' }) && seen.us.value === 'dmy_slash_full' && seen.us.read === '09/12/2026',
+        back: seen.back.date === null && seen.back.value === 'dmy_chip' && seen.back.read === '12/09/2026',
+      };
+      return { pass: Object.values(checks).every(Boolean), notes: json({ checks, seen }) };
+    },
+  });
+
+  // Les exports lisent le réglage comme la Lecture : le vrai PDF et le vrai Word écrivent la date dans l'écriture choisie, dans le corps comme dans le pied de page. Le jour est celui de l'appareil, relevé
+  // avant et après l'appel : un minuit qui passe entre-temps ne fausse rien.
+  cases.push({
+    id: 'chip_date_setting_is_written_in_pdf_and_word_body_and_footer',
+    description: 'Puce « Date du jour » réglée : le vrai PDF et le vrai Word écrivent le jour de l\'appareil dans l\'écriture choisie - « 2026-09-12 » (ISO) dans le corps, « 12 septembre 2026 » dans le pied de page - et « 12/09/2026 » sans réglage, comme avant',
+    run: async (h) => {
+      const previousLang = I18n.getLang();
+      try {
+        I18n.setLang('fr');
+        const days = () => { const d = new Date(); const two = n => String(n).padStart(2, '0'); const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']; return { dmy: two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + d.getFullYear(), iso: d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()), long: (d.getDate() === 1 ? '1er' : d.getDate()) + ' ' + months[d.getMonth()] + ' ' + d.getFullYear() }; };
+        const read = async (bodyDate, footerDate) => {
+          const hf = { enabled: true, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '<p>Pied de ' + dateChipHtml(footerDate) + '.</p>', first: '' } };
+          const body = '<p>Reçu le ' + dateChipHtml(bodyDate) + '.</p>';
+          const before = days();
+          const pdf = await h.exportPdfContent(body, hf);
+          const footer = typeof pdf.docDefinition.footer === 'function' ? pdf.docDefinition.footer(1, 1) : null;
+          const docx = await h.exportDocxParts(body, hf);
+          const footerPart = docx.part('word/footer1.xml');
+          const got = {
+            pdfBody: h.findTextBlocks(pdf.content, b => h.blockPlainText(b).includes('Reçu le')).map(b => h.blockPlainText(b)).join(' | '),
+            pdfFooter: h.findTextBlocks(footer, b => h.blockPlainText(b).includes('Pied de')).map(b => h.blockPlainText(b)).join(' | '),
+            docxBody: docx.doc.documentElement.textContent,
+            docxFooter: footerPart ? footerPart.documentElement.textContent : '',
+          };
+          const after = days();
+          const wrote = (text, lead, style) => [before[style], after[style]].some(day => text.includes(lead + day + '.'));
+          return { got, ok: wrote(got.pdfBody, 'Reçu le ', 'iso') && wrote(got.docxBody, 'Reçu le ', 'iso') && wrote(got.pdfFooter, 'Pied de ', 'long') && wrote(got.docxFooter, 'Pied de ', 'long') };
+        };
+        const set = await read({ preset: 'iso' }, { preset: 'd_mmmm_yyyy' });
+        const plain = await (async () => {
+          const before = days();
+          const pdf = await h.exportPdfContent('<p>Reçu le ' + dateChipHtml() + '.</p>', null);
+          const text = h.findTextBlocks(pdf.content, b => h.blockPlainText(b).includes('Reçu le')).map(b => h.blockPlainText(b)).join(' | ');
+          return { text, ok: [before.dmy, days().dmy].some(day => text.includes('Reçu le ' + day + '.')) };
+        })();
+        return { pass: set.ok && plain.ok, notes: JSON.stringify({ set, plain }) };
+      } finally {
+        I18n.setLang(previousLang);
+        document.getElementById('btn-mode-edit').click();
+        await h.sleep(60);
+      }
+    },
+  });
+
   // --- Un « # » qui n'est pas une variable (12/11) : la liste « # » se ferme à la croix ou à Échap, et Entrée redevient un saut de ligne ---
   // Avant : la liste, ouverte dès que le curseur est derrière un « # » (« Lot # »), gardait Entrée : impossible de passer à la ligne sans poser la première variable de la liste.
   const listShown = () => { const box = document.getElementById('autocomplete-box'); return !!box && box.style.display !== 'none'; };

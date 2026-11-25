@@ -1299,6 +1299,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   retire le réglage au lieu de l'enregistrer (l'attribut `data-chip-time` n'existe pas tant que rien n'est réglé). Les autres puces n'ont pas de barre ; ce n'est pas la barre d'une bulle
   (classe `v2-timechip-toolbar`, jamais les deux à la fois) ; elle suit les règles des barres flottantes : dans le panneau, au-dessus de tout, sans recouvrir la puce. La Lecture, le PDF, le
   Word, l'e-mail et le nom du fichier écrivent l'heure dans l'écriture choisie.
+- Puce « Date du jour » (retour d'Antoine du 25/11 : « la date du jour (puce) n'a pas d'option pour sa mise en forme de date ») : la puce écrit la date de l'appareil en « 12/09/2026 »
+  (jour, mois, année, dans toutes les langues) tant qu'on n'y touche pas - un document déjà enregistré s'écrit comme avant. Un clic sur la puce, dans le corps d'un document comme dans l'Objet,
+  les adresses ou le nom du PDF, ouvre la barre flottante de la puce (`v2-timechip-toolbar`, panneau `[data-chip-panel="date"]`) : les trois boutons Jour, Mois, Année (`chip-date-part:*`,
+  `aria-pressed`, le dernier allumé ne s'éteint pas), la liste « Format de date » (`select[data-role="chip-date"]` : la liste d'une bulle Date, `VariableFormat.chipDateChoices`, plus le départ
+  `dmy_chip` « 12/09/2026 » qui retire le réglage au lieu de l'enregistrer, sans doublon en français), le bouton « Lettres » (`chip-date-words`) et le bouton de style conditionnel de toutes
+  les puces. L'attribut `data-chip-date` (un JSON) n'existe pas tant que rien n'est réglé et n'est porté que par cette puce. La Lecture, le PDF, le Word, l'Excel, le PowerPoint,
+  l'OpenDocument, le HTML, le Markdown, l'e-mail et le nom du fichier écrivent la date dans l'écriture choisie. Une icône, une fonction ; le même réglage, sous le même nom, que celui d'une
+  bulle sur une colonne Date : une pastille de date qui n'aurait pas ses options est un oubli, pas un choix.
 - Bouton « Comme dans Grist » (choix d'Antoine du 21/10, carte « Bouton « Comme dans Grist » ») : la barre d'une bulle sur une colonne Numérique, Entière, Date ou Date et heure a une
   pipette (icône `gristFormat`, la pipette de Lucide, trait monochrome comme les autres) qui lit le format d'affichage de la colonne dans Grist - mode nombre, décimales « au moins, au plus »,
   devise (celle du document si la colonne n'en nomme pas), pourcentage, format de date et d'heure - et le pose sur la bulle d'un clic, d'un seul Annuler. Rien ne se pose tout seul : un modèle

@@ -369,17 +369,27 @@ const EditorNodes = (function () {
     // Les attributs DOM d'une puce (HTML enregistré, presse-papiers) d'après son genre, et l'inverse : sans TipTap, pour que les champs texte
     // (js/field-codec.js) écrivent la même puce que l'éditeur.
     // `time` : l'écriture de l'heure d'une puce « Heure actuelle » (une clé de VariableFormat.TIME_STYLES, `data-chip-time`) ; absente, la puce écrit l'heure sur 24 heures comme avant ce réglage.
-    // Aucune autre puce n'en porte.
+    // `date` : le réglage de date d'une puce « Date du jour » (`data-chip-date`, du JSON : { preset?, day?, month?, year?, words? }, VariableFormat.chipDateFormat) ; absent, la puce écrit « 12/09/2026 » comme avant ce réglage.
+    // Aucune autre puce ne porte ni l'un ni l'autre.
     // `emoji` : le smiley d'une puce « Smiley » (`data-chip-emoji`, js/emoji-chip.js) ; aucune autre puce n'en porte.
     // `condStyle` : la mise en forme selon la ligne (js/conditional-style.js, `data-cond-style`), propre au document : un champ texte ne l'écrit pas.
-    const smartChipAttributes = (kind, time, condStyle, emoji) => Object.assign({ class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind }, kind === 'time' && time ? { 'data-chip-time': time } : {},
-      kind === EmojiChip.KIND ? { 'data-chip-emoji': EmojiChip.normalize(emoji) } : {}, condStyle ? { 'data-cond-style': JSON.stringify(condStyle) } : {});
-    // Sans réglage, ni `time` ni `condStyle` ne sont dans le résultat : la forme d'une puce d'avant ces réglages ({ kind }) ne change pas. Le smiley, lui, porte toujours le sien : un
+    const smartChipAttributes = ({ kind, time, date, condStyle, emoji }) => {
+      const attrs = { class: 'smart-chip', contenteditable: 'false', 'data-chip-kind': kind };
+      if (kind === 'time' && time) attrs['data-chip-time'] = time;
+      const dateFormat = kind === 'date' ? VariableFormat.chipDateFormat(date) : null;
+      if (dateFormat) attrs['data-chip-date'] = JSON.stringify(dateFormat);
+      if (kind === EmojiChip.KIND) attrs['data-chip-emoji'] = EmojiChip.normalize(emoji);
+      if (condStyle) attrs['data-cond-style'] = JSON.stringify(condStyle);
+      return attrs;
+    };
+    // Sans réglage, ni `time` ni `date` ni `condStyle` ne sont dans le résultat : la forme d'une puce d'avant ces réglages ({ kind }) ne change pas. Le smiley, lui, porte toujours le sien : un
     // `data-chip-emoji` absent ou qui n'est pas un emoji (HTML collé, modèle abîmé) donne le smiley d'origine, jamais du texte.
     function smartChipAttrsOf(el) {
       const attrs = { kind: el.getAttribute('data-chip-kind') || 'date' };
       const time = attrs.kind === 'time' && el.getAttribute('data-chip-time');
       if (time) attrs.time = time;
+      const date = attrs.kind === 'date' && VariableFormat.chipDateFormat(el.getAttribute('data-chip-date'));
+      if (date) attrs.date = date;
       if (attrs.kind === EmojiChip.KIND) attrs.emoji = EmojiChip.normalize(el.getAttribute('data-chip-emoji') || el.textContent);
       const condStyle = ConditionalStyle.parse(el.getAttribute('data-cond-style'));
       if (condStyle) attrs.condStyle = condStyle;
@@ -387,7 +397,7 @@ const EditorNodes = (function () {
     }
     function smartChipElement(nodeAttrs) {
       const span = document.createElement('span');
-      setAttrs(span, smartChipAttributes(nodeAttrs.kind, nodeAttrs.time, nodeAttrs.condStyle, nodeAttrs.emoji));
+      setAttrs(span, smartChipAttributes(nodeAttrs));
       span.textContent = smartChipLabel(nodeAttrs.kind, nodeAttrs);
       return span;
     }
@@ -398,13 +408,13 @@ const EditorNodes = (function () {
       return inlineAtom(Node, {
         name: 'smartChip',
         addAttributes() {
-          return { kind: internalAttr('date'), time: internalAttr(null), emoji: internalAttr(null), condStyle: internalAttr(null) };
+          return { kind: internalAttr('date'), time: internalAttr(null), date: internalAttr(null), emoji: internalAttr(null), condStyle: internalAttr(null) };
         },
         parseHTML() {
           return [{ tag: 'span.smart-chip', getAttrs: smartChipAttrsOf }];
         },
         renderHTML({ node }) {
-          return ['span', mergeAttributes(smartChipAttributes(node.attrs.kind, node.attrs.time, node.attrs.condStyle, node.attrs.emoji)), smartChipLabel(node.attrs.kind, node.attrs)];
+          return ['span', mergeAttributes(smartChipAttributes(node.attrs)), smartChipLabel(node.attrs.kind, node.attrs)];
         },
         // Le texte brut d'une sélection copiée : un smiley s'écrit lui-même (le collage dans un éditeur de texte le garde) ; les autres puces n'ont aucun texte, comme avant. N'entre pas
         // dans `textContent` du document : seul le texte copié le lit.

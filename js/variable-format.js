@@ -22,6 +22,10 @@ const VariableFormat = (function () {
     { key: 'ampm', label: '11:30 PM', labelEn: '11:30 PM' },
     { key: 'ampmlower', label: '11:30pm', labelEn: '11:30pm' },
   ];
+  // La date que la puce « Date du jour » écrit tant qu'aucun préréglage n'est choisi : jour, mois, année en chiffres, « 12/09/2026 », dans TOUTES les langues - l'écriture qu'elle avait avant d'avoir un
+  // réglage de date, que les documents déjà faits gardent. Dans une interface française c'est le premier préréglage de DATE_PRESETS ; en anglais, où celui-ci écrit « 09/12/2026 », elle s'y ajoute en
+  // tête de la liste de la puce (chipDateChoices). Hors de DATE_PRESETS : la liste d'une bulle sur une colonne Date, le format de Grist et l'export Excel ne la connaissent pas.
+  const CHIP_DATE_START = { key: 'dmy_chip', label: '12/09/2026', labelEn: '12/09/2026', dayFirst: true };
   // I18n est absent des tests qui chargent ce fichier seul : le français est alors la langue.
   const interfaceIsEnglish = () => typeof I18n !== 'undefined' && I18n.getLang() === 'en';
   function presetLabel(preset) {
@@ -31,6 +35,11 @@ const VariableFormat = (function () {
   }
   // Une date n'a pas de réglage de langue par variable, contrairement au nombre (opts.style) : elle suit la langue de l'interface.
   const dateLocale = () => (interfaceIsEnglish() ? 'en-US' : 'fr-FR');
+  // Ce que la liste « Date » de la puce « Date du jour » propose dans la langue de l'interface, chaque écriture une fois : l'écriture de départ de la puce (CHIP_DATE_START), puis les préréglages d'une
+  // bulle - sans « 12/09/2026 » en français, où c'est déjà le départ.
+  const chipDateChoices = () => [CHIP_DATE_START].concat(DATE_PRESETS.filter(preset => interfaceIsEnglish() || preset.key !== DATE_PRESETS[0].key));
+  // L'option de cette liste qui écrit comme ce préréglage ; l'écriture de départ pour une puce sans réglage, ou dont le réglage n'est pas un préréglage connu (un modèle abîmé).
+  const chipDateChoiceOf = key => (chipDateChoices().some(preset => preset.key === key) ? key : CHIP_DATE_START.key);
 
   // Le type d'une colonne « Date et heure » porte son fuseau après les deux-points (« DateTime:Europe/Paris ») : Grist ne rend jamais « DateTime » nu pour
   // une vraie colonne (vérifié dans un vrai Grist), et `=== 'DateTime'` n'était donc jamais vrai. Même lecture que ConditionRules.dateTimeZone, redite ici
@@ -183,7 +192,7 @@ const VariableFormat = (function () {
     format = format || {};
     const zone = zoneOrUtc(dateTimeZone(columnType) || (val && val.timezone) || null);
     const clock = wallClock(date, zone);
-    const preset = DATE_PRESETS.find(p => p.key === format.preset) || DATE_PRESETS[0];
+    const preset = DATE_PRESETS.find(p => p.key === format.preset) || (format.preset === CHIP_DATE_START.key ? CHIP_DATE_START : DATE_PRESETS[0]);
     const keep = {
       day: format.day !== false,
       month: format.month !== false,
@@ -195,6 +204,9 @@ const VariableFormat = (function () {
       const m = twoDigits(clock.month);
       const day = twoDigits(clock.day);
       parts = [{ type: 'year', value: y }, { type: 'literal', value: '-' }, { type: 'month', value: m }, { type: 'literal', value: '-' }, { type: 'day', value: day }];
+    } else if (preset.dayFirst) {
+      // Jour, mois, année à deux chiffres (l'année entière), dans toutes les langues : l'écriture de départ de la puce « Date du jour ».
+      parts = [{ type: 'day', value: twoDigits(clock.day) }, { type: 'literal', value: '/' }, { type: 'month', value: twoDigits(clock.month) }, { type: 'literal', value: '/' }, { type: 'year', value: String(clock.year) }];
     } else if (preset.shortNoPad) {
       // Construit à la main : Intl fr-FR complète toujours jour et mois à deux chiffres, même avec `numeric`, et ce préréglage existe pour s'en
       // distinguer.
@@ -213,6 +225,31 @@ const VariableFormat = (function () {
     const text = buildDateStringFromParts(parts, keep);
     // L'heure reste en chiffres, même en toutes lettres : « Lettres » écrit la date.
     return writesTime(format, columnType, val) ? text + dateTimeJoiner(preset) + timeText(clock, format.time) : text;
+  }
+
+  // Le réglage de date d'une puce « Date du jour » (`data-chip-date`, du JSON), tel que la barre de la puce et la Lecture le lisent : { preset?, day?, month?, year?, words? } - mêmes clés et mêmes
+  // sens que le format d'une bulle sur une colonne Date, sans `type` ni `time` - ou null quand il ne règle rien (la puce écrit alors « 12/09/2026 », comme avant ce réglage). `raw` : le JSON, ou
+  // déjà l'objet ; ce qui n'est pas lisible, une clé inconnue ou une valeur qui ne dit rien (un jour « vrai ») est écarté, jamais un échec.
+  function chipDateFormat(raw) {
+    let read = raw;
+    if (typeof raw === 'string') {
+      try { read = JSON.parse(raw); } catch (e) { return null; }
+    }
+    if (!read || typeof read !== 'object' || Array.isArray(read)) return null;
+    const format = {};
+    if (typeof read.preset === 'string' && DATE_PRESETS.some(preset => preset.key === read.preset)) format.preset = read.preset;
+    ['day', 'month', 'year'].forEach(part => { if (read[part] === false) format[part] = false; });
+    // Les trois composants cachés ne laisseraient aucune date : le réglage les remet (comme le dernier bouton J / M / A, qui ne se relâche pas).
+    if (format.day === false && format.month === false && format.year === false) { delete format.day; delete format.month; delete format.year; }
+    if (read.words === true) format.words = true;
+    return Object.keys(format).length ? format : null;
+  }
+  // La date du jour d'une puce, dans son réglage : `now` est le jour de l'appareil (jour civil local), `format` le réglage (chipDateFormat) ou null. Sans réglage - ou avec un préréglage que ce widget
+  // ne connaît pas - « 12/09/2026 », comme avant ce réglage.
+  function chipDateText(now, format) {
+    const day = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const known = chipDateFormat(format) || {};
+    return formatDate(day, Object.assign({ preset: CHIP_DATE_START.key }, known), 'Date');
   }
 
   // --- Nombre en toutes lettres (français, orthographe classique) ---
@@ -783,7 +820,7 @@ const VariableFormat = (function () {
   }
 
   return {
-    DATE_PRESETS, TIME_STYLES, presetLabel, timeLabel, timeChoices, timeChoiceOf, timeText, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
+    DATE_PRESETS, TIME_STYLES, CHIP_DATE_START, presetLabel, timeLabel, timeChoices, timeChoiceOf, timeText, chipDateChoices, chipDateChoiceOf, chipDateFormat, chipDateText, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
     currencyGap, decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,

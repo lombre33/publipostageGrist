@@ -7,7 +7,7 @@
 //    lettres d'une clé (« #Projet.Nom » puis « Long » se relirait « #Projet.NomLong »). Les bulles et les puces y sont écrites comme dans le corps d'un
 //    modèle (EditorNodes.varBadgeHtml, smartChipHtml), pour que le suivi des renommages et la résolution les lisent pareil.
 // Une valeur est une suite d'éléments : { text }, { badge } (les attributs d'un nœud varBadge), { chip } (ceux d'un nœud smartChip : son genre et,
-// pour l'heure actuelle, son écriture) ou { mention } (ceux d'un nœud mention : la table, la ligne et la colonne de la fiche, et son nom). Sans TipTap ni éditeur : le champ, la résolution et les tests passent par ici.
+// pour l'heure actuelle et la date du jour, leur écriture) ou { mention } (ceux d'un nœud mention : la table, la ligne et la colonne de la fiche, et son nom). Sans TipTap ni éditeur : le champ, la résolution et les tests passent par ici.
 const FieldCodec = (function () {
   const RICH_OPEN = '<p class="pp-field">';
   const RICH_CLOSE = '</p>';
@@ -123,13 +123,13 @@ const FieldCodec = (function () {
     return RICH_OPEN + itemsHtml(items) + RICH_CLOSE;
   }
 
-  // Deux suites disent la même chose : mêmes textes, mêmes puces (genre et, pour l'heure, écriture), mêmes fiches (table, ligne, colonne), mêmes variables (table, colonne, clé).
+  // Deux suites disent la même chose : mêmes textes, mêmes puces (genre et, pour l'heure et la date, écriture), mêmes fiches (table, ligne, colonne), mêmes variables (table, colonne, clé).
   function sameItems(a, b) {
     if (a.length !== b.length) return false;
     return a.every((item, index) => {
       const other = b[index];
       if (isText(item) || isText(other)) return isText(item) && isText(other) && item.text === other.text;
-      if (isChip(item) || isChip(other)) return isChip(item) && isChip(other) && item.chip.kind === other.chip.kind && (item.chip.time || null) === (other.chip.time || null);
+      if (isChip(item) || isChip(other)) return isChip(item) && isChip(other) && item.chip.kind === other.chip.kind && (item.chip.time || null) === (other.chip.time || null) && JSON.stringify(item.chip.date || null) === JSON.stringify(other.chip.date || null);
       if (isMention(item) || isMention(other)) {
         return isMention(item) && isMention(other) && item.mention.table === other.mention.table && Number(item.mention.row) === Number(other.mention.row) && item.mention.column === other.mention.column;
       }

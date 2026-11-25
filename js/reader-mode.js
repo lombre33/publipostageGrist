@@ -1715,12 +1715,13 @@ const ReaderMode = (function () {
     if (!wrapper.querySelector('img.editor-image[data-slide-source]')) return;
     await SlideCopies.fillBlocks(wrapper, html => preview(html, tableId, record), stale);
   }
-  function formatTodayDate() {
+  function formatTodayDate(setting) {
     // Chips intelligents : date du jour, heure actuelle, email et nom de la personne connectée. Des valeurs calculées, jamais liées à une colonne
     // Grist : résolues à chaque rendu, sans recherche de ligne ni de table liée. `.footnote-ref-marker` n'a pas besoin de l'être ici : son numéro
     // vient du compteur CSS, déjà juste à l'écran.
-    const now = new Date();
-    return String(now.getDate()).padStart(2, '0') + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
+    // Le jour de l'appareil, dans le réglage de la puce (`data-chip-date`, VariableFormat.chipDateFormat : préréglage, jour / mois / année, « Lettres », comme une bulle sur une colonne Date) ; sans réglage - ou
+    // avec un réglage que ce widget ne lit pas - « 12/09/2026 », comme avant ce réglage.
+    return VariableFormat.chipDateText(new Date(), setting);
   }
   function formatNowTime(style) {
     // L'heure de l'appareil, dans l'écriture de la puce (`data-chip-time`, une clé de VariableFormat.TIME_STYLES : « 14:30 », « 2:30 PM », « 2:30pm »...) ; sans réglage - ou avec un
@@ -1738,11 +1739,14 @@ const ReaderMode = (function () {
     } catch (e) { /* repli ci-dessous */ }
     return { text: I18n.t(unavailableKey), isError: true };
   }
-  async function smartChipValue(kind, time, emoji) {
+  // Les réglages d'une puce lus sur son élément : `time` (`data-chip-time`), `date` (`data-chip-date`), `emoji` (`data-chip-emoji`) ; chacun n'a de sens que pour sa puce (smartChipValue).
+  const chipSettingsOf = chip => ({ time: chip.getAttribute('data-chip-time'), date: chip.getAttribute('data-chip-date'), emoji: chip.getAttribute('data-chip-emoji') });
+  async function smartChipValue(kind, settings) {
     // La valeur d'une puce d'après son genre (date, heure, email, nom, smiley) : { text, isError }. Partagée par le document (resolveSmartChips) et par les
-    // champs texte à bulles (fieldText). `time` : l'écriture de l'heure d'une puce « Heure actuelle » (`data-chip-time`). `emoji` : le smiley d'une puce « Smiley » (`data-chip-emoji`,
-    // js/emoji-chip.js), écrit tel quel comme un emoji tapé ; un smiley illisible donne le smiley d'origine.
-    if (kind === 'date') return { text: formatTodayDate(), isError: false };
+    // champs texte à bulles (fieldText). `settings` : ses réglages (chipSettingsOf). `time` : l'écriture de l'heure d'une puce « Heure actuelle » (`data-chip-time`). `date` : celle de la date d'une puce
+    // « Date du jour » (`data-chip-date`). `emoji` : le smiley d'une puce « Smiley » (`data-chip-emoji`, js/emoji-chip.js), écrit tel quel comme un emoji tapé ; un smiley illisible donne le smiley d'origine.
+    const { time, date, emoji } = settings || {};
+    if (kind === 'date') return { text: formatTodayDate(date), isError: false };
     if (kind === EmojiChip.KIND) return { text: EmojiChip.normalize(emoji), isError: false };
     if (kind === 'time') return { text: formatNowTime(time), isError: false };
     if (kind === 'email') return userChipText(() => GristAPI.getCurrentUserEmail(), 'reader.emailUnavailable');
@@ -1759,7 +1763,7 @@ const ReaderMode = (function () {
   async function chipValue(chip) {
     if (chip.classList.contains('mention-chip')) return Mention.resolve(Mention.attrsOf(chip));
     const kind = chip.getAttribute('data-chip-kind');
-    return kind === 'rowNumber' ? rowNumberValue(chip) : smartChipValue(kind, chip.getAttribute('data-chip-time'), chip.getAttribute('data-chip-emoji'));
+    return kind === 'rowNumber' ? rowNumberValue(chip) : smartChipValue(kind, chipSettingsOf(chip));
   }
   async function resolveSmartChips(wrapper) {
     const chips = Array.from(wrapper.querySelectorAll('.smart-chip, .mention-chip'));
@@ -1875,7 +1879,7 @@ const ReaderMode = (function () {
     if (!textOpts) return;
     for (const chip of Array.from(node.querySelectorAll('.smart-chip'))) {
       let text = '';
-      try { text = (await smartChipValue(chip.getAttribute('data-chip-kind'), chip.getAttribute('data-chip-time'), chip.getAttribute('data-chip-emoji'))).text; } catch (e) { /* une puce illisible donne un texte vide */ }
+      try { text = (await smartChipValue(chip.getAttribute('data-chip-kind'), chipSettingsOf(chip))).text; } catch (e) { /* une puce illisible donne un texte vide */ }
       chip.replaceWith(document.createTextNode(text));
     }
   }
@@ -2170,7 +2174,7 @@ const ReaderMode = (function () {
         if (atom.matches('.mention-chip')) {
           text = (await Mention.resolve(Mention.fieldAttrsOf(atom))).text;
         } else if (atom.matches('.smart-chip')) {
-          text = (await smartChipValue(atom.getAttribute('data-chip-kind'), atom.getAttribute('data-chip-time'), atom.getAttribute('data-chip-emoji'))).text;
+          text = (await smartChipValue(atom.getAttribute('data-chip-kind'), chipSettingsOf(atom))).text;
         } else {
           const { node } = await resolveBadgeNode(atom, tableId || lastCurrentTableId, record, parseBadgeFormat(atom), loopCtx, { rawNumbers: true });
           text = plainText(node);

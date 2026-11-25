@@ -512,8 +512,8 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .v2-varfmt-toolbar [data-var-panel][hidden] { display: none; }
 .v2-varfmt-seg { display: inline-flex; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); overflow: hidden; }
-.v2-varfmt-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }
-.v2-varfmt-toolbar .v2-varfmt-seg button:first-child { border-left: none; }
+.v2-varfmt-toolbar .v2-varfmt-seg button, .v2-timechip-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }
+.v2-varfmt-toolbar .v2-varfmt-seg button:first-child, .v2-timechip-toolbar .v2-varfmt-seg button:first-child { border-left: none; }
 /* Les trois cases de la barre « Oui / Non » sont les icônes de la liste à cases, dessinées dans un coin d'un cadre de 24 : à 15 px la case ne fait
    que 4 px et les styles « texte barré » et « texte normal » (deux traits de longueur différente) ne se distinguent plus ; à 20 px ils se lisent,
    dans la hauteur de 26 px des autres boutons de la barre. */
@@ -524,10 +524,17 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 /* La liste « Heure » (colonne « Date et heure » seulement, cachée par l'attribut `hidden`) : « Sans heure » est son texte le plus long. */
 .v2-varfmt-toolbar select[data-role="date-time"] { width: 96px; }
 .v2-varfmt-toolbar select[data-role="date-time"][hidden] { display: none; }
-/* Barre flottante d'une puce : le chrome de `.v2-floating-toolbar`, la liste « Heure » d'une bulle pour la puce « Heure actuelle » seule (mêmes mesures que celle de `.v2-varfmt-toolbar`) et le bouton de mise en forme conditionnelle. */
+/* Barre flottante d'une puce : le chrome de `.v2-floating-toolbar`, la liste « Heure » d'une bulle pour la puce « Heure actuelle » seule, les boutons J / M / A, la liste des écritures et « Lettres » d'une bulle sur
+   une colonne Date pour la puce « Date du jour » seule (mêmes mesures que celles de `.v2-varfmt-toolbar`) et le bouton de mise en forme conditionnelle. Dans un panneau étroit les réglages passent à la ligne, comme ceux d'une bulle. */
 .v2-timechip-toolbar, .v2-mention-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
+.v2-timechip-toolbar { flex-wrap: wrap; }
 .v2-timechip-toolbar select { width: 96px; height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
 .v2-timechip-toolbar select[hidden] { display: none; }
+.v2-timechip-toolbar select[data-role="chip-date"] { width: 190px; }
+.v2-timechip-toolbar [data-chip-panel] { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.v2-timechip-toolbar [data-chip-panel][hidden] { display: none; }
+.v2-timechip-toolbar button[data-action="chip-date-words"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
+.v2-timechip-toolbar .v2-floating-sep { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }
 /* Barre flottante du sommaire (js/floating-toolbars.js:createTocToolbar) : « Titres H1 à H6 » et le bouton « N° de page ». Le chrome vient de `.v2-floating-toolbar` ; le bouton, qui porte un texte, remplace la largeur d'icône des boutons de la barre. */
 .v2-toc-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
 .v2-toc-toolbar .v2-toc-label, .v2-toc-toolbar .v2-toc-to { padding: 0 4px; font: 12px/1 var(--font-ui); color: var(--text-muted, #6b7482); }

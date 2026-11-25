@@ -2648,7 +2648,7 @@ check('Lecture : « 120 000,00 % » (1200 fois cent, deux décimales)', readPerc
 
 // Puce « Heure actuelle » (carte « Les deux » d'Antoine, 21/10) : sa barre dans le document, à la vraie souris et à 700x400. Un clic sur la puce ouvre la liste « Heure » (23:30, 23 h 30,
 // 11:30 PM, 11:30pm), atteignable dans le panneau et sans recouvrir la puce ; le choix se range dans la puce (data-chip-time), la barre reste ouverte et la Lecture écrit l'heure ainsi ;
-// « 23:30 » retire le réglage ; la puce « Date du jour » n'a que le bouton de mise en forme conditionnelle, sans la liste « Heure ». L'heure de la page est figée à 23 h 30 pour que la Lecture ait un texte sûr.
+// « 23:30 » retire le réglage ; la puce « Date du jour » a les réglages de date d'une bulle (plus bas), sans la liste « Heure ». L'heure de la page est figée à 23 h 30 pour que la Lecture ait un texte sûr.
 await page.evaluate(() => {
   const RealDate = Date;
   const frozen = new RealDate(2026, 8, 12, 23, 30, 0).getTime();
@@ -2675,15 +2675,76 @@ const chipBar = () => page.evaluate(() => {
 const dateChipBox = await hitTest(DATE_CHIP);
 await page.mouse.click(dateChipBox.x, dateChipBox.y);
 await page.waitForTimeout(400);
-// La date du jour n'a pas la liste « Heure », mais sa barre porte le bouton « Mise en forme conditionnelle » (lot 3 : puces) ; la barre d'une bulle ne s'ouvre pas.
+// La date du jour n'a pas la liste « Heure », mais sa barre porte les réglages de date d'une bulle sur une colonne Date (J / M / A, la liste des écritures, « Lettres » : retour d'Antoine du 25/11, « la date du jour (puce)
+// n'a pas d'option pour sa mise en forme de date ») et le bouton « Mise en forme conditionnelle » (lot 3 : puces) ; la barre d'une bulle ne s'ouvre pas.
 const dateChipBar = await page.evaluate(() => {
   const bar = document.querySelector('.v2-timechip-toolbar.visible');
   if (!bar) return null;
   const select = bar.querySelector('select[data-role="chip-time"]');
   const button = bar.querySelector('button[data-action="chip-style"]');
-  return { selectHidden: select.hidden, button: !!button && button.getClientRects().length > 0, bubbleBars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length };
+  const panel = bar.querySelector('[data-chip-panel="date"]');
+  return { selectHidden: select.hidden, panelShown: !!panel && !panel.hidden && panel.getClientRects().length > 0, button: !!button && button.getClientRects().length > 0, bubbleBars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length };
 });
-check('clic sur la puce « Date du jour » : sa barre n\'a que « Mise en forme conditionnelle » (pas de liste « Heure »), sans la barre d\'une bulle', !!dateChipBar && dateChipBar.selectHidden && dateChipBar.button && dateChipBar.bubbleBars === 0, dateChipBar);
+check('clic sur la puce « Date du jour » : sa barre montre les réglages de date (J / M / A, liste, « Lettres ») et « Mise en forme conditionnelle », sans la liste « Heure » ni la barre d\'une bulle', !!dateChipBar && dateChipBar.selectHidden && dateChipBar.panelShown && dateChipBar.button && dateChipBar.bubbleBars === 0, dateChipBar);
+// Ses réglages à la vraie souris et à 700x400 : la barre tient dans le panneau, la liste est atteignable et la puce découverte ; le choix et chaque bouton se rangent dans la puce (data-chip-date), la barre reste ouverte,
+// et la Lecture écrit la date ainsi (le jour de la page est figé au 12/09/2026).
+const chipDateOf = () => page.evaluate(() => { let found; EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'smartChip' && n.attrs.kind === 'date') found = n.attrs.date; }); return found; });
+const chipDateBar = () => page.evaluate(() => {
+  const bar = document.querySelector('.v2-timechip-toolbar.visible');
+  if (!bar) return null;
+  const r = bar.getBoundingClientRect(); const select = bar.querySelector('select[data-role="chip-date"]');
+  const sr = select.getBoundingClientRect(); const topEl = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+  const chip = document.querySelector('.tiptap .smart-chip[data-chip-kind="date"]').getBoundingClientRect();
+  const cx = chip.left + chip.width / 2, cy = chip.top + chip.height / 2;
+  const button = action => bar.querySelector('button[data-action="' + action + '"]');
+  return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, height: r.height, viewport: innerWidth, viewportHeight: innerHeight, docOverflowX: document.scrollingElement.scrollWidth - innerWidth,
+    selectOnTop: !!topEl && (topEl === select || select.contains(topEl)), coversChip: cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom,
+    options: Array.from(select.options).map(o => o.textContent), value: select.value, title: select.title, bubbleBars: document.querySelectorAll('.v2-varfmt-toolbar.visible').length,
+    parts: ['day', 'month', 'year'].map(part => button('chip-date-part:' + part).classList.contains('is-active')), words: button('chip-date-words').classList.contains('is-active') };
+});
+const dateOpened = await chipDateBar();
+check('la barre de la puce « Date du jour » : la liste « 12/09/2026, 12/9/26, 2026-09-12, 12 sept. 2026... » sur « 12/09/2026 », J, M et A allumés, « Lettres » éteint, sans la barre d\'une bulle',
+  !!dateOpened && JSON.stringify(dateOpened.options) === JSON.stringify(['12/09/2026', '12/9/26', '2026-09-12', '12 sept. 2026', '12 septembre 2026', 'mar. 12 sept. 2026', 'mardi 12 septembre 2026']) && dateOpened.value === 'dmy_chip' && dateOpened.title === 'Format de date'
+  && JSON.stringify(dateOpened.parts) === '[true,true,true]' && dateOpened.words === false && dateOpened.bubbleBars === 0, dateOpened);
+check('... la barre est dans le panneau à 700x400 sur une seule ligne, la liste atteignable et non recouverte, la puce découverte, la page ne défile pas de côté',
+  !!dateOpened && dateOpened.left >= 0 && dateOpened.right <= dateOpened.viewport + 0.5 && dateOpened.bottom <= dateOpened.viewportHeight + 0.5 && dateOpened.height < 50 && dateOpened.selectOnTop && !dateOpened.coversChip && dateOpened.docOverflowX <= 0, dateOpened);
+check('puce sans réglage : le modèle n\'en garde aucun (la date s\'écrit « 12/09/2026 » comme avant)', (await chipDateOf()) === null);
+await page.selectOption('.v2-timechip-toolbar.visible select[data-role="chip-date"]', 'd_mmmm_yyyy');
+await page.waitForTimeout(350);
+const dateAfterLong = { date: await chipDateOf(), bar: await chipDateBar() };
+check('choisir « 12 septembre 2026 » : la puce porte { preset: "d_mmmm_yyyy" } et la barre reste ouverte sur ce choix', JSON.stringify(dateAfterLong.date) === JSON.stringify({ preset: 'd_mmmm_yyyy' }) && !!dateAfterLong.bar && dateAfterLong.bar.value === 'd_mmmm_yyyy', dateAfterLong);
+const monthButton = await hitTest('.v2-timechip-toolbar.visible button[data-action="chip-date-part:month"]');
+check('le bouton M de la barre est dans le panneau et non recouvert', monthButton.found && monthButton.inViewport && monthButton.onTop, monthButton);
+await page.mouse.click(monthButton.x, monthButton.y);
+await page.waitForTimeout(350);
+const dateNoMonth = { date: await chipDateOf(), bar: await chipDateBar() };
+check('vrai clic sur M : le mois est relâché dans la puce, le bouton s\'éteint et la barre reste ouverte', JSON.stringify(dateNoMonth.date) === JSON.stringify({ preset: 'd_mmmm_yyyy', month: false }) && JSON.stringify(dateNoMonth.bar && dateNoMonth.bar.parts) === '[true,false,true]', dateNoMonth);
+const readDateNoMonth = await readBubbleInReaderMode('p');
+check('Lecture, bouton cliqué à la vraie souris : « Reçu à 23:30 et le 12 2026. » (le mois relâché, comme pour une bulle sur une colonne Date)', readDateNoMonth.readButton.found && readDateNoMonth.text === 'Reçu à 23:30 et le 12 2026.' && readDateNoMonth.backToEdit, readDateNoMonth);
+const dateChipAgain = await hitTest(DATE_CHIP);
+await page.mouse.click(dateChipAgain.x, dateChipAgain.y);
+await page.waitForTimeout(450);
+const dateBarAgain = await chipDateBar();
+check('la puce rouverte : la barre relit le réglage (« 12 septembre 2026 », M éteint)', !!dateBarAgain && dateBarAgain.value === 'd_mmmm_yyyy' && JSON.stringify(dateBarAgain.parts) === '[true,false,true]', dateBarAgain);
+const wordsButton = await hitTest('.v2-timechip-toolbar.visible button[data-action="chip-date-words"]');
+check('le bouton « Lettres » de la barre est dans le panneau et non recouvert', wordsButton.found && wordsButton.inViewport && wordsButton.onTop, wordsButton);
+await page.mouse.click(wordsButton.x, wordsButton.y);
+await page.waitForTimeout(350);
+const readDateWords = await readBubbleInReaderMode('p');
+check('vrai clic sur « Lettres » : la Lecture écrit « Reçu à 23:30 et le douze deux mille vingt-six. »', JSON.stringify(await chipDateOf()) === JSON.stringify({ preset: 'd_mmmm_yyyy', month: false, words: true }) && readDateWords.text === 'Reçu à 23:30 et le douze deux mille vingt-six.' && readDateWords.backToEdit, readDateWords);
+const dateChipLast = await hitTest(DATE_CHIP);
+await page.mouse.click(dateChipLast.x, dateChipLast.y);
+await page.waitForTimeout(450);
+const wordsOff = await hitTest('.v2-timechip-toolbar.visible button[data-action="chip-date-words"]');
+await page.mouse.click(wordsOff.x, wordsOff.y);
+await page.waitForTimeout(300);
+const monthOn = await hitTest('.v2-timechip-toolbar.visible button[data-action="chip-date-part:month"]');
+await page.mouse.click(monthOn.x, monthOn.y);
+await page.waitForTimeout(300);
+await page.selectOption('.v2-timechip-toolbar.visible select[data-role="chip-date"]', 'dmy_chip');
+await page.waitForTimeout(300);
+const readDateReset = await readBubbleInReaderMode('p');
+check('« Lettres » éteint, M rallumé et « 12/09/2026 » rechoisi retirent le réglage de la puce : la Lecture écrit « Reçu à 23:30 et le 12/09/2026. »', (await chipDateOf()) === null && readDateReset.text === 'Reçu à 23:30 et le 12/09/2026.' && readDateReset.backToEdit, { date: await chipDateOf(), readDateReset });
 const timeChipBox = await hitTest(TIME_CHIP);
 await page.mouse.click(timeChipBox.x, timeChipBox.y);
 await page.waitForTimeout(500);

@@ -729,7 +729,7 @@
 
   scenario(
     'fieldeditor_the_time_chip_of_a_field_has_its_own_bar_and_writes_the_chosen_clock',
-    'Dans l’Objet, la puce « Heure actuelle » sélectionnée ouvre sa barre - la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm), sur « 23:30 » tant que rien n’est réglé - et non celle des bulles ; choisir une écriture la range dans la valeur du champ (`data-chip-time`) en émettant `input`, relue en puce avec son réglage, et l’Objet comme le nom du PDF écrivent l’heure ainsi (« 11:30 PM », « 11_30 PM ») ; choisir « 23:30 » retire le réglage ; la barre se referme quand le champ change de modèle ; la puce « Date du jour » n’a pas de barre, une bulle garde la sienne',
+    'Dans l’Objet, la puce « Heure actuelle » sélectionnée ouvre sa barre - la liste « Heure » (23:30, 23 h 30, 11:30 PM, 11:30pm), sur « 23:30 » tant que rien n’est réglé - et non celle des bulles ; choisir une écriture la range dans la valeur du champ (`data-chip-time`) en émettant `input`, relue en puce avec son réglage, et l’Objet comme le nom du PDF écrivent l’heure ainsi (« 11:30 PM », « 11_30 PM ») ; choisir « 23:30 » retire le réglage ; la barre se referme quand le champ change de modèle ; la puce « Date du jour » a sa barre, sans la liste « Heure », une bulle garde la sienne',
     async (h) => {
       I18n.setLang('fr');
       const host = field(SUBJECT);
@@ -766,7 +766,7 @@
         host.value = rich([T('Le '), C('date')]);
         await h.sleep(60);
         await selectChipOf(h, SUBJECT, 'date');
-        const dateChip = { bars: timeBars().length, bubbleBars: panels().length };
+        const dateChip = { bars: timeBars().length, bubbleBars: panels().length, datePanel: !!timeBars()[0] && !timeBars()[0].querySelector('[data-chip-panel="date"]').hidden, timeList: !!timeSelect() && !timeSelect().hidden };
         host.value = mixed;
         await h.sleep(60);
         await selectBubble(h, SUBJECT, 0);
@@ -778,12 +778,67 @@
           lower: same(lower.chips, [{ kind: 'time', time: 'ampmlower' }]) && lower.value === 'ampmlower' && matches(lower.seen, 'ampmlower', subjectOf, fileOf),
           reset: same(reset.chips, [{ kind: 'time' }]) && !reset.stored.includes('data-chip-time') && FieldCodec.isRich(reset.stored) && reset.value === 'colon' && matches(reset.seen, 'colon', subjectOf, fileOf),
           closes: afterOtherTemplate.bars === 0,
-          dateChip: dateChip.bars === 0 && dateChip.bubbleBars === 0,
+          // La puce « Date du jour » a sa propre barre (ses réglages de date, scénario suivant), sans la liste « Heure » : jamais la barre des bulles.
+          dateChip: dateChip.bars === 1 && dateChip.bubbleBars === 0 && dateChip.datePanel && !dateChip.timeList,
           bubble: bubble.bars === 0 && bubble.bubbleBars === 1,
           sameItems: !FieldCodec.sameItems([C('time')], [{ chip: { kind: 'time', time: 'ampm' } }]) && FieldCodec.sameItems([C('time')], [{ chip: { kind: 'time', time: null } }]),
         };
         const failed = Object.keys(checks).filter(k => !checks[k]);
         return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ opened, ampm, lower, reset, afterOtherTemplate, dateChip, bubble }) };
+      } finally { host.removeEventListener('input', count); }
+    },
+    { email: true },
+  );
+
+  // La barre de la puce « Date du jour » d'un champ (25/11, « la date du jour n'a pas d'option de mise en forme de date ») : les réglages d'une bulle sur une colonne Date - J / M / A, la liste des écritures, « Lettres » -, rangés dans la valeur du champ.
+  const dateSelect = () => (timeBars()[0] ? timeBars()[0].querySelector('select[data-role="chip-date"]') : null);
+  const dateButton = action => (timeBars()[0] ? timeBars()[0].querySelector('button[data-action="' + action + '"]') : null);
+  const isoNow = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  scenario(
+    'fieldeditor_the_date_chip_of_a_field_has_its_own_bar_and_writes_the_chosen_date',
+    'Dans l’Objet, la puce « Date du jour » sélectionnée ouvre sa barre - J, M et A, la liste des écritures sur « 12/09/2026 » tant que rien n’est réglé, « Lettres » -, sans la liste « Heure » ni la barre des bulles ; choisir une écriture ou relâcher un composant la range dans la valeur du champ (`data-chip-date`) en émettant `input`, relue en puce avec son réglage, et l’Objet comme le nom du PDF écrivent la date ainsi (« 2026-09-12 », « 2026-09-12 » sans le jour : « 2026-09 ») ; revenir à l’écriture de départ retire le réglage ; le bouton de mise en forme conditionnelle y est grisé',
+    async (h) => {
+      I18n.setLang('fr');
+      const host = field(SUBJECT);
+      let inputs = 0;
+      const count = () => { inputs += 1; };
+      host.addEventListener('input', count);
+      try {
+        host.value = rich([T('Reçu le '), C('date'), T(' - '), B('Titre')]);
+        await h.sleep(60);
+        await selectChipOf(h, SUBJECT, 'date');
+        const panelEl = () => (timeBars()[0] ? timeBars()[0].querySelector('[data-chip-panel="date"]') : null);
+        const opened = { bars: timeBars().length, bubbleBars: panels().length, options: dateSelect() ? Array.from(dateSelect().options).map(o => o.value) : null, value: dateSelect() && dateSelect().value, title: dateSelect() && dateSelect().title, panel: !!panelEl() && !panelEl().hidden, timeList: !!timeSelect() && !timeSelect().hidden, style: (() => { const b = dateButton('chip-style'); return b && b.getAttribute('aria-disabled'); })(), inputs };
+        const chooseDate = async value => { const select = dateSelect(); select.value = value; select.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(80); };
+        const press = async action => { const button = dateButton(action); button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true })); await h.sleep(80); };
+        const chips = () => FieldCodec.itemsOf(host.value).filter(FieldCodec.isChip).map(item => item.chip);
+        const written = async (style) => {
+          const before = style();
+          const out = { subject: await text(host.value), file: await filename(host.value) };
+          return { out, before, after: style() };
+        };
+        const matches = (seen, subjectOf, fileOf) => [seen.before, seen.after].some(day => seen.out.subject === subjectOf(day) && seen.out.file === fileOf(day));
+        await chooseDate('iso');
+        const iso = { chips: chips(), stored: host.value, inputs, bar: timeBars().length, value: dateSelect() && dateSelect().value, seen: await written(isoNow) };
+        await press('chip-date-part:day');
+        const noDay = { chips: chips(), seen: await written(isoNow), day: dateButton('chip-date-part:day').classList.contains('is-active') };
+        await chooseDate('dmy_chip');
+        await press('chip-date-part:day');
+        const reset = { chips: chips(), stored: host.value, value: dateSelect() && dateSelect().value, seen: await written(() => today().date) };
+        host.value = 'Autre objet';
+        await h.sleep(60);
+        const afterOtherTemplate = { bars: timeBars().length };
+        const checks = {
+          opened: opened.bars === 1 && opened.bubbleBars === 0 && same(opened.options, ['dmy_chip', 'dmy_slash_short', 'iso', 'd_mmm_yyyy', 'd_mmmm_yyyy', 'ddd_d_mmm_yyyy', 'dddd_d_mmmm_yyyy']) && opened.value === 'dmy_chip' && opened.title === 'Format de date'
+            && opened.panel && !opened.timeList && opened.style === 'true' && opened.inputs === 0,
+          iso: same(iso.chips, [{ kind: 'date', date: { preset: 'iso' } }]) && iso.stored.includes('data-chip-date') && iso.inputs === 1 && iso.bar === 1 && iso.value === 'iso'
+            && matches(iso.seen, day => `Reçu le ${day} - Dossier A`, day => `Reçu le ${day} - Dossier A`),
+          noDay: same(noDay.chips, [{ kind: 'date', date: { preset: 'iso', day: false } }]) && noDay.day === false && matches(noDay.seen, day => `Reçu le ${day.slice(0, 7)} - Dossier A`, day => `Reçu le ${day.slice(0, 7)} - Dossier A`),
+          reset: same(reset.chips, [{ kind: 'date' }]) && !reset.stored.includes('data-chip-date') && FieldCodec.isRich(reset.stored) && reset.value === 'dmy_chip' && matches(reset.seen, day => `Reçu le ${day} - Dossier A`, day => `Reçu le ${day.replace(/\//g, '_')} - Dossier A`),
+          closes: afterOtherTemplate.bars === 0,
+        };
+        const failed = Object.keys(checks).filter(k => !checks[k]);
+        return { pass: failed.length === 0, notes: failed.join(', ') || JSON.stringify({ opened, iso, noDay, reset, afterOtherTemplate }) };
       } finally { host.removeEventListener('input', count); }
     },
     { email: true },

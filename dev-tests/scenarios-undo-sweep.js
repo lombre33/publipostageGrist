@@ -152,6 +152,7 @@ window.EditorTestSuites.undoSweep = (function () {
     { name: 'suggestion', markup: '<p>Bonjour <ins data-id="1">monde</ins> fin</p><p>Autre <del data-id="2">texte</del> ligne</p>', sel: 'inSuggestion' },
     { name: 'toc', markup: '<p>Texte</p><div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h3>Gamma</h3>', sel: 'toc' },
     { name: 'timeChip', markup: '<p>Heure <span class="smart-chip" contenteditable="false" data-chip-kind="time"></span> fin</p>', sel: 'chip' },
+    { name: 'dateChip', markup: '<p>Date <span class="smart-chip" contenteditable="false" data-chip-kind="date"></span> fin</p>', sel: 'chip' },
   ];
   async function seedVariables() {
     const stub = window.__gristStub;
