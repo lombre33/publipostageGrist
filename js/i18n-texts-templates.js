@@ -132,7 +132,7 @@ const I18nTextsTemplates = {
   'toolbar.newFromTemplate': { fr: 'Créer à partir d’un modèle…', en: 'Create from a template…' },
   'toolbar.save': { fr: 'Enregistrer', en: 'Save' },
   'toolbar.saveAs': { fr: 'Enregistrer sous (copie)', en: 'Save as (copy)' },
-  'toolbar.saveAsRow': { fr: 'Enregistrer sous…', en: 'Save as…' },
+  'toolbar.saveAsRow': { fr: 'Enregistrer sous (dupliquer)…', en: 'Save as (duplicate)…' },
   'toolbar.delete': { fr: 'Supprimer', en: 'Delete' },
   'toolbar.linkRules.tip': { fr: 'Tables liées : comment trouver la bonne ligne', en: 'Linked tables: how the right row is found' },
   'toolbar.linkRules.aria': { fr: 'Tables liées : comment trouver la bonne ligne d’une autre table', en: 'Linked tables: how the right row of another table is found' },

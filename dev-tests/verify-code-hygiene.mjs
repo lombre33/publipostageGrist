@@ -376,6 +376,11 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const headingEntry = entries.find(e => e.key === 'toolbar.newHeading');
   check('vocabulaire : le titre du menu « + » est « Nouveau » (sa première ligne est déjà « Nouveau document »)',
     !!headingEntry && headingEntry.fr === 'Nouveau' && headingEntry.en === 'New' && /data-i18n="toolbar\.newHeading"/.test(htmlText));
+  // Demande d'Antoine du 25/11 : la ligne « Enregistrer sous » du menu Enregistrer dit ce qu'elle fait, une copie (« dupliquer »), en français comme en anglais ; le texte de secours d'index.html est le même que le français.
+  const saveAsEntry = entries.find(e => e.key === 'toolbar.saveAsRow');
+  const saveAsFallback = (htmlText.match(/id="v2-btn-save-as"[^>]*data-i18n="toolbar\.saveAsRow">([^<]*)</) || [])[1];
+  check('vocabulaire : la ligne « Enregistrer sous » du menu Enregistrer dit « (dupliquer) » (anglais : « (duplicate) »), et le texte de secours d\'index.html est le même',
+    !!saveAsEntry && saveAsEntry.fr === 'Enregistrer sous (dupliquer)…' && saveAsEntry.en === 'Save as (duplicate)…' && saveAsFallback === saveAsEntry.fr, JSON.stringify({ saveAsEntry, saveAsFallback }));
 
   // « Puces » : en français, l'onglet du menu « # », l'aide du caractère déclencheur (Réglages) et le nom du bouton « Insérer une variable » disent « puces », jamais « chips » (choix d'Antoine du 05/10) ;
   // l'anglais garde « chip(s) ». Seuls les textes lus comptent : un nom de classe ou d'id d'index.html (`v2-format-chip`) n'en est pas un, d'où les nœuds de texte et les attributs lus par une personne.

@@ -580,7 +580,7 @@
   // focus) et celui de « Enregistrer sous… » (copie sous le nom saisi). Le survol et le focus réels, à 700x400, sont dans verify-save-menu-mouse.mjs (saveMenuMouse).
   cases.push({
     id: 'save_menu_sits_under_the_save_button_and_replaces_the_two_old_controls',
-    description: 'Le bouton Enregistrer ouvre un menu : « Enregistrer sous… » et la ligne cochée « Enregistrement automatique » (cochée par défaut) y sont, et le bouton « Enregistrer sous » comme la bascule de la barre n\'existent plus ; le titre du menu porte le raccourci, le bouton n\'a plus d\'info-bulle qui se superposerait',
+    description: 'Le bouton Enregistrer ouvre un menu : « Enregistrer sous (dupliquer)… » et la ligne cochée « Enregistrement automatique » (cochée par défaut) y sont, et le bouton « Enregistrer sous » comme la bascule de la barre n\'existent plus ; le titre du menu porte le raccourci, le bouton n\'a plus d\'info-bulle qui se superposerait',
     run: async (h) => {
       const group = document.getElementById('v2-save-group');
       const save = document.getElementById('btn-save');
@@ -593,7 +593,7 @@
       const noTip = !save.hasAttribute('data-tip');
       const shortcut = /(Ctrl\+S|⌘S)/.test(save.getAttribute('aria-label') || '') && title.textContent === save.getAttribute('aria-label');
       const rows = !!saveAs && !!auto && saveAs.getAttribute('role') === 'menuitem' && auto.getAttribute('role') === 'menuitemcheckbox' && saveAs.tabIndex === 0 && auto.tabIndex === 0
-        && saveAs.textContent.trim() === 'Enregistrer sous…' && auto.textContent.trim() === 'Enregistrement automatique' && flyout.getAttribute('role') === 'menu';
+        && saveAs.textContent.trim() === 'Enregistrer sous (dupliquer)…' && auto.textContent.trim() === 'Enregistrement automatique' && flyout.getAttribute('role') === 'menu';
       const checkedByDefault = auto.getAttribute('aria-checked') === 'true';
       h.openFlyout('#v2-save-group');
       const sb = save.getBoundingClientRect(), ar = saveAs.getBoundingClientRect(), cr = auto.getBoundingClientRect(), fr = flyout.getBoundingClientRect();

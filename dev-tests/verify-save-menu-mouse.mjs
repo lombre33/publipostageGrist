@@ -3,20 +3,20 @@
 // en sombre : les scénarios de dev-tests/scenarios-toolbar-chrome.js et scenarios-autosave.js tournent DANS la page (dispatchEvent, :hover jamais actif) et ne prouvent ni que le
 // menu s'ouvre au survol sous le bouton et y reste quand la souris descend vers une ligne, ni qu'il se referme une fois la souris partie après un clic (le bouton cliqué gardait le
 // focus, donc son menu, avec :focus-within), ni que le curseur reste dans le texte après un clic sur Enregistrer.
-//   1) le menu : s'ouvre au survol sous le bouton, tient dans la fenêtre, titre « Enregistrer (Ctrl+S) », « Enregistrer sous… » et « Enregistrement automatique » avec sa coche, plus
+//   1) le menu : s'ouvre au survol sous le bouton, tient dans la fenêtre, titre « Enregistrer (Ctrl+S) », « Enregistrer sous (dupliquer)… » et « Enregistrement automatique » avec sa coche, plus
 //      de bouton « Enregistrer sous » ni de bascule dans la barre, la barre garde sa hauteur ;
 //   2) un clic sur Enregistrer enregistre (une seule action), le focus et le curseur restent dans le texte (la frappe suivante y arrive), le menu ne reste pas ouvert souris partie ;
 //   3) la ligne « Enregistrement automatique » : cochée au départ, un vrai clic la décoche (coche disparue, choix gardé après rechargement, plus aucune écriture automatique, Enregistrer
 //      écrit toujours), la recoche et la modification en attente part ; au rechargement, coupée, le bouton est noir et blanc dès la PREMIÈRE image rendue (image par image, et pixel du rendu
 //      réel) : il était peint en bleu jusqu'à la fin des scripts, puis fondait vers le noir ;
-//   4) « Enregistrer sous… » au vrai clic : la fenêtre s'ouvre, Entrée crée la copie sous le nom tapé (l'original reste), Échap n'en crée pas et rend le focus là où il était ;
+//   4) « Enregistrer sous (dupliquer)… » au vrai clic : la fenêtre s'ouvre, Entrée crée la copie sous le nom tapé (l'original reste), Échap n'en crée pas et rend le focus là où il était ;
 //      renommer puis cliquer Enregistrer : le champ de nom se referme (il perd le focus comme avant) et le nouveau nom est enregistré ;
-//   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique »), puis sort ; Entrée sur « Enregistrer sous… » ouvre la fenêtre, le focus revient au
+//   5) au clavier : Tab depuis Enregistrer descend dans le menu (anneau de focus visible), dans l'ordre (« Enregistrer sous (dupliquer)… », « Historique des versions… », « Enregistrement automatique »), puis sort ; Entrée sur « Enregistrer sous (dupliquer)… » ouvre la fenêtre, le focus revient au
 //      bouton Enregistrer ; Espace sur la case la bascule ; Entrée sur le bouton enregistre ;
 //   5b) aucun menu au survol n'est un arrêt de Tab à lui seul : à 700×400 comme à 700×300, où les menus « + » et « Type d'export » défilent sans qu'aucune de leurs lignes se focalise (le navigateur fait alors du menu un
 //      arrêt de Tab : Tab depuis « + » s'y arrêtait au lieu d'arriver sur Enregistrer), Tab depuis le bouton de chaque menu n'arrive jamais sur la boîte d'un menu ; et un appui de la souris sur le titre ou sur une ligne
 //      de ces deux menus ne leur laisse pas le focus (qui garderait leur menu ouvert souris partie) : il se referme comme avant ;
-//   6) interface en anglais : « Save (Ctrl+S) », « Save as… », « Auto-save » ;
+//   6) interface en anglais : « Save (Ctrl+S) », « Save as (duplicate)… », « Auto-save » ;
 //   7) l'indicateur de la carte « Les deux » (01/10) : enregistrement automatique coupé, une frappe écrit « Modifications non enregistrées. » dans le coin d'état - en entier à 700 px,
 //      sans changer la hauteur de la barre, d'une couleur plus soutenue que les autres messages -, il tient 3 s sans qu'une écriture parte, un clic sur Enregistrer le remplace par
 //      « Enregistré à… » ; à 860 px, où le coin partage la première ligne et coupe le texte, le message entier s'affiche au survol.
@@ -238,10 +238,10 @@ for (const theme of ['light', 'dark']) {
       size: parseFloat(getComputedStyle(el('v2-btn-save-as')).fontSize), expanded: el('btn-save').getAttribute('aria-expanded') };
   });
   check(`${T} : le survol de Enregistrer ouvre le menu juste dessous, entier dans la fenêtre de 700x400`, look.display === 'flex' && look.t >= look.saveB - 1 && look.t <= look.saveB + 8 && look.l >= 0 && look.r <= look.vw && look.b <= look.vh && look.expanded === 'true', look);
-  check(`${T} : titre « Enregistrer (Ctrl+S) », trois lignes (« Enregistrer sous… », « Historique des versions… », « Enregistrement automatique ») de 12,5 px et d’au moins 24 px, au premier plan, coche visible`, look.title === 'Enregistrer (Ctrl+S)' && look.size === 12.5 && look.saveAs.h >= 24 && look.history.h >= 24 && look.auto.h >= 24 && look.saveAs.onTop && look.history.onTop && look.auto.onTop && look.tick === 'visible', look);
+  check(`${T} : titre « Enregistrer (Ctrl+S) », trois lignes (« Enregistrer sous (dupliquer)… », « Historique des versions… », « Enregistrement automatique ») de 12,5 px et d’au moins 24 px, au premier plan, coche visible`, look.title === 'Enregistrer (Ctrl+S)' && look.size === 12.5 && look.saveAs.h >= 24 && look.history.h >= 24 && look.auto.h >= 24 && look.saveAs.onTop && look.history.onTop && look.auto.onTop && look.tick === 'visible', look);
   await page.screenshot({ path: SHOTS + `/menu-${theme}.png`, clip: { x: 0, y: 0, width: 700, height: 150 } });
   await slideTo(page, '#v2-btn-save-as');
-  check(`${T} : en descendant lentement vers « Enregistrer sous… », le menu reste ouvert et la ligne est survolée`, (await flyOpen(page)) && await page.evaluate(() => !!document.querySelector('#v2-btn-save-as:hover')));
+  check(`${T} : en descendant lentement vers « Enregistrer sous (dupliquer)… », le menu reste ouvert et la ligne est survolée`, (await flyOpen(page)) && await page.evaluate(() => !!document.querySelector('#v2-btn-save-as:hover')));
   await away(page); await page.waitForTimeout(200);
   check(`${T} : souris partie, le menu se referme`, !(await flyOpen(page)) && (await expandedOf(page)) === 'false');
 
@@ -307,11 +307,11 @@ for (const theme of ['light', 'dark']) {
   await page.waitForTimeout(3400);
   check(`${T} : ... la modification faite pendant la coupure (« beta ») est enregistrée toute seule au tick suivant`, ((await contentOf(page, 'Contrat de vente')) || '').includes('alpha beta'), await contentOf(page, 'Contrat de vente'));
 
-  // 5) « Enregistrer sous… » au vrai clic
+  // 5) « Enregistrer sous (dupliquer)… » au vrai clic
   const n0 = (await names(page)).length;
   await clickMenuRow(page, '#v2-btn-save-as', 500);
   const dlg = await dialogState(page);
-  check(`${T} : un vrai clic sur « Enregistrer sous… » ouvre la fenêtre de saisie, le champ a le focus`, dlg.shown && dlg.title === 'Enregistrer sous (copie)' && dlg.inputFocused, dlg);
+  check(`${T} : un vrai clic sur « Enregistrer sous (dupliquer)… » ouvre la fenêtre de saisie, le champ a le focus`, dlg.shown && dlg.title === 'Enregistrer sous (copie)' && dlg.inputFocused, dlg);
   await page.keyboard.press('Escape'); await page.waitForTimeout(300);
   check(`${T} : Échap n’enregistre aucune copie et rend le focus au texte, là où il était`, (await names(page)).length === n0 && (await inEditor(page)), { n: (await names(page)).length, focus: await activeId(page) });
   await clickMenuRow(page, '#v2-btn-save-as', 500);
@@ -336,7 +336,7 @@ for (const theme of ['light', 'dark']) {
   check(`${T} : Tab arrive sur Enregistrer et ouvre son menu`, k0.active === 'btn-save' && k0.open === 'flex' && k0.expanded === 'true', k0);
   await page.keyboard.press('Tab');
   const k1 = await page.evaluate(() => { const a = document.activeElement, cs = getComputedStyle(a); return { active: a.id, visible: a.matches(':focus-visible'), outline: cs.outlineWidth, open: getComputedStyle(document.getElementById('v2-save-flyout')).display }; });
-  check(`${T} : Tab suivant : « Enregistrer sous… » a le focus, avec son anneau, le menu reste ouvert`, k1.active === 'v2-btn-save-as' && k1.visible && k1.outline === '2px' && k1.open === 'flex', k1);
+  check(`${T} : Tab suivant : « Enregistrer sous (dupliquer)… » a le focus, avec son anneau, le menu reste ouvert`, k1.active === 'v2-btn-save-as' && k1.visible && k1.outline === '2px' && k1.open === 'flex', k1);
   await page.keyboard.press('Tab');
   check(`${T} : Tab suivant : « Historique des versions… »`, (await activeId(page)) === 'v2-btn-history');
   await page.keyboard.press('Tab');
@@ -359,18 +359,18 @@ for (const theme of ['light', 'dark']) {
   await page.keyboard.press('Shift+Tab');
   check(`${T} : Maj+Tab dans le menu : retour sur « Historique des versions… »`, (await activeId(page)) === 'v2-btn-history');
   await page.keyboard.press('Shift+Tab');
-  check(`${T} : Maj+Tab encore : retour sur « Enregistrer sous… »`, (await activeId(page)) === 'v2-btn-save-as');
+  check(`${T} : Maj+Tab encore : retour sur « Enregistrer sous (dupliquer)… »`, (await activeId(page)) === 'v2-btn-save-as');
   const n1 = (await names(page)).length;
   await page.keyboard.press('Enter'); await page.waitForTimeout(500);
   const dlgK = await dialogState(page);
-  check(`${T} : Entrée sur « Enregistrer sous… » ouvre la fenêtre de saisie`, dlgK.shown && dlgK.inputFocused, dlgK);
+  check(`${T} : Entrée sur « Enregistrer sous (dupliquer)… » ouvre la fenêtre de saisie`, dlgK.shown && dlgK.inputFocused, dlgK);
   await page.keyboard.press('Escape'); await page.waitForTimeout(300);
   const back = await page.evaluate(() => ({ active: document.activeElement.id, open: getComputedStyle(document.getElementById('v2-save-flyout')).display, copies: window.__gristStub.state.rows.Publipostage_Modeles.Nom.length }));
   check(`${T} : Échap : aucune copie, le focus revient au bouton Enregistrer (visible), pas à une ligne de menu refermée`, back.copies === n1 && back.active === 'btn-save', { back, n1 });
   await page.keyboard.press('Tab'); await page.keyboard.press('Enter'); await page.waitForTimeout(500);
   await page.keyboard.type('Copie clavier'); await page.keyboard.press('Enter'); await page.waitForTimeout(1000);
   const names2 = await names(page);
-  check(`${T} : Entrée sur « Enregistrer sous… », nom tapé, Entrée : la copie existe (clavier seul)`, names2.includes('Copie clavier') && names2.length === n1 + 1, names2);
+  check(`${T} : Entrée sur « Enregistrer sous (dupliquer)… », nom tapé, Entrée : la copie existe (clavier seul)`, names2.includes('Copie clavier') && names2.length === n1 + 1, names2);
   check(`${T} : ... le focus est revenu sur le bouton Enregistrer`, (await activeId(page)) === 'btn-save', await activeId(page));
   const w2 = await updates(page);
   await page.keyboard.press('Enter'); await page.waitForTimeout(600);
@@ -500,7 +500,7 @@ for (const theme of ['light', 'dark']) {
     await hoverSave(page);
     const en = await page.evaluate(() => ({ title: document.getElementById('v2-save-flyout-label').textContent, saveAs: document.getElementById('v2-btn-save-as').textContent, auto: document.getElementById('v2-btn-autosave').textContent,
       aria: document.getElementById('btn-save').getAttribute('aria-label'), autoAria: document.getElementById('v2-btn-autosave').getAttribute('aria-label') }));
-    check('anglais : « Save (Ctrl+S) », « Save as… », « Auto-save »', en.title === 'Save (Ctrl+S)' && en.saveAs === 'Save as…' && en.auto === 'Auto-save' && en.aria === 'Save (Ctrl+S)' && /^Auto-save/.test(en.autoAria), en);
+    check('anglais : « Save (Ctrl+S) », « Save as (duplicate)… », « Auto-save »', en.title === 'Save (Ctrl+S)' && en.saveAs === 'Save as (duplicate)…' && en.auto === 'Auto-save' && en.aria === 'Save (Ctrl+S)' && /^Auto-save/.test(en.autoAria), en);
     await page.screenshot({ path: SHOTS + '/menu-en.png', clip: { x: 0, y: 0, width: 700, height: 150 } });
   }
   await page.context().close();
