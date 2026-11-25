@@ -46,6 +46,9 @@
 //   window.__gfsStub.identite : l'adresse de la personne que rend le contexte (contrats 5.2 point 9, consigne 094) : `{ email }` (la casse est celle de Grist), null : GFS ne la connaît pas (encore : sa propre sonde n'a rien lu, un compte Lecteur, un
 //   document sans sa table de rangement), ou undefined : une app qui n'a pas déclaré `permissions.identite`, ou un GFS d'avant (par défaut), dont le contexte n'a pas d'`identite` et qui n'envoie aucun événement. Réglée avant le chargement de la page,
 //   comme `ambiance` ; setIdentite(message) la change et envoie l'événement `identite` `{ identite }` (null quand GFS la perd), UNE seule fois par changement, et rien quand elle ne change pas, comme GFS.
+//   window.__gfsStub.role : le rôle de la personne que rend le contexte (contrats 5.2 point 8, consigne 104) : `{ proprietaire: true | false | null, responsableDe: [] }` - `true` quand GFS a prouvé que la personne est propriétaire du document
+//   (`GET /webhooks`), `false` quand il a vu un refus, `null` quand il ne sait pas encore - ou undefined : un GFS d'avant la consigne 104 (par défaut), dont le contexte n'a pas de `role`. Réglé avant le chargement de la page, comme `identite` :
+//   GFS le relit à chaque appel `contexte` et n'envoie AUCUN événement quand il change (seule une règle posée recharge la page), donc le stub n'en a pas non plus.
 //   window.__gfsStub.section : l'appel `section` (contrats 5.4 point 15, consigne 097 : « quelle ligne de `_grist_Views_section` est la tienne ? ») - null : un GFS d'avant la consigne 097, dont l'appel reçoit `GFS_INCONNU` (par
 //   défaut) ; sinon un objet de réglage : `reponse` (ce que GFS rend : `{ id: 6 }`, ou `{ id: null, raison: 'inconnue' }` ; ou une fonction `(rang, args) => réponse`), `erreur` ({ code, message } : l'appel est refusé), `delai`
 //   (millisecondes avant la réponse), `silence` (vrai : GFS ne répond jamais). Sans argument de l'app : GFS les ignore (`sectionAppels` garde ceux qu'il a reçus, `{ rang, args }`, dans l'ordre : de quoi compter les demandes).
@@ -106,6 +109,7 @@
     ambiance: undefined,
     correcteurs: undefined,
     identite: undefined,
+    role: undefined,
     masquee: false,
     refusBarre: [],
     ignoreContext: false,
@@ -152,6 +156,7 @@
       if (stub.ambiance !== undefined) data.ambiance = JSON.parse(JSON.stringify(stub.ambiance));
       if (stub.correcteurs !== undefined) data.correcteurs = JSON.parse(JSON.stringify(stub.correcteurs));
       if (stub.identite !== undefined) data.identite = JSON.parse(JSON.stringify(stub.identite));
+      if (stub.role !== undefined) data.role = JSON.parse(JSON.stringify(stub.role));
       if (stub.lecteurs !== undefined) data.lecteurs = stub.lecteurs.slice();
       if (stub.natives !== undefined) data.natives = JSON.parse(JSON.stringify(stub.natives));
       return data;

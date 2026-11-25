@@ -1408,9 +1408,10 @@ const GristAPI = (function () {
     try { return new URL((await getAccessTokenCached()).baseUrl).origin; } catch (e) { return ''; }
   }
 
-  // Un jeton d'accès capable d'ÉCRIRE, pour envoyer un fichier en pièce jointe (js/row-attachment.js, le seul à s'en servir) : { token, baseUrl, expiresAt }. Le seul de tout le widget qui puisse écrire par
-  // l'adresse de l'interface de programmation. Il n'est JAMAIS gardé ici : pas de cache comme getAccessTokenCached (un jeton capable d'écrire ne reste pas en mémoire plus longtemps que l'export qui
-  // l'a demandé), l'appelant le tient pour la durée d'un export et le jette à la fin ; un export plus long que `expiresAt` en redemande un autre. Rejette quand Grist refuse d'en donner un.
+  // Un jeton d'accès capable d'ÉCRIRE, pour envoyer un fichier en pièce jointe (js/row-attachment.js) : { token, baseUrl, expiresAt }. Le seul de tout le widget qui puisse écrire par l'adresse de l'interface de
+  // programmation. Il n'est JAMAIS gardé ici : pas de cache comme getAccessTokenCached (un jeton capable d'écrire ne reste pas en mémoire plus longtemps que l'export qui l'a demandé), l'appelant le tient pour la
+  // durée d'un export et le jette à la fin ; un export plus long que `expiresAt` en redemande un autre. Rejette quand Grist refuse d'en donner un. Un seul autre appelant, hors GFS : js/names-update.js, pour
+  // prouver que la personne est propriétaire du document avant la fenêtre de mise à jour des noms (un `GET /webhooks`, que Grist ne rend qu'aux propriétaires : rien n'est écrit, le jeton est jeté avec la réponse).
   async function getWriteAccess() {
     const info = await grist.docApi.getAccessToken({ readOnly: false });
     return { token: info.token, baseUrl: fixBaseUrl(info.baseUrl), expiresAt: Date.now() + (info.ttlMsecs || 120000) };

@@ -1,8 +1,10 @@
-// Suite "schemaMigration" - le widget ouvre un document D'AVANT (les tables et les colonnes du widget sous leurs noms français, avec les libellés que l'ancien code leur donnait) et le renomme à sa
-// première lecture (js/schema-columns.js, migrate ; colonnes et tables en anglais, lot 5). La page est posée par dev-tests/run-headless.mjs (SCHEMA_MODES : `window.__schemaNames = 'migrate'`, et
-// SCHEMA_PRESEED : deux modèles, un commentaire, une règle de liaison et les libellés d'avant, semés dans le faux Grist avant que le widget ne lise quoi que ce soit). Le faux Grist (dev-tests/grist-stub.js)
-// rejoue ce que le vrai Grist fait de RenameTable, RenameColumn et ModifyColumn (mesuré dans grist-static 0.1.6 le 18/11 : un lot est rejoué en entier ou pas du tout, le libellé ne suit pas le
-// renommage, un nom de table pris est numéroté) ; le traducteur lui-même, avec tous ses cas limites, est dans dev-tests/unit-schema-columns.mjs.
+// Suite "schemaMigration" - le widget ouvre un document D'AVANT (les tables et les colonnes du widget sous leurs noms français, avec les libellés que l'ancien code leur donnait) et le renomme PAR LA FENÊTRE COMMUNE
+// de mise à jour des noms du kit (consigne 104 de GFS : js/names-update.js ; js/schema-columns.js, migrate ; colonnes et tables en anglais, lot 5). La page est posée par dev-tests/run-headless.mjs (SCHEMA_MODES :
+// `window.__schemaNames = 'migrate'`, et SCHEMA_PRESEED : deux modèles, un commentaire, une règle de liaison et les libellés d'avant, semés dans le faux Grist avant que le widget ne lise quoi que ce soit). La fenêtre
+// bloque le démarrage jusqu'au clic : le lanceur clique pour la personne (NAMES_WINDOW_GROUPS : « Mettre à jour », puis « Continuer ») et garde ce qu'elle a montré (`window.__namesWindow.shown`) ; `GET /webhooks`
+// répond « propriétaire ». Le faux Grist (dev-tests/grist-stub.js) rejoue ce que le vrai Grist fait de RenameTable, RenameColumn et ModifyColumn (mesuré dans grist-static 0.1.6 le 18/11 : un lot est rejoué en
+// entier ou pas du tout, le libellé ne suit pas le renommage, un nom de table pris est numéroté) ; le traducteur lui-même, avec tous ses cas limites, est dans dev-tests/unit-schema-columns.mjs, la fenêtre à la
+// vraie souris (dans GFS et hors GFS, pas propriétaire, table de Sync+, anglais) dans dev-tests/verify-names-update.mjs.
 (function () {
   const stub = () => window.__gristStub;
   const cases = [];
@@ -38,6 +40,26 @@
   }
   const json = JSON.stringify;
   const result = problems => ({ pass: problems.length === 0, notes: json(problems) });
+
+  cases.push({
+    id: 'schemamigration_the_window_opens_once_before_any_read_and_the_person_validates_it',
+    description: 'La fenêtre commune du kit s\'ouvre une fois : elle nomme l\'app et dit que les données ne changent pas, la personne clique « Mettre à jour » puis « Continuer », et le widget n\'a lu aucune table du widget sous son nom d\'avant',
+    run: async () => {
+      const problems = [];
+      const shown = (window.__namesWindow && window.__namesWindow.shown) || [];
+      if (shown.length !== 2) problems.push('étapes montrées : ' + shown.length + ' ' + json(shown));
+      const first = shown[0], second = shown[1];
+      if (!first || first.button !== 'Mettre à jour' || first.text.indexOf('Publipostage+ range désormais ses données sous des noms anglais') === -1 || first.text.indexOf('Vos données ne changent pas') === -1 || !/3 tables/.test(first.text)) problems.push('première étape : ' + json(first));
+      if (!second || second.button !== 'Continuer' || !/Terminé : 3 tables mises à jour/.test(second.text)) problems.push('seconde étape : ' + json(second));
+      const order = stub().state.callOrder;
+      const oldRead = order.filter(call => /^fetchTable Publipostage_(Modeles|Commentaires|LiensTables|PreferencesModeles|Abreviations|FormatsPage)$/.test(call));
+      if (oldRead.length) problems.push('lectures sous un nom d\'avant : ' + oldRead.join());
+      const proofs = stub().state.tokenCalls.filter(call => !call.readOnly).length;
+      if (proofs !== 1) problems.push('jetons capables d\'écrire demandés : ' + proofs + ' (un seul : la preuve de propriété)');
+      if (document.getElementById('nu-modal')) problems.push('la fenêtre est encore là');
+      return result(problems);
+    },
+  });
 
   cases.push({
     id: 'schemamigration_the_first_reading_renames_the_widget_tables_and_columns_once',
@@ -126,6 +148,8 @@
       const problems = [];
       if (after !== before) problems.push('actions de renommage : ' + before + ' puis ' + after);
       if (SchemaColumns.lastMigration() !== null) problems.push('lastMigration : ' + json(SchemaColumns.lastMigration()));
+      const windows = (window.__namesWindow && window.__namesWindow.shown.length) || 0;
+      if (windows !== 2) problems.push('la fenêtre s\'est rouverte : ' + windows + ' étapes montrées au lieu de 2');
       return result(problems);
     },
   });

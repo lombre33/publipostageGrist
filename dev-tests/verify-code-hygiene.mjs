@@ -2023,8 +2023,13 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   for (const [rel, text] of importers) {
     for (const match of text.matchAll(/(?:import\s*\(\s*|\bfrom\s+|\bsrc=)['"]([^'"]*\bkit\/[^'"]*)['"]/g)) kitImports.push(`${rel} : ${match[1]}`);
   }
-  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`, `kit/correcteurs-message`), js/gfs-ambiance.js (`kit/ambiance-pose`), js/gfs-correcteurs.js (`kit/correcteurs-pose`) et js/gfs-violations.js (`kit/violations-pose`) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js`, son `correcteurs.js`, son `violations.js`, son `violations-start.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
-    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-correcteurs.js : kit/correcteurs-pose', 'js/gfs-link.js : kit/ambiance-message', 'js/gfs-link.js : kit/correcteurs-message', 'js/gfs-violations.js : kit/violations-pose']), kitImports.join(' ; '));
+  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`, `kit/correcteurs-message`), js/gfs-ambiance.js (`kit/ambiance-pose`), js/gfs-correcteurs.js (`kit/correcteurs-pose`), js/gfs-violations.js (`kit/violations-pose`) et js/names-update.js (`kit/names-update`, `kit/i18n` : la fenêtre des noms, consigne 104) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js`, son `correcteurs.js`, son `violations.js`, son `violations-start.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
+    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-correcteurs.js : kit/correcteurs-pose', 'js/gfs-link.js : kit/ambiance-message', 'js/gfs-link.js : kit/correcteurs-message', 'js/gfs-violations.js : kit/violations-pose', 'js/names-update.js : kit/i18n', 'js/names-update.js : kit/names-update']), kitImports.join(' ; '));
+  // La fenêtre des noms (consigne 104) : sa feuille est celle du kit, au ?v= du gitlink comme les entrées de la carte (elle change avec le gitlink, à la main : l'outil des bibliothèques n'écrit que la carte), et sa passerelle est un script de la page.
+  const sheetLink = /<link rel="stylesheet" href="kit\/css\/names-update\.css\?v=([0-9a-f]+)">/.exec(index);
+  check('fenêtre des noms : index.html charge la feuille du kit `kit/css/names-update.css` au ?v= du gitlink (sept premiers caractères) et le script js/names-update.js, dont la feuille s\'aligne sur la carte d\'importation (une seule empreinte du kit dans la page)',
+    pin7 !== '' && !!sheetLink && sheetLink[1] === pin7 && /<script src="js\/names-update\.js\?v=[^"]+"><\/script>/.test(index) && /<link rel="preload" as="script" href="js\/names-update\.js\?v=[^"]+">/.test(index),
+    JSON.stringify({ pin7, sheet: sheetLink && sheetLink[1] }));
 
   // (3) la feuille de l'ambiance n'agit que sous ses deux marques de <html>
   const unscoped = [];

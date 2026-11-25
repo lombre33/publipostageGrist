@@ -29,6 +29,9 @@
 //  - `identite` (contrats 5.2, point 9, consignes 094 et 095), au contexte puis par l'événement `identite` `{ identite }` (une fois par changement : GFS apprend l'adresse après le contexte, ou la perd) : `{ email }`, l'adresse de la personne telle que Grist la
 //    donne (la casse est gardée), que GFS ne dit qu'à l'app qui a déclaré `permissions.identite` dans son manifeste, ou null (GFS ne la connaît pas encore, un compte Lecteur, un document sans sa table de rangement). Elle remplace la sonde de
 //    l'ouverture (une ligne écrite, relue et retirée dans une table interne) : js/grist-api.js (getCurrentUserEmail), le seul à s'en servir, ne passe par la sonde que quand `identity()` rend null ;
+//  - `role` (contrats 5.2, point 8, consigne 104), au contexte seulement (sans événement : GFS le relit à chaque appel `contexte`, et seule une règle posée recharge la page) : `{ proprietaire: true | false | null }` (et `responsableDe`, que l'app ne lit pas).
+//    `true` ou `false` quand GFS a prouvé que la personne est propriétaire du document ou non (`GET /webhooks` de l'API REST, que Grist ne rend qu'aux propriétaires : 200, ou 403 « No owner access »), `null` quand il ne sait pas (le cas de départ, pas de
+//    jeton, pas de réponse). Gardé tel quel (`role()`, `{ owner }`) : la fenêtre de mise à jour des noms (js/names-update.js, le seul à s'en servir) ne s'ouvre que pour `true`, et la personne que GFS ne connaît pas encore continue sur les noms d'avant ;
 //  - `lecteurs` (demande du 06/11, objet vidéo de Slides+, js/video-frame.js), au contexte puis par l'événement `lecteurs` `{ lecteurs }` : les sites dont GFS sait jouer le lecteur (`youtube`, `vimeo`), qu'il pose lui-même par-dessus
 //    le cadre de l'app (le cadre isolé n'a pas d'identité et un lecteur posé dedans échoue) ; l'app lui dit quoi et où par les appels `lecteur.afficher { id, fournisseur, video, debut?, rect, zone }`, `lecteur.deplacer { id, rect, zone }`,
 //    `lecteur.masquer { id, masque }` et `lecteur.fermer { id }`, sans `id` d'appel (GFS ne répond rien), et GFS dit où en est son lecteur par l'événement `lecteur { id, etat }` (`lecture`, `pause`, `fin`, `erreur`). Sans la clé, la liste est vide
@@ -51,7 +54,7 @@
 //    null comprise (GFS ne la change pas : une vue défaite ou une page recopiée en change le numéro, pas la vie du cadre). js/view-source.js (readLinkedRows), le seul à s'en servir, prend alors cette section au lieu de « toutes les sections de la table à
 //    l'adresse de GFS » ; sans identifiant il garde sa recherche par adresse.
 // Une app sait qu'elle est hébergée par `gfs=<n>` dans sa propre adresse (<n> : le contrat de GFS), pas par une question : seule, il n'y a ni écouteur ni message, `extensions()` est vide,
-// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `correcteurs()` rend { coupes: false }, `identity()` rend null, `section()` rend null, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
+// `library()` et `native()` ne rendent rien, `widgetAddress()` rend '', `opening()` rend null, `language()` rend null, `hasStorage()` rend faux, `bar()` rend null, `players()` rend [], `player()` rend faux, `settingsSaved()` rend null, `ambiance()` rend null, `role()` rend `{ owner: null }`, `correcteurs()` rend { coupes: false }, `identity()` rend null, `section()` rend null, `hideBar()` rend faux, `tell()` rend faux, `opensInNewTab()` rend faux et `deposit()` et `attach()` rejettent sans rien envoyer (et rien du kit n'est chargé). Un message n'est lu que s'il vient du cadre parent (`event.source`) et porte le contrat de GFS (le premier de ceux-là dit, par `event.origin`, l'origine que viseront les envois suivants) ; l'écouteur est un addEventListener, jamais `window.onmessage =`,
 // qui remplacerait celui du script d'API de Grist. Le reste du widget passe par js/extensions.js, js/gfs-open.js, js/person-store.js et js/gfs-bar.js, jamais par ce fichier (sauf `opensInNewTab`, que trois liens consultent, consigne 011).
 const GfsLink = (function () {
   const CONTRACT = 0;                // le contrat que parle l'app, celui de son manifeste
@@ -97,6 +100,7 @@ const GfsLink = (function () {
   let readAmbiance = null;     // `normalizeAmbiance` du kit, une fois son module chargé (hébergée seulement)
   const ambianceListeners = new Set();
   let identity = null;         // `identite` du contexte, puis de l'événement `identite` (consignes 094 et 095), lue par `normalizeIdentity` : { email } ou null (seul, GFS ne la donne pas, l'app n'a pas la permission `identite`, ou GFS ne connaît pas encore la personne)
+  let role = { owner: null };    // `role` du contexte (consigne 104), lu par `normalizeRole` : { owner } ; { owner: null } seul, si GFS ne répond pas, ne le donne pas, ou n'a pas prouvé (le cas de départ)
   let correcteurs = { coupes: false };   // `correcteurs` du contexte, puis de l'événement `correcteurs` (consigne 068), lu par `normalizeCorrecteurs` du kit : { coupes } ; { coupes: false } seul, si GFS ne le donne pas, ou si le lecteur du kit n'est pas là
   let correcteursRaw = null;   // ce que GFS a dit, tel quel : relu dès que le lecteur du kit est là
   let readCorrecteurs = null;  // `normalizeCorrecteurs` du kit, une fois son module chargé (hébergée seulement)
@@ -175,6 +179,12 @@ const GfsLink = (function () {
     return /^[^@\s]+@[^@\s]+$/.test(email) ? { email } : null;
   }
 
+  // `role` du contexte (contrats 5.2, point 8, consigne 104) : `{ proprietaire: true | false | null, responsableDe }` ; l'app ne retient que `proprietaire`, et seulement quand c'est un booléen (`{ owner }`). Tout le reste (rien, un autre type,
+  // `null`) vaut « GFS ne sait pas » : `{ owner: null }`, que la fenêtre de mise à jour des noms traite comme « pas propriétaire » (elle ne s'ouvre que pour `true`).
+  function normalizeRole(raw) {
+    return { owner: raw && typeof raw === 'object' && typeof raw.proprietaire === 'boolean' ? raw.proprietaire : null };
+  }
+
   // `stockage` du contexte (contrats 5.2, consigne 024) : l'espace de cette app chez GFS, `{ clé: texte }`. Une clé hors de la règle de GFS ou une valeur qui n'est pas un texte n'est pas gardée ; null quand
   // ce n'est pas un objet (un GFS d'avant la consigne 024 n'en donne pas : l'app garde alors ses préférences comme avant).
   function normalizeStorage(raw) {
@@ -220,8 +230,8 @@ const GfsLink = (function () {
     return out;
   }
 
-  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, les copies figées des bibliothèques natives, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance, les correcteurs et l'identité, rien d'autre n'est gardé. L'événement
-  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance, ni correcteurs, ni identité : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
+  // Ce que GFS donne (contexte ou événement `extensions`) : une liste d'identifiants, des sources, les copies figées des bibliothèques natives, l'adresse du widget, l'ouverture demandée, la langue, l'espace de l'app, la barre, l'ambiance, les correcteurs, l'identité et le rôle, rien d'autre n'est gardé. L'événement
+  // `extensions` n'a ni adresse, ni ouverture, ni langue, ni espace, ni barre, ni ambiance, ni correcteurs, ni identité, ni rôle : il ne les efface pas. La langue du contexte (`fr` ou `en`) fait foi à chaque appel `contexte` ; elle est gardée sans rappeler personne
   // (applyLanguage rappelle ceux qui suivent l'événement `langue`). Il en va de même de la barre : celle du contexte est gardée sans rappeler personne (le départ lit `bar()`), applyBar rappelle ceux qui suivent
   // l'événement `barre`.
   function apply(data) {
@@ -234,6 +244,7 @@ const GfsLink = (function () {
     if ('ambiance' in data) setAmbiance(data.ambiance);
     if ('correcteurs' in data) setCorrecteurs(data.correcteurs);
     if ('identite' in data) identity = normalizeIdentity(data.identite);
+    if ('role' in data) role = normalizeRole(data.role);
     if ('lecteurs' in data) players = normalizePlayers(data.lecteurs);
     const nextExtensions = (Array.isArray(data.extensions) ? data.extensions : []).filter(id => typeof id === 'string' && ID_PATTERN.test(id));
     const nextLibraries = new Map();
@@ -492,6 +503,9 @@ const GfsLink = (function () {
   // L'adresse de la personne que GFS donne (consignes 094 et 095, contrats 5.2 point 9) : celle du contexte, puis celle du dernier événement `identite`, `{ email }` (une copie que l'appelant peut garder). null seul, si GFS ne répond pas, quand il ne connaît pas
   // encore la personne (un compte Lecteur, un document sans sa table de rangement), ou quand il ne la donne pas à cette app (la permission `identite` de son manifeste, un GFS d'avant la consignes 094 et 095).
   function getIdentity() { return identity === null ? null : { email: identity.email }; }
+  // Le rôle que GFS a prouvé pour la personne (consigne 104, contrats 5.2 point 8) : `{ owner: true | false | null }`, celui du dernier contexte. `true` : propriétaire du document ; `false` : GFS a vu un refus ; `null` : seule, GFS ne répond pas
+  // ou ne l'a pas prouvé. Seul `true` ouvre la fenêtre de mise à jour des noms (js/names-update.js) : `null` vaut « non », sans rien montrer, et l'app continue sur les noms que le document a.
+  function getRole() { return { owner: role.owner }; }
   // Les sites que GFS sait jouer (`['youtube', 'vimeo']`), une copie ; vide seul ou quand GFS ne les donne pas.
   function getPlayers() { return players.slice(); }
   // Un appel `lecteur.<action>` vers GFS (`afficher`, `deplacer`, `masquer`, `fermer`), sans `id` d'appel : GFS ne répond rien. `args` est un objet simple (js/video-frame.js en fait la forme : identifiants et nombres, jamais
@@ -628,5 +642,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, section: getSection, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, role: getRole, section: getSection, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

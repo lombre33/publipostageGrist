@@ -328,9 +328,11 @@
 <link rel="stylesheet" href="css/print.css?v=0.4">
 <link rel="stylesheet" href="css/template-gallery.css?v=0.3">
 <link rel="stylesheet" href="css/gfs-ambiance.css?v=0.1">
+<!-- La feuille de la fenetre de mise a jour des noms (consigne 104 de GFS), celle du kit : son ?v= est le debut du commit que le depot epingle pour le kit (comme les entrees kit/ de la carte d'importation, dev-tests/verify-code-hygiene.mjs le controle). Elle ne dessine rien tant que la fenetre (js/names-update.js) n'est pas ouverte. -->
+<link rel="stylesheet" href="kit/css/names-update.css?v=d061fbf">
 <!-- précharge des scripts : début (écrit par outils/precharger-scripts.mjs d'après les balises <script> ci-dessous : ne pas le modifier à la main) -->
 <!-- Sans ce bloc, les scripts se chargent un par un (la politique de sécurité de cette page est une balise <meta> : le navigateur ne lit plus la page à l'avance) : 8 s de plus à 30 ms d'aller-retour. -->
-<link rel="preload" as="script" href="js/gfs-link.js?v=0.25">
+<link rel="preload" as="script" href="js/gfs-link.js?v=0.26">
 <link rel="preload" as="script" href="js/gfs-violations.js?v=0.1">
 <link rel="preload" as="script" href="js/person-store.js?v=0.4">
 <link rel="preload" as="script" href="js/gfs-bar.js?v=0.6">
@@ -346,7 +348,8 @@
 <link rel="preload" as="script" href="js/version.js?v=0.5">
 <link rel="preload" as="script" href="js/html-sanitize.js?v=0.10">
 <link rel="preload" as="script" href="js/page-tree.js?v=0.6">
-<link rel="preload" as="script" href="js/schema-columns.js?v=0.6">
+<link rel="preload" as="script" href="js/schema-columns.js?v=0.7">
+<link rel="preload" as="script" href="js/names-update.js?v=0.1">
 <link rel="preload" as="script" href="js/csp-narrow.js?v=0.1">
 <link rel="preload" as="script" href="js/grist-api.js?v=0.139">
 <link rel="preload" as="script" href="js/templates.js?v=0.120">
@@ -1520,7 +1523,7 @@
      le dit (js/gfs-correcteurs.js, consigne 068) AVANT tout autre script : le contexte que GFS donne (dont l'espace de l'app, consigne 024, sa barre, consigne 025, l'ambiance qu'il a choisie et ses correcteurs) est demandé dès le premier script
      et arrive pendant que les autres se chargent, si bien que le thème, les raccourcis ou le caractère de déclenchement que ces scripts lisent en se chargeant sont déjà ceux de la personne, que la zone de la barre est connue de qui voudra
      s'en écarter, que l'ambiance est posée avant que les autres n'aient fini de se charger et que la marque des correcteurs est sur chaque zone de texte dès qu'elle naît. -->
-<script src="js/gfs-link.js?v=0.25"></script>
+<script src="js/gfs-link.js?v=0.26"></script>
 <script src="js/gfs-violations.js?v=0.1"></script>
 <script src="js/person-store.js?v=0.4"></script>
 <script src="js/gfs-bar.js?v=0.6"></script>
@@ -1536,7 +1539,8 @@
 <script src="js/version.js?v=0.5"></script>
 <script src="js/html-sanitize.js?v=0.10"></script>
 <script src="js/page-tree.js?v=0.6"></script>
-<script src="js/schema-columns.js?v=0.6"></script>
+<script src="js/schema-columns.js?v=0.7"></script>
+<script src="js/names-update.js?v=0.1"></script>
 <script src="js/csp-narrow.js?v=0.1"></script>
 <script src="js/grist-api.js?v=0.139"></script>
 <script src="js/templates.js?v=0.120"></script>
