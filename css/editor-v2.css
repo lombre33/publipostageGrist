@@ -718,10 +718,16 @@
 
 /* Panneau `#` (js/variables.js:ensureBox), seule définition de #autocomplete-box : colonne flex (le JS bascule son display en `flex`) pour que
    `.ac-tabs` reste fixe pendant que `.ac-items` défile seul. Onglets Variables (par défaut) et Chips, en `--accent` pour l'onglet actif comme
-   partout dans ce fichier, pas le vert des chips (réservé au contenu des bulles, pas à la navigation). */
-#autocomplete-box { position: absolute; z-index: var(--z-menu); min-width: 160px; max-width: 320px; display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: var(--radius-md, 6px); }
+   partout dans ce fichier, pas le vert des chips (réservé au contenu des bulles, pas à la navigation).
+   LARGEUR FIXE (25/11) : 360 px, bordure comprise, quelles que soient les lignes (avant : `min-width: 160px; max-width: 320px` sans `width`, donc la largeur de la ligne
+   la plus longue, ~162 px pour « Projets.Ville », 322 px dès qu'un nom long était dans la liste, et elle changeait à chaque frappe ; un nom long était coupé, avec un défilement
+   à l'horizontale). Un nom trop long passe à la ligne (`.ac-item`) au lieu d'élargir le panneau. Dans un cadre plus étroit que 372 px, le panneau garde 6 px de marge
+   (ViewportFit.EDGE) de chaque côté. */
+#autocomplete-box { position: absolute; z-index: var(--z-menu); box-sizing: border-box; width: 360px; max-width: calc(100vw - 12px); display: flex; flex-direction: column; max-height: 280px; overflow: hidden; padding: 0; font-family: var(--font-ui); font-size: 12.5px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 4px 14px rgba(0,0,0,.10); border-radius: var(--radius-md, 6px); }
 #autocomplete-box .ac-items { overflow: auto; }
-#autocomplete-box .ac-item { padding: 4px 8px; cursor: pointer; color: var(--text); }
+/* `overflow-wrap: anywhere` : le nom d'une variable (« Projets.Date_de_signature_du_contrat ») n'a pas d'espace où couper ; la coupure se fait d'abord aux `<wbr>` que pose
+   js/variables.js:render derrière chaque « _ » et « . », et au caractère près seulement pour un mot plus long que la ligne. */
+#autocomplete-box .ac-item { padding: 4px 8px; cursor: pointer; color: var(--text); overflow-wrap: anywhere; }
 #autocomplete-box .ac-item:hover, #autocomplete-box .ac-item.selected { background: var(--surface-sunken); }
 .ac-tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid var(--border); }
 .ac-tab { flex: 1; text-align: center; padding: 5px 8px; font-size: 12px; font-weight: 600; color: var(--text-faint); cursor: pointer; }

@@ -335,12 +335,27 @@ const Variables = (function () {
       ensureBox().querySelector('.ac-tabs').style.display = visible ? '' : 'none';
     }
 
+    // Le nom d'une ligne : son texte, avec une coupure possible (`<wbr>`, sans texte : textContent, la recherche et les essais lisent le même nom) derrière chaque « _ » et
+    // chaque « . ». Le panneau a une largeur FIXE (css/editor-v2.css) : un nom plus long que la ligne passe à la suivante, entre deux mots du nom (« Projets.Date_de_signature_ »
+    // puis « du_contrat »), au lieu d'élargir le panneau ou d'être coupé. Un nom court (moins de WRAP_FROM caractères : ~200 px) ne passe jamais à la ligne et reste un seul nœud
+    // texte : la liste n'a pas de limite de longueur, des milliers de lignes ne portent pas chacune trois `<wbr>` de plus.
+    const WRAP_FROM = 30;
+    function fillName(row, name) {
+      const text = String(name);
+      if (text.length < WRAP_FROM) { row.textContent = text; return; }
+      text.split(/(?<=[._])/).forEach((part, index) => {
+        if (index) row.appendChild(Dom.el('wbr'));
+        row.appendChild(document.createTextNode(part));
+      });
+    }
+
     // Une ligne par entrée de `currentItems`, toutes : `data-idx` dit à laquelle elle répond (évènements de ensureBox).
     function render() {
       ensureBox().querySelectorAll('.ac-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === activeTab));
       const rows = document.createDocumentFragment();
       currentItems.forEach((item, idx) => {
-        const row = Dom.el('div', 'ac-item' + (idx === selectedIndex ? ' selected' : ''), displayKey(item));
+        const row = Dom.el('div', 'ac-item' + (idx === selectedIndex ? ' selected' : ''));
+        fillName(row, displayKey(item));
         row.dataset.idx = idx;
         rows.appendChild(row);
       });
