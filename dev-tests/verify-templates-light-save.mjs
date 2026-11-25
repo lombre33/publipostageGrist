@@ -8,6 +8,8 @@
 //  3. un gros document (700 Ko) ouvert puis modifié : écrit, sans lecture de la table ; le conflit se vérifie sur sa ligne (numéro 3) ;
 //  4. les gestes qui lisaient la table : l'historique des versions (les jetons de tous les modèles), le mot de passe des PDF protégés (lu, écrit), la ligne qu'on supprime (lue, puis rendue) : par SQL ou par numéro ;
 //  5. TÉMOIN : l'interrupteur « off » (la lecture d'avant) lit la table à chaque enregistrement : les contrôles ci-dessus ne sont pas aveugles ;
+//  6. le rapport de fluidité (js/perf-trace.js, consigne 103 de GFS, « fait quand ») compte ces lectures PAR PHASE (ouverture, repos, enregistrement, gestes) : aucune lecture entière après l'ouverture
+//     sur un document lourd, la lecture légère (SQL, lignes par numéros) comptée à côté, et le témoin « off » y voit la lecture entière à l'enregistrement.
 // Lancé par run-headless.mjs (groupe Node « templatesLightSave », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-templates-light-save.mjs
 import { start, seedModels } from './gfs-page.mjs';
 import { createLightServer, tablesFromStubState } from './light-server.mjs';
@@ -44,6 +46,9 @@ async function open({ light = 'auto' } = {}) {
 }
 const wholeReads = app => app.evaluate(table => window.__gristStub.state.callOrder.filter(call => call === 'fetchTable ' + table).length, TABLE);
 const sqlOf = server => server.log.filter(entry => entry.kind === 'sql').map(entry => entry.sql);
+// Les lectures par phase que le rapport de fluidité compte (PerfTrace.reads) et ses deux lignes dans le rapport écrit ; null sur un code d'avant ce compte.
+const traced = app => app.evaluate(() => (typeof PerfTrace !== 'undefined' && typeof PerfTrace.reads === 'function'
+  ? { reads: PerfTrace.reads(), lines: PerfTrace.report().split('\n').filter(line => /^Lectures de la table des modèles ENTIÈRE|^ +lectures légères/.test(line)) } : null));
 const text = app => app.evaluate(() => { const editor = EditorCore.getEditor(); return editor ? editor.getText() : ''; });
 const waitText = (app, word) => app.waitForFunction(w => { const editor = EditorCore.getEditor(); return !!editor && editor.getText().includes(w); }, word, { timeout: 40000 });
 const pick = (app, id) => app.evaluate((value) => { const select = document.getElementById('template-select'); select.value = String(value); select.dispatchEvent(new Event('change', { bubbles: true })); }, id);
@@ -74,6 +79,10 @@ const bannerShown = app => app.evaluate(() => { const b = document.getElementByI
   check('la vérification de conflit a lu la ligne du document par son numéro, pas la table (WHERE id IN (1))', sql.some(line => / WHERE id IN \(1\) ORDER BY "?manualSort"?, id$| WHERE id IN \(1\) ORDER BY id$/.test(line) && /FROM "Publipostage_Modeles"/.test(line)), sql.map(line => line.slice(-80)));
   check('la date que Grist garde s\'est relue pour cette ligne seule (SQL des dates)', sql.some(line => /AS "ModifiedAt" FROM "Publipostage_Modeles" WHERE id IN \(1\) ORDER BY id$/.test(line)), sql.map(line => line.slice(-90)));
   check('la table des modèles n\'a JAMAIS été lue en entier, ni à l\'ouverture ni à l\'enregistrement', (await wholeReads(app)) === 0, await wholeReads(app));
+  const seen = await traced(app);
+  check('6. le rapport de fluidité compte zéro lecture entière de la table, à toute phase (le faux Grist en a compté zéro aussi)', !!seen && seen.reads.entieres.total === 0 && seen.reads.entieres.apresOuverture === 0, JSON.stringify(seen && seen.reads.entieres));
+  check('...et la lecture légère y est comptée : la liste à l\'ouverture (SQL), la ligne relue à l\'enregistrement (SQL)', !!seen && seen.reads.sql.ouverture >= 1 && seen.reads.sql.enregistrement >= 1, JSON.stringify(seen && seen.reads.sql));
+  check('...le rapport écrit dit « APRÈS l’ouverture : 0 (aucune) » et la lecture de la liste « légère »', !!seen && seen.lines.some(line => /APRÈS l’ouverture : 0 \(aucune\)/.test(line) && /lecture de la liste : légère/.test(line)) && seen.lines.some(line => /lectures légères : SQL .*enregistrement [1-9]/.test(line)), JSON.stringify(seen && seen.lines));
 
   // 2. Quelqu'un d'autre enregistre ce document : la lettre suivante n'écrase rien
   await app.evaluate(table => window.__gristStub.remoteWrite(table, 1, { Contenu: '<p>Version d\'une autre personne</p>', DateModif: new Date(Date.now() + 60000).toISOString() }), TABLE);
@@ -102,6 +111,8 @@ const bannerShown = app => app.evaluate(() => { const b = document.getElementByI
   check('sa vérification de conflit lit sa ligne (numéro 3), pas la table', sql.some(line => / WHERE id IN \(3\) ORDER BY/.test(line)), sql.map(line => line.slice(-70)));
   check('...la date relue est celle de cette ligne seule', sql.some(line => /AS "ModifiedAt" FROM "Publipostage_Modeles" WHERE id IN \(3\) ORDER BY id$/.test(line)), sql.map(line => line.slice(-90)));
   check('...la table n\'a JAMAIS été lue en entier', (await wholeReads(app)) === 0, await wholeReads(app));
+  const heavySeen = await traced(app);
+  check('6. sur ce gros document, le rapport de fluidité compte zéro lecture entière après l\'ouverture, et une ligne lue par son numéro (le texte du document, à la demande)', !!heavySeen && heavySeen.reads.entieres.total === 0 && heavySeen.reads.lignes.total >= 1, JSON.stringify(heavySeen && heavySeen.reads));
 
   // 4. Les gestes qui lisaient la table
   const reads0 = await wholeReads(app);
@@ -119,6 +130,8 @@ const bannerShown = app => app.evaluate(() => { const b = document.getElementByI
     return snapshot ? { id: snapshot.id, hasText: String(snapshot.values.Content || '').includes('DOSSIER-C paragraphe 39'), name: snapshot.values.Name } : null;
   });
   check('la ligne qu\'on s\'apprête à supprimer se lit par son numéro, avec tout son texte (c\'est ce qu\'Annuler rendra)', !!row && row.id === 3 && row.hasText === true && server.log.some(entry => entry.kind === 'records' && JSON.stringify(entry.ids) === '[3]') && (await wholeReads(app)) === reads0, JSON.stringify([row, reads0, await wholeReads(app)]));
+  const gestures = await traced(app);
+  check('6. les gestes (versions, mot de passe des PDF, ligne à supprimer) sont comptés à la phase « gestes », et aucun n\'est une lecture entière', !!gestures && gestures.reads.entieres.total === 0 && gestures.reads.sql.gestes >= 1 && gestures.reads.lignes.gestes >= 1, JSON.stringify(gestures && gestures.reads));
   const unloaded = await app.evaluate(() => Templates.getUnloadedReads());
   check('aucun module n\'a lu un texte avant qu\'il soit chargé (Templates.getUnloadedReads vide)', unloaded.length === 0, unloaded);
   await app.context().close();
@@ -134,6 +147,8 @@ const bannerShown = app => app.evaluate(() => { const b = document.getElementByI
   await sleep(600);
   const after = await wholeReads(app);
   check('TÉMOIN : « off » (la lecture d\'avant) lit la table en entier à l\'enregistrement, et ne pose aucune requête SQL', written && after > before && server.log.filter(entry => entry.kind === 'sql').length === 0, JSON.stringify({ written, before, after, sql: server.log.length }));
+  const witness = await traced(app);
+  check('6. TÉMOIN : le rapport de fluidité voit la lecture entière du démarrage (phase « ouverture ») ET celle de l\'enregistrement, et ne dit plus « aucune » après l\'ouverture', !!witness && witness.reads.entieres.ouverture >= 1 && witness.reads.entieres.enregistrement >= 1 && witness.reads.entieres.apresOuverture >= 1 && witness.lines.some(line => /APRÈS l’ouverture : [1-9]/.test(line) && !/\(aucune\)/.test(line)), JSON.stringify(witness && [witness.reads.entieres, witness.lines]));
   await app.context().close();
 }
 

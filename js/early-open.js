@@ -67,7 +67,9 @@ const EarlyOpen = (function () {
   // À la fin du démarrage : la table entière se lit, en fond, et prend la place du cache partiel (js/main.js redessine alors la liste). Rien quand la table entière est déjà lue.
   function finish() {
     if (plan !== 'partial' || Templates.isComplete()) return;
-    Templates.loadAll().catch((e) => { console.warn('[EarlyOpen] la liste des documents n’a pas pu être lue', e); });
+    // Le rapport de fluidité compte cette lecture avec l'ouverture (js/perf-trace.js : « ouverture ») : c'est la fin du démarrage, pas une relecture d'après.
+    const read = () => Templates.loadAll();
+    (typeof PerfTrace !== 'undefined' && typeof PerfTrace.phase === 'function' ? PerfTrace.phase('ouverture', read) : read()).catch((e) => { console.warn('[EarlyOpen] la liste des documents n’a pas pu être lue', e); });
   }
 
   return { startupTemplates, finish, plan: () => plan };

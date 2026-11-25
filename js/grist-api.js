@@ -1350,8 +1350,10 @@ const GristAPI = (function () {
   // est un GET simple (ni corps ni en-tête particulier : pas de pré-requête CORS) ; elle ne peut rien écrire. Rend les lignes, des objets { colonne: valeur } aux valeurs brutes de SQLite (un booléen y est 0 ou 1,
   // une date des secondes). Lève une erreur dont `reason` dit pourquoi : 'jeton' (Grist n'en donne pas), 'réseau' (hors ligne, CORS, politique de GFS), 'http' (avec `status` : droits, instance sans cette
   // interface), 'délai', 'forme' (réponse sans `records`). Rien ne dépend d'elle : celui qui l'appelle sait toujours lire autrement.
-  async function lightGet(path, timeoutMs) {
+  async function lightGet(path, timeoutMs, kind) {
     const fail = (reason, extra) => Object.assign(new Error('lightGet : ' + reason), { reason }, extra);
+    // Le rapport de fluidité (js/perf-trace.js, temporaire) compte chaque lecture au moment où elle part, dans la phase du moment (ouverture, repos, enregistrement, gestes) : `kind` dit laquelle.
+    if (typeof PerfTrace !== 'undefined' && typeof PerfTrace.noteRead === 'function') PerfTrace.noteRead(kind);
     let info;
     try { info = await getAccessTokenCached(); } catch (e) { throw fail('jeton'); }
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -1376,7 +1378,7 @@ const GristAPI = (function () {
     } finally { clearTimeout(timer); }
   }
   async function lightQuery(sql, timeoutMs) {
-    const { body } = await lightGet('/sql?q=' + encodeURIComponent(sql), timeoutMs);
+    const { body } = await lightGet('/sql?q=' + encodeURIComponent(sql), timeoutMs, 'sql');
     if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightQuery : forme'), { reason: 'forme' });
     return body.records.map(record => (record && record.fields) || {});
   }
@@ -1390,7 +1392,7 @@ const GristAPI = (function () {
     const byColumns = !some && only && Object.keys(only).length ? only : null;
     const query = some ? '?limit=' + ids.length + '&filter=' + encodeURIComponent(JSON.stringify(Object.assign({ id: ids }, only || {})))
       : (byColumns ? '?filter=' + encodeURIComponent(JSON.stringify(byColumns)) : '');
-    const { body, bytes, parseMs } = await lightGet('/tables/' + encodeURIComponent(table) + '/records' + query, timeoutMs);
+    const { body, bytes, parseMs } = await lightGet('/tables/' + encodeURIComponent(table) + '/records' + query, timeoutMs, some || byColumns ? 'lignes' : 'entiere');
     if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightRecords : forme'), { reason: 'forme' });
     return { records: body.records, bytes, parseMs };
   }

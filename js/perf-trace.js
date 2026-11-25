@@ -8,6 +8,8 @@
 //  - les longues tâches et les longues images d'animation (`longtask`, `long-animation-frame` : Chromium seulement ; ces dernières disent QUEL script a pris le temps) ;
 //  - les étapes que le code nomme (`PerfTrace.mark`) et la durée des fonctions de l'éditeur qui dépassent 40 ms (`PerfTrace.watch`) ;
 //  - la mémoire de la page quand le navigateur la donne (Chromium : `performance.memory`), la machine et la taille du document ;
+//  - LES LECTURES DE LA TABLE DES MODÈLES ENTIÈRE, PAR PHASE (25/11, consigne 103 de GFS : « rien ne relit les contenus des autres fichiers après l'ouverture ») : ouverture, repos (l'enregistrement automatique qui compare la date),
+//    enregistrement (un passage qui écrit, Enregistrer, une version) et gestes (une liste, un export, une fenêtre), avec à côté les lectures légères (SQL, lignes par numéros) de la même phase ;
 //  - LE JOURNAL D'OUVERTURE (23/11, « explorer des pistes pour que l'ouverture soit encore plus rapide » : tous les documents, le démarrage du widget, le changement de document par le menu) : chaque appel à Grist
 //    (`grist.docApi` : lecture d'une table, écriture, jeton) avec sa durée et ce qu'il porte, cumulé par appel dans le rapport, de quoi voir ce que le démarrage et les relectures de l'enregistrement automatique
 //    lisent ; les fichiers du chargement (les plus lents, ceux servis sans transfert, le dernier reçu de chaque site : l'éditeur, servi par la copie de l'app, arrive-t-il longtemps après les scripts ?) ; le temps de chaque document ouvert
@@ -34,8 +36,49 @@ const PerfTrace = (function () {
     if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
   }
 
+  // --- Les lectures de la table des modèles, par phase (consigne 103 de GFS) ---
+  // Une lecture ENTIÈRE est un `fetchTable` de la table des modèles (tous les contenus : des dizaines de Mo chez une personne, jusqu'au mur d'environ 500 Mo où Grist ne rend plus rien). La liste légère par SQL (js/templates.js,
+  // GristAPI.lightQuery) et la lecture de lignes par numéros (GristAPI.lightRecords) n'en sont pas : elles sont comptées à côté. La phase est celle du moment où l'appel PART : « ouverture » jusqu'à « démarrage : widget prêt »,
+  // puis celle que dit le module qui lit (`phase`, ci-dessous : « repos », « enregistrement »), sinon « gestes ». Un compte de diagnostic, pas un contrat : deux travaux qui se chevauchent se partagent la dernière phase dite.
+  const PHASES = ['ouverture', 'repos', 'enregistrement', 'gestes'];
+  const countsOf = () => ({ ouverture: 0, repos: 0, enregistrement: 0, gestes: 0 });
+  const wholeReadCounts = countsOf();
+  const sqlReadCounts = countsOf();
+  const rowReadCounts = countsOf();
+  const phaseStack = [];
+  let startupDone = false;
+  const currentPhase = () => (!startupDone ? 'ouverture' : (phaseStack.length ? phaseStack[phaseStack.length - 1] : 'gestes'));
+  // Fait `work` (qui peut rendre une promesse) en disant la phase des lectures qu'il lance : « ouverture », « repos » ou « enregistrement ». Rend ce que rend `work`, erreur comprise.
+  function phase(name, work) {
+    if (PHASES.indexOf(name) === -1 || typeof work !== 'function') return typeof work === 'function' ? work() : undefined;
+    phaseStack.push(name);
+    const done = () => { const at = phaseStack.lastIndexOf(name); if (at !== -1) phaseStack.splice(at, 1); };
+    let result;
+    try { result = work(); } catch (error) { done(); throw error; }
+    if (result && typeof result.then === 'function') return result.then((value) => { done(); return value; }, (error) => { done(); throw error; });
+    done();
+    return result;
+  }
+  // Le nom de la table des modèles que le document porte (le registre de SchemaColumns dit aussi celui d'avant les noms anglais) : un fetchTable de celle-là est une lecture entière de la liste.
+  function isModelsTable(name) {
+    try {
+      const entry = typeof SchemaColumns !== 'undefined' ? SchemaColumns.TABLES.find(table => table.id === 'Publipostage_Templates') : null;
+      const actual = entry && typeof Templates !== 'undefined' ? SchemaColumns.actualTable(Templates.TABLE_NAME) : '';
+      return name === actual || name === 'Publipostage_Templates' || (!!entry && name === entry.legacyId);
+    } catch (error) { return false; }
+  }
+  // Une lecture que le code compte lui-même, là où elle part (js/grist-api.js:lightGet, avant son premier délai : ce fichier se charge APRÈS celui-ci, rien ne peut l'envelopper dès le premier appel) : `kind` vaut
+  // 'sql' (la liste légère), 'lignes' (des lignes par numéros ou par leurs colonnes) ou 'entiere' (TOUTES les lignes de la table par l'interface REST : le rapport de fluidité mesure ce qu'elle coûterait).
+  function noteRead(kind) {
+    const counts = kind === 'sql' ? sqlReadCounts : (kind === 'lignes' ? rowReadCounts : (kind === 'entiere' ? wholeReadCounts : null));
+    if (counts) counts[currentPhase()] += 1;
+  }
+  const total = counts => PHASES.reduce((sum, name) => sum + counts[name], 0);
+  const afterOpening = counts => counts.repos + counts.enregistrement + counts.gestes;
+
   // Une étape que le code nomme, avec la mémoire du moment ; `extra` : des chiffres en plus (diapositives lues, taille...).
   function mark(label, extra) {
+    if (label === 'démarrage : widget prêt') startupDone = true;
     if (performance.now() - watchesAt > 1000) installWatches();
     const heap = heapMb();
     push(Object.assign({ t: rel(performance.now()), kind: 'mark', label }, heap === null ? {} : { heapMb: heap }, extra || {}));
@@ -196,6 +239,7 @@ const PerfTrace = (function () {
         const start = performance.now();
         const label = describeGristCall(name, arguments);
         const sent = isWrite(name) ? charsOf(arguments[0], 0) : 0;
+        if (name === 'fetchTable' && typeof arguments[0] === 'string' && isModelsTable(arguments[0])) wholeReadCounts[currentPhase()] += 1;
         let result;
         try { result = original.apply(this, arguments); } catch (error) { noteGristCall(label, start, sent); throw error; }
         if (result && typeof result.then === 'function') {
@@ -274,6 +318,17 @@ const PerfTrace = (function () {
       if (opened) parts.push('premier document à l’écran à ' + Math.round(T0 + opened.t) + ' ms');
       return ['Départ : la chronologie ci-dessous commence ' + Math.round(T0) + ' ms après le début du chargement de la page (temps de la page : ' + parts.join(' ; ') + ')'];
     } catch (error) { return ['Départ : illisible']; }
+  }
+  // Les lectures de la table des modèles par phase (consigne 103 de GFS) : combien de lectures ENTIÈRES (contenus compris), et à côté ce que la lecture légère a fait. « Après l'ouverture » doit être zéro sur un document lourd.
+  function readFacts() {
+    const mode = typeof Templates !== 'undefined' && typeof Templates.getLightState === 'function' ? Templates.getLightState() : '?';
+    const modeText = { light: 'légère (SQL, sans les longs textes)', whole: 'entière (table peu lourde)', refused: 'entière (SQL refusé : droits d’accès ou instance)', unknown: 'pas encore sondée' }[mode] || String(mode);
+    const parts = counts => PHASES.map(name => name + ' ' + counts[name]).join(', ');
+    const after = afterOpening(wholeReadCounts);
+    return [
+      'Lectures de la table des modèles ENTIÈRE (contenus compris) : ' + parts(wholeReadCounts) + ' ; APRÈS l’ouverture : ' + after + (after === 0 ? ' (aucune)' : '') + ' ; lecture de la liste : ' + modeText,
+      '   lectures légères : SQL (la liste sans les longs textes) ' + parts(sqlReadCounts) + ' ; lignes par numéros (un texte lu à la demande) ' + parts(rowReadCounts),
+    ];
   }
   // De quoi se compose la table des modèles que le démarrage lit en entier (js/templates.js:loadAll) : par colonne, et les lignes les plus lourdes ; le travail de ce widget sur ces lignes (hors attente de Grist) est dit à côté.
   function weightFacts() {
@@ -421,6 +476,7 @@ const PerfTrace = (function () {
       ...startFacts(),
       ...fileFacts(),
       ...gristFacts(),
+      ...readFacts(),
       ...weightFacts(),
       ...lightFacts(),
       'Document : ' + documentFacts(),
@@ -464,5 +520,14 @@ const PerfTrace = (function () {
   }, true);
 
   mark('page ouverte');
-  return { mark, watch, watchGrist, opened, report, summary, download, probeLight, events: () => events.slice(), totals: () => Object.assign({}, totals), gristCalls: () => Array.from(gristCalls.entries()).map(([label, item]) => Object.assign({ label }, item)) };
+  // Les lectures par phase, pour qui veut les chiffres sans lire le rapport : `entieres` (la table des modèles entière), `sql` (la liste légère), `lignes` (des lignes par numéros), chacune { ouverture, repos, enregistrement, gestes }
+  // et `apresOuverture` (la somme des trois dernières) pour les lectures entières.
+  function reads() {
+    return {
+      entieres: Object.assign({}, wholeReadCounts, { total: total(wholeReadCounts), apresOuverture: afterOpening(wholeReadCounts) }),
+      sql: Object.assign({}, sqlReadCounts, { total: total(sqlReadCounts), apresOuverture: afterOpening(sqlReadCounts) }),
+      lignes: Object.assign({}, rowReadCounts, { total: total(rowReadCounts), apresOuverture: afterOpening(rowReadCounts) }),
+    };
+  }
+  return { mark, phase, noteRead, reads, watch, watchGrist, opened, report, summary, download, probeLight, events: () => events.slice(), totals: () => Object.assign({}, totals), gristCalls: () => Array.from(gristCalls.entries()).map(([label, item]) => Object.assign({ label }, item)) };
 })();

@@ -1606,11 +1606,13 @@ const Templates = (function () {
       if (!isWriting()) return Promise.resolve();
       return new Promise(resolve => { idleWaiters.push(resolve); setTimeout(resolve, WATCHDOG_MS); });
     }
+    // Les lectures que fait une écriture (la date relue, le jeton, la ligne qu'on vient de poser) sont celles de la phase « enregistrement » du rapport de fluidité (js/perf-trace.js).
+    const inPhase = (name, work) => (typeof PerfTrace !== 'undefined' && typeof PerfTrace.phase === 'function' ? PerfTrace.phase(name, work) : work());
     async function track(write) {
       seq++;
       if (pending === 0) pendingSince = Date.now();
       pending++;
-      try { return await write(); }
+      try { return await inPhase('enregistrement', write); }
       finally {
         pending--;
         seq++;

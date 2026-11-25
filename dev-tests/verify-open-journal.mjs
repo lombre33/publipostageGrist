@@ -131,4 +131,24 @@ const secondOpen = await page.evaluate(async () => {
 });
 check('un second choix a son propre temps (le premier n\'est pas repris)', secondOpen.length === 1 && typeof secondOpen[0] === 'number', secondOpen);
 
+// --- 5. Les lectures entières de la table des modèles, par phase (consigne 103 de GFS : « fait quand ») ---
+const phased = await page.evaluate(async () => {
+  const api = { fetchTable: async () => ({ id: [] }) };
+  PerfTrace.watchGrist(api);
+  const before = PerfTrace.reads().entieres;
+  await api.fetchTable('Publipostage_Templates');
+  await PerfTrace.phase('repos', () => api.fetchTable('Publipostage_Templates'));
+  await PerfTrace.phase('enregistrement', async () => { await api.fetchTable('Publipostage_Modeles'); await api.fetchTable('Une_Autre_Table'); });
+  let thrown = null;
+  try { await PerfTrace.phase('repos', async () => { throw new Error('boum'); }); } catch (error) { thrown = error.message; }
+  const sync = PerfTrace.phase('enregistrement', () => 12);
+  const unknown = PerfTrace.phase('nimporte', () => 7);
+  await api.fetchTable('Publipostage_Templates');
+  const after = PerfTrace.reads().entieres;
+  return { gestes: after.gestes - before.gestes, repos: after.repos - before.repos, enregistrement: after.enregistrement - before.enregistrement, total: after.total - before.total, apres: after.apresOuverture - before.apresOuverture, thrown, sync, unknown, line: PerfTrace.report().split('\n').find(line => /^Lectures de la table des modèles ENTIÈRE/.test(line)) };
+});
+check('une lecture entière (fetchTable de la table des modèles, sous l\'un ou l\'autre de ses noms) est comptée dans la phase qui la lance : hors phase « gestes », « repos », « enregistrement » ; une autre table n\'est pas comptée', phased.gestes === 2 && phased.repos === 1 && phased.enregistrement === 1 && phased.total === 4 && phased.apres === 4, phased);
+check('la phase rend ce que rend le travail (la valeur, l\'erreur levée, un nom inconnu sans effet) et la phase se referme (le dernier appel est de nouveau « gestes »)', phased.thrown === 'boum' && phased.sync === 12 && phased.unknown === 7, phased);
+check('le rapport écrit dit la ligne des lectures entières avec chaque phase et « APRÈS l’ouverture »', !!phased.line && /ouverture \d+, repos [1-9]\d*, enregistrement [1-9]\d*, gestes [1-9]\d* ; APRÈS l’ouverture : [1-9]\d*/.test(phased.line), phased.line);
+
 await t.finish();

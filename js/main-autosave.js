@@ -249,12 +249,18 @@ const MainAutosave = (function () {
       return !Templates.sameDateModif(remoteTpl.dateModif, Templates.lastWritten(remoteTpl.id));
     }
 
+    // Le rapport de fluidité (js/perf-trace.js) range les lectures d'un passage : « repos » (rien à écrire : il compare seulement la date) ou « enregistrement » (il va écrire : `phaseName`, par défaut, pour qui lit avant
+    // d'écrire un commentaire de la Lecture).
+    const inPhase = (name, work) => (typeof PerfTrace !== 'undefined' && typeof PerfTrace.phase === 'function' ? PerfTrace.phase(name, work) : work());
+
+    function readRemoteTemplate(id, epoch, phaseName) { return inPhase(phaseName || 'enregistrement', () => readRemoteTemplateNow(id, epoch)); }
+
     // Relit la ligne du modèle `id` et celles qu'il désigne (Templates.refreshRows : leurs numéros seuls quand la table est lue par la liste légère, la table des modèles entière sinon : une table peu lourde, un SQL refusé) et rend
     // { remoteTpl } (la ligne de `id`, absente si le modèle a été supprimé), ou null quand cette lecture ne prouve
     // rien : elle a croisé une écriture de CE widget (la lecture tombe entre l'écriture et la relecture de sa date, ou revient avec l'état d'avant :
     // Grist lent, cf. Templates.getWriteSeq), ou un autre modèle a été chargé pendant ce temps (la ligne relue n'est plus celle de l'écran). Une
     // lecture abandonnée ne perd rien : le passage suivant relit l'état d'alors. Lève si la lecture échoue.
-    async function readRemoteTemplate(id, epoch) {
+    async function readRemoteTemplateNow(id, epoch) {
       if (Templates.isWriting()) return null;
       const seq = Templates.getWriteSeq();
       // Consigne 103 de GFS (demande 2) : la vérification de conflit lit la ligne du modèle ouvert et celles qu'il suit, pas la table (ses autres lignes n'ont rien à dire ici).
@@ -375,7 +381,7 @@ const MainAutosave = (function () {
       let remote;
       // Le passage fait suivre les modèles qu'il lit (followLinkedModels, plus bas) et redit ce que la synchro a appris après l'écriture : leur arrivée ne les fait pas suivre à part (persist.followHeld, js/main.js).
       persist.followHeld++;
-      try { remote = await readRemoteTemplate(id, epoch); }
+      try { remote = await readRemoteTemplate(id, epoch, persist.autosaveDirty && !autosaveRefused() ? 'enregistrement' : 'repos'); }
       catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
       finally { persist.followHeld--; }
       if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
