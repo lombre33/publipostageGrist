@@ -1303,8 +1303,10 @@ const Variables = (function () {
         for (const variable of variables) {
           if (text.startsWith(variable.key, keyAt) && (!base || variable.key.length > base.key.length)) base = variable;
         }
-        if (base) {
-          const path = extendKeyPath(base.table, base.column, text, keyAt + base.key.length);
+        // Pas de clé « Table.Colonne » connue, mais « Table.+1(Date;Cycle) » : la ligne voisine d'une table, avant toute colonne.
+        if (!base) base = stepStartAt(text, keyAt);
+        const path = base ? trimTrailingSteps(extendKeyPath(base.table, base.column, text, keyAt + base.key.length)) : null;
+        if (path && path.column) {
           found.push({ start: at, end: path.end, table: base.table, column: path.column });
           at = text.indexOf(trigger, path.end);
         } else {
@@ -1313,8 +1315,27 @@ const Variables = (function () {
       }
       return found;
     }
+    // Un chemin qui finit sur un maillon « ligne voisine » ne lit aucune colonne : le maillon (et ce qui le suit) retourne au texte. Rend { column, end } ; `column`
+    // est vide quand il ne restait que des maillons.
+    function trimTrailingSteps(path) {
+      const hops = path.column.split('.');
+      let end = path.end;
+      while (hops.length && GristAPI.stepOf(hops[hops.length - 1])) end -= 1 + hops.pop().length;
+      return { column: hops.join('.'), end };
+    }
+    // Une table suivie directement d'un maillon « ligne voisine » à la position `keyAt` du texte (« Séances.+1(Date;Cycle) ») : { table, column, key } comme une
+    // variable de GristAPI.getAllVariables, où `column` est le maillon, ou null. La table la plus longue l'emporte ; le maillon ne vaut que si ses colonnes existent.
+    function stepStartAt(text, keyAt) {
+      const tables = GristAPI.getTables().filter(table => text.startsWith(table + '.', keyAt)).sort((a, b) => b.length - a.length);
+      for (const table of tables) {
+        const token = GristAPI.stepAt(text, keyAt + table.length + 1);
+        if (token && GristAPI.tableAtEndOf(table, [token])) return { table, column: token, key: table + '.' + token };
+      }
+      return null;
+    }
     // Ajoute « .Colonne » à `column` tant que le texte, à partir de `from`, suit un chemin de colonnes Référence : la colonne la plus longue de la
-    // table atteinte l'emporte, comme pour les clés. Rend { column, end } : le chemin entier et la position où il s'arrête dans `text`.
+    // table atteinte l'emporte, comme pour les clés. Un maillon « ligne voisine » (« .+1(Date;Cycle) ») se suit aussi, sans changer de table. Rend
+    // { column, end } : le chemin entier et la position où il s'arrête dans `text`.
     function extendKeyPath(table, column, text, from) {
       let path = column;
       let end = from;
@@ -1322,9 +1343,15 @@ const Variables = (function () {
         const reached = GristAPI.tableAtEndOf(table, path.split('.'));
         if (!reached) break;
         const next = GristAPI.getColumns(reached).filter(c => text.startsWith('.' + c, end)).sort((a, b) => b.length - a.length)[0];
-        if (!next) break;
-        path += '.' + next;
-        end += 1 + next.length;
+        if (next) {
+          path += '.' + next;
+          end += 1 + next.length;
+          continue;
+        }
+        const step = text[end] === '.' ? GristAPI.stepAt(text, end + 1) : null;
+        if (!step || !GristAPI.tableAtEndOf(table, path.split('.').concat(step))) break;
+        path += '.' + step;
+        end += 1 + step.length;
       }
       return { column: path, end };
     }

@@ -38,7 +38,8 @@ const Formula = (function () {
   // Lecture : le texte enregistré en jetons. Retourne { tokens } ou { error }. Un jeton : { t: 'num'|'var'|'name'|'op', pos, ... } - `op` est l'un de
   // + - * / % ( ) ;
   function tokenize(src) {
-    const KEY = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/;
+    // « Table.Colonne », « Table.Référence.Colonne », et un maillon « ligne voisine » (« Séances.+1(Date;Cycle).Numéro », GristAPI.stepOf) à la place d'une colonne.
+    const KEY = /^[A-Za-z_][A-Za-z0-9_]*(?:\.(?:[A-Za-z0-9_]+|[+-]\d{1,3}\([^;().\s{}]+(?:;[^;().\s{}]*)?\)))+$/;
     const NUMBER = /^(?:\d+(?:\.\d*)?|\.\d+)/;
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*/;
     const tokens = [];

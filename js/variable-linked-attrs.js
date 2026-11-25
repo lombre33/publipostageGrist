@@ -443,11 +443,11 @@ const VariableLinkedAttrs = (function () {
   function syncStepButton() {
     refs.stepGo.disabled = !refs.stepOrder.value;
   }
-  // Le volet « Ligne suivante ou précédente » du niveau affiché : les colonnes de sa table pour l'ordre et le groupe (une pièce jointe ne range rien). Ni sur une
-  // pastille (elle désigne une ligne précise), ni pour le choix d'une colonne.
+  // Le volet « Ligne suivante ou précédente » du niveau affiché : les colonnes de sa table pour l'ordre et le groupe (une pièce jointe ne range rien). Pas sur une
+  // pastille (elle désigne une ligne précise) ; pour le choix d'une colonne (une règle de condition), oui : le chemin choisi porte alors le maillon.
   function renderStepBox() {
     const { stepBox, stepOrder, stepGroup } = refs;
-    stepBox.hidden = !!state.pick || !!state.mention;
+    stepBox.hidden = !!state.mention;
     if (stepBox.hidden) return;
     const table = levelTable();
     const columns = GristAPI.getVisibleColumns(table).filter(col => GristAPI.getColumnType(table, col) !== 'Attachments');

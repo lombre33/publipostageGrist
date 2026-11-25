@@ -158,28 +158,56 @@ const SchemaRenames = (function () {
       return oldKeys;
     }
 
+    // Les tables de l'instantané, les plus longues d'abord : pour une variable écrite « Séances.+1(Date;Cycle).Titre », la table suivie d'un maillon avant toute colonne.
+    let oldTables = null;
+    function tables() {
+      if (!oldTables) oldTables = Object.keys(o.tableName).map(tRow => ({ name: o.tableName[tRow], tRow })).sort((a, b) => b.name.length - a.name.length);
+      return oldTables;
+    }
+    // Le maillon « ligne voisine » écrit à la position `at` de `rest` et lisible dans la table `tRow` d'hier (ses colonnes d'ordre et de groupe y existaient), ou null.
+    function stepIn(rest, at, tRow) {
+      const token = rest[at - 1] === '.' ? GristAPI.stepAt(rest, at) : null;
+      const jump = token && GristAPI.stepOf(token);
+      const columns = o.colRow[tRow] || {};
+      return jump && columns[jump.order] !== undefined && (!jump.group || columns[jump.group] !== undefined) ? token : null;
+    }
+
     // Dans un texte, la variable écrite juste après la touche de déclenchement (`rest` commence après elle) : { table, path, length } avec les noms
     // d'hier, le chemin prolongé tant que le texte suit une colonne Référence (la colonne la plus longue de la table atteinte l'emporte, comme
-    // Variables.findTextVariables). Null si rien ne s'y lit.
+    // Variables.findTextVariables) ou un maillon « ligne voisine ». Null si rien ne s'y lit.
     function matchTextKey(rest) {
+      let table; let path; let length; let here; // `here` : la table d'hier où le chemin est arrivé, undefined quand il ne peut plus se prolonger
       const base = keys().find(k => rest.startsWith(k.key));
-      if (!base) return null;
-      let path = base.column;
-      let length = base.key.length;
-      let cRow = base.cRow;
-      for (;;) {
-        const tRow = refTargetRow(cRow);
-        if (tRow === undefined) break;
-        let next = null;
-        Object.keys(o.colRow[tRow] || {}).forEach(name => {
-          if (rest.startsWith('.' + name, length) && (!next || name.length > next.name.length)) next = { name, cRow: o.colRow[tRow][name] };
-        });
-        if (!next) break;
-        path += '.' + next.name;
-        length += 1 + next.name.length;
-        cRow = next.cRow;
+      if (base) {
+        table = base.table; path = base.column; length = base.key.length;
+        here = refTargetRow(base.cRow);
+      } else {
+        const start = tables().find(t => rest.startsWith(t.name + '.') && stepIn(rest, t.name.length + 1, t.tRow));
+        if (!start) return null;
+        const token = stepIn(rest, start.name.length + 1, start.tRow);
+        table = start.name; path = token; length = start.name.length + 1 + token.length; here = start.tRow;
       }
-      return { table: base.table, path, length };
+      for (;;) {
+        if (here === undefined) break;
+        let next = null;
+        Object.keys(o.colRow[here] || {}).forEach(name => {
+          if (rest.startsWith('.' + name, length) && (!next || name.length > next.name.length)) next = { name, cRow: o.colRow[here][name] };
+        });
+        if (next) {
+          path += '.' + next.name;
+          length += 1 + next.name.length;
+          here = refTargetRow(next.cRow);
+          continue;
+        }
+        const step = stepIn(rest, length + 1, here);
+        if (!step) break;
+        path += '.' + step;
+        length += 1 + step.length;
+      }
+      // Un chemin qui finit sur un maillon ne lit aucune colonne (Variables.findTextVariables le rend au texte).
+      const hops = path.split('.');
+      while (hops.length && GristAPI.stepOf(hops[hops.length - 1])) length -= 1 + hops.pop().length;
+      return hops.length ? { table, path: hops.join('.'), length } : null;
     }
     return matchTextKey;
   }

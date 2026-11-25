@@ -884,6 +884,14 @@ const GristAPI = (function () {
     const offset = found ? Number(found[2]) * (found[1] === '-' ? -1 : 1) : 0;
     return offset ? { offset, order: found[3], group: found[4] || '' } : null;
   }
+  // Le maillon « ligne voisine » qui commence à la position `from` d'un texte (« +1(Date;Instance) » dans « #Séances.+1(Date;Instance).Titre ») : son écriture, ou
+  // null quand il n'y en a pas. Ne dit pas si ses colonnes existent (tableAtEndOf).
+  const STEP_IN_TEXT = /[+-]\d{1,3}\([^;().\s]+(?:;[^;().\s]*)?\)/y;
+  function stepAt(text, from) {
+    STEP_IN_TEXT.lastIndex = from;
+    const found = STEP_IN_TEXT.exec(text);
+    return found && stepOf(found[0]) ? found[0] : null;
+  }
   // Le maillon qui désigne la ligne `offset` rangs plus loin (négatif : avant), rangée selon `order`, dans le groupe `group` ('' : toute la table).
   function stepToken(offset, order, group) {
     return (offset < 0 ? '-' : '+') + Math.abs(offset) + '(' + order + (group ? ';' + group : '') + ')';
@@ -1586,5 +1594,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, stepOf, stepToken, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, stepOf, stepAt, stepToken, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

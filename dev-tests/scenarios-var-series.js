@@ -345,6 +345,201 @@
     },
   });
 
+  // --- Lot 2 : les endroits où la variable se lit sans bulle de corps de modèle : champs texte, conditions, calculs, renommages, exports ---
+  // La ligne telle que grist.onRecord la livre (la Référence en valeur affichée).
+  const recordOf = id => {
+    const row = ROWS.find(r => r.id === id);
+    return { id, Titre: row.Titre, Cycle: row.Cycle, Date: row.Date, Numero: row.Numero, Responsable: row.gristHelper_Display };
+  };
+  const NEXT = '+1(Date;Cycle)';
+  const SCHEMA_OLD = { f: 1, t: { 1: [PAGE, { 1: 'Titre', 2: 'Date', 3: 'Cycle', 4: 'Numero' }] } };
+  const SCHEMA_NEW = { f: 1, t: { 1: [PAGE, { 1: 'Intitule', 2: 'Quand', 3: 'Serie', 4: 'Numero' }] } };
+
+  cases.push({
+    id: 'varseries_text_fields_read_the_hop_straight_after_the_table',
+    description: 'Dans un champ texte (Objet, À, Cc, Cci, nom du PDF), « #VsInstances.+1(Date;Cycle).Titre » est la variable de la ligne suivante, même sans colonne avant le maillon : deux dans la même phrase, le point de fin de phrase reste du texte, rien d’écrit au bout de la série, « -1 » la ligne d’avant ; un maillon sans colonne finale, ou dont la colonne d’ordre n’existe pas, reste du texte',
+    run: async (h) => {
+      await seed(h);
+      const sentence = `Prochaine : #${PAGE}.${NEXT}.Titre, puis #${PAGE}.+2(Date;Cycle).Titre.`;
+      const found = Variables.findTextVariables(sentence).map(v => [v.table, v.column, sentence.slice(v.start, v.end)]);
+      const resolved = {
+        row2: await Variables.resolveTextVariables(sentence, PAGE, recordOf(2)),
+        row1: await Variables.resolveTextVariables(sentence, PAGE, recordOf(1)),
+        before: await Variables.resolveTextVariables(`avant : #${PAGE}.-1(Date;Cycle).Titre|`, PAGE, recordOf(4)),
+        noColumn: await Variables.resolveTextVariables(`#${PAGE}.${NEXT} fin`, PAGE, recordOf(2)),
+        unknownOrder: await Variables.resolveTextVariables(`#${PAGE}.+1(Inconnue).Titre`, PAGE, recordOf(2)),
+        ordinary: await Variables.resolveTextVariables(`#${PAGE}.Titre et #${PAGE}.Cycle`, PAGE, recordOf(2)),
+      };
+      const fileOfNext = await ReaderMode.resolveFilename(`Suite_#${PAGE}.${NEXT}.Titre`, PAGE, recordOf(2));
+      const fileOfRow = await ReaderMode.resolveFilename(`Suite_#${PAGE}.Titre`, PAGE, recordOf(4));
+      const expectedFound = [[PAGE, `${NEXT}.Titre`, `#${PAGE}.${NEXT}.Titre`], [PAGE, '+2(Date;Cycle).Titre', `#${PAGE}.+2(Date;Cycle).Titre`]];
+      const pass = JSON.stringify(found) === JSON.stringify(expectedFound)
+        && resolved.row2 === 'Prochaine : Séance 2, puis Séance 2 bis.' && resolved.row1 === 'Prochaine : , puis .' && resolved.before === 'avant : Séance 1|'
+        && resolved.noColumn === `#${PAGE}.${NEXT} fin` && resolved.unknownOrder === `#${PAGE}.+1(Inconnue).Titre` && resolved.ordinary === 'Séance 1 et A'
+        && fileOfNext === fileOfRow && /Suite_/.test(fileOfNext) && /Séance 2/.test(fileOfNext);
+      return { pass, notes: JSON.stringify({ found, resolved, fileOfNext, fileOfRow }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_text_field_keeps_the_hop_as_a_bubble_and_as_text',
+    description: 'Le champ À enregistré en texte « #VsInstances.+1(Date;Cycle).Titre » se relit en UNE bulle dont la colonne est le chemin entier (maillon compris), se réécrit à l’identique, et se résout sur la ligne suivante ; avec du texte autour (virgule, mot après) la bulle ne mange rien et le texte revient tel quel',
+    run: async (h) => {
+      await seed(h);
+      const to = document.getElementById('v2-email-to');
+      const read = () => {
+        const badges = [];
+        FieldEditor.of(to).state.doc.descendants(node => { if (node.type.name === 'varBadge') badges.push([node.attrs.table, node.attrs.column, node.attrs.key]); });
+        return badges;
+      };
+      const plain = `#${PAGE}.${NEXT}.Titre`;
+      to.value = plain;
+      await h.sleep(40);
+      const alone = { badges: read(), stored: to.value };
+      const around = `Suite : #${PAGE}.-1(Date;Cycle).Titre, merci`;
+      to.value = around;
+      await h.sleep(40);
+      const inText = { badges: read(), stored: to.value };
+      const resolved = await Variables.resolveTextVariables(alone.stored, PAGE, recordOf(2));
+      to.value = '';
+      await h.sleep(20);
+      const pass = JSON.stringify(alone.badges) === JSON.stringify([[PAGE, `${NEXT}.Titre`, `${PAGE}.${NEXT}.Titre`]]) && alone.stored === plain
+        && JSON.stringify(inText.badges) === JSON.stringify([[PAGE, '-1(Date;Cycle).Titre', `${PAGE}.-1(Date;Cycle).Titre`]]) && inText.stored === around && resolved === 'Séance 2';
+      return { pass, notes: JSON.stringify({ alone, inText, resolved }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_condition_reads_the_neighbor_row',
+    description: 'Une règle de condition sur « VsInstances.+1(Date;Cycle).Titre » lit la ligne suivante : « = Séance 2 » vaut sur la ligne 2 (dont la suivante est la 4) et pas sur la 4 ; « non vide » dit qu’il y a une suivante, « vide » qu’il n’y en a pas (la ligne 1 finit sa série, la 6 est hors série) ; la règle se compose avec une règle de la ligne courante',
+    run: async (h) => {
+      await seed(h);
+      const rule = (operator, value) => ({ column: `${PAGE}.${NEXT}.Titre`, operator, value });
+      const holds = (id, r) => ConditionRules.matches(r, PAGE, recordOf(id));
+      const got = {
+        equal2: await holds(2, rule('=', 'Séance 2')),
+        equal4: await holds(4, rule('=', 'Séance 2')),
+        hasNext: [await holds(2, rule('non vide', '')), await holds(1, rule('non vide', '')), await holds(6, rule('non vide', ''))],
+        noNext: [await holds(2, rule('vide', '')), await holds(1, rule('vide', '')), await holds(6, rule('vide', ''))],
+        both: await ConditionRules.conditionHolds({ mode: 'all', rules: [rule('non vide', ''), { column: 'Cycle', operator: '=', value: 'A' }] }, PAGE, recordOf(2)),
+        bothOther: await ConditionRules.conditionHolds({ mode: 'all', rules: [rule('non vide', ''), { column: 'Cycle', operator: '=', value: 'B' }] }, PAGE, recordOf(2)),
+      };
+      const type = GristAPI.getColumnType(PAGE, `${NEXT}.Date`);
+      const pass = got.equal2 === true && got.equal4 === false && JSON.stringify(got.hasNext) === JSON.stringify([true, false, false]) && JSON.stringify(got.noNext) === JSON.stringify([false, true, true])
+        && got.both === true && got.bothOther === false && type === 'Date';
+      return { pass, notes: JSON.stringify({ got, type }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_condition_rule_picks_a_column_of_the_neighbor_row',
+    description: 'Le choix d’une colonne d’une règle de condition (bouton « Choisir dans la fenêtre des colonnes ») propose aussi le volet « Ligne suivante ou précédente » : après « Aller à cette ligne » et le choix de Titre, la règle porte « VsInstances.+1(Date;Cycle).Titre », la liste de la règle la montre comme choix, et la règle se lit sur la ligne suivante (« = Séance 2 » vaut sur la ligne 2)',
+    run: async (h) => {
+      await seed(h);
+      const rule = { column: '', operator: '=', value: 'Séance 2' };
+      const row = ConditionFields.buildRuleRow(rule, 0, {
+        mode: 'all',
+        options: { allTables: true, compareColumn: true, attributesWindow: true, onColumnChosen: () => true, onColumnResolved: () => {}, onValueColumnResolved: () => {} },
+        onRemove: () => {},
+      });
+      const holder = document.createElement('div');
+      holder.className = 'cd-host';
+      holder.appendChild(row);
+      document.body.appendChild(holder);
+      const wrap = row.querySelector('.macro-rule-column-wrap');
+      wrap.querySelector('.ss-trigger').click();
+      await h.sleep(30);
+      wrap.querySelector('.ss-browse').click();
+      await h.sleep(200);
+      const offered = !!modal() && !step().hidden && modal().style.display !== 'none';
+      choose('order', 'Date');
+      choose('group', 'Cycle');
+      step('go').click();
+      await h.sleep(150);
+      const crumbsAfter = crumbs();
+      const box = rowOf('Titre').querySelector('input');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      modal().querySelector('.var-modal-primary').click();
+      await h.sleep(200);
+      const column = rule.column;
+      const options = Array.from(wrap.querySelector('select').options).map(o => o.value).filter(v => v.indexOf('+1(') !== -1);
+      const holdsOn2 = await ConditionRules.matches(rule, PAGE, recordOf(2));
+      const holdsOn4 = await ConditionRules.matches(rule, PAGE, recordOf(4));
+      VariableLinkedAttrs.close({ keepFocus: true });
+      holder.remove();
+      const pass = offered && JSON.stringify(crumbsAfter) === JSON.stringify([PAGE, NEXT]) && column === `${PAGE}.${NEXT}.Titre` && options.length === 1 && holdsOn2 === true && holdsOn4 === false;
+      return { pass, notes: JSON.stringify({ offered, crumbsAfter, column, options, holdsOn2, holdsOn4 }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_calculation_reads_the_neighbor_row',
+    description: 'Un calcul peut citer la ligne voisine : {VsInstances.+1(Date;Cycle).Numero}-{VsInstances.Numero} donne 22 − 2 = 20 sur la ligne 4 ; il se relit dans la saisie (« #… ») et s’y réécrit à l’identique ; une colonne d’ordre disparue est dite par calcProblem',
+    run: async (h) => {
+      await seed(h);
+      const stored = `{${PAGE}.${NEXT}.Numero}-{${PAGE}.Numero}`;
+      const result = await Variables.resolveCalc(stored, PAGE, recordOf(4), null);
+      const typed = Formula.toDisplay(stored, { trigger: Variables.triggerChar(), lang: 'fr' });
+      const back = Formula.fromDisplay(typed, Variables.findTextVariables(typed), { lang: 'fr' });
+      const problems = [Variables.calcProblem(stored), Variables.calcProblem(`{${PAGE}.+1(Inconnue;Cycle).Numero}`)];
+      const pass = String(result).trim() === '20' && back.replace(/\s+/g, '') === stored && problems[0] === '' && problems[1] !== '';
+      return { pass, notes: JSON.stringify({ result, typed, back, problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_renamed_column_is_followed_in_text_fields_and_calculations',
+    description: 'Les colonnes d’ordre et de groupe renommées sont réécrites dans le maillon d’une variable de champ texte (« #VsInstances.+1(Date;Cycle).Titre » devient « #VsInstances.+1(Quand;Serie).Intitule ») comme dans une formule, sans toucher au texte autour ni à un maillon déjà à jour',
+    run: async (h) => {
+      await seed(h);
+      const m = SchemaRenames.createMapper(SCHEMA_OLD, SCHEMA_NEW, {});
+      const trigger = Variables.triggerChar();
+      const text = SchemaRenames.rewriteText(`Après : #${PAGE}.${NEXT}.Titre, et #${PAGE}.Titre.`, m, trigger);
+      const formula = SchemaRenames.rewriteFormula(`{${PAGE}.${NEXT}.Numero}*2`, m);
+      const same = SchemaRenames.createMapper(SCHEMA_OLD, SCHEMA_OLD, {});
+      const untouched = SchemaRenames.rewriteText(`Après : #${PAGE}.${NEXT}.Titre`, same, trigger);
+      const pass = text.text === `Après : #${PAGE}.+1(Quand;Serie).Intitule, et #${PAGE}.Intitule.` && formula.text === `{${PAGE}.+1(Quand;Serie).Numero}*2` && untouched.count === 0;
+      return { pass, notes: JSON.stringify({ text, formula, untouched }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_every_export_writes_the_neighbor_row',
+    description: 'Le Word, l’OpenDocument, le Markdown et le HTML d’une ligne écrivent la ligne suivante de la série pour « +1(Date;Cycle).Titre » (« Séance 2 » pour la ligne 2), et rien de plus au bout de la série (la variable est vide, la phrase finit sur « Prochaine :. »)',
+    run: async (h) => {
+      await seed(h);
+      await ExportCommon.ensureJsZipLoaded();
+      await DocxExport.ensureDocxLibLoaded();
+      const html = `<p>Prochaine : ${badgeHtml(PAGE, `${NEXT}.Titre`)}.</p>`;
+      const noHeaderFooter = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      const docxText = async id => {
+        const { blob } = await DocxExport.getDocxBlobForRecord(html, PAGE, recordOf(id), '', noHeaderFooter, null);
+        const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+        return new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml').documentElement.textContent;
+      };
+      const odtText = async id => {
+        const made = await OdtExport.getOdtBlobForRecord(html, PAGE, recordOf(id), '', noHeaderFooter, null);
+        const zip = await JSZip.loadAsync(await (made.blob || made).arrayBuffer());
+        return new DOMParser().parseFromString(await zip.file('content.xml').async('string'), 'application/xml').documentElement.textContent;
+      };
+      const markdownText = async id => (await MarkdownExport.getMarkdownBlobForRecord(html, PAGE, recordOf(id), '', noHeaderFooter)).blob.text();
+      const htmlText = async id => (await HtmlExport.getHtmlBlobForRecord(html, PAGE, recordOf(id), '', noHeaderFooter, {})).blob.text();
+      const got = {
+        docx: [await docxText(2), await docxText(1)],
+        odt: [await odtText(2), await odtText(1)],
+        markdown: [await markdownText(2), await markdownText(1)],
+        html: [await htmlText(2), await htmlText(1)],
+      };
+      const has = (text, expected) => text.indexOf(expected) !== -1;
+      // Au bout de la série la variable est vide : l'espace qui la précédait tombe comme pour toute variable vide, la phrase finit sur « Prochaine :. ».
+      const empty = text => /Prochaine :\s?\./.test(text) && !/Séance/.test(text);
+      const pass = has(got.docx[0], 'Prochaine : Séance 2.') && empty(got.docx[1]) && has(got.odt[0], 'Prochaine : Séance 2.') && empty(got.odt[1])
+        && has(got.markdown[0], 'Prochaine : Séance 2.') && empty(got.markdown[1]) && has(got.html[0], 'Prochaine : Séance 2.') && empty(got.html[1].replace(/[\s\S]*<body>/, ''));
+      return { pass, notes: JSON.stringify({ docx: got.docx.map(t => t.slice(0, 80)), odt: got.odt.map(t => t.slice(0, 80)), markdown: got.markdown, html: got.html.map(t => t.slice(-120)) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varSeries = cases;
 })();

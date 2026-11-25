@@ -1086,7 +1086,8 @@
       const everywhere = [title, reference, lines, tags].every(s => s.panels === 1 && s.condition && s.condition.enabled);
       const checks = {
         everywhere,
-        title: !title.linked.enabled && title.loop.enabled && !title.list.enabled,
+        // « Autres colonnes de la même ligne, ou ligne suivante ou précédente » : ouverte aussi sur une colonne ordinaire depuis le 24/11 (la ligne suivante d'une série, js/variable-linked-attrs.js).
+        title: title.linked.enabled && title.loop.enabled && !title.list.enabled,
         reference: reference.linked.enabled && !reference.list.enabled,
         lines: lines.loop.enabled && !lines.list.enabled,
         tags: tags.list.enabled && tags.loop.enabled,
