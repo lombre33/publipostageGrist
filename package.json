@@ -130,13 +130,13 @@
     },
     "carte": {
       "fixes": {
-        "kit/ambiance-message": "./kit/js/ambiance-message.js?v=6a20f9d",
-        "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=6a20f9d",
-        "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=6a20f9d",
-        "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=6a20f9d",
+        "kit/ambiance-message": "./kit/js/ambiance-message.js?v=4774a99",
+        "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=4774a99",
+        "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=4774a99",
+        "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=4774a99",
         "kit/i18n": "./kit/js/i18n.js",
-        "kit/names-update": "./kit/js/names-update/index.js?v=6a20f9d",
-        "kit/violations-pose": "./kit/js/violations-pose.js?v=6a20f9d"
+        "kit/names-update": "./kit/js/names-update/index.js?v=4774a99",
+        "kit/violations-pose": "./kit/js/violations-pose.js?v=4774a99"
       },
       "paquets": [
         "prosemirror-model",
