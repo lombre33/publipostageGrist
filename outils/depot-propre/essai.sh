@@ -72,9 +72,12 @@ HTML
   git init -q -b main "$T/kit-src"
   (
     cd "$T/kit-src"
-    mkdir -p css js/synchro/logic test
+    mkdir -p css js/synchro/logic js/names-update test
     echo '.kit { color: #000; }' > css/tokens.css
-    for f in ambiance-message ambiance-pose correcteurs-message correcteurs-pose violations-message violations-pose once; do echo "export default '$f';" > "js/$f.js"; done
+    for f in ambiance-message ambiance-pose correcteurs-message correcteurs-pose violations-message violations-pose once dom i18n host color-strings modal-base; do echo "export default '$f';" > "js/$f.js"; done
+    # La mise à jour des noms (kit 0.29.1, consigne 104 de GFS) : son point d'entrée, son noyau, sa fenêtre, ses textes et sa feuille de style, que controles.mjs attend dès que le code cite le kit.
+    for f in index run plan window strings; do echo "export default '$f';" > "js/names-update/$f.js"; done
+    echo '#nu-modal { z-index: 2100; }' > css/names-update.css
     # Le moteur de partage du kit 0.23.0 (js/synchro) : l'app ne l'importe pas, et ses notes citent par son prénom la personne qui a demandé le widget (KIT_RETIRES de publier.sh : il ne part pas, sinon controles.mjs refuserait l'envoi).
     printf '// décision d%sAntoine, le 6 novembre\nexport default 1;\n' "'" > js/synchro/logic/exports.js
     printf '# synchro\nAntoine : « un exemple ».\n' > js/synchro/README.md
@@ -312,6 +315,8 @@ vrai "une clé du navigateur nommée dans le README passe" bash -c "rm -rf '$T/m
 muter "un .gitmodules resté dans l'arbre public (il n'a pas de sous-module)" "n'a pas de sous-module" "printf '[submodule \"kit\"]\n' > .gitmodules"
 muter "un code qui cite le kit alors qu'un de ses fichiers manque" "cite le kit, mais kit/js/ambiance-pose.js est absent" "echo \"import('../kit/js/ambiance-pose.js');\" >> js/main.js; rm kit/js/ambiance-pose.js"
 muter "un code qui cite le kit alors que le relais des appels bloqués (consigne 084) manque" "cite le kit, mais kit/js/violations-pose.js est absent" "echo \"import('../kit/js/violations-pose.js');\" >> js/main.js; rm kit/js/violations-pose.js"
+muter "un code qui cite le kit alors que la fenêtre de mise à jour des noms (consigne 104) manque" "cite le kit, mais kit/js/names-update/window.js est absent" "echo \"import('../kit/js/names-update/index.js');\" >> js/main.js; rm kit/js/names-update/window.js"
+muter "un code qui cite le kit alors que la feuille de style de la fenêtre des noms manque" "cite le kit, mais kit/css/names-update.css est absent" "echo \"import('../kit/js/names-update/index.js');\" >> js/main.js; rm kit/css/names-update.css"
 vrai "un code qui cite le kit, ses fichiers présents, passe" bash -c "rm -rf '$T/mut'; cp -a '$P' '$T/mut'; rm -rf '$T/mut/.git'; echo \"import('../kit/js/ambiance-pose.js');\" >> '$T/mut/js/main.js'; node '$C' '$T/mut' --version 1.0.0-beta.2 | grep -q ' 0 erreur'"
 # La page qui cite la copie de l'éditeur (sa carte « gfs-carte-copie », consigne 066 de GFS) : le module cité, les licences et le manifeste doivent être dans l'arbre, sinon la case « Éditeur hors ligne » rendrait une page sans éditeur.
 # (La carte est un script en ligne : la politique de sécurité de la page en porte l'empreinte, que le petit script pose avec elle.)

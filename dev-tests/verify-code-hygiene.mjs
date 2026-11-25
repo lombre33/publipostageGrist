@@ -1966,7 +1966,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // Dans GFS, la personne choisit une ambiance (Grist Factory, Pop, Papier, Brut, Néon, ou sa couleur) : js/gfs-ambiance.js pose ses jetons sur <html> et les feuilles les lisent. Rien de tout cela ne casse un test
 // fonctionnel quand il se défait : une couleur écrite en dur ne suit simplement pas l'ambiance, un jeton lu sans repli casse la page hors de GFS, un second lien de GFS dans le cadre prend les réponses du premier. Ce
 // contrôle garde les cinq règles : (1) le kit est un sous-module (.gitmodules + gitlink) dont la carte d'importation de index.html ne nomme que `kit/ambiance-message`, `kit/ambiance-pose` et, depuis la consigne 068 (les
-// correcteurs du navigateur coupés par le bouton « LanguageTool » de GFS), `kit/correcteurs-message` et `kit/correcteurs-pose`, depuis la consigne 084 (le relais des appels bloqués) `kit/violations-pose` (la pose importe elle-même `violations-message.js` et `once.js` par un chemin relatif : une seule adresse chacun, donc pas d'entrée), à l'empreinte du gitlink ;
+// correcteurs du navigateur coupés par le bouton « LanguageTool » de GFS), `kit/correcteurs-message` et `kit/correcteurs-pose`, depuis la consigne 084 (le relais des appels bloqués) `kit/violations-pose` (la pose importe elle-même `violations-message.js` et `once.js` par un chemin relatif : une seule adresse chacun, donc pas d'entrée), depuis la consigne 104 (la fenêtre commune de mise à jour des noms) `kit/names-update` et `kit/i18n` (celle-ci SANS `?v` : c'est l'adresse que la fenêtre importe par `../i18n.js`, et une seule adresse veut une seule instance, celle dont l'app règle la langue), à l'empreinte du gitlink ;
 // (2) rien n'importe un autre module du kit (js/gfs-correcteurs.js ne prend que la pose, jamais `kit/js/correcteurs.js`, ni js/gfs-violations.js jamais `kit/js/violations.js`, qui démarreraient un second lien) ; (3) css/gfs-ambiance.css n'a aucune règle hors `:root[data-gfs-ambiance]` ou `:root[data-gfs-forme]` (sans ambiance, elle ne change rien) ; (4) un jeton de forme se lit avec
 // sa valeur d'origine en repli, ceux de la mise en page de GFS ne se lisent jamais, et `.pp-print-host` (l'impression : ce que l'app produit) remet à leur repli tous ceux que les feuilles lisent ; (5) aucune couleur
 // (#rrggbb, rgb(), hsl(), nom) n'est écrite en dur dans css/ ni extensions/ - hors définition de jeton et hors repli de `var(--x, #fff)` - sans règle de dev-tests/ambiance-exceptions.json qui dit pourquoi, et
@@ -2004,9 +2004,16 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const importMap = (() => { try { return JSON.parse(importMapText(index)).imports; } catch (e) { return {}; } })();
   const kitEntries = Object.entries(importMap).filter(([name]) => name.startsWith('kit/'));
   const copyKitEntries = (() => { try { return Object.entries(JSON.parse(copyMapText(index)).imports).filter(([name]) => name.startsWith('kit/')); } catch (e) { return []; } })(); // la carte de la copie de l'éditeur (066) porte les mêmes
-  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message`, `kit/ambiance-pose`, `kit/correcteurs-message`, `kit/correcteurs-pose` et `kit/violations-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
+  const pin7 = pin.slice(0, 7);
+  const expectedKit = [
+    ...['ambiance-message', 'ambiance-pose', 'correcteurs-message', 'correcteurs-pose'].map(name => [`kit/${name}`, `./kit/js/${name}.js?v=${pin7}`]),
+    ['kit/i18n', './kit/js/i18n.js'], // sans ?v : la même adresse que `../i18n.js` dans la fenêtre des noms, donc la même instance (consigne 104)
+    ['kit/names-update', `./kit/js/names-update/index.js?v=${pin7}`],
+    ['kit/violations-pose', `./kit/js/violations-pose.js?v=${pin7}`],
+  ];
+  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message`, `kit/ambiance-pose`, `kit/correcteurs-message`, `kit/correcteurs-pose`, `kit/i18n` (sans ?v), `kit/names-update` et `kit/violations-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
     pin !== '' && /\[submodule "kit"\]\s+path = kit\s+url = https:\/\/github\.com\/lombre33\/grist-factory-kit\.git/.test(modules)
-      && JSON.stringify(kitEntries) === JSON.stringify(['ambiance-message', 'ambiance-pose', 'correcteurs-message', 'correcteurs-pose', 'violations-pose'].map(name => [`kit/${name}`, `./kit/js/${name}.js?v=${pin.slice(0, 7)}`]))
+      && JSON.stringify(kitEntries) === JSON.stringify(expectedKit)
       && JSON.stringify(copyKitEntries) === JSON.stringify(kitEntries),
     JSON.stringify({ pin: pin.slice(0, 7), kitEntries, copyKitEntries }));
 

@@ -63,8 +63,8 @@
     https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
     https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
     https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
-    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-c/RaE/NMLwhbIqtrdmjl9RCu79OAuzu3vCnqyiaF9Zs='
-    'sha256-T5mKluScfRtuj0P/t6/XPNGRtl1KicJ00NJXmuWrmxk=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
+    'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-KIZ4j7hybLmtOJEselE4MEU3gUkEFffZEC8m7667GaE='
+    'sha256-iq6CQ+DhWcuZ+ya2pU8u2kM18gj05wwcnj2Ixs9B/bg=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
     'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-Ju+vNoncsiRhUbNSxr1nwqCkvJGIjcELvN5FaeZc+xw=';
   object-src 'none'; base-uri 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; form-action 'none';
   default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:;
@@ -99,9 +99,10 @@
      a chaque demande (cache de dix minutes) vers la derniere version publiee : sans ces entrees, une version nouvelle de linkifyjs ou de floating-ui, publiee OU VOLEE sur npm, se serait chargee
      dans l'editeur le jour meme, avec l'acces complet au document. Chacune renvoie vers la version exacte que l'adresse flottante donnait le 10/11 (meme fichier final, meme texte, cache immuable).
      outils/empreintes-editeur.mjs --verifier refuse toute adresse flottante du parcours ; dev-tests/verify-code-hygiene.mjs garde le releve hors ligne.
-     Les cinq premieres entrees sont celles du kit de Grist Factory (sous-module kit/ ; consigne 041 de GFS : l'ambiance choisie dans GFS, consigne 068 : les correcteurs du navigateur coupes, consigne 084 : le relais des appels bloques) : un module du kit n'a qu'UNE adresse par page
+     Les sept premieres entrees sont celles du kit de Grist Factory (sous-module kit/ ; consigne 041 de GFS : l'ambiance choisie dans GFS, consigne 068 : les correcteurs du navigateur coupes, consigne 084 : le relais des appels bloques, consigne 104 : la fenetre commune de mise a jour des noms) : un module du kit n'a qu'UNE adresse par page
      (kit/js/once.js le dit dans la console sinon), donc js/gfs-link.js (les lecteurs des messages), js/gfs-ambiance.js, js/gfs-correcteurs.js et js/gfs-violations.js (les poses) les importent par ce nom, jamais par un chemin (la pose des violations importe elle-meme kit/js/violations-message.js et kit/js/once.js, par un chemin relatif : une seule adresse chacun, donc pas d'entree). Le ?v= est le debut du commit que le depot
-     epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec.
+     epingle (git ls-files -s kit) : il change avec lui, dans la liste (gfs.carte.fixes) comme ici, et l'empreinte de la carte dans la politique ci-dessus avec. Seule kit/i18n n'en a pas : la fenetre des noms (kit/names-update) importe ../i18n.js, c'est-a-dire kit/js/i18n.js tout court, et js/names-update.js (la passerelle de la fenetre)
+     y regle la langue de l'app : une seule adresse, donc une seule instance, celle que la fenetre lit.
      Depuis la consigne 066 de GFS, la page porte DEUX cartes en donnees : celle-ci (gfs-carte-cdn) et gfs-carte-copie, les memes noms vers les modules de vendor/editeur/ (la copie figee de l'editeur, construite
      par `node kit/outils/bibliotheques.mjs --copies` d'apres les memes versions). Le script qui les suit en pose UNE seule dans la page, avant tout le reste (Firefox n'en prend qu'une) : la copie quand l'adresse
      dit copie=editeur (GFS la met quand la personne l'a choisie) ou quand la cle pp_editeur_copie du navigateur vaut « copie » (Reglages > Theme > Editeur hors ligne, js/settings.js), le CDN sinon.
@@ -109,11 +110,13 @@
 <script type="application/json" id="gfs-carte-cdn">
 {
   "imports": {
-    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=ed0a575",
-    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=ed0a575",
-    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=ed0a575",
-    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=ed0a575",
-    "kit/violations-pose": "./kit/js/violations-pose.js?v=ed0a575",
+    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=d061fbf",
+    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=d061fbf",
+    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=d061fbf",
+    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=d061fbf",
+    "kit/i18n": "./kit/js/i18n.js",
+    "kit/names-update": "./kit/js/names-update/index.js?v=d061fbf",
+    "kit/violations-pose": "./kit/js/violations-pose.js?v=d061fbf",
     "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
@@ -177,11 +180,13 @@
 <script type="application/json" id="gfs-carte-copie">
 {
   "imports": {
-    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=ed0a575",
-    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=ed0a575",
-    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=ed0a575",
-    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=ed0a575",
-    "kit/violations-pose": "./kit/js/violations-pose.js?v=ed0a575",
+    "kit/ambiance-message": "./kit/js/ambiance-message.js?v=d061fbf",
+    "kit/ambiance-pose": "./kit/js/ambiance-pose.js?v=d061fbf",
+    "kit/correcteurs-message": "./kit/js/correcteurs-message.js?v=d061fbf",
+    "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=d061fbf",
+    "kit/i18n": "./kit/js/i18n.js",
+    "kit/names-update": "./kit/js/names-update/index.js?v=d061fbf",
+    "kit/violations-pose": "./kit/js/violations-pose.js?v=d061fbf",
     "https://esm.sh/@floating-ui/dom@^1.0.0?target=es2022": "https://esm.sh/@floating-ui/dom@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.6.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
     "https://esm.sh/@floating-ui/core@^1.8.0?target=es2022": "https://esm.sh/@floating-ui/core@1.8.0?target=es2022",
