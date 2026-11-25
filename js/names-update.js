@@ -11,6 +11,8 @@
 // Le module du kit (une dizaine de fichiers) ne se charge que quand il y a quelque chose à faire : js/schema-columns.js n'appelle `run` que pour un document qui porte une table du widget sous son nom d'avant.
 //   NamesUpdateBridge.run({ readSchema, plan, apply, readOnly }) -> Promise<{ state, held, … }>   l'état du kit : none, wait, blocked, done, already ou skipped (voir kit/js/names-update/index.js) ; `wait` aussi quand le module du kit ne se charge pas
 //   NamesUpdateBridge.proveOwner() -> Promise<true | false | null>   la preuve de propriété seule (essais)
+//   NamesUpdateBridge.announceStale() -> Promise<boolean>   « Rechargez la page » (consigne 104 f) : js/schema-columns.js l'appelle quand une écriture échoue deux fois sur des noms qui ont changé ailleurs (un autre onglet, une autre personne ou une restauration a renommé
+//     les tables du document depuis que cette page les a lues). Une seule fenêtre par page ; « Fermer » laisse copier ce que la page n'avait pas enregistré. Vrai quand la fenêtre s'est ouverte.
 //   NamesUpdateBridge.useKitForTests(chargeur | null) -> remplace le chargement du kit par `chargeur()` -> Promise<{ NamesUpdate, kitI18n }> (essais : le produit ne l'appelle jamais) ; null le rend
 const NamesUpdateBridge = (function () {
   const APP_NAME = 'Publipostage+';
@@ -96,5 +98,27 @@ const NamesUpdateBridge = (function () {
     }
   }
 
-  return { run, proveOwner, useKitForTests };
+  // « Rechargez la page » : la fenêtre simple du widget (js/dialogs.js), un seul bouton qui recharge, « Fermer » à côté. Elle ne s'ouvre qu'une fois par page : une personne qui l'a fermée pour copier son texte n'est pas relancée à chaque essai d'écriture,
+  // l'erreur de l'écriture (code NAMES_CHANGED_ELSEWHERE) part de toute façon chez l'appelant. Recharger le cadre du widget suffit : les noms se lisent au démarrage.
+  let staleShown = false;
+  async function announceStale() {
+    if (staleShown) return false;
+    staleShown = true;
+    if (typeof Dialogs === 'undefined' || !Dialogs || typeof Dialogs.choose !== 'function') return false;
+    try {
+      const choice = await Dialogs.choose({
+        title: I18n.t('names.stale.title'),
+        message: I18n.t('names.stale.message'),
+        choices: [{ value: 'reload', label: I18n.t('names.stale.reload'), primary: true }],
+        cancelLabel: I18n.t('common.close'),
+      });
+      if (choice === 'reload') window.location.reload();
+      return true;
+    } catch (e) {
+      console.warn('[NamesUpdate] la fenêtre « Rechargez la page » ne s\'ouvre pas', e);
+      return false;
+    }
+  }
+
+  return { run, proveOwner, useKitForTests, announceStale };
 })();

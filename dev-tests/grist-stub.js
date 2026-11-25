@@ -268,10 +268,11 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   // (refreshColumnTypes, cf. js/grist-api.js) - un seul appel idempotent suffit,
   // reconstruit tout à chaque fois à partir de state.tables/columns/choices, avec les identifiants de ligne de metaIds ci-dessus.
   // Les colonnes d'une table que les métadonnées de Grist décrivent : celles de son schéma (state.columns) ; pour une table du widget, seulement quand la page joue un document que le widget
-  // renomme (`__schemaNames` = « migrate », groupe schemaMigration) : les clés de ses lignes, toutes en Texte. Dans les autres modes les tables du widget n'ont pas de colonnes dans les métadonnées, comme avant.
+  // renomme (`__schemaNames` = « migrate », groupe schemaMigration) ou que le faux Grist est « strict » (setStrictTables : le vrai Grist décrit toutes les colonnes) : les clés de ses lignes, toutes en Texte. Dans les autres modes
+  // les tables du widget n'ont pas de colonnes dans les métadonnées, comme avant.
   function metaColumns(t) {
     if (state.columns[t]) return state.columns[t];
-    if (window.__schemaNames !== 'migrate' || !/^Publipostage_/.test(t) || !state.rows[t]) return {};
+    if ((window.__schemaNames !== 'migrate' && !state.strictTables) || !/^Publipostage_/.test(t) || !state.rows[t]) return {};
     const out = {};
     Object.keys(state.rows[t]).forEach(colId => { if (colId !== 'id' && colId !== 'manualSort') out[colId] = 'Text'; });
     return out;
@@ -680,12 +681,39 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
     actions.forEach(a => state.deniedWrites.push(a));
     throw new Error('Blocked by access rules : ' + (state.deniedTables[refused[1]] ? 'ce compte ne peut pas écrire dans ' + refused[1] : 'ce compte ne peut pas modifier la structure du document'));
   }
+  // Le vrai moteur ne devine pas : une action sur une table qui n'existe pas (renommée ailleurs, supprimée) lève « [Sandbox] KeyError 'table' », et le lot entier est refusé AVANT que rien ne soit écrit (consigne 104 f de GFS ; grist-static
+  // 0.1.6, lui, ne rend que « Error », cf. labo-grist-reel/probe-noms-introuvables.mjs). Par défaut le stub reste indulgent pour une table du widget qu'il ne connaît pas (AddRecord la crée, UpdateRecord l'ignore, fetchTable rend une table vide) :
+  // `state.strictTables` (vrai) le rend exigeant pour les tables du widget, en écriture comme en lecture (« Table not found "table" »). Une table créée ou renommée plus tôt dans le même lot existe pour la suite du lot.
+  // `state.failWritesTo` { table : message } refuse tout lot qui touche cette table (le moteur qui refuse malgré des noms justes), avant d'écrire ou de journaliser quoi que ce soit.
+  // `state.writeAttempts` compte les lots reçus, refusés ou non : de quoi prouver qu'une page n'a PAS appelé Grist (un lot refusé n'entre pas dans le journal des actions).
+  // `setStrictTables(vrai)` le rend exigeant ET fait décrire aux métadonnées toutes les colonnes des tables du widget, comme le vrai Grist (par défaut elles n'en ont pas : metaColumns).
+  state.strictTables = false;
+  state.failWritesTo = {};
+  state.writeAttempts = 0;
+  function setStrictTables(on) { state.strictTables = on !== false; rebuildColumnMeta(); }
+  function checkStrict(actions) {
+    if (!state.strictTables) return;
+    const known = new Set(Object.keys(state.rows));
+    for (const action of actions) {
+      const [type, tableId] = action;
+      if (type === 'AddTable') { known.add(tableId); continue; }
+      if (isWidgetTable(tableId) && !known.has(tableId)) throw new Error("[Sandbox] KeyError '" + tableId + "'");
+      if (type === 'RenameTable' && typeof action[2] === 'string') known.add(action[2]);
+    }
+  }
+  function checkInjectedFailures(actions) {
+    const refused = actions.find(a => Object.prototype.hasOwnProperty.call(state.failWritesTo, a[1]));
+    if (refused) throw new Error(state.failWritesTo[refused[1]]);
+  }
   async function applyUserActions(actions) {
+    state.writeAttempts++;
     if (state.viewer) {
       actions.forEach(a => state.deniedWrites.push(a));
       throw new Error('Blocked by access rules : ce compte ne peut pas modifier le document');
     }
     checkDenied(actions);
+    checkStrict(actions);
+    checkInjectedFailures(actions);
     actions.forEach(a => state.actionLog.push(a));
     // Une écriture dans la table des modèles vient d'avoir lieu : la prochaine lecture de cette table peut échouer (failReadBackOnce). Synchrone, aucun tour de microtâche de plus.
     if (actions.some(a => a[1] === NAMES.models && (a[0] === 'UpdateRecord' || a[0] === 'AddRecord'))) state.modelsWriteSeen = true;
@@ -959,6 +987,7 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   // Ce que rend fetchTable : une copie de la table, ou - une seule fois, quand failReadBackOnce l'a armé et qu'une écriture de la table des modèles a eu lieu depuis - une panne
   // de réseau simulée. Synchrone : l'appelant (une fonction async) garde les mêmes tours de microtâche qu'avant.
   function readTable(tableId) {
+    if (state.strictTables && isWidgetTable(tableId) && !state.rows[tableId]) throw new Error('Table not found "' + tableId + '"');
     if (tableId === NAMES.models && state.failModelsFetches) throw new Error('Réseau coupé (simulé par failModelsFetches)');
     if (tableId === NAMES.models && state.failNextModelsFetchAfterWrite && state.modelsWriteSeen) {
       state.failNextModelsFetchAfterWrite = false; state.modelsWriteSeen = false;
@@ -1116,11 +1145,11 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
     return server;
   }
 
-  window.__gristStub = { names: NAMES, installUploadServer, state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure };
+  window.__gristStub = { names: NAMES, installUploadServer, state, setViewer, setVariables, setColumnLabels, setColumnFormats, setColumnRules, setDocumentSettings, setAttachments, setFormulaColumn, setRows, setHiddenColumns, setAccessLevel, setWidgetOptions, saveOptions, revertOptions, setUserEmail, setUserName, setDocId, renameColumn, renameTable, deleteColumn, dropTable, fireRecord, applyUserActions, getActionLog, clearActionLog, countActions, countSaves, remoteWrite, getRow, dropColumn, resetPages, readPages, setLatency, resetInFlightStats, failReadBackOnce, setViewRows, setViewFailure, fireViewChange, denyTable, denyStructure, setStrictTables };
   // Un essai qui change le document du faux Grist APRÈS le chargement des scripts de la page joue un acteur du dehors (un autre widget, une autre personne, un autre onglet) : ce que l'ouverture met en commun (js/open-reads.js : la
   // liste des tables, les métadonnées, le jeton de lecture) serait périmé, et les lectures qui suivent le liraient d'avant le changement. L'ouverture est donc finie dès que l'essai change le document par ces fonctions (consigne 095
   // de GFS). Avant le chargement (la graine de __preSeedGristStub), OpenReads n'existe pas encore : rien à faire. Un essai qui écrit dans `state` sans elles appelle `OpenReads.end()` lui-même.
-  ['setVariables', 'setColumnLabels', 'setColumnFormats', 'setColumnRules', 'setDocumentSettings', 'setAttachments', 'setFormulaColumn', 'setRows', 'setHiddenColumns', 'renameColumn', 'renameTable', 'deleteColumn', 'dropTable', 'dropColumn', 'resetPages'].forEach(name => {
+  ['setVariables', 'setColumnLabels', 'setColumnFormats', 'setColumnRules', 'setDocumentSettings', 'setAttachments', 'setFormulaColumn', 'setRows', 'setHiddenColumns', 'renameColumn', 'renameTable', 'deleteColumn', 'dropTable', 'dropColumn', 'resetPages', 'setStrictTables'].forEach(name => {
     const change = window.__gristStub[name];
     if (typeof change !== 'function') return;
     window.__gristStub[name] = function () {

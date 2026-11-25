@@ -14,6 +14,10 @@
 // RenameColumn, puis le libellé de chaque colonne, qui ne suit pas le renommage dans Grist) que Grist rejoue en entier ou pas du tout, et relit les noms pour le vérifier. Une table que Sync+ utilise (sa colonne `id_sync`) garde son nom d'avant, et
 // ses colonnes aussi. Tout ce que la fenêtre ne fait pas (pas propriétaire, compte Lecteur, nom d'arrivée déjà pris, deux jeux de noms à la fois, refus, « Continuer sans mettre à jour ») laisse le document à ses noms d'avant, et le traducteur
 // continue de le lire et de l'écrire sous les noms qu'il a : le renommage est une commodité, jamais une condition. Il se demande une fois par page, jamais deux.
+// Un renommage venu d'AILLEURS (un autre onglet, une autre personne, une restauration : ce que cette page a lu des noms ne vaut plus ; consigne 104 f de GFS, guide des apps 1.1 point 15) : une lecture ou une écriture de ces tables qui échoue relit
+// les noms du document et se relance UNE fois quand ils ont changé (les noms relus décident, pas le texte de l'erreur : grist-static ne rend que « Error ») ; une écriture qui échoue encore dit « Rechargez la page »
+// (NamesUpdateBridge.announceStale) et cette page n'écrit plus rien dans ses tables (un lot est rejoué en entier ou pas du tout : rien n'est resté à moitié écrit). Une table ou une colonne qui manque sans que
+// aucun nom n'ait changé (supprimée à la main), un refus d'une règle d'accès et la création d'une table gardent l'erreur de Grist, sans relance.
 // Deux interrupteurs : englishOnDisk (les noms que prend une table ou une colonne créée, et celui que l'on préfère quand un document porte les deux) et renameDocuments (la fenêtre ci-dessus ; allumé dans le widget tel qu'il est servi).
 // Les essais posent `globalThis.__schemaNames` avant le chargement (dev-tests/grist-stub.js, dev-tests/unit-harness.mjs) : 'legacy' éteint les deux (le faux Grist porte les noms d'avant),
 // 'english' allume le premier seul, 'migrate' les deux (pour essayer la fenêtre elle-même) ; absent (le widget en vrai), les deux sont allumés.
@@ -150,6 +154,8 @@ const SchemaColumns = (function () {
   let namesRead = null;
   // Le nombre de fois que ce qui a été lu du document a été oublié (un renommage, une réunion de tables) : une lecture qui échoue et dont le document a changé depuis se retente.
   let documentEpoch = 0;
+  // Vrai dès qu'une écriture de ce widget a échoué DEUX fois sur des noms qui ont changé ailleurs : cette page ne sait plus où ranger ses données, elle n'écrit plus rien dans ses tables jusqu'au rechargement, et la personne le lit.
+  let namesChangedElsewhere = false;
 
   function real() { return grist.docApi; }
 
@@ -158,7 +164,7 @@ const SchemaColumns = (function () {
   // Oublie ce qui a été lu du document (le document a changé sous nos pieds : un renommage, une autre fenêtre).
   function forgetDocument() { tableNames = null; columnsByTable = new Map(); namesRead = null; documentEpoch++; }
   // Oublie aussi la reprise du document (essais : chaque scénario repart d'un widget qui n'a rien lu ni renommé).
-  function reset() { forgetDocument(); migration = null; migrationResult = null; lastPlan = null; }
+  function reset() { forgetDocument(); migration = null; migrationResult = null; lastPlan = null; namesChangedElsewhere = false; }
 
   // Le nom réel d'une table de la liste : celui que le document porte ; quand il porte les deux, celui que l'interrupteur préfère ; quand il n'en porte aucun
   // (ou qu'on ne sait pas encore), celui que l'interrupteur dit pour une table à créer.
@@ -419,6 +425,60 @@ const SchemaColumns = (function () {
     return { table: tableId, column, label: column === pair.legacy && pair.legacyLabel ? pair.legacyLabel : column };
   }
 
+  // --- Un renommage venu d'ailleurs (consigne 104 f) -------------------------------------------------------------------------------------------------------------------------
+
+  // Ce que dit l'erreur d'une lecture ou d'une écriture : 'gone' (le moteur parle d'un nom qui n'existe pas : « KeyError 'Nom' », « Table not found », « Invalid column »), 'other' (un message précis qui parle d'autre chose : valeur refusée,
+  // panne de réseau...) ou 'unknown' (aucun texte lisible : grist-static ne rend que « Error »). Elle ne décide pas d'une relance - les noms relus décident - elle sert à ne pas accuser un renommage quand l'erreur dit autre chose.
+  const NAME_GONE = /KeyError|not found|no such (?:table|column)|unknown (?:table|column)|invalid (?:table|column)|does not exist|introuvable/i;
+  function nameErrorKind(error) {
+    const text = String((error && error.message) || (typeof error === 'string' ? error : '') || '').trim();
+    if (NAME_GONE.test(text)) return 'gone';
+    return !text || /^error$/i.test(text) ? 'unknown' : 'other';
+  }
+
+  // L'erreur d'une écriture refusée parce que cette page ne sait plus où ranger ses données : « Rechargez la page » (le texte vient de js/i18n-texts-status.js ; sans lui, en anglais).
+  function staleError(cause) {
+    const text = typeof I18n !== 'undefined' && I18n && typeof I18n.t === 'function' ? I18n.t('names.stale.error') : 'The table names of this document changed elsewhere: reload the page.';
+    return Object.assign(new Error(text), { code: 'NAMES_CHANGED_ELSEWHERE', cause });
+  }
+  // La personne le lit dans une fenêtre (js/names-update.js) ; l'erreur, elle, part toujours chez l'appelant.
+  function announceStale() {
+    if (typeof NamesUpdateBridge === 'undefined' || !NamesUpdateBridge || typeof NamesUpdateBridge.announceStale !== 'function') return;
+    try {
+      const shown = NamesUpdateBridge.announceStale();
+      if (shown && typeof shown.catch === 'function') shown.catch(() => {});
+    } catch (e) { /* la fenêtre ne doit jamais masquer l'erreur de l'écriture */ }
+  }
+
+  // Les noms que des actions traduites visent existent-ils dans le document tel qu'il vient d'être relu ? Une table ou une colonne du widget qu'aucun nom ne retrouve (supprimée à la main) n'a pas été « renommée ailleurs » : traduite, elle
+  // reprend le nom que l'interrupteur dit pour une création, qui n'existe pas non plus. Les colonnes qu'une action crée n'ont pas à exister.
+  function targetsExist(translated) {
+    return translated.every(action => {
+      if (!byEnglish.has(action[1]) && !byLegacy.has(action[1])) return true;
+      if (!tableNames || !tableNames.has(action[1])) return false;
+      const fields = /^(?:Bulk)?(?:Add|Update)Record$/.test(action[0]) ? action[3] : null;
+      const columns = columnsByTable.get(action[1]);
+      return !fields || typeof fields !== 'object' || !columns || Object.keys(fields).every(key => columns.has(key));
+    });
+  }
+
+  // Les actions, traduites sous les noms que le document a maintenant, et ce que chacune apprendra une fois appliquée.
+  async function prepareActions(actions) {
+    const learned = [];
+    const translated = [];
+    for (const action of actions || []) translated.push(await translate(action, learned));
+    return { learned, translated };
+  }
+  async function sendActions(prepared, rest) {
+    const result = await real().applyUserActions(prepared.translated, ...rest);
+    prepared.learned.forEach(learn => learn());
+    return result;
+  }
+  // Un refus d'une règle d'accès (« Blocked by full structure access rules »...) se garde pour le constat d'une icône grisée (js/lock-diagnostic.js), même quand l'appelant l'avale (une colonne à ajouter qu'on retentera). Rend si c'était un refus.
+  function noteFailure(error) {
+    return typeof GristAPI !== 'undefined' && typeof GristAPI.noteRefusal === 'function' ? !!GristAPI.noteRefusal(error) : false;
+  }
+
   const docApi = {
     // Les tables du document, sous leurs noms anglais : une table portée sous l'ancien nom et sous le nouveau n'est rendue qu'une fois.
     async listTables(...rest) {
@@ -439,17 +499,28 @@ const SchemaColumns = (function () {
       if (!table) return real().fetchTable(name, ...rest);
       // La fenêtre de mise à jour des noms est ouverte (ou vient de l'être) : on attend le nom que la table aura.
       if (migration) await migration;
-      const epoch = documentEpoch;
+      let epoch = documentEpoch;
       let actual = actualTableIn(table, tableNames);
       let columns;
       try {
         columns = await real().fetchTable(actual, ...rest);
       } catch (e) {
-        if (tableNames) throw e;
-        await readTableNames();
+        let reread = false;
+        if (tableNames) {
+          // Les noms sont lus depuis un moment : la table a pu être renommée ailleurs (un autre onglet, une autre personne, une restauration). On les relit ; une erreur qui parle d'autre chose (une règle d'accès, le réseau) reste la sienne.
+          if (nameErrorKind(e) === 'other') throw e;
+          forgetDocument();
+          epoch = documentEpoch;
+          reread = true;
+          try { await readTableNames(); } catch (readError) { throw e; }
+        } else {
+          await readTableNames();
+        }
         const other = actualTableIn(table, tableNames);
         // Les noms viennent d'être lus : sous l'autre nom, ou sous le même quand la fenêtre a renommé le document entre-temps (le document a changé depuis le départ), on retente une fois.
         if (other === actual && epoch === documentEpoch) throw e;
+        // Relus après coup : une table qu'aucun de ses deux noms ne retrouve n'a pas été renommée, elle n'existe plus.
+        if (reread && !tableNames.has(other)) throw e;
         actual = other;
         columns = await real().fetchTable(actual, ...rest);
       }
@@ -458,21 +529,35 @@ const SchemaColumns = (function () {
     },
 
     async applyUserActions(actions, ...rest) {
-      if (migration && (actions || []).some(action => byEnglish.has(action[1]))) await migration;
-      const learned = [];
-      const translated = [];
-      for (const action of actions || []) translated.push(await translate(action, learned));
-      let result;
-      try { result = await real().applyUserActions(translated, ...rest); }
+      const touches = (actions || []).some(action => byEnglish.has(action[1]));
+      if (migration && touches) await migration;
+      // Cette page a déjà dû dire « Rechargez la page » : elle n'écrit plus rien dans les tables du widget (ni retente, ni crée une table qui existe sous un autre nom).
+      if (touches && namesChangedElsewhere) throw staleError();
+      const first = await prepareActions(actions);
+      try { return await sendActions(first, rest); }
       catch (error) {
-        // Un refus d'une règle d'accès (« Blocked by full structure access rules »…) se garde pour le constat d'une icône grisée (js/lock-diagnostic.js), même quand l'appelant l'avale (une colonne à ajouter qu'on retentera).
-        if (typeof GristAPI !== 'undefined' && typeof GristAPI.noteRefusal === 'function') GristAPI.noteRefusal(error);
-        throw error;
+        const refused = noteFailure(error);
+        // Un refus d'une règle d'accès se rejouerait tel quel ; une création de table ne se relance jamais (Grist numérote un nom pris, il ne le refuse pas) ; ce qui ne touche pas les tables du widget n'est pas notre affaire.
+        if (!touches || refused || (actions || []).some(action => action[0] === 'AddTable')) throw error;
+        // Une table ou une colonne du widget a pu changer de nom ailleurs depuis que cette page a lu les noms : relus, ils le disent. Aucun nom n'a changé (une colonne supprimée à la main) : l'erreur de Grist reste la sienne.
+        let second = null;
+        try {
+          forgetDocument();
+          const again = await prepareActions(actions);
+          if (JSON.stringify(again.translated) !== JSON.stringify(first.translated) && targetsExist(again.translated)) second = again;
+        } catch (readError) { second = null; }
+        if (!second) throw error;
+        try { return await sendActions(second, rest); }
+        catch (secondError) {
+          // Les noms ont changé et l'écriture échoue encore : cette page n'a plus la bonne image du document. Une erreur qui parle d'autre chose (une règle d'accès, une valeur refusée) reste la sienne.
+          if (noteFailure(secondError) || nameErrorKind(secondError) === 'other') throw secondError;
+          namesChangedElsewhere = true;
+          announceStale();
+          throw staleError(secondError);
+        }
       }
-      learned.forEach(learn => learn());
-      return result;
     },
   };
 
-  return { docApi, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated };
+  return { docApi, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated, isStale: () => namesChangedElsewhere };
 })();

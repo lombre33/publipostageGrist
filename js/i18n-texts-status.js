@@ -354,6 +354,11 @@ const I18nTextsStatus = {
   'firstContact.host.exports': { fr: 'les exports PDF, Word et Excel, au premier export', en: 'PDF, Word and Excel exports, on first export' },
   'firstContact.error.title': { fr: 'Le widget n’a pas pu démarrer', en: 'The widget could not start' },
   'firstContact.error.intro': { fr: 'Une erreur a arrêté le démarrage. Rechargez la page ; si elle revient, joignez le message technique ci-dessous à votre signalement.', en: 'An error stopped the widget from starting. Reload the page; if it comes back, include the technical message below when you report it.' },
+  // --- Les noms des tables ont changé ailleurs (js/schema-columns.js, js/names-update.js ; consigne 104 f de GFS) ---
+  'names.stale.title': { fr: 'Rechargez la page', en: 'Reload the page' },
+  'names.stale.message': { fr: 'Les noms des tables de ce document ont changé depuis l’ouverture de cette page : un autre onglet ou une autre personne vient de les mettre à jour. Pour ne rien abîmer, rien de plus n’est écrit d’ici. Rechargez la page pour continuer ; si vous aviez des modifications non enregistrées, copiez-les avant.', en: 'The table names of this document have changed since this page was opened: another tab or another person has just updated them. To avoid damaging anything, nothing more is written from here. Reload the page to continue; if you had unsaved changes, copy them first.' },
+  'names.stale.reload': { fr: 'Recharger la page', en: 'Reload the page' },
+  'names.stale.error': { fr: 'Les noms des tables du document ont changé ailleurs : rechargez la page.', en: 'The table names of this document changed elsewhere: reload the page.' },
   'varToolbar.style': { fr: 'Mise en forme conditionnelle', en: 'Conditional formatting' },
   'varToolbar.styleInField': { fr: 'Indisponible dans un champ de texte : il écrit une ligne sans mise en forme', en: 'Not available in a text field: it writes a plain line' },
   'varToolbar.styleCheckbox': { fr: 'Disponible pour une variable, pas pour une case conditionnelle', en: 'Available for a variable, not for a conditional checkbox' },

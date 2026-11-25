@@ -95,6 +95,9 @@ class Doc {
     this.reads = [];
     this.nextId = 1;
     this.failBundles = 0; // les prochains lots refusés en entier (un autre widget a renommé entre-temps, ou Grist refuse)
+    this.failQueue = []; // un message par essai d'écriture à venir : un texte le fait échouer avec lui, `null` le laisse passer (rien : il passe)
+    this.attempts = []; // chaque essai d'écriture reçu, réussi ou non (les lots réussis sont dans `bundles`)
+    this.strict = false; // vrai : une écriture dans une table ou une colonne qui n'existe pas échoue (« KeyError '...' », comme le moteur de Grist) au lieu d'être passée sous silence
   }
 
   labelOf(table, col) { return (this.labels[table] && this.labels[table][col]) !== undefined ? this.labels[table][col] : col; }
@@ -122,7 +125,9 @@ class Doc {
   async applyUserActions(actions) {
     const before = JSON.stringify({ tables: this.tables, labels: this.labels });
     const journaled = this.journal.length;
+    this.attempts.push(JSON.stringify(actions));
     try {
+      if (this.failQueue.length) { const next = this.failQueue.shift(); if (next) throw new Error(next); }
       if (this.failBundles > 0) { this.failBundles--; throw new Error('refusé'); }
       const result = this.applyAll(actions);
       this.bundles.push(actions);
@@ -141,6 +146,11 @@ class Doc {
     for (const action of actions) {
       this.journal.push(action);
       const table = this.tables[action[1]];
+      if (this.strict && ['AddRecord', 'UpdateRecord', 'BulkAddRecord', 'BulkUpdateRecord', 'RemoveRecord', 'BulkRemoveRecord'].includes(action[0])) {
+        if (!table) throw new Error('[Sandbox] KeyError \'' + action[1] + '\'');
+        const unknown = Object.keys(action[3] && typeof action[3] === 'object' ? action[3] : {}).find((col) => !table.cols.includes(col));
+        if (unknown) throw new Error('[Sandbox] KeyError \'' + unknown + '\'');
+      }
       if (action[0] === 'AddTable') { this.tables[action[1]] = { cols: action[2].map((c) => c.id), rows: [] }; retValues.push(null); }
       else if (action[0] === 'RenameTable') {
         if (!table) throw new Error('Table inconnue ' + action[1]);
@@ -726,6 +736,222 @@ async function main() {
     check('un serveur qui ne répond pas : un compte à rebours de 8 s est posé', timers.length === 1 && timers[0].ms === 8000, JSON.stringify(timers.map((t) => t.ms)));
     timers[0].fn();
     check('et à son échéance la preuve rend null (pas de fenêtre, l\'app continue)', (await hung) === null);
+  });
+
+  // --- Consigne 104 f : un renommage venu d'ailleurs (un autre onglet, une autre personne, une restauration) ----------------------------------------------------------------------------
+  // La page a lu les noms d'avant ; un autre onglet passe le document à l'anglais ; son écriture suivante vise des noms qui n'existent plus. Le faux document est « strict » comme le moteur de Grist (KeyError sur un nom absent, le lot entier refusé).
+  const PREF_COLS = ['Utilisateur', 'ModeleId', 'Epingle', 'Dossier', 'Replie', 'TypeExport', 'QualitePdf', 'LignesExport'];
+  const RENAME_TEMPLATES = [['RenameTable', 'Publipostage_Modeles', 'Publipostage_Templates'], ['RenameColumn', 'Publipostage_Templates', 'Nom', 'Name'], ['RenameColumn', 'Publipostage_Templates', 'Contenu', 'Content'], ['RenameColumn', 'Publipostage_Templates', 'Jeton', 'Token']];
+  const RENAME_PREFS = [['RenameTable', 'Publipostage_PreferencesModeles', 'Publipostage_TemplatePreferences'], ['RenameColumn', 'Publipostage_TemplatePreferences', 'Utilisateur', 'User'], ['RenameColumn', 'Publipostage_TemplatePreferences', 'ModeleId', 'TemplateId']];
+  // Une page qui a lu les noms d'avant d'un document strict (modèles, préférences, une table de la personne), avec un faux pont qui note les « Rechargez la page » et un faux moteur de refus d'accès.
+  async function stalePage(extra = {}) {
+    const doc = new Doc({ Publipostage_Modeles: LEGACY_COLS, Publipostage_PreferencesModeles: PREF_COLS, Missions: ['Nom'] });
+    doc.strict = true;
+    doc.tables.Publipostage_Modeles.rows.push({ id: 1, Nom: 'Facture', Contenu: '<p>a</p>', Jeton: 'tok1' });
+    const announced = [];
+    const globals = Object.assign({
+      NamesUpdateBridge: { announceStale: () => { announced.push('annonce'); return Promise.resolve(true); } },
+      GristAPI: { noteRefusal: (error) => /Blocked by/.test(String(error && error.message)) },
+    }, extra);
+    const page = fresh(doc, { englishOnDisk: true, globals });
+    await page.api.listTables();
+    await page.api.fetchTable('Publipostage_Templates');
+    return Object.assign(page, { doc, announced });
+  }
+  const failure = async (promise) => { try { await promise; return null; } catch (e) { return e; } };
+
+  await section('une écriture vers des noms renommés ailleurs : les noms sont relus, l\'écriture recommence une fois', async () => {
+    const { api, schema, doc, announced } = await stalePage();
+    await doc.applyUserActions(RENAME_TEMPLATES);
+    const before = doc.attempts.length;
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>b</p>', Token: 'tok2' }]]);
+    const tried = doc.attempts.slice(before).map((json) => JSON.parse(json)[0]);
+    check('deux essais : l\'un sous les noms d\'avant (refusé, rien d\'écrit), l\'autre sous les noms d\'aujourd\'hui', tried.length === 2 && tried[0][1] === 'Publipostage_Modeles' && tried[1][1] === 'Publipostage_Templates', JSON.stringify(tried));
+    check('le second essai porte les colonnes anglaises que le document a maintenant', same(tried[1][3], { Content: '<p>b</p>', Token: 'tok2' }), JSON.stringify(tried[1]));
+    check('la ligne a reçu l\'écriture, une seule fois', doc.tables.Publipostage_Templates.rows.length === 1 && doc.tables.Publipostage_Templates.rows[0].Content === '<p>b</p>' && doc.tables.Publipostage_Templates.rows[0].Token === 'tok2', JSON.stringify(doc.tables.Publipostage_Templates));
+    check('aucune table d\'avant ne renaît, aucune table anglaise n\'est créée en double', same(Object.keys(doc.tables).sort(), ['Missions', 'Publipostage_PreferencesModeles', 'Publipostage_Templates']), Object.keys(doc.tables));
+    check('rien n\'est annoncé : la page est à jour', announced.length === 0 && schema.isStale() === false);
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Name: 'Devis' }]]);
+    check('et l\'écriture d\'après ne coûte plus qu\'un essai (les noms relus sont gardés)', doc.attempts.length - before === 3 && doc.tables.Publipostage_Templates.rows[0].Name === 'Devis', doc.attempts.length - before);
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('la lecture, elle aussi, suit les noms d\'aujourd\'hui', same(read.Name, ['Devis']) && same(read.Token, ['tok2']), JSON.stringify(read));
+  });
+
+  await section('une colonne seule renommée ailleurs', async () => {
+    const { api, doc, announced } = await stalePage();
+    await doc.applyUserActions([['RenameTable', 'Publipostage_Modeles', 'Publipostage_Templates']]);   // la table suit déjà le nouveau nom pour cette page...
+    await api.listTables();                                                                              // ... qui le sait,
+    await api.fetchTable('Publipostage_Templates');                                                        // et lit les colonnes d'avant
+    await doc.applyUserActions([['RenameColumn', 'Publipostage_Templates', 'Nom', 'Name']]);
+    const before = doc.attempts.length;
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Name: 'Devis' }]]);
+    check('l\'écriture vers la colonne d\'avant échoue puis recommence sous le nom d\'aujourd\'hui', doc.attempts.length - before === 2 && doc.tables.Publipostage_Templates.rows[0].Name === 'Devis', doc.attempts.length - before);
+    check('sans rien annoncer', announced.length === 0);
+  });
+
+  await section('un lot de plusieurs actions sur deux tables renommées : tout est relancé, rien n\'est à moitié écrit', async () => {
+    const { api, doc, announced } = await stalePage();
+    await doc.applyUserActions([...RENAME_TEMPLATES, ...RENAME_PREFS]);
+    const before = doc.attempts.length;
+    await api.applyUserActions([
+      ['AddRecord', 'Publipostage_Templates', null, { Name: 'Contrat', Token: 'tok9' }],
+      ['AddRecord', 'Publipostage_TemplatePreferences', null, { User: 'a@b.fr', TemplateId: 1 }],
+    ]);
+    check('un essai refusé en entier, un essai accepté', doc.attempts.length - before === 2, doc.attempts.length - before);
+    check('chaque table a reçu sa ligne, une seule fois', doc.tables.Publipostage_Templates.rows.length === 2 && doc.tables.Publipostage_TemplatePreferences.rows.length === 1, JSON.stringify([doc.tables.Publipostage_Templates.rows.length, doc.tables.Publipostage_TemplatePreferences.rows.length]));
+    check('et la page n\'a rien dit', announced.length === 0);
+  });
+
+  await section('deux écritures en même temps sur une page périmée', async () => {
+    const { api, doc, announced } = await stalePage();
+    await doc.applyUserActions(RENAME_TEMPLATES);
+    await Promise.all([
+      api.applyUserActions([['AddRecord', 'Publipostage_Templates', null, { Name: 'Un' }]]),
+      api.applyUserActions([['AddRecord', 'Publipostage_Templates', null, { Name: 'Deux' }]]),
+    ]);
+    const names = doc.tables.Publipostage_Templates.rows.map((row) => row.Name).sort();
+    check('les deux lignes sont là, une fois chacune', same(names, ['Deux', 'Facture', 'Un']), names);
+    check('rien n\'est annoncé', announced.length === 0);
+  });
+
+  await section('les noms ont changé encore, ou la relance échoue aussi : « Rechargez la page », et plus rien n\'est écrit', async () => {
+    const { api, schema, doc, announced } = await stalePage({ I18n: { t: (key) => 'T:' + key } });
+    await doc.applyUserActions(RENAME_TEMPLATES);
+    doc.failQueue = [null, '[Sandbox] KeyError \'Publipostage_Templates\''];   // le premier essai échoue de lui-même (noms d'avant), le second est refusé par le moteur
+    const before = doc.attempts.length;
+    const error = await failure(api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>b</p>' }]]));
+    check('deux essais, pas trois', doc.attempts.length - before === 2, doc.attempts.length - before);
+    check('l\'erreur porte le code NAMES_CHANGED_ELSEWHERE et le texte « Rechargez la page »', !!error && error.code === 'NAMES_CHANGED_ELSEWHERE' && error.message === 'T:names.stale.error', error && error.message);
+    check('l\'erreur de Grist est gardée comme cause', !!error && !!error.cause && /KeyError/.test(error.cause.message), error && error.cause && error.cause.message);
+    check('la page le dit une fois à la personne', announced.length === 1 && schema.isStale() === true, announced.length);
+    const after = doc.attempts.length;
+    const refused = await failure(api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>c</p>' }]]));
+    check('une écriture de plus dans une table du widget est refusée SANS appeler Grist', !!refused && refused.code === 'NAMES_CHANGED_ELSEWHERE' && doc.attempts.length === after, doc.attempts.length - after);
+    check('et ne le redit pas', announced.length === 1);
+    const create = await failure(api.applyUserActions([['AddTable', 'Publipostage_Comments', [{ id: 'Text', type: 'Text' }]]]));
+    check('ni ne crée une table que la page croit manquer', !!create && create.code === 'NAMES_CHANGED_ELSEWHERE' && doc.attempts.length === after && !('Publipostage_Comments' in doc.tables) && !('Publipostage_Commentaires' in doc.tables), doc.attempts.length - after);
+    await api.applyUserActions([['AddRecord', 'Missions', null, { Nom: 'Mission 1' }]]);
+    check('les tables de la personne, elles, s\'écrivent comme avant', doc.tables.Missions.rows.length === 1 && doc.attempts.length === after + 1, doc.attempts.length - after);
+    schema.reset();
+    check('reset (essais) rend à la page ses écritures', schema.isStale() === false);
+  });
+
+  await section('ce qui n\'est pas un renommage venu d\'ailleurs garde l\'erreur de Grist, sans relance', async () => {
+    // Une colonne supprimée à la main : aucun nom n'a changé, la même écriture échouerait de la même façon.
+    const mine = await stalePage();
+    mine.doc.tables.Publipostage_Modeles.cols = mine.doc.tables.Publipostage_Modeles.cols.filter((col) => col !== 'Contenu');
+    const before = mine.doc.attempts.length;
+    const missing = await failure(mine.api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>b</p>' }]]));
+    check('colonne supprimée à la main : l\'erreur de Grist, un seul essai', !!missing && /KeyError 'Contenu'/.test(missing.message) && mine.doc.attempts.length - before === 1, missing && missing.message);
+    check('et la page ne dit rien', mine.announced.length === 0 && mine.schema.isStale() === false);
+
+    // Un refus d'une règle d'accès : rejoué, il serait refusé de nouveau.
+    const refused = await stalePage();
+    refused.doc.failQueue = ['Blocked by full structure access rules'];
+    const b2 = refused.doc.attempts.length;
+    const readsBefore = refused.doc.reads.length;
+    const blocked = await failure(refused.api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Name: 'x' }]]));
+    check('un refus d\'une règle d\'accès : un seul essai, la phrase de Grist', !!blocked && /Blocked by full structure/.test(blocked.message) && refused.doc.attempts.length - b2 === 1, blocked && blocked.message);
+    check('et aucune relecture des noms pour lui', refused.doc.reads.length === readsBefore && refused.announced.length === 0, JSON.stringify(refused.doc.reads.slice(readsBefore)));
+
+    // La création d'une table ne se relance jamais : Grist numérote un nom pris, il ne le refuse pas.
+    const creating = await stalePage();
+    creating.doc.failQueue = ['[Sandbox] KeyError \'x\''];
+    const b3 = creating.doc.attempts.length;
+    const created = await failure(creating.api.applyUserActions([['AddTable', 'Publipostage_Comments', [{ id: 'Text', type: 'Text' }]]]));
+    check('une création de table : un seul essai', !!created && creating.doc.attempts.length - b3 === 1, created && created.message);
+
+    // Une table de la personne : pas la nôtre.
+    const theirs = await stalePage();
+    theirs.doc.failQueue = ['[Sandbox] KeyError \'Mission\''];
+    const b4 = theirs.doc.attempts.length;
+    const own = await failure(theirs.api.applyUserActions([['UpdateRecord', 'Missions', 1, { Mission: 'x' }]]));
+    check('une table de la personne : un seul essai, l\'erreur telle quelle', !!own && /KeyError 'Mission'/.test(own.message) && theirs.doc.attempts.length - b4 === 1, own && own.message);
+
+    // Les noms ont changé, la relance échoue pour une autre raison : l'erreur de Grist, pas « Rechargez la page ».
+    const other = await stalePage();
+    await other.doc.applyUserActions(RENAME_TEMPLATES);
+    other.doc.failQueue = [null, 'Valeur refusée pour la colonne Content'];
+    const b5 = other.doc.attempts.length;
+    const refusedValue = await failure(other.api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: 12 }]]));
+    check('les noms ont changé mais la relance dit autre chose : cette erreur-là, sans « Rechargez la page »', !!refusedValue && refusedValue.message === 'Valeur refusée pour la colonne Content' && other.doc.attempts.length - b5 === 2 && other.announced.length === 0 && other.schema.isStale() === false, refusedValue && refusedValue.message);
+    const again = await other.api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>ok</p>' }]]);
+    check('et la page écrit encore ensuite', !!again && other.doc.tables.Publipostage_Templates.rows[0].Content === '<p>ok</p>');
+  });
+
+  await section('une lecture vers un nom renommé ailleurs recommence une fois sous le nom d\'aujourd\'hui', async () => {
+    const { api, doc } = await stalePage();
+    await doc.applyUserActions(RENAME_TEMPLATES);
+    doc.reads.length = 0;
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('la table est lue sous le nom d\'aujourd\'hui, colonnes anglaises', same(read.Name, ['Facture']) && same(read.Token, ['tok1']), JSON.stringify(read));
+    check('une lecture ratée sous l\'ancien nom, une réussie sous le nouveau', doc.reads.filter((name) => name === 'Publipostage_Modeles').length === 1 && doc.reads.filter((name) => name === 'Publipostage_Templates').length === 1, doc.reads);
+
+    // Une erreur qui parle d'autre chose (le réseau) reste la sienne : les noms ne sont pas relus.
+    const net = await stalePage();
+    const failing = net.doc.fetchTable.bind(net.doc);
+    net.doc.fetchTable = async (name) => { if (name === 'Publipostage_Modeles') { net.doc.reads.push(name); throw new Error('Failed to fetch'); } return failing(name); };
+    net.doc.reads.length = 0;
+    const down = await failure(net.api.fetchTable('Publipostage_Templates'));
+    check('une panne de réseau : son erreur, une seule lecture, aucune relecture des noms', !!down && down.message === 'Failed to fetch' && same(net.doc.reads, ['Publipostage_Modeles']), JSON.stringify(net.doc.reads));
+
+    // La table n'a pas changé de nom (elle n'existe plus) : l'erreur, sans boucle.
+    const gone = await stalePage();
+    delete gone.doc.tables.Publipostage_Modeles;
+    gone.doc.reads.length = 0;
+    const lost = await failure(gone.api.fetchTable('Publipostage_Templates'));
+    check('une table disparue (aucun de ses deux noms) : l\'erreur de Grist, une seule lecture de la table, pas de boucle', !!lost && /Invalid table Publipostage_Modeles/.test(lost.message) && gone.doc.reads.filter((name) => /^Publipostage_/.test(name)).length === 1, JSON.stringify([lost && lost.message, gone.doc.reads]));
+  });
+
+  await section('NamesUpdateBridge.announceStale : « Rechargez la page »', async () => {
+    const make = (answer, { dialogs = true } = {}) => {
+      const spy = { asked: [], reloads: 0, keys: [] };
+      const globals = {
+        I18n: { t: (key) => { spy.keys.push(key); return 'T:' + key; } },
+        window: { location: { reload: () => { spy.reloads++; } } },
+        console: { warn: (...args) => spy.keys.push('warn') },
+      };
+      if (dialogs) globals.Dialogs = { choose: async (options) => { spy.asked.push(options); return typeof answer === 'function' ? answer() : answer; } };
+      const ctx = createContext(globals);
+      loadScript(ctx, 'js/names-update.js');
+      return { spy, bridge: evalIn(ctx, 'NamesUpdateBridge') };
+    };
+    const reload = make('reload');
+    const shown = await reload.bridge.announceStale();
+    check('une fenêtre simple : le titre « Rechargez la page », le message, un bouton qui recharge, « Fermer » à côté', shown === true && reload.spy.asked.length === 1 && reload.spy.asked[0].title === 'T:names.stale.title' && reload.spy.asked[0].message === 'T:names.stale.message' && same(reload.spy.asked[0].choices, [{ value: 'reload', label: 'T:names.stale.reload', primary: true }]) && reload.spy.asked[0].cancelLabel === 'T:common.close', JSON.stringify(reload.spy.asked));
+    check('« Recharger la page » recharge la page', reload.spy.reloads === 1, reload.spy.reloads);
+    const again = await reload.bridge.announceStale();
+    check('une seule fenêtre par page : la seconde demande ne rouvre rien', again === false && reload.spy.asked.length === 1 && reload.spy.reloads === 1, JSON.stringify([again, reload.spy.asked.length]));
+    const close = make(null);
+    await close.bridge.announceStale();
+    check('« Fermer » laisse la page telle quelle (la personne copie ce qu\'elle n\'avait pas enregistré)', close.spy.asked.length === 1 && close.spy.reloads === 0, close.spy.reloads);
+    const bare = make('reload', { dialogs: false });
+    check('sans fenêtre simple (page incomplète) : rien n\'est ouvert, aucune exception', (await bare.bridge.announceStale()) === false && bare.spy.reloads === 0);
+    const broken = make(() => { throw new Error('boum'); });
+    check('une fenêtre qui échoue ne casse rien', (await broken.bridge.announceStale()) === false && broken.spy.reloads === 0 && broken.spy.keys.includes('warn'), JSON.stringify(broken.spy.keys));
+  });
+
+  await section('SchemaColumns -> NamesUpdateBridge : l\'annonce, avec le vrai pont', async () => {
+    // La page entière, vraie : le traducteur (js/schema-columns.js) et le pont (js/names-update.js), une fenêtre simple et un rechargement notés.
+    const doc = new Doc({ Publipostage_Modeles: LEGACY_COLS });
+    doc.strict = true;
+    doc.tables.Publipostage_Modeles.rows.push({ id: 1, Nom: 'Facture', Jeton: 'tok1' });
+    const spy = { asked: [], reloads: 0 };
+    const globals = { I18n: { t: (key) => 'T:' + key, getLang: () => 'fr' }, window: { location: { reload: () => { spy.reloads++; } } }, Dialogs: { choose: async (options) => { spy.asked.push(options); return 'reload'; } } };
+    const ctx = createContext(Object.assign({ grist: { docApi: doc }, console: { warn() {}, log() {}, error() {} } }, globals));
+    loadScript(ctx, 'js/schema-columns.js');
+    loadScript(ctx, 'js/names-update.js');
+    evalIn(ctx, 'SchemaColumns.setEnglishOnDisk(true)');
+    evalIn(ctx, 'SchemaColumns.setRenameDocuments(false)');
+    const api = evalIn(ctx, 'SchemaColumns.docApi');
+    await api.listTables();
+    await api.fetchTable('Publipostage_Templates');
+    await doc.applyUserActions(RENAME_TEMPLATES);
+    doc.failQueue = [null, '[Sandbox] KeyError \'Publipostage_Templates\''];
+    const error = await failure(api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Name: 'Devis' }]]));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    check('l\'écriture échoue avec le code NAMES_CHANGED_ELSEWHERE', !!error && error.code === 'NAMES_CHANGED_ELSEWHERE', error && error.message);
+    check('la fenêtre « Rechargez la page » s\'est ouverte une fois, et le bouton a rechargé la page', spy.asked.length === 1 && spy.asked[0].title === 'T:names.stale.title' && spy.reloads === 1, JSON.stringify([spy.asked.length, spy.reloads]));
   });
 
   await section('planRenames : le plan seul', async () => {
