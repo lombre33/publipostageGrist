@@ -13,6 +13,9 @@
 //   window.__gfsStub.natives : les copies figées que GFS donne des bibliothèques natives de l'app (contrats 5.2 point 12, consigne 065) : `{ id: { version, src, integrite, forme } }` pour celles dont la personne a mis la fonction en « copie
 //   figée » (`{}` : tout au CDN) ; undefined : un GFS d'avant la 065, dont le contexte et l'événement `extensions` n'ont pas de `natives` (par défaut). Réglée avant le chargement de la page, comme `mode` ; setNatives(objet) la change et
 //   envoie l'événement `extensions` (`{ extensions, bibliotheques, natives }`), comme GFS quand la personne change le choix « CDN ou copie figée » d'une fonction. C'est le test qui sert les fichiers (dev-tests/verify-native-libs.mjs).
+//   window.__gfsStub.secours : les copies de GFS que l'app essaie après le CDN d'une bibliothèque quand il échoue ou tarde (contrats 5.2 point 14, consigne 108) : `{ id: { version, src, integrite, forme } }`, pour chaque bibliothèque que GFS
+//   garde en copie, que la personne ait choisi la copie ou non ; undefined : un GFS d'avant la 108, dont le contexte et l'événement `extensions` n'ont pas de `secours` (par défaut). Réglée avant le chargement ; setSecours(objet) la change
+//   et envoie l'événement `extensions`. C'est le test qui sert les fichiers (dev-tests/verify-cdn-rescue.mjs).
 //   window.__gfsStub.calls : les appels reçus ({ nom, args, id }) ; ignoreContext : ne pas répondre (GFS absent) ; installReply : { actives } ou { error } que reçoit `installer`.
 //   L'appel `securite` (consigne 084, contrats de GFS 5.4 point 14 ; guide des apps, règle S8) : l'app dit à GFS, sans `id`, que sa politique de contenu a bloqué un appel (`{ quoi: 'relais', kit }` au démarrage du relais, puis
 //   `{ quoi: 'bloque', directive, cible, source, disposition, fois }`). GFS ne répond rien : le stub le note dans `calls` comme tout appel et ne répond rien non plus (le jugement de la forme et de ce qui ne part pas est celui de
@@ -159,6 +162,7 @@
       if (stub.role !== undefined) data.role = JSON.parse(JSON.stringify(stub.role));
       if (stub.lecteurs !== undefined) data.lecteurs = stub.lecteurs.slice();
       if (stub.natives !== undefined) data.natives = JSON.parse(JSON.stringify(stub.natives));
+      if (stub.secours !== undefined) data.secours = JSON.parse(JSON.stringify(stub.secours));
       return data;
     },
     // La barre que GFS montre à l'app : null quand il n'y en a pas (explorateur ouvert) ou que l'app l'a masquée.
@@ -465,11 +469,14 @@
     send() {
       const data = { extensions: stub.extensions.slice(), bibliotheques: stub.libraries(stub.extensions) };
       if (stub.natives !== undefined) data.natives = JSON.parse(JSON.stringify(stub.natives));
+      if (stub.secours !== undefined) data.secours = JSON.parse(JSON.stringify(stub.secours));
       stub.post({ type: 'evenement', nom: 'extensions', data });
     },
     setExtensions(list) { stub.extensions = list.slice(); stub.send(); },
     // Le choix « CDN ou copie figée » d'une fonction change (contrats 5.2 point 12) : le même événement `extensions`, avec les copies que GFS donne maintenant.
     setNatives(next) { stub.natives = next; stub.send(); },
+    // Les copies de secours que GFS donne changent (contrats 5.2 point 14) : le même événement `extensions`, avec les `secours` de maintenant.
+    setSecours(next) { stub.secours = next; stub.send(); },
     // L'événement `langue` : la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps). Rien n'est envoyé quand elle ne change pas, comme GFS.
     setLangue(next) {
       if (next === stub.langue) return;

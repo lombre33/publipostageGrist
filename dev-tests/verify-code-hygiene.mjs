@@ -1619,8 +1619,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('extension : la version exacte de Plotly (2.13.2) s\'écrit une fois dans le code, avec son identifiant, dans extensions/graphique/chart-plot.js (la politique d\'index.html la porte aussi, dans l\'adresse)',
     versions.length === 1 && versions[0] === 'extensions/graphique/chart-plot.js' && /const LIBRARY = \{ id: 'plotly', version: '2\.13\.2' \};/.test(read('extensions/graphique/chart-plot.js')), versions.join(', '));
   const plot = noCommentsJs(read('extensions/graphique/chart-plot.js'));
-  check('extension : chart-plot.js prend la source de Plotly chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte, sans chargeur à lui',
-    /Extensions\.library\(LIBRARY\.id\)/.test(plot) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*\)/.test(plot) && !/createElement\(\s*['"]script['"]\s*\)/.test(plot), 'extensions/graphique/chart-plot.js');
+  check('extension : chart-plot.js prend la source de Plotly chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte et le secours de GFS (Extensions.rescue, consigne 108), sans chargeur à lui',
+    /Extensions\.library\(LIBRARY\.id\)/.test(plot) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*,\s*Extensions\.rescue\(LIBRARY\.id\)\s*\)/.test(plot) && !/createElement\(\s*['"]script['"]\s*\)/.test(plot), 'extensions/graphique/chart-plot.js');
 
   // ECharts 6.1.0 (le graphique créé, extensions/graphique/chart-make.js) est dans le même cas que Plotly : son adresse exacte n'est que dans la politique d'index.html, la source vient de GFS.
   const ECHARTS_ADDRESS = EXTENSION_LIBRARY_ADDRESSES.echarts;   // l'adresse du catalogue de GFS, mode CDN
@@ -1638,8 +1638,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('extension : la version exacte d\'ECharts (6.1.0) s\'écrit une fois dans le code, avec son identifiant, dans extensions/graphique/chart-make.js (la politique d\'index.html la porte aussi, dans l\'adresse)',
     echartsVersions.length === 1 && echartsVersions[0] === 'extensions/graphique/chart-make.js' && /const LIBRARY = \{ id: 'echarts', version: '6\.1\.0' \};/.test(read('extensions/graphique/chart-make.js')), echartsVersions.join(', '));
   const makeCode = noCommentsJs(read('extensions/graphique/chart-make.js'));
-  check('extension : chart-make.js prend la source d\'ECharts chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte, sans chargeur à lui',
-    /Extensions\.library\(LIBRARY\.id\)/.test(makeCode) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*\)/.test(makeCode) && !/createElement\(\s*['"]script['"]\s*\)/.test(makeCode), 'extensions/graphique/chart-make.js');
+  check('extension : chart-make.js prend la source d\'ECharts chez GFS (Extensions.library) et la charge par ExportCommon.loadScriptOnce, avec son empreinte et le secours de GFS (Extensions.rescue, consigne 108), sans chargeur à lui',
+    /Extensions\.library\(LIBRARY\.id\)/.test(makeCode) && /ExportCommon\.loadScriptOnce\(\s*\{\s*src: source\.src,\s*integrity: source\.integrite\s*\}\s*,\s*Extensions\.rescue\(LIBRARY\.id\)\s*\)/.test(makeCode) && !/createElement\(\s*['"]script['"]\s*\)/.test(makeCode), 'extensions/graphique/chart-make.js');
 
   // Le registre : les fichiers que js/extensions.js nomme sont ceux du dossier de l'extension, ni plus ni moins.
   const literal = (read('js/extensions.js').match(/const REGISTRY = (\{[\s\S]*?\n  \});/) || [])[1];
@@ -2020,9 +2020,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     ...['ambiance-message', 'ambiance-pose', 'correcteurs-message', 'correcteurs-pose'].map(name => [`kit/${name}`, `./kit/js/${name}.js?v=${pin7}`]),
     ['kit/i18n', './kit/js/i18n.js'], // sans ?v : la même adresse que `../i18n.js` dans la fenêtre des noms, donc la même instance (consigne 104)
     ['kit/names-update', `./kit/js/names-update/index.js?v=${pin7}`],
+    ['kit/script-loader', `./kit/js/script-loader.js?v=${pin7}`], // le chargeur d'un script qui a une copie chez GFS (consigne 108) : il ne parle pas à GFS, c'est l'app qui lui passe la copie
     ['kit/violations-pose', `./kit/js/violations-pose.js?v=${pin7}`],
   ];
-  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message`, `kit/ambiance-pose`, `kit/correcteurs-message`, `kit/correcteurs-pose`, `kit/i18n` (sans ?v), `kit/names-update` et `kit/violations-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
+  check('ambiance de GFS : le kit est un sous-module épinglé (.gitmodules et gitlink) et la carte d\'importation de index.html n\'en nomme que `kit/ambiance-message`, `kit/ambiance-pose`, `kit/correcteurs-message`, `kit/correcteurs-pose`, `kit/i18n` (sans ?v), `kit/names-update`, `kit/script-loader` et `kit/violations-pose`, à l\'empreinte du gitlink (sept premiers caractères)',
     pin !== '' && /\[submodule "kit"\]\s+path = kit\s+url = https:\/\/github\.com\/lombre33\/grist-factory-kit\.git/.test(modules)
       && JSON.stringify(kitEntries) === JSON.stringify(expectedKit),
     JSON.stringify({ pin: pin.slice(0, 7), kitEntries }));
@@ -2033,8 +2034,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   for (const [rel, text] of importers) {
     for (const match of text.matchAll(/(?:import\s*\(\s*|\bfrom\s+|\bsrc=)['"]([^'"]*\bkit\/[^'"]*)['"]/g)) kitImports.push(`${rel} : ${match[1]}`);
   }
-  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`, `kit/correcteurs-message`), js/gfs-ambiance.js (`kit/ambiance-pose`), js/gfs-correcteurs.js (`kit/correcteurs-pose`), js/gfs-violations.js (`kit/violations-pose`) et js/names-update.js (`kit/names-update`, `kit/i18n` : la fenêtre des noms, consigne 104) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js`, son `correcteurs.js`, son `violations.js`, son `violations-start.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
-    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-correcteurs.js : kit/correcteurs-pose', 'js/gfs-link.js : kit/ambiance-message', 'js/gfs-link.js : kit/correcteurs-message', 'js/gfs-violations.js : kit/violations-pose', 'js/names-update.js : kit/i18n', 'js/names-update.js : kit/names-update']), kitImports.join(' ; '));
+  check('ambiance de GFS : seuls js/gfs-link.js (`kit/ambiance-message`, `kit/correcteurs-message`), js/gfs-ambiance.js (`kit/ambiance-pose`), js/gfs-correcteurs.js (`kit/correcteurs-pose`), js/gfs-violations.js (`kit/violations-pose`), js/names-update.js (`kit/names-update`, `kit/i18n` : la fenêtre des noms, consigne 104) et js/export-common.js (`kit/script-loader` : le chargeur qui reprend la copie de GFS, consigne 108) importent le kit - jamais son lien (`kit/js/gfs-link.js`), son `ambiance.js`, son `correcteurs.js`, son `violations.js`, son `violations-start.js` ni son `host.js` : deux liens de GFS dans un cadre numérotent chacun leurs appels depuis 1 et se prennent les réponses',
+    JSON.stringify(kitImports.sort()) === JSON.stringify(['js/export-common.js : kit/script-loader', 'js/gfs-ambiance.js : kit/ambiance-pose', 'js/gfs-correcteurs.js : kit/correcteurs-pose', 'js/gfs-link.js : kit/ambiance-message', 'js/gfs-link.js : kit/correcteurs-message', 'js/gfs-violations.js : kit/violations-pose', 'js/names-update.js : kit/i18n', 'js/names-update.js : kit/names-update']), kitImports.join(' ; '));
   // La fenêtre des noms (consigne 104) : sa feuille est celle du kit, au ?v= du gitlink comme les entrées de la carte (elle change avec le gitlink, à la main : l'outil des bibliothèques n'écrit que la carte), et sa passerelle est un script de la page.
   const sheetLink = /<link rel="stylesheet" href="kit\/css\/names-update\.css\?v=([0-9a-f]+)">/.exec(index);
   check('fenêtre des noms : index.html charge la feuille du kit `kit/css/names-update.css` au ?v= du gitlink (sept premiers caractères) et le script js/names-update.js, dont la feuille s\'aligne sur la carte d\'importation (une seule empreinte du kit dans la page)',

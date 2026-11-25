@@ -11,7 +11,7 @@ const Extensions = (function () {
   const REGISTRY = {
     graphique: {
       nameKey: 'extension.graphique.name',
-      version: '0.18',
+      version: '0.19',
       scripts: ['chart-plot.js', 'chart-source.js', 'chart-host.js', 'chart-make.js', 'chart-office.js', 'chart-block.js', 'chart-make-ui.js'],
       styles: ['chart-block.css', 'chart-make.css'],
     },
@@ -80,6 +80,9 @@ const Extensions = (function () {
   const nameOf = id => (isKnown(id) ? I18n.t(REGISTRY[id].nameKey) : String(id));
   // La source { src, integrite } que GFS donne de la bibliothèque `id`, ou null.
   const library = id => GfsLink.library(id);
+  // La copie de GFS que le chargeur essaie quand le CDN de la bibliothèque `id` échoue ou tarde (consigne 108 de GFS) : { version, src, integrite, forme }, ou null (l'app seule, un GFS d'avant, une bibliothèque que GFS sert déjà
+  // par sa copie : pdfjs, qui n'a pas de CDN). Sans version : GFS ne donne que celle de l'entrée.
+  const rescue = id => GfsLink.secours(id);
   // L'adresse du widget dans Grist (sans requête) que GFS donne dans son contexte, ou '' : seul, ou si GFS ne la donne pas.
   const widgetAddress = () => GfsLink.widgetAddress();
   const onChange = fn => GfsLink.onChange(fn);
@@ -122,10 +125,12 @@ const Extensions = (function () {
       // garde l'échec, sans regarder l'empreinte. La reprise (le clic suivant) change donc l'adresse d'une question (?r=<n>), que GFS, qui sert un fichier, ignore ; la première tentative garde l'adresse exacte de GFS.
       const attempt = moduleAttempts.get(source.src) || 0;
       moduleAttempts.set(source.src, attempt + 1);
-      let address = source.src;
-      if (attempt) { const url = new URL(source.src, document.baseURI); url.searchParams.set('r', String(attempt)); address = url.href; }
+      const retried = src => { if (!attempt) return src; const url = new URL(src, document.baseURI); url.searchParams.set('r', String(attempt)); return url.href; };
+      const address = retried(source.src);
+      // Le secours (consigne 108) : la copie de GFS, essayée après le CDN s'il échoue ou tarde ; elle change d'adresse à la reprise comme lui (le navigateur garde aussi l'échec de la sienne).
+      const spare = rescue(id);
       // Le chargeur de script est celui de tout le widget (ExportCommon.loadScriptOnce) : une balise <script type="module" src integrity crossorigin="anonymous">.
-      const promise = ExportCommon.loadScriptOnce({ src: address, integrity: source.integrite, type: 'module' }).then(
+      const promise = ExportCommon.loadScriptOnce({ src: address, integrity: source.integrite, type: 'module' }, spare ? Object.assign({}, spare, { src: retried(spare.src) }) : null).then(
         () => {
           const given = moduleGiven(id);
           if (given) return given;
@@ -197,5 +202,5 @@ const Extensions = (function () {
     });
   }
 
-  return { isKnown, isActive, isLoaded, nameOf, library, widgetAddress, onChange, ensure, failureOf, loadModuleLibrary, moduleNamespaces, loadAll, explain, tellLoadFailed };
+  return { isKnown, isActive, isLoaded, nameOf, library, rescue, widgetAddress, onChange, ensure, failureOf, loadModuleLibrary, moduleNamespaces, loadAll, explain, tellLoadFailed };
 })();

@@ -8,7 +8,10 @@
 //  3) la personne a choisi la copie mais une bibliothèque de la fonction n'en a pas, ou une copie est d'une autre version que la liste, ou n'est pas de forme `script` : TOUT par le CDN, et la page le sait (`pp:nativeFallback`,
 //     raison `ecart`) - jamais une version que la liste n'a pas, jamais un mélange ;
 //  4) une copie qui ne se charge pas (réseau, fausse empreinte) : le CDN la remplace, ainsi que le reste de l'appel, et la page le sait (raison `echec`, la bibliothèque dite) ; si le CDN échoue aussi, l'appel échoue ;
-//  5) la décision se prend UNE fois par appel (un choix qui change entre deux fichiers d'une même fonction n'en mélange pas) et se relit à chaque appel (le nouveau choix vaut au chargement suivant).
+//  5) la décision se prend UNE fois par appel (un choix qui change entre deux fichiers d'une même fonction n'en mélange pas) et se relit à chaque appel (le nouveau choix vaut au chargement suivant) ;
+//  6) l'autre sens (consigne GFS 108) : chaque bibliothèque qui se charge par le CDN reçoit, en second argument de `ExportCommon.loadScriptOnce`, la copie de GFS qu'`GfsLink.secours(id, version de la liste)` donne (null : un GFS
+//     d'avant, une autre version, une forme qui n'est pas `script`, une app seule) ; une copie figée choisie par la personne se charge SANS secours (le chemin copie puis CDN est celui d'avant), et le CDN qui la remplace après son
+//     échec ne reprend pas la même adresse.
 // Lancer : node dev-tests/unit-native-libs.mjs
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,28 +38,40 @@ const FUNCTIONS = {
 };
 
 // Un contexte neuf : le tableau de js/native-libs.js, un GfsLink dont les copies sont celles de `state.natives`, un chargeur qui note ce qu'on lui demande.
-function fresh({ withGfsLink = true } = {}) {
+function fresh({ withGfsLink = true, withSecours = true } = {}) {
   const loads = [];
+  const rescues = [];   // pour chaque appel de `loadScriptOnce`, dans le même ordre que `loads` : le nombre d'arguments et le secours reçu (consigne 108)
+  const asks = [];      // chaque question posée à `GfsLink.secours` : [id, version]
   const events = [];
-  const state = { natives: {}, fail: new Set(), afterLoad: null };
+  const state = { natives: {}, secours: {}, fail: new Set(), afterLoad: null };
   class CustomEvent { constructor(type, init) { this.type = type; this.detail = init && init.detail; } }
   const globals = {
     document: { dispatchEvent(event) { events.push({ type: event.type, detail: JSON.parse(JSON.stringify(event.detail)) }); return true; } },
     CustomEvent,
     ExportCommon: {
-      async loadScriptOnce(lib) {
+      async loadScriptOnce(lib, rescue) {
         loads.push({ src: lib.src, integrity: lib.integrity });
+        rescues.push(arguments.length < 2 ? { argc: arguments.length } : { argc: arguments.length, rescue: rescue === null || rescue === undefined ? rescue : JSON.parse(JSON.stringify(rescue)) });
         if (state.afterLoad) state.afterLoad(lib);
         if (state.fail.has(lib.src)) throw new Error('Échec de chargement du script : ' + lib.src);
       },
     },
   };
-  if (withGfsLink) globals.GfsLink = { native: id => (state.natives[id] ? Object.assign({}, state.natives[id]) : null) };
+  if (withGfsLink) {
+    globals.GfsLink = { native: id => (state.natives[id] ? Object.assign({}, state.natives[id]) : null) };
+    if (withSecours) {
+      globals.GfsLink.secours = (id, version) => {
+        asks.push([id, version]);
+        const entry = state.secours[id];
+        return entry && (version === undefined || entry.version === version) ? Object.assign({}, entry) : null;
+      };
+    }
+  }
   const ctx = createContext(globals);
   loadScript(ctx, 'js/native-libs.js');
   const load = async (...ids) => { ctx.__ids = ids; return evalIn(ctx, 'NativeLibs.load(...__ids)'); };
-  const reset = () => { loads.length = 0; events.length = 0; state.fail.clear(); state.afterLoad = null; };
-  return { ctx, state, loads, events, load, reset };
+  const reset = () => { loads.length = 0; rescues.length = 0; asks.length = 0; events.length = 0; state.fail.clear(); state.afterLoad = null; };
+  return { ctx, state, loads, rescues, asks, events, load, reset };
 }
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const reject = async (promise) => { try { await promise; return null; } catch (e) { return String(e && e.message); } };
@@ -168,6 +183,66 @@ async function main() {
     t.state.natives = { pdfmake: copyOf('pdfmake'), 'pdfmake-polices': copyOf('pdfmake-polices') };
     const whole = decide('pdf');
     check('decide : une copie de chaque, à la version de la liste : « copie »', whole.source === 'copie' && whole.say === null, JSON.stringify(whole));
+  }
+
+  // 8. Le secours du CDN (consigne 108) : le second argument de chaque chargement par le CDN.
+  for (const [fn, ids] of Object.entries(FUNCTIONS)) {
+    const spares = Object.fromEntries(ids.map(id => [id, copyOf(id)]));
+    const secondArgument = (t, expected) => t.rescues.length === expected.length && t.rescues.every((call, at) => same(call, expected[at]));
+    {
+      const t = fresh();
+      t.state.secours = spares;
+      await t.load(...ids);
+      check(`${fn} : au CDN avec un secours chez GFS : chaque bibliothèque se charge par son CDN avec la copie de GFS (même version que la liste) en secours, et rien n'est dit`,
+        same(t.loads, ids.map(cdnOf)) && secondArgument(t, ids.map(id => ({ argc: 2, rescue: copyOf(id) }))) && t.events.length === 0, JSON.stringify({ loads: t.loads, rescues: t.rescues }));
+      check(`${fn} : GfsLink.secours est interrogé pour chaque bibliothèque, avec la version de la liste`, same(t.asks, ids.map(id => [id, versionOf(id)])), JSON.stringify(t.asks));
+    }
+    {
+      const t = fresh();
+      await t.load(...ids);
+      check(`${fn} : au CDN sans secours chez GFS (un GFS d'avant la 108) : le secours est null pour chaque bibliothèque, le CDN se charge comme avant`, same(t.loads, ids.map(cdnOf)) && secondArgument(t, ids.map(() => ({ argc: 2, rescue: null }))), JSON.stringify(t.rescues));
+      const noFunction = fresh({ withSecours: false });
+      await noFunction.load(...ids);
+      check(`${fn} : un lien sans GfsLink.secours (le lien d'avant la consigne) : secours null, sans plantage`, same(noFunction.loads, ids.map(cdnOf)) && secondArgument(noFunction, ids.map(() => ({ argc: 2, rescue: null }))), JSON.stringify(noFunction.rescues));
+      const alone = fresh({ withGfsLink: false });
+      await alone.load(...ids);
+      check(`${fn} : sans GfsLink (une app seule) : secours null`, same(alone.loads, ids.map(cdnOf)) && secondArgument(alone, ids.map(() => ({ argc: 2, rescue: null }))), JSON.stringify(alone.rescues));
+    }
+    {
+      const gap = fresh();
+      gap.state.secours = Object.fromEntries(ids.map(id => [id, copyOf(id, { version: '0.0.1' })]));
+      await gap.load(...ids);
+      const asModule = fresh();
+      asModule.state.secours = Object.fromEntries(ids.map(id => [id, copyOf(id, { forme: 'module' })]));
+      await asModule.load(...ids);
+      check(`${fn} : un secours d'une autre version que la liste, ou de forme « module », n'est jamais donné au chargeur (null) ; le CDN se charge comme avant`,
+        same(gap.loads, ids.map(cdnOf)) && secondArgument(gap, ids.map(() => ({ argc: 2, rescue: null }))) && same(asModule.loads, ids.map(cdnOf)) && secondArgument(asModule, ids.map(() => ({ argc: 2, rescue: null }))), JSON.stringify({ gap: gap.rescues, asModule: asModule.rescues }));
+    }
+    {
+      // La copie que la personne a choisie : chargée SANS secours (un seul argument), et GfsLink.secours n'est pas même interrogé : le chemin copie puis CDN est celui d'avant.
+      const t = fresh();
+      t.state.natives = Object.fromEntries(ids.map(id => [id, copyOf(id)]));
+      t.state.secours = spares;
+      await t.load(...ids);
+      check(`${fn} : la copie choisie par la personne se charge sans secours (un seul argument), GfsLink.secours n'est pas interrogé`, same(t.loads, ids.map(id => asked(copyOf(id)))) && secondArgument(t, ids.map(() => ({ argc: 1 }))) && t.asks.length === 0, JSON.stringify({ rescues: t.rescues, asks: t.asks }));
+    }
+    for (let at = 0; at < ids.length; at += 1) {
+      // La copie choisie échoue : le CDN la remplace et reprend le reste de l'appel ; le secours de GFS est la MÊME copie que celle qui vient d'échouer : il n'est pas redonné pour cette bibliothèque (la même adresse, la même réponse), il l'est pour les suivantes.
+      const t = fresh();
+      t.state.natives = Object.fromEntries(ids.map(id => [id, copyOf(id)]));
+      t.state.secours = spares;
+      t.state.fail.add(copyOf(ids[at]).src);
+      await t.load(...ids);
+      const expected = [...ids.slice(0, at + 1).map(() => ({ argc: 1 })), ...ids.slice(at).map(id => ({ argc: 2, rescue: id === ids[at] ? null : copyOf(id) }))];
+      check(`${fn} : la copie choisie de ${ids[at]} échoue : le CDN la remplace sans reprendre la même adresse en secours${at < ids.length - 1 ? ', et le reste de l\'appel au CDN a son secours' : ''}`, secondArgument(t, expected), JSON.stringify(t.rescues));
+      const other = fresh();
+      other.state.natives = Object.fromEntries(ids.map(id => [id, copyOf(id)]));
+      other.state.secours = Object.fromEntries(ids.map(id => [id, copyOf(id, { src: copyOf(id).src + '?secours' })]));
+      other.state.fail.add(copyOf(ids[at]).src);
+      await other.load(...ids);
+      const expectedOther = [...ids.slice(0, at + 1).map(() => ({ argc: 1 })), ...ids.slice(at).map(id => ({ argc: 2, rescue: copyOf(id, { src: copyOf(id).src + '?secours' }) }))];
+      check(`${fn} : la copie choisie de ${ids[at]} échoue, le secours de GFS est une autre adresse : le CDN la remplace avec ce secours`, secondArgument(other, expectedOther), JSON.stringify(other.rescues));
+    }
   }
 }
 

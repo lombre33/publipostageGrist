@@ -70,7 +70,12 @@ const ExportCommon = (function () {
   // Charge un script CDN (`integrity` : SRI sha384, avec `crossOrigin`) ou un fichier du dépôt (sans SRI : même origine que la page), sous réserve de
   // scriptRefusal. Résolu au `load`, rejeté si le script est refusé ou ne charge pas ; l'appelant mémorise sa propre promesse pour ne charger qu'une fois.
   // `lib.type: 'module'` : le fichier assemblé d'une extension de GFS (js/extensions.js:loadModuleLibrary) est un module, que seule une balise charge avec son empreinte.
-  function loadScriptOnce(lib) {
+  //
+  // `rescue` (consigne 108 de GFS, contrats 5.2 point 14) : la copie de GFS ({ src, integrite, forme }, GfsLink.secours) que le chargeur du kit (kit/js/script-loader.js, une carte d'importation d'index.html le
+  // nomme) essaie après le CDN, quand il échoue (un hôte mort, des octets que l'empreinte refuse, une adresse que la politique ne nomme pas : le navigateur lève le même `error`) ou ne répond pas en 3 secondes.
+  // Jamais un deuxième CDN : la copie est du site de GFS (même origine que la page, `script-src 'self'` suffit). Elle passe par scriptRefusal comme le CDN ; refusée, ou sans chargeur du kit (une page qui n'a pas sa
+  // carte d'importation), le script se charge comme avant, sans secours. Sans `rescue` (l'app seule, un GFS d'avant, un fichier du dépôt), rien ne change : une balise, sans minuterie.
+  function loadScriptTag(lib) {
     return new Promise((resolve, reject) => {
       const refusal = scriptRefusal(lib);
       if (refusal) { reject(new Error('Script refusé (' + refusal + ') : ' + (lib && lib.src))); return; }
@@ -82,6 +87,15 @@ const ExportCommon = (function () {
       s.onerror = () => reject(new Error('Échec de chargement du script : ' + lib.src));
       document.head.appendChild(s);
     });
+  }
+  function loadScriptOnce(lib, rescue) {
+    const spare = rescue && typeof rescue === 'object' && !scriptRefusal({ src: rescue.src, integrity: rescue.integrite }) ? rescue : null;
+    if (!spare || scriptRefusal(lib)) return loadScriptTag(lib);
+    const primary = { src: lib.src, integrite: lib.integrity, forme: lib.type === 'module' ? 'module' : 'script' };
+    return import('kit/script-loader').then(
+      module => module.loadScript(primary, { secours: spare }).then(() => undefined, () => { throw new Error('Échec de chargement du script : ' + lib.src + ' (et de sa copie chez GFS)'); }),
+      () => loadScriptTag(lib),
+    );
   }
 
   // JSZip fabrique l'archive des exports en lot (PDF et Word en ZIP) : ~0,1 Mo, chargé seul, sans pdfmake ni ses polices (~4 Mo) que seul l'export

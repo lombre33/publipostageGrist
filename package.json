@@ -136,6 +136,7 @@
         "kit/correcteurs-pose": "./kit/js/correcteurs-pose.js?v=4774a99",
         "kit/i18n": "./kit/js/i18n.js",
         "kit/names-update": "./kit/js/names-update/index.js?v=4774a99",
+        "kit/script-loader": "./kit/js/script-loader.js?v=4774a99",
         "kit/violations-pose": "./kit/js/violations-pose.js?v=4774a99"
       },
       "paquets": [

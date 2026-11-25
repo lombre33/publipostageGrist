@@ -9,7 +9,10 @@
 //     absente ou d'un autre algorithme sont refusés, et la promesse est rejetée sans que le document reçoive la moindre balise ;
 //  3) les sept bibliothèques du widget passent la règle (une huitième, ajoutée sans empreinte ou depuis un autre site, la ferait échouer ici) ;
 //  4) `type: 'module'` (le fichier assemblé d'une extension de GFS, js/extensions.js:loadModuleLibrary) pose le type de la balise, avec la même empreinte et le même crossOrigin : le widget n'a
-//     qu'UN chargeur de script, celui-ci (dev-tests/verify-code-hygiene.mjs, section 4, le garde).
+//     qu'UN chargeur de script, celui-ci (dev-tests/verify-code-hygiene.mjs, section 4, le garde) ;
+//  5) le secours (consigne 108 de GFS, `loadScriptOnce(lib, secours)`) : un secours que la politique refuse (un autre site, http, sans adresse, ce qui n'est pas une copie) ou sans chargeur du kit à importer (un contexte `vm` n'en a pas)
+//     retombe sur la balise seule, comme avant, sans jamais ajouter celle du secours ; le CDN lui-même refusé n'ajoute rien, même avec un secours permis. Le chemin où le chargeur du kit pose les deux balises (le CDN d'abord, la copie
+//     de GFS ensuite, la minuterie de 3 secondes) est joué par un vrai navigateur : dev-tests/verify-cdn-rescue.mjs.
 // Lancer : node dev-tests/unit-script-loader.mjs
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -20,17 +23,20 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = 'https://widget.exemple.test';
 const SRI = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
 
-// Un faux document : createElement('script') donne un objet que appendChild « charge » aussitôt (onload) ; rien d'autre n'est simulé.
-function fresh() {
+// Un faux document : createElement('script') donne un objet que appendChild « charge » aussitôt (onload) ; rien d'autre n'est simulé. `failing` : les adresses dont la balise lève `error` au lieu de `load`.
+function fresh(failing = []) {
   const appended = [];
   const document = {
     baseURI: PAGE + '/dossier/index.html',
     createElement: () => ({}),
-    head: { appendChild(el) { appended.push(el); queueMicrotask(() => el.onload && el.onload()); } },
+    head: { appendChild(el) { appended.push(el); queueMicrotask(() => (failing.includes(el.src) ? el.onerror && el.onerror() : el.onload && el.onload())); } },
   };
   const ctx = createContext({ document, window: { location: { origin: PAGE } }, URL, console });
   loadScript(ctx, 'js/export-common.js');
-  return { ctx, appended, refusal: lib => { ctx.__lib = lib; return evalIn(ctx, 'ExportCommon.scriptRefusal(__lib)'); }, load: lib => { ctx.__lib = lib; return evalIn(ctx, 'ExportCommon.loadScriptOnce(__lib)'); } };
+  return {
+    ctx, appended, refusal: lib => { ctx.__lib = lib; return evalIn(ctx, 'ExportCommon.scriptRefusal(__lib)'); },
+    load: (lib, rescue) => { ctx.__lib = lib; ctx.__rescue = rescue; return evalIn(ctx, 'ExportCommon.loadScriptOnce(__lib, __rescue)'); },
+  };
 }
 
 async function main() {
@@ -102,6 +108,54 @@ async function main() {
     for (const m of text.matchAll(/\{\s*src:\s*'(https:\/\/[^']+)'\s*\}/g)) withoutSri.push(`${name} : ${m[1]}`);
   }
   check('bibliothèques : aucune adresse de CDN n\'est écrite sans empreinte', withoutSri.length === 0, withoutSri.join(', '));
+
+  // 5. Le secours (consigne 108) : ce qui ne passe pas par le chargeur du kit.
+  const CDN = { src: 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', integrity: SRI };
+  const spare = { version: '3.10.1', src: PAGE + '/gfs/vendor/jszip/3.10.1/jszip.min.js', integrite: SRI, forme: 'script' };
+  // Un secours que la politique refuse, ou qui n'est pas une copie : la balise seule du CDN, comme avant, jamais celle du secours.
+  const refusedSpares = [
+    ['un autre site', Object.assign({}, spare, { src: 'https://evil.example/jszip.js' })],
+    ['un faux CDN', Object.assign({}, spare, { src: 'https://cdn.jsdelivr.net.evil.example/jszip.js' })],
+    ['un CDN sans empreinte', Object.assign({}, spare, { src: 'https://cdn.jsdelivr.net/npm/x.js', integrite: '' })],
+    ['http au lieu de https', Object.assign({}, spare, { src: 'http://evil.example/jszip.js' })],
+    ['un schéma data:', Object.assign({}, spare, { src: 'data:text/javascript,alert(1)' })],
+    ['sans adresse', Object.assign({}, spare, { src: '' })],
+    ['un objet vide', {}],
+    ['un texte', 'https://evil.example/jszip.js'],
+    ['un nombre', 42],
+    ['vrai', true],
+    ['null', null],
+    ['absent', undefined],
+  ];
+  for (const [label, rescue] of refusedSpares) {
+    const run = fresh();
+    await run.load(CDN, rescue);
+    check('secours refusé (' + label + ') : une seule balise, celle du CDN, avec son empreinte ; jamais celle du secours', run.appended.length === 1 && run.appended[0].src === CDN.src && run.appended[0].integrity === SRI && run.appended[0].crossOrigin === 'anonymous', JSON.stringify(run.appended));
+  }
+  {
+    // Le CDN échoue et le secours est refusé : l'appel échoue comme avant, avec la phrase d'avant, et le secours n'est pas ajouté.
+    const run = fresh([CDN.src]);
+    let message = '';
+    try { await run.load(CDN, refusedSpares[0][1]); } catch (e) { message = String(e && e.message); }
+    check('secours refusé et CDN en échec : l\'appel échoue comme avant (« Échec de chargement du script : … »), sans secours ajouté', message === 'Échec de chargement du script : ' + CDN.src && run.appended.length === 1, JSON.stringify({ message, appended: run.appended.length }));
+  }
+  {
+    // Un secours permis, mais aucun chargeur du kit à importer (ce contexte `vm` n'en a pas, comme une page sans carte d'importation) : la balise seule, comme avant.
+    const run = fresh();
+    await run.load(CDN, spare);
+    check('secours permis sans chargeur du kit : une seule balise, celle du CDN, comme avant', run.appended.length === 1 && run.appended[0].src === CDN.src, JSON.stringify(run.appended));
+    const down = fresh([CDN.src]);
+    let message = '';
+    try { await down.load(CDN, spare); } catch (e) { message = String(e && e.message); }
+    check('secours permis sans chargeur du kit, CDN en échec : l\'appel échoue comme avant, sans phrase de secours', message === 'Échec de chargement du script : ' + CDN.src && down.appended.length === 1, JSON.stringify({ message, appended: down.appended.length }));
+  }
+  {
+    // Le CDN lui-même refusé : rien n'est ajouté, même avec un secours permis.
+    const run = fresh();
+    let message = '';
+    try { await run.load({ src: 'https://evil.example/jszip.js', integrity: SRI }, spare); } catch (e) { message = String(e && e.message); }
+    check('le CDN refusé avec un secours permis : « Script refusé », aucune balise, le secours n\'est pas essayé', /^Script refusé \(origine non permise\)/.test(message) && run.appended.length === 0, JSON.stringify({ message, appended: run.appended.length }));
+  }
 }
 
 main().then(summarizeAndExit);

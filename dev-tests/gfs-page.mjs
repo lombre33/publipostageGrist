@@ -142,8 +142,9 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
         await page.route(re, async route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: await readFile(join(CACHE, rel), 'utf8') }));
       }
       // L'empreinte (SRI) d'un script est ignorée : le miroir n'a pas les octets exacts de tous les fichiers des CDN (les paquets reminifiés, les versions plus récentes). `realIntegrity` la garde VRAIE pour un script qui ne vient
-      // pas d'un CDN (la copie figée de GFS, que le test sert lui-même : une fausse empreinte y est refusée par le navigateur, comme chez une personne) ; celle des CDN reste ignorée. `window.__integrity` garde chaque empreinte demandée
-      // ({ src, integrity, enforced }) : de quoi lire, dans un essai, quelle empreinte l'app a posée sur quel fichier.
+      // pas d'un CDN (la copie figée de GFS, que le test sert lui-même : une fausse empreinte y est refusée par le navigateur, comme chez une personne) ; celle des CDN reste ignorée, sauf `realIntegrity: 'tout'` (consigne 108 : un
+      // CDN qui rend d'autres octets que ceux que l'empreinte nomme, que le navigateur refuse pour de bon). `window.__integrity` garde chaque empreinte demandée ({ src, integrity, enforced }) : de quoi lire, dans un essai, quelle
+      // empreinte l'app a posée sur quel fichier.
       await page.addInitScript((real) => {
         const native = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'integrity');
         window.__integrity = [];
@@ -151,7 +152,7 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
           configurable: true,
           get() { return real ? native.get.call(this) : ''; },
           set(value) {
-            const enforced = real && !/^https:\/\/cdn\.jsdelivr\.net\//.test(this.src);
+            const enforced = real && (real === 'tout' || !/^https:\/\/cdn\.jsdelivr\.net\//.test(this.src));
             window.__integrity.push({ src: this.src, integrity: String(value), enforced });
             if (enforced) native.set.call(this, value);
           },

@@ -3,7 +3,8 @@
 // protocole des widgets de Grist, envoyée au cadre parent par une seule fonction (`sendToHost`) : à `targetOrigin "*"` tant que GFS n'a rien dit (la demande de `contexte`, la première, ne porte aucune donnée : le sous-cadre d'une app
 // a une origine opaque et ne sait pas encore d'où il est cadré), puis à l'origine de GFS, retenue à son premier message valide (`holdOrigin`, consigne 086, contrats de GFS 1.2 point 4). Dix-sept choses seulement :
 //  - `contexte`, demandé au démarrage (5 secondes au plus) : les extensions que la personne a activées, la source de chaque bibliothèque qu'elles exigent ({ id: { src, integrite, forme } }), les copies figées des bibliothèques natives de l'app
-//    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire),
+//    dont la personne a mis la fonction en « copie figée » (`natives`, { id: { version, src, integrite, forme } }, consigne 065 : js/native-libs.js, le seul à les lire), et, pour chaque bibliothèque que l'app charge par un CDN, la copie
+//    de GFS à essayer quand ce CDN échoue ou tarde (`secours`, la même forme, contrats 5.2 point 14, consigne 108 : js/export-common.js, `loadScriptOnce`, par le chargeur du kit),
 //    l'adresse du widget dans Grist (`adresseWidget`, sans requête : celle de GFS, que portent les sections de la page, pas celle de cette app qui n'en est que le sous-cadre),
 //    `ouverture`, ce que GFS demande d'ouvrir au démarrage (consigne 010 ; pour « Nouveau > Importer », le fichier à importer que GFS donne, consigne 035 ; pour « Nouveau > Depuis un modèle », l'identifiant du modèle de départ choisi, consigne 075), `langue`, la langue qui vaut maintenant (`fr` ou `en`, consigne 019), `stockage`, l'espace de cette app chez GFS
 //    (`{ clé: texte }`, consigne 024) et `barre`, la barre de GFS posée par-dessus le cadre (`{ bord, epaisseur, zone }` ou null, consigne 025) ;
@@ -12,7 +13,7 @@
 //  - l'événement `barre`, `{ barre }` de la même forme, une fois par changement (la personne déplace la barre, le cadre change de taille, l'explorateur s'ouvre ou se ferme, l'app la masque ou la
 //    rend) et l'appel `barre.masquer { masquee }`, sans `id`, que fait un diaporama à son ouverture et à chaque sortie : GFS pose la barre, l'app écarte ce qu'elle met sous la zone (js/gfs-bar.js,
 //    le seul à s'en servir) ;
-//  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS, ou change le choix « CDN ou copie figée » d'une fonction : la même forme (`natives` comprise : `{}` quand tout est au CDN) ;
+//  - l'événement `extensions`, quand la personne en active ou en désactive une dans GFS, ou change le choix « CDN ou copie figée » d'une fonction : la même forme (`natives` comprise : `{}` quand tout est au CDN ; `secours` aussi) ;
 //  - l'événement `langue`, `{ langue: 'fr' | 'en' }`, quand la personne change la langue de GFS (un seul choix pour GFS et toutes ses apps, contrats 5.2 point 6) : une seule fois par changement, sans que GFS
 //    touche au cadre de l'app, qui décide comment suivre (js/settings.js:followGfsLanguage) ;
 //  - l'événement `reglages`, `{ enregistres: true | false }` (consigne 039), que GFS envoie après chaque écriture des réglages de la vue de l'app (`setOption`, `setOptions`, `clearOptions`) : `true`, le réglage est
@@ -84,6 +85,7 @@ const GfsLink = (function () {
   let extensions = [];
   let libraries = new Map();   // identifiant -> { src, integrite, forme } (forme : 'script' ou 'module', contrats de GFS 5.2 point 4)
   let natives = new Map();     // identifiant -> { version, src, integrite, forme } : la copie figée que GFS donne d'une bibliothèque native de l'app, quand la personne a mis sa fonction en « copie figée » (contrats 5.2 point 12, consigne 065)
+  let spares = new Map();      // identifiant -> { version, src, integrite, forme } : la copie de GFS à essayer quand le CDN d'une bibliothèque échoue ou tarde (contrats 5.2 point 14, consigne 108) ; vide : un GFS d'avant, ou rien à secourir
   let address = '';            // `adresseWidget` du contexte ('' : seul, ou GFS ne l'a pas donnée)
   let opening = null;          // `ouverture` du contexte : null, ou { fichier: null | { id, type }, type, dossier, raison[, importation: { valeur, fichier: File }][, lecture: { id, fichier: File }][, modele: { id }] }
   let language = null;         // `langue` du contexte, puis de l'événement `langue` : 'fr' ou 'en' (null : seul, ou GFS ne la donne pas)
@@ -255,6 +257,8 @@ const GfsLink = (function () {
       if (ID_PATTERN.test(id) && lib && typeof lib.src === 'string' && typeof lib.integrite === 'string') nextLibraries.set(id, { src: lib.src, integrite: lib.integrite, forme: lib.forme === 'module' ? 'module' : 'script' });
     });
     const nextNatives = normalizeNatives(data.natives);
+    // Le secours (consigne 108) se lit comme les copies figées et se garde sans bruit : un secours qui change seul ne change rien à ce que l'app charge, il ne rappelle donc personne (`changed` ne le compte pas).
+    spares = normalizeNatives(data.secours);
     const changed = !known || JSON.stringify([extensions, Array.from(libraries), Array.from(natives)]) !== JSON.stringify([nextExtensions, Array.from(nextLibraries), Array.from(nextNatives)]);
     extensions = nextExtensions;
     libraries = nextLibraries;
@@ -455,6 +459,12 @@ const GfsLink = (function () {
     const copy = natives.get(id);
     return copy ? { version: copy.version, src: copy.src, integrite: copy.integrite, forme: copy.forme } : null;
   };
+  // La copie de GFS à essayer quand le CDN de la bibliothèque `id` échoue ou tarde ({ version, src, integrite, forme }, une copie), ou null : seule, avec un GFS d'avant la consigne 108, pour une bibliothèque que GFS sert déjà
+  // par sa copie, ou, quand `version` est donnée (celle que la liste de l'app attend), pour une copie d'une autre version : elle ne vaut pas la sienne. Le chargeur (js/export-common.js : loadScriptOnce) l'essaie après le CDN.
+  const spare = (id, version) => {
+    const entry = spares.get(id);
+    return entry && (version === undefined || entry.version === version) ? { version: entry.version, src: entry.src, integrite: entry.integrite, forme: entry.forme } : null;
+  };
   // L'adresse du widget dans Grist (sans requête) que GFS a donnée dans le contexte : celle de GFS, que portent les sections de la page. '' seul, si GFS ne répond pas ou ne la donne pas.
   const widgetAddress = () => address;
   // GFS a répondu (le contexte ou un événement est arrivé) : faux seul, et faux tant qu'un GFS qui ne répond pas laisse passer ses 5 secondes.
@@ -642,5 +652,5 @@ const GfsLink = (function () {
     call('contexte', undefined, CONTEXT_TIMEOUT_MS).then(apply, e => console.warn('[GfsLink] contexte indisponible', e)).then(readerIfNeeded).then(settleReady);
   } else settleReady();
 
-  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, role: getRole, section: getSection, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
+  return { hosted, ready, isAnswering, extensions: getExtensions, library, native, secours: spare, widgetAddress, opening: getOpening, language: getLanguage, settingsSaved: getSettingsSaved, hasStorage, storageGet, storageSet, bar: getBar, hideBar, opensInNewTab, ambiance: getAmbiance, correcteurs: getCorrecteurs, identity: getIdentity, role: getRole, section: getSection, players: getPlayers, player, tell, onChange, onLanguage, onSettings, onBar, onAmbiance, onCorrecteurs, onPlayerEvent, onOpen, onClose, install, deposit, attach };
 })();

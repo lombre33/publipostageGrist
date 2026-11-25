@@ -8,6 +8,8 @@
 //  - si CHAQUE bibliothèque de la fonction a une copie dont la `version` est celle de la liste de l'app, chacune se charge par sa copie (<script src integrity crossorigin="anonymous">, l'empreinte telle que GFS la donne) ;
 //  - sinon TOUT se charge par le CDN écrit plus bas. GFS ne donne jamais l'adresse d'un CDN : la politique de sécurité de la page ne change pas, et la copie de GFS passe par `'self'` ;
 //  - une copie qui ne se charge pas (réseau, fausse empreinte, origine refusée) retombe sur le CDN, et la personne le lit dans le coin d'état : l'événement `pp:nativeFallback`, que js/main.js dit ; jamais en silence ;
+//  - l'autre sens (consigne 108) : une bibliothèque qui se charge par le CDN, et dont GFS garde une copie de la MÊME version (GfsLink.secours), se charge par cette copie quand le CDN échoue ou ne répond pas en 3 secondes
+//    (le chargeur du kit, dans ExportCommon.loadScriptOnce) : jamais un deuxième CDN, et rien à dire à la personne (la fonction marche) ;
 //  - un choix qui change en cours de route (l'événement `extensions` de GFS) ne touche pas ce qui est déjà chargé : il vaut au prochain chargement de la fonction, sans recharger l'app.
 // Le script lui-même est posé par ExportCommon.loadScriptOnce, la seule porte des scripts (origine permise, empreinte vérifiée par le navigateur). Pour monter une version : package.json puis `node kit/outils/bibliotheques.mjs`
 // (le catalogue, la politique et l'empreinte écrite ici), puis la version et l'adresse écrites ici, et le dire à GFS dans « Changements qui touchent GFS » de GFS-ETAT.md : dev-tests/verify-code-hygiene.mjs compare ce tableau
@@ -49,6 +51,13 @@ const NativeLibs = (function () {
   const cdnOf = id => (Object.prototype.hasOwnProperty.call(LIBRARIES, id) ? { src: LIBRARIES[id].cdn.src, integrity: LIBRARIES[id].cdn.integrity } : null);
 
   const copyOf = id => (typeof GfsLink !== 'undefined' && GfsLink && typeof GfsLink.native === 'function' ? GfsLink.native(id) : null);
+  // L'autre sens (consigne 108 de GFS) : la bibliothèque est au CDN, et GFS en garde une copie de la MÊME version, qu'il donne comme secours (GfsLink.secours, `null` : un GFS d'avant, l'app seule, une autre version : elle ne vaut
+  // pas celle de la liste) et de forme `script` (ces neuf fichiers sont des scripts classiques : une copie « module » ne vaut pas non plus, comme pour la copie figée). ExportCommon.loadScriptOnce l'essaie après le CDN quand
+  // il échoue ou ne répond pas en 3 secondes ; la personne n'a rien choisi, rien n'est dit.
+  const spareOf = (id) => {
+    const spare = typeof GfsLink !== 'undefined' && GfsLink && typeof GfsLink.secours === 'function' ? GfsLink.secours(id, versionOf(id)) : null;
+    return spare && spare.forme === 'script' ? spare : null;
+  };
 
   // Ce que la personne a choisi pour la fonction `fn`, lu maintenant, et ce que l'app en fait :
   //  - { source: 'cdn', say: null }     aucune bibliothèque de la fonction n'a de copie : le CDN, le défaut (ou une app seule, ou un GFS d'avant) ;
@@ -77,6 +86,7 @@ const NativeLibs = (function () {
     if (!fn || ids.some(id => functionOf(id) !== fn)) throw new Error('Bibliothèque native inconnue, ou de fonctions différentes : ' + ids.join(', '));
     let decision = decide(fn);
     if (decision.say) announce(fn, decision.say, null);
+    let failed = null;   // l'adresse de la copie choisie qui vient d'échouer : le secours du CDN ne la reprend pas (le même fichier, la même réponse)
     for (const id of ids) {
       const copy = decision.source === 'copie' ? decision.copies.get(id) : null;
       if (copy) {
@@ -85,10 +95,12 @@ const NativeLibs = (function () {
           continue;
         } catch (e) {
           decision = { source: 'cdn', say: 'echec' };
+          failed = copy.src;
           announce(fn, 'echec', id);
         }
       }
-      await ExportCommon.loadScriptOnce(cdnOf(id));
+      const spare = spareOf(id);
+      await ExportCommon.loadScriptOnce(cdnOf(id), spare && spare.src !== failed ? spare : null);
     }
   }
 

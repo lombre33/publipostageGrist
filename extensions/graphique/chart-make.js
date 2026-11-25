@@ -58,7 +58,8 @@ const ChartMake = (function () {
     // La source que Grist Factory Suite donne (contexte ou événement `extensions`) : { src, integrite }. Sans elle - extension retirée, GFS qui ne la porte pas -, rien ne se charge.
     const source = Extensions.library(LIBRARY.id);
     if (!source) return Promise.reject(new Error('Bibliothèque non fournie par Grist Factory Suite : ' + LIBRARY.id + '@' + LIBRARY.version));
-    return ExportCommon.loadScriptOnce({ src: source.src, integrity: source.integrite });
+    // Le CDN d'abord, puis la copie de GFS quand il échoue ou tarde (consigne 108) : `Extensions.rescue` rend null quand GFS n'en donne pas.
+    return ExportCommon.loadScriptOnce({ src: source.src, integrity: source.integrite }, Extensions.rescue(LIBRARY.id));
   }
   // Résolue quand `window.echarts` est prêt ; rejetée si la source manque ou que le script ne charge pas, et réessayée alors à l'appel suivant.
   function ensureLibrary() {
