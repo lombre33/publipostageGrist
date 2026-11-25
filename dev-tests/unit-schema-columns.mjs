@@ -410,6 +410,28 @@ async function main() {
     check('renameDocuments éteint : aucune écriture', doc.bundles.length === 0 && 'Publipostage_Modeles' in doc.tables, doc.bundles.length);
   });
 
+  // Consigne 105 de GFS (25/11) : « plus de renommage en silence ». Le widget tel qu'il est servi n'a AUCUN mode d'essai (`__schemaNames` absent) : un document aux noms d'avant, widget ouvert, ne reçoit
+  // aucune action de renommage, ni à la lecture ni à l'écriture, et il se lit et s'écrit sous ses noms ; une table neuve naît pourtant en anglais (englishOnDisk allumé). Échoue sur l'ancien code (renameDocuments
+  // allumé quand le mode est absent : un lot RenameTable / RenameColumn partait à la première lecture).
+  await section('105 : le widget tel qu\'il est servi ne renomme rien en silence', async () => {
+    const doc = legacyDoc();
+    const warnings = [];
+    const ctx = createContext({ grist: { docApi: doc }, console: { warn: (...args) => warnings.push(args), log() {}, error() {} }, __schemaNames: undefined });
+    loadScript(ctx, 'js/schema-columns.js');
+    const api = evalIn(ctx, 'SchemaColumns.docApi');
+    const schema = evalIn(ctx, 'SchemaColumns');
+    const listed = await api.listTables();
+    const read = await api.fetchTable('Publipostage_Templates');
+    check('un document aux noms d\'avant, ouvert : aucune action envoyée, aucun lot tenté', doc.bundles.length === 0 && doc.journal.length === 0 && warnings.length === 0, JSON.stringify({ bundles: doc.bundles.length, journal: doc.journal.length, warnings }));
+    check('ses tables et ses colonnes gardent leurs noms d\'avant', 'Publipostage_Modeles' in doc.tables && !('Publipostage_Templates' in doc.tables) && same(doc.tables.Publipostage_Modeles.cols.slice(0, 2), ['Nom', 'Contenu']), Object.keys(doc.tables).join(','));
+    check('il se lit pourtant sous les noms anglais du code, et la reprise n\'a rien à dire', listed.includes('Publipostage_Templates') && same(read.Name, ['Facture', 'Devis']) && schema.lastMigration() === null, JSON.stringify({ listed, name: read.Name, migration: schema.lastMigration() }));
+    await api.applyUserActions([['UpdateRecord', 'Publipostage_Templates', 1, { Content: '<p>y</p>' }]]);
+    check('et s\'écrit sous ses noms d\'avant, sans le moindre renommage', same(doc.last(), ['UpdateRecord', 'Publipostage_Modeles', 1, { Contenu: '<p>y</p>' }]) && doc.journal.every(action => action[0] === 'UpdateRecord'), JSON.stringify(doc.journal));
+    const empty = createContext({ grist: { docApi: new Doc() }, console: { warn() {}, log() {}, error() {} }, __schemaNames: undefined });
+    loadScript(empty, 'js/schema-columns.js');
+    check('englishOnDisk ne change pas : sans document lu, une table neuve naît en anglais', evalIn(empty, "SchemaColumns.actualTable('Publipostage_Templates')") === 'Publipostage_Templates');
+  });
+
   await section('la reprise : le nom anglais est déjà pris, ou le document porte les deux noms', async () => {
     const taken = legacyDoc();
     taken.tables.publipostage_templates = { cols: ['x'], rows: [] }; // une table de la personne, à la casse près

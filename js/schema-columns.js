@@ -9,12 +9,14 @@
 //    qui n'existe pas encore est créée sous le nom que dit l'interrupteur (englishOnDisk), avec, sous l'ancien nom, le libellé que l'ancien code lui donnait ;
 //  - une table ou une colonne qui n'est pas dans la liste passe telle quelle : les tables de la personne, les métadonnées de Grist, et les deux tables du widget qui
 //    s'appelaient déjà en anglais (Publipostage_Direct, Publipostage_UserProbe).
-// Le renommage des documents d'avant se fait ICI, à la première lecture ou écriture d'une table du widget (migrate) : un seul lot d'actions (RenameTable, RenameColumn, puis le
+// Le renommage des documents d'avant se ferait ICI, à la première lecture ou écriture d'une table du widget (migrate) : un seul lot d'actions (RenameTable, RenameColumn, puis le
 // libellé de chaque colonne, qui ne suit pas le renommage dans Grist), que Grist rejoue en entier ou pas du tout. Un document qui ne s'y prête pas (lecteur, deux jeux de noms à la fois,
 // nom déjà pris) garde ses noms d'avant, et le traducteur continue de le lire et de l'écrire sous ces noms : le renommage est une commodité, jamais une condition.
+// **Il est ÉTEINT dans le widget tel qu'il est servi** (consigne 105 de GFS, 25/11 : « plus de renommage en silence ») : un document d'avant garde ses noms, lus et écrits tels quels par le traducteur, jusqu'à la
+// fenêtre commune de mise à jour des noms (consigne 104), qui prévient la personne et ne s'ouvre que pour qui peut le faire. Un document que la version de développement avait déjà renommé reste lu (les deux jeux de noms).
 // Deux interrupteurs : englishOnDisk (les noms que prend une table ou une colonne créée, et celui que l'on préfère quand un document porte les deux) et renameDocuments (le renommage ci-dessus).
 // Les essais posent `globalThis.__schemaNames` avant le chargement (dev-tests/grist-stub.js, dev-tests/unit-harness.mjs) : 'legacy' éteint les deux (le faux Grist porte les noms d'avant),
-// 'english' allume le premier seul, 'migrate' les deux ; absent (le widget en vrai), les deux sont allumés.
+// 'english' allume le premier seul, 'migrate' les deux (pour essayer la reprise elle-même) ; absent (le widget en vrai), le premier est allumé et le second ÉTEINT.
 //
 // Pourquoi un traducteur et pas `grist.docApi = ...` : le paquet de Grist (grist-plugin-api.js) exporte `docApi` par un accesseur sans écriture ; on ne peut pas
 // le remplacer. Les modules qui lisent ou écrivent les tables du widget passent donc ici ; ce que la personne a dans ses tables passe toujours par grist.docApi.
@@ -27,8 +29,9 @@ const SchemaColumns = (function () {
   // Faux : le document garde (et reçoit) les noms français d'avant. Vrai : les noms anglais.
   const testMode = typeof globalThis !== 'undefined' ? globalThis.__schemaNames : undefined;
   let englishOnDisk = testMode !== 'legacy';
-  // Vrai : les tables et les colonnes d'un document d'avant sont renommées à leur première lecture (migrate). Faux : il garde ses noms, lus tels quels.
-  let renameDocuments = testMode === undefined || testMode === 'migrate';
+  // Vrai : les tables et les colonnes d'un document d'avant sont renommées à leur première lecture (migrate). Faux : il garde ses noms, lus tels quels. Éteint dans le widget tel qu'il est servi (consigne 105
+  // de GFS) : seul le mode d'essai « migrate » l'allume, pour que la reprise elle-même reste essayée tant que la fenêtre commune de la consigne 104 ne la remplace pas.
+  let renameDocuments = testMode === 'migrate';
 
   // [nom anglais, nom d'avant, libellé que l'ancien code donnait à la colonne en l'ajoutant (absent : celui de Grist, c'est-à-dire l'identifiant)]. Les trois colonnes
   // dont le nom n'a pas changé (HeaderFooter, Margins, Cc) n'avaient que le libellé français.
