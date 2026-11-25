@@ -134,7 +134,9 @@ await probe.script(solo.app, HOSTS.script);
 await sleep(400);
 const soloSeen = await solo.app.evaluate(() => ({ violations: window.__violations.length, told: window.__told.length, active: GfsViolations.active(), tell: GfsLink.tell('securite', { quoi: 'relais', kit: '0.0.0' }) }));
 check('l\'app seule : la page lève bien une violation (script d\'un autre site bloqué), mais le relais est inactif, rien n\'est dit à personne et `GfsLink.tell` rend faux', soloSeen.violations >= 1 && soloSeen.active === false && soloSeen.told === 0 && soloSeen.tell === false, soloSeen);
-check('l\'app seule ne demande jamais le kit (ni le module de pose, ni son lecteur de message)', requestsOf(solo, /\/kit\//).length === 0, requestsOf(solo, /\/kit\//));
+// La feuille de la fenêtre des noms (kit/css/names-update.css, consigne 104) est une feuille que index.html pose toujours ; elle ne parle pas à GFS : seuls le module de pose et le lecteur du message sont du kit que l'app seule ne demande pas.
+const soloKit = requestsOf(solo, /\/kit\//).filter(url => !/\/kit\/css\/names-update\.css(\?|$)/.test(url));
+check('l\'app seule ne demande jamais le kit (ni le module de pose, ni son lecteur de message)', soloKit.length === 0, soloKit);
 check('l\'app seule : rien dans la console sur le relais', solo.logs.filter(text => OURS.test(text) && !/exemple\.test|Content Security Policy|Refused/i.test(text)).length === 0, solo.logs);
 await closeOf(solo);
 

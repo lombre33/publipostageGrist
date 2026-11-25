@@ -106,7 +106,9 @@ console.log('— 1) sans coupure : rien ne change');
 const solo = await open({ hosted: false });
 await settle(solo.app);
 const soloOracle = await oracleOf(solo.app);
-check('l\'app seule ne demande jamais le kit (ni le lecteur des correcteurs, ni la pose)', requestsOf(solo, /\/kit\//).length === 0, requestsOf(solo, /\/kit\//));
+// La feuille de la fenêtre des noms (kit/css/names-update.css, consigne 104) est une feuille que index.html pose toujours ; elle ne parle pas à GFS : seuls le lecteur des correcteurs et la pose sont du kit que l'app seule ne demande pas.
+const soloKit = requestsOf(solo, /\/kit\//).filter(url => !/\/kit\/css\/names-update\.css(\?|$)/.test(url));
+check('l\'app seule ne demande jamais le kit (ni le lecteur des correcteurs, ni la pose)', soloKit.length === 0, soloKit);
 check('l\'app seule : aucune marque nulle part, la pose est inactive, l\'app lit « pas coupé », et il y avait des zones à marquer', soloOracle.marked === 0 && soloOracle.wanted > 0 && (await poseOf(solo.app)) === false && (await readOf(solo.app)).coupes === false, soloOracle);
 check('l\'app seule : rien dans la console sur les correcteurs', solo.logs.filter(text => OURS.test(text)).length === 0, solo.logs);
 await closeOf(solo);
