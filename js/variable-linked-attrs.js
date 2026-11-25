@@ -168,7 +168,7 @@ const VariableLinkedAttrs = (function () {
     win.body.append(subtitle, inheritRow, path, stepBox, filter, list, note);
     refs = {
       title: win.title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, replaceBtn, insertBtn,
-      stepBox, stepDirection, stepRank, stepOrder, stepGroup, stepGo,
+      stepBox, stepDirection, stepRank, stepOrder, stepGroup, stepGo, stepHint,
     };
 
     filter.addEventListener('input', applyFilter);
@@ -299,7 +299,7 @@ const VariableLinkedAttrs = (function () {
     const table = levelTable();
     const cols = GristAPI.getVisibleColumns(table);
     // La colonne de la bulle d'origine, montrée mais pas cochable ; le choix d'une colonne n'a pas de bulle d'origine : toutes se sélectionnent.
-    const own = node ? String(node.attrs.column).split('.') : [];
+    const own = !node ? [] : state.mention ? (node.attrs.step ? [node.attrs.step, node.attrs.column] : [node.attrs.column]) : String(node.attrs.column).split('.');
     const currentCol = node && node.attrs.table === base && sameHops(own.slice(0, -1), hops) ? own[own.length - 1] : null;
     list.replaceChildren();
     if (!cols.some(c => c !== currentCol)) list.appendChild(el('div', 'var-linked-empty', I18n.t(state.pick ? 'varLinked.pickEmpty' : 'varLinked.empty', { table })));
@@ -392,11 +392,11 @@ const VariableLinkedAttrs = (function () {
     const { base, mention } = state;
     setNote(I18n.t('varCond.debug.computing'), true);
     let found = null;
-    try { found = await Mention.valuesOf(base, mention.row); } catch (e) { console.warn('[VariableLinkedAttrs] fiche illisible', e); }
+    try { found = await Mention.valuesOf(base, mention.row, mentionStep()); } catch (e) { console.warn('[VariableLinkedAttrs] fiche illisible', e); }
     if (gen !== valuesGeneration || !state) return;
-    if (!found || found.gone) {
+    if (!found || found.gone || found.none) {
       list.querySelectorAll('.var-linked-row').forEach(row => row.classList.add('is-unavailable'));
-      setNote(I18n.t(found ? 'varLinked.noteMentionGone' : 'varLinked.noteMentionUnreadable', { table: base }));
+      setNote(I18n.t(!found ? 'varLinked.noteMentionUnreadable' : found.none ? 'varLinked.noteMentionNone' : 'varLinked.noteMentionGone', { table: base }));
       return;
     }
     mention.labels = found.labels;
@@ -418,7 +418,11 @@ const VariableLinkedAttrs = (function () {
 
   function subtitleText() {
     const { node, base, hops, refColumn } = state;
-    if (state.mention) return I18n.t('varLinked.subtitleMention', { badge: Mention.chipText(node.attrs), id: state.mention.row, table: base });
+    if (state.mention) {
+      const jump = GristAPI.stepOf(mentionStep());
+      if (jump) return I18n.t('varLinked.subtitleMentionStep', { which: I18n.t(jump.offset < 0 ? 'varLinked.stepBefore' : 'varLinked.stepAfter'), rank: Math.abs(jump.offset), id: state.mention.row, table: base, order: jump.order });
+      return I18n.t('varLinked.subtitleMention', { badge: Mention.chipText(node.attrs), id: state.mention.row, table: base });
+    }
     if (hops.length) return I18n.t(crossesList() ? 'varLinked.subtitleList' : 'varLinked.subtitlePath', { table: levelTable(), path: pathText() });
     const currentTableId = GristAPI.getCurrentTableId();
     const badge = VariableModal.badgeText(node);
@@ -443,12 +447,11 @@ const VariableLinkedAttrs = (function () {
   function syncStepButton() {
     refs.stepGo.disabled = !refs.stepOrder.value;
   }
-  // Le volet « Ligne suivante ou précédente » du niveau affiché : les colonnes de sa table pour l'ordre et le groupe (une pièce jointe ne range rien). Pas sur une
-  // pastille (elle désigne une ligne précise) ; pour le choix d'une colonne (une règle de condition), oui : le chemin choisi porte alors le maillon.
+  // Le volet « Ligne suivante ou précédente » du niveau affiché : les colonnes de sa table pour l'ordre et le groupe (une pièce jointe ne range rien). Sur une bulle, pour le choix
+  // d'une colonne (une règle de condition : le chemin choisi porte le maillon) et sur une pastille « @ » (elle cite alors la fiche voisine de la sienne).
   function renderStepBox() {
-    const { stepBox, stepOrder, stepGroup } = refs;
-    stepBox.hidden = !!state.mention;
-    if (stepBox.hidden) return;
+    const { stepOrder, stepGroup, stepHint } = refs;
+    stepHint.textContent = I18n.t(state.mention ? 'varLinked.stepHintMention' : 'varLinked.stepHint');
     const table = levelTable();
     const columns = GristAPI.getVisibleColumns(table).filter(col => GristAPI.getColumnType(table, col) !== 'Attachments');
     const last = lastSeries[table] || {};
@@ -465,7 +468,8 @@ const VariableLinkedAttrs = (function () {
     lastSeries[levelTable()] = { order: stepOrder.value, group: stepGroup.value };
     const token = GristAPI.stepToken(stepDirection.value === 'before' ? -rank : rank, stepOrder.value, stepGroup.value);
     stepBox.open = false;
-    goTo(state.hops.concat(token));
+    // Une pastille cite UNE fiche voisine de la sienne : le maillon remplace celui d'avant, il ne s'y ajoute pas.
+    goTo(state.mention ? [token] : state.hops.concat(token));
   }
 
   // Affiche le niveau `state.hops` : titre, fil d'Ariane, colonnes puis valeurs. Le choix d'une colonne n'a pas de sous-titre (il dirait comment les attributs
@@ -546,13 +550,16 @@ const VariableLinkedAttrs = (function () {
     });
   }
 
+  // Le maillon « fiche voisine » du niveau affiché pour une pastille ('' : la fiche elle-même).
+  const mentionStep = () => state.hops.find(hop => GristAPI.stepOf(hop)) || '';
   // Contenu à poser pour ces colonnes de la fiche d'une pastille : une espace avant chaque pastille, qui cite la même ligne que `node` avec le texte lu par la fenêtre
   // (`state.mention.labels`), le même que celui que `Mention.resolve` donnera.
   function mentionContent(picks, node) {
     const { table, row } = node.attrs;
     const { labels } = state.mention;
+    const step = mentionStep() || null;
     return picks.flatMap(p => (labels && labels.get(p.col)
-      ? [{ type: 'text', text: ' ' }, { type: 'mention', attrs: { table, row, column: p.col, label: labels.get(p.col) } }]
+      ? [{ type: 'text', text: ' ' }, { type: 'mention', attrs: { table, row, step, column: p.col, label: labels.get(p.col) } }]
       : []));
   }
 
@@ -624,7 +631,7 @@ const VariableLinkedAttrs = (function () {
     const picks = orderedPicks();
     const first = state.mention.labels && state.mention.labels.get(picks[0].col);
     if (!first) return;
-    const attrs = Object.assign({}, node.attrs, { column: picks[0].col, label: first });
+    const attrs = Object.assign({}, node.attrs, { column: picks[0].col, step: mentionStep() || null, label: first });
     const after = pos + node.nodeSize;
     const content = mentionContent(picks.slice(1), node);
     close({ keepFocus: true });
@@ -666,6 +673,13 @@ const VariableLinkedAttrs = (function () {
     refs.stepDirection.value = 'after';
     refs.stepRank.value = '1';
     refs.stepBox.open = !!from.sameRow;
+    // Une pastille qui cite déjà une fiche voisine : le volet reprend son sens, son rang et ses colonnes.
+    const own = mention && node.attrs.step ? GristAPI.stepOf(node.attrs.step) : null;
+    if (own) {
+      refs.stepDirection.value = own.offset < 0 ? 'before' : 'after';
+      refs.stepRank.value = String(Math.abs(own.offset));
+      lastSeries[from.base] = { order: own.order, group: own.group };
+    }
     const { filter, cancelBtn, replaceBtn, subtitle, inheritRow } = refs;
     filter.placeholder = I18n.t('varLinked.filter');
     filter.setAttribute('aria-label', I18n.t('varLinked.filter'));
@@ -688,7 +702,7 @@ const VariableLinkedAttrs = (function () {
     if (node && node.type.name === 'mention') {
       if (opening || state || !Mention.columnsStatus(node.attrs).enabled) return;
       EditorCore.hideFloatingContextToolbars();
-      showFor(editor, pos, node, { base: node.attrs.table, refColumn: null, minHops: 0, hops: [] }, { row: node.attrs.row });
+      showFor(editor, pos, node, { base: node.attrs.table, refColumn: null, minHops: 0, hops: node.attrs.step ? [node.attrs.step] : [] }, { row: node.attrs.row });
       return;
     }
     if (!node || node.type.name !== 'varBadge' || opening || state) return;

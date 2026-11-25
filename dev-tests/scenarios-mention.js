@@ -773,7 +773,8 @@
       await h.sleep(150);
       const afterCaret = barOf().classList.contains('visible');
       await h.resetEditor();
-      const usual = 'Autres colonnes de la même fiche';
+      // Depuis le 25/11 le bouton dit aussi la fiche voisine (js/mention.js, la ligne suivante ou précédente d'une série).
+      const usual = 'Autres colonnes de la même fiche, ou fiche suivante ou précédente';
       const wanted = [
         { grey: false, aria: 'false', title: usual },
         { grey: true, aria: 'true', title: 'Cette fiche n’existe plus dans la table « ' + PEOPLE + ' ».' },
@@ -1109,7 +1110,7 @@
           };
         });
         closeWindow();
-        const pass = english.bar === 'Other columns of the same record' && english.title === 'Other columns of “' + PEOPLE + '”'
+        const pass = english.bar === 'Other columns of the same record, or the next or previous record' && english.title === 'Other columns of “' + PEOPLE + '”'
           && english.subtitle === 'Same record as @Marie Martin: row #2 of “' + PEOPLE + '”, whichever row is selected in Grist.' && english.current === '· this chip'
           && english.replace === 'Replace' && english.replaceTitle === 'Replaces @Marie Martin with the checked columns instead of inserting them after it.'
           && english.note === 'Values for this record. “Insert” adds the checked columns right after the chip, separated by a space; “Replace” puts them in its place.'

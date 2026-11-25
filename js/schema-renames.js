@@ -531,11 +531,28 @@ const SchemaRenames = (function () {
     return 1;
   }
 
+  // La fiche d'une pastille « @ » : sa table et sa colonne et, pour une fiche voisine (`data-mention-step`, js/mention.js), les colonnes d'ordre et de groupe de son maillon - lues
+  // comme le chemin « maillon.colonne » d'une bulle, qui se réécrit d'un seul geste.
+  function rewriteMention(el, m) {
+    const names = REFERENCE_ATTRS.mention;
+    const step = el.getAttribute('data-mention-step');
+    if (!step) return rewriteReference(el, m, names);
+    const table = el.getAttribute(names.table);
+    const column = el.getAttribute(names.column);
+    const next = table && column ? m.mapQualified(table, step + '.' + column) : null;
+    if (!next) return 0;
+    const cut = next.column.lastIndexOf('.');
+    el.setAttribute(names.table, next.table);
+    el.setAttribute('data-mention-step', next.column.slice(0, cut));
+    el.setAttribute(names.column, next.column.slice(cut + 1));
+    return 1;
+  }
+
   // Un élément du modèle (bulle et son sinon, bulle de calcul, image liée ou QR code, bloc, valeur ou case conditionnels) : le nombre de références
   // réécrites.
   function rewriteElement(el, m, page, trigger) {
     let count = rewriteReference(el, m, el.tagName === 'IMG' ? REFERENCE_ATTRS.image : REFERENCE_ATTRS.badge) + rewriteReference(el, m, REFERENCE_ATTRS.otherwise)
-      + rewriteReference(el, m, REFERENCE_ATTRS.mention);
+      + rewriteMention(el, m);
     const formula = el.getAttribute('data-formula');
     if (formula) {
       const next = rewriteFormula(formula, m);

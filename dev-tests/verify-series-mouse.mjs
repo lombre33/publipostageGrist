@@ -209,6 +209,57 @@ async function runMode(mode) {
       return { keys, text };
     });
     check(`${label} : la bulle porte le maillon et écrit le titre de la ligne suivante`, JSON.stringify(after.keys) === JSON.stringify(['VsInstances.+1(Date;Cycle).Titre']) && /Séance 2/.test(after.text) && !/Séance 1/.test(after.text), after);
+
+    // 4. La pastille « @ » : même fenêtre depuis sa barre, « Remplacer » met la fiche voisine dans la pastille, avec son signe « +1 » visible.
+    await page.evaluate(() => {
+      Mention.reset();
+      Editor.setHTML('<p>Prochaine : <span class="mention-chip" contenteditable="false" data-mention-table="VsInstances" data-mention-row="2" data-mention-column="Titre">Séance 1</span></p>');
+    });
+    await page.waitForTimeout(500);
+    const chip = await centerOf(page, '.tiptap span.mention-chip');
+    await page.mouse.click(chip.x, chip.y);
+    await page.waitForTimeout(300);
+    const chipBtn = await centerOf(page, '.v2-mention-toolbar button[data-action="mention-linked"]');
+    check(`${label} : la barre de la pastille a son bouton « autres colonnes » et rien ne le recouvre`, !!chipBtn && await reachable(page, '.v2-mention-toolbar button[data-action="mention-linked"]'), chipBtn);
+    await shot(page, `${mode.lang}-${mode.theme}-5-pastille-avant`);
+    await page.mouse.click(chipBtn.x, chipBtn.y);
+    await page.waitForTimeout(400);
+    const chipBox = await centerOf(page, '#var-linked-modal .var-modal-content');
+    check(`${label} : la fenêtre d'une pastille tient dans le panneau (${WIDTH}x${HEIGHT}) sans être rognée`, !!chipBox && chipBox.left >= 0 && chipBox.right <= WIDTH && chipBox.top >= 0 && chipBox.bottom <= HEIGHT, chipBox);
+    const chipPanel = await page.evaluate(() => { const d = document.querySelector('.var-linked-step'); return !!d && !d.hidden; });
+    check(`${label} : la fenêtre d'une pastille propose le volet « Ligne suivante ou précédente »`, chipPanel);
+    const summary = await centerOf(page, '.var-linked-step > summary');
+    check(`${label} : pastille, le volet est fermé d'emblée et son titre reçoit le vrai clic`, !!summary && await reachable(page, '.var-linked-step > summary') && !(await page.evaluate(() => document.querySelector('.var-linked-step').open)), summary);
+    await page.mouse.click(summary.x, summary.y);
+    await page.waitForTimeout(300);
+    const chipBox2 = await centerOf(page, '#var-linked-modal .var-modal-content');
+    check(`${label} : pastille, le volet ouvert, la fenêtre reste dans le panneau`, !!chipBox2 && chipBox2.left >= 0 && chipBox2.right <= WIDTH && chipBox2.top >= 0 && chipBox2.bottom <= HEIGHT, chipBox2);
+    for (const field of ['direction', 'rank', 'order', 'group']) {
+      const where = await centerOf(page, `.var-linked-step-${field}`);
+      check(`${label} : pastille, le champ « ${field} » est atteignable à la souris`, !!where && await reachable(page, `.var-linked-step-${field}`), where);
+    }
+    await page.selectOption('.var-linked-step-order', 'Date');
+    await page.selectOption('.var-linked-step-group', 'Cycle');
+    const chipGo = await centerOf(page, '.var-linked-step-go');
+    await page.mouse.click(chipGo.x, chipGo.y);
+    await page.waitForTimeout(500);
+    await shot(page, `${mode.lang}-${mode.theme}-6-pastille-fenetre`);
+    const chipTick = await centerOf(page, '.var-linked-row[data-col="Titre"] input');
+    await page.mouse.click(chipTick.x, chipTick.y);
+    const chipReplace = await centerOf(page, '#var-linked-modal button.var-linked-replace');
+    check(`${label} : pastille, « Remplacer » reçoit le vrai clic`, !!chipReplace && chipReplace.bottom <= HEIGHT && await reachable(page, '#var-linked-modal button.var-linked-replace'), chipReplace);
+    await page.mouse.click(chipReplace.x, chipReplace.y);
+    await page.waitForTimeout(500);
+    const sign = await page.evaluate(() => {
+      const el = document.querySelector('.tiptap span.mention-chip');
+      if (!el) return null;
+      const after = getComputedStyle(el, '::after');
+      return { text: el.textContent, step: el.getAttribute('data-mention-step'), sign: el.getAttribute('data-mention-sign'), drawn: after.content, broken: el.classList.contains('mention-chip-broken') };
+    });
+    check(`${label} : la pastille cite la voisine (« Séance 2 ») avec son signe « +1 » dessiné`, !!sign && sign.text === 'Séance 2' && sign.step === '+1(Date;Cycle)' && sign.sign === '+1' && /\+1/.test(sign.drawn) && !sign.broken, sign);
+    await page.mouse.click(5, 5);
+    await page.waitForTimeout(200);
+    await shot(page, `${mode.lang}-${mode.theme}-7-pastille-apres`);
   } finally {
     await context.close();
   }

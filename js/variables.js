@@ -967,7 +967,7 @@ const Variables = (function () {
   // est un chemin sans maillon à suivre. Une liste de références (« Membres.Email ») se suit aussi : elle désigne plusieurs lignes, et l'on lit
   // Email sur chacune, dans l'ordre de la liste - une valeur par ligne, comme pour une table liée par une règle « match » (`multi`).
 
-  const { resolveRows } = (function () {
+  const { resolveRows, stepNeighbor } = (function () {
     // Descendre de référence en référence
 
     // Les lignes brutes (fetchTable) de `varTable` d'où part la variable pour la ligne courante : la ligne du tour d'une zone répétée, la ligne
@@ -1049,15 +1049,15 @@ const Variables = (function () {
     async function stepRows(table, jump, rows, opts) {
       if (!rows.some(Boolean)) return { table, rows: rows.map(() => null), many: false };
       const fetchRows = (opts && opts.fetchRows) || GristAPI.fetchTableRows;
-      const index = seriesOf(table, await fetchRows(table), jump);
-      return {
-        table,
-        rows: rows.map(row => {
-          const place = row && index.get(row.id);
-          return (place && place.list[place.at + jump.offset]) || null;
-        }),
-        many: false,
-      };
+      const all = await fetchRows(table);
+      return { table, rows: rows.map(row => (row ? stepNeighbor(table, all, row.id, jump) : null)), many: false };
+    }
+    // La ligne voisine de la ligne d'identifiant `id` parmi `rows` (toutes les lignes brutes de `table`, le même tableau d'une demande à l'autre pour garder le rangement) :
+    // celle du maillon `jump` (GristAPI.stepOf), ou null au bout de la série, pour une ligne hors série ou disparue. Partagé avec la pastille « @ » (js/mention.js), qui lit
+    // la table elle-même.
+    function stepNeighbor(table, rows, id, jump) {
+      const place = seriesOf(table, rows, jump).get(id);
+      return (place && place.list[place.at + jump.offset]) || null;
     }
     // Les lignes de la table où mène le chemin `hops` (suite de colonnes Référence ou liste de références) à partir de la ligne courante de `varTable` :
     // { table, rows, multi } (une ligne, ou null si le chemin s'arrête sur une référence vide, par ligne de départ ; toutes celles des listes quand le chemin en
@@ -1080,7 +1080,7 @@ const Variables = (function () {
       }
       return { table, rows, multi };
     }
-    return { resolveRows };
+    return { resolveRows, stepNeighbor };
   })();
   const { resolveRawValue, resolveVariableResult, resolveVariable, resolveListTexts, resolveRowTexts } = (function () {
     // La valeur brute d'une variable, son texte et ses valeurs de liste
@@ -1905,7 +1905,7 @@ const Variables = (function () {
   // lien qui ne trouve aucune ligne, js/editor.js et js/variable-column.js).
   return {
     createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
-    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, formatValue, listTexts, resolveListTexts, rowTexts, resolveRowTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, rowListOf, columnsBelow, attachmentReference, attachmentColumnsBelow,
+    preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, stepNeighbor, formatValue, listTexts, resolveListTexts, rowTexts, resolveRowTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, rowListOf, columnsBelow, attachmentReference, attachmentColumnsBelow,
     calcOperand, resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
     linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses,
   };

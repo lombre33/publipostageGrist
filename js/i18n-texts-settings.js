@@ -658,7 +658,9 @@ const I18nTextsSettings = {
   'mention.broken.column': { fr: 'La colonne « {column} » n’existe plus dans la table « {table} ».', en: 'Column “{column}” no longer exists in table “{table}”.' },
   'mention.broken.row': { fr: 'Cette fiche n’existe plus dans la table « {table} ».', en: 'This record no longer exists in table “{table}”.' },
   // Le bouton de la barre d'une pastille sélectionnée : la fenêtre « Autres colonnes de « {table} » » des bulles (varLinked.*), ouverte sur la ligne de la fiche.
-  'mention.toolbar.linked': { fr: 'Autres colonnes de la même fiche', en: 'Other columns of the same record' },
+  'mention.toolbar.linked': { fr: 'Autres colonnes de la même fiche, ou fiche suivante ou précédente', en: 'Other columns of the same record, or the next or previous record' },
+  'mention.titleStep': { fr: 'La fiche {which} (rang {rank}) de la table « {table} », rangée selon « {order} »', en: 'The {which} record (distance {rank}) in table “{table}”, ordered by “{order}”' },
+  'mention.alone': { fr: 'Aucune fiche à ce rang dans cette série : la pastille n’écrit rien.', en: 'No record at this distance in this series: the chip writes nothing.' },
 
   // --- Réglages > Raccourcis : touches du clavier (js/shortcuts.js, js/shortcuts-panel.js) ---
   'settings.switch.aria': { fr: 'Sections des raccourcis', en: 'Shortcut sections' },

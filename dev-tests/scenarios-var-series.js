@@ -540,6 +540,188 @@
     },
   });
 
+  // --- Lot 2b : la pastille « @ » qui cite la fiche voisine ---
+  const chipHtml = (row, step, column, label) => `<span class="mention-chip" contenteditable="false" data-mention-table="${PAGE}" data-mention-row="${row}" data-mention-column="${column || 'Titre'}"`
+    + `${step ? ` data-mention-step="${step}"` : ''}>${label || 'x'}</span>`;
+  const mentionNodes = ed => {
+    const out = [];
+    ed.state.doc.descendants((node, pos) => { if (node.type.name === 'mention') out.push({ node, pos }); });
+    return out;
+  };
+  const attrsOfChip = node => ({ row: node.attrs.row, step: node.attrs.step, column: node.attrs.column, label: node.attrs.label });
+  async function openChipWindow(h, index) {
+    const ed = EditorCore.getEditor();
+    document.querySelector('.tiptap').focus();
+    const found = mentionNodes(ed)[index || 0];
+    ed.commands.setNodeSelection(found.pos);
+    await h.sleep(150);
+    document.querySelector('.v2-mention-toolbar button[data-action="mention-linked"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    await h.sleep(350);
+    return ed;
+  }
+  const tickColumn = col => {
+    const input = rowOf(col).querySelector('input');
+    input.checked = true;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  cases.push({
+    id: 'varseries_a_chip_cites_the_neighbor_fiche_and_writes_nothing_at_the_end',
+    description: 'Une pastille « @ » de la ligne 2 avec le maillon « +1(Date;Cycle) » écrit le titre de la fiche d’après (« Séance 2 ») au lieu du sien (« Séance 1 »), « -1 » celle d’avant ; au bout de la série ou pour une fiche hors série elle n’écrit rien, sans erreur ; sa fiche disparue ou sa colonne d’ordre disparue : « [Fiche introuvable] » ; son HTML garde le maillon et écrit le signe « +1 », une pastille ordinaire garde le HTML d’avant',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      const text = async (row, step) => Mention.resolve({ table: PAGE, row, column: 'Titre', step, label: 'x' });
+      const got = {
+        own: (await text(2, null)).text,
+        next: (await text(2, NEXT)).text,
+        nextOfNext: (await text(2, '+2(Date;Cycle)')).text,
+        before: (await text(4, '-1(Date;Cycle)')).text,
+        end: await text(1, NEXT),
+        outOfSeries: await text(6, NEXT),
+        goneRow: await text(99, NEXT),
+        brokenOrder: await text(2, '+1(Inconnue;Cycle)'),
+      };
+      const withStep = Mention.html({ table: PAGE, row: 2, column: 'Titre', step: NEXT, label: 'Séance 2' });
+      const plain = Mention.html({ table: PAGE, row: 2, column: 'Titre', label: 'Séance 1' });
+      const parsed = Mention.fieldAttrsOf(dom(withStep));
+      const parsedPlain = Mention.fieldAttrsOf(dom(plain));
+      const pass = got.own === 'Séance 1' && got.next === 'Séance 2' && got.nextOfNext === 'Séance 2 bis' && got.before === 'Séance 1'
+        && got.end.text === '' && got.end.isError === false && got.outOfSeries.text === '' && got.outOfSeries.isError === false && got.goneRow.isError === true && got.brokenOrder.isError === true
+        && withStep.indexOf('data-mention-step="+1(Date;Cycle)"') !== -1 && withStep.indexOf('data-mention-sign="+1"') !== -1
+        && plain.indexOf('data-mention-step') === -1 && plain.indexOf('data-mention-sign') === -1
+        && parsed.step === NEXT && parsed.row === 2 && parsed.column === 'Titre' && !('step' in parsedPlain);
+      return { pass, notes: JSON.stringify({ got, withStep, plain, parsed, parsedPlain }) };
+    },
+  });
+  function dom(html) { const t = document.createElement('template'); t.innerHTML = html; return t.content.firstElementChild; }
+
+  cases.push({
+    id: 'varseries_a_chip_shows_the_sign_and_the_neighbor_name_in_the_editor',
+    description: 'Dans l’éditeur, la pastille de la fiche voisine montre le nom de la voisine d’aujourd’hui (« Séance 2 », pas « x ») avec son signe « +1 » (attribut data-mention-sign, dessiné par le CSS), une info-bulle qui dit le sens, le rang et la colonne d’ordre ; au bout de la série elle est « seule » (liseré en tirets, info-bulle « n’écrit rien ») sans être rouge ; une colonne d’ordre disparue la rend rouge avec le nom de cette colonne',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + [chipHtml(2, NEXT), chipHtml(1, NEXT), chipHtml(7, '-2(Date;Cycle)'), chipHtml(2, '+1(Inconnue;Cycle)'), chipHtml(2, null, 'Titre', 'Séance 1')].join(' ') + '</p>');
+      await h.sleep(700);
+      const chips = Array.from(document.querySelectorAll('.tiptap span.mention-chip'));
+      const info = chips.map(c => ({
+        text: c.textContent, sign: c.getAttribute('data-mention-sign'), broken: c.classList.contains('mention-chip-broken'), alone: c.classList.contains('mention-chip-alone'), title: c.title,
+      }));
+      const signDrawn = chips[0] ? getComputedStyle(chips[0], '::after').content : '';
+      const pass = info.length === 5 && info[0].text === 'Séance 2' && info[0].sign === '+1' && !info[0].broken && !info[0].alone && /suivante/.test(info[0].title) && /Date/.test(info[0].title)
+        && info[1].alone === true && !info[1].broken && /n’écrit rien/.test(info[1].title)
+        && info[2].sign === '−2' && !info[2].alone && info[2].text === 'Séance 1';
+      const rest = info[3] && info[3].broken === true && /Inconnue/.test(info[3].title) && info[4] && info[4].sign === null && !info[4].alone && !info[4].broken;
+      return { pass: pass && !!rest && /\+1/.test(signDrawn), notes: JSON.stringify({ info, signDrawn }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_the_window_of_a_chip_goes_to_the_neighbor_fiche_and_replaces_one_chip',
+    description: 'La fenêtre d’une pastille a aussi le volet « Ligne suivante ou précédente » : « Aller à cette ligne » montre les valeurs de la fiche voisine (le fil d’Ariane dit le maillon, la liste montre « Séance 2 »), cocher Titre puis « Remplacer » met le maillon dans la même pastille (une seule, avec le nom de la voisine) et un seul Annuler rend l’ancienne ; « Insérer » cite la voisine à la suite avec une espace',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipHtml(2, null, 'Titre', 'Séance 1') + '</p>');
+      await h.sleep(500);
+      const ed = await openChipWindow(h, 0);
+      const offered = !!modal() && !step().hidden && !step().open;
+      choose('order', 'Date');
+      choose('group', 'Cycle');
+      step('go').click();
+      await h.sleep(300);
+      const level = { crumbs: crumbs(), titre: valueOf('Titre'), numero: valueOf('Numero'), subtitle: modal().querySelector('.var-linked-subtitle, .var-modal-intro') ? modal().querySelector('.var-linked-subtitle, .var-modal-intro').textContent : '' };
+      tickColumn('Titre');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(250);
+      const replaced = mentionNodes(ed).map(n => attrsOfChip(n.node));
+      ed.commands.undo();
+      await h.sleep(200);
+      const undone = mentionNodes(ed).map(n => attrsOfChip(n.node));
+      // Insérer : la voisine à la suite, la pastille d'origine intacte.
+      const again = await openChipWindow(h, 0);
+      choose('order', 'Date');
+      choose('group', 'Cycle');
+      step('go').click();
+      await h.sleep(300);
+      tickColumn('Titre');
+      modal().querySelector('.var-modal-primary').click();
+      await h.sleep(250);
+      const inserted = mentionNodes(again).map(n => attrsOfChip(n.node));
+      const spaced = again.state.doc.textBetween(0, again.state.doc.content.size, '|', '|');
+      const pass = offered && JSON.stringify(level.crumbs) === JSON.stringify([PAGE, NEXT]) && level.titre === 'Séance 2' && level.numero === '2'
+        && replaced.length === 1 && replaced[0].step === NEXT && replaced[0].column === 'Titre' && replaced[0].label === 'Séance 2' && replaced[0].row === 2
+        && undone.length === 1 && !undone[0].step && undone[0].label === 'Séance 1'
+        && inserted.length === 2 && !inserted[0].step && inserted[1].step === NEXT && inserted[1].label === 'Séance 2' && inserted[1].row === 2 && /\s/.test(spaced.replace(/\|/g, ' '));
+      return { pass, notes: JSON.stringify({ offered, level, replaced, undone, inserted, spaced }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_the_window_of_a_chip_with_a_step_opens_on_its_level_and_says_when_there_is_no_neighbor',
+    description: 'Une pastille qui cite déjà la fiche voisine rouvre la fenêtre sur ce niveau (fil d’Ariane « VsInstances › +1(Date;Cycle) », sens, rang et colonnes du volet repris, sa colonne marquée « cette pastille ») ; revenir au niveau de la table puis cocher une colonne ôte le maillon ; au bout de la série la fenêtre dit qu’aucune fiche ne répond et grise toutes les cases',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipHtml(4, '-1(Date;Cycle)', 'Titre', 'Séance 1') + '</p>');
+      await h.sleep(500);
+      const ed = await openChipWindow(h, 0);
+      const opened = { crumbs: crumbs(), direction: step('direction').value, rank: step('rank').value, order: step('order').value, group: step('group').value, current: rowOf('Titre').classList.contains('is-current'), titre: valueOf('Titre') };
+      // Remonter au niveau de la table : plus de maillon dans la pastille remplacée.
+      modal().querySelector('.var-linked-path button.var-linked-crumb').click();
+      await h.sleep(250);
+      tickColumn('Titre');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(250);
+      const cleared = mentionNodes(ed).map(n => attrsOfChip(n.node));
+      Editor.setHTML('<p>' + chipHtml(1, null, 'Titre', 'Séance 3') + '</p>');
+      await h.sleep(500);
+      await openChipWindow(h, 0);
+      choose('order', 'Date');
+      choose('group', 'Cycle');
+      step('go').click();
+      await h.sleep(300);
+      const end = { note: modal().querySelector('.var-linked-note').textContent, enabled: Array.from(modal().querySelectorAll('.var-linked-row input')).filter(i => !i.disabled).length };
+      VariableLinkedAttrs.close({ keepFocus: true });
+      const pass = JSON.stringify(opened.crumbs) === JSON.stringify([PAGE, '-1(Date;Cycle)']) && opened.direction === 'before' && opened.rank === '1' && opened.order === 'Date' && opened.group === 'Cycle'
+        && opened.current === true && opened.titre === 'Séance 1'
+        && cleared.length === 1 && !cleared[0].step && cleared[0].label === 'Séance 2'
+        && /Aucune fiche à ce rang/.test(end.note) && end.enabled === 0;
+      return { pass, notes: JSON.stringify({ opened, cleared, end }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_renamed_order_column_is_followed_in_a_chip_and_every_export_writes_its_neighbor',
+    description: 'Les colonnes d’ordre et de groupe renommées sont réécrites dans le maillon d’une pastille (data-mention-step « +1(Date;Cycle) » devient « +1(Quand;Serie) »), la colonne lue aussi ; la Lecture et le Word écrivent le nom de la fiche voisine, quelle que soit la ligne affichée',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      const m = SchemaRenames.createMapper(SCHEMA_OLD, SCHEMA_NEW, {});
+      const out = SchemaRenames.rewriteHtml(`<p>${chipHtml(2, NEXT, 'Titre', 'Séance 2')}</p>`, m, { page: m.tableContext(PAGE), trigger: Variables.triggerChar() });
+      const renamed = dom(out.html.indexOf('<p>') === 0 ? out.html.replace(/^<p>|<\/p>$/g, '') : out.html);
+      const found = { step: renamed.getAttribute('data-mention-step'), column: renamed.getAttribute('data-mention-column'), count: out.count };
+      const same = SchemaRenames.createMapper(SCHEMA_OLD, SCHEMA_OLD, {});
+      const untouched = SchemaRenames.rewriteHtml(`<p>${chipHtml(2, NEXT, 'Titre', 'Séance 2')}</p>`, same, { page: same.tableContext(PAGE), trigger: Variables.triggerChar() });
+      await at(h, 5);
+      const body = `<p>Prochaine : ${chipHtml(2, NEXT)}, fin : ${chipHtml(1, NEXT)}.</p>`;
+      const readerOut = await readerText(body);
+      await ExportCommon.ensureJsZipLoaded();
+      await DocxExport.ensureDocxLibLoaded();
+      const noHeaderFooter = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      const { blob } = await DocxExport.getDocxBlobForRecord(body, PAGE, recordOf(5), '', noHeaderFooter, null);
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const docx = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml').documentElement.textContent;
+      const pass = found.step === '+1(Quand;Serie)' && found.column === 'Intitule' && found.count === 1 && untouched.count === 0
+        && /Prochaine : Séance 2, fin : \.?/.test(readerOut) && !/introuvable|Fiche/i.test(readerOut) && docx.indexOf('Prochaine : Séance 2, fin :') !== -1 && !/introuvable/i.test(docx);
+      return { pass, notes: JSON.stringify({ found, untouched: untouched.count, readerOut, docx: docx.slice(0, 120) }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varSeries = cases;
 })();

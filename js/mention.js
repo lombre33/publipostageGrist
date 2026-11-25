@@ -24,6 +24,10 @@
 // la fenêtre des bulles (js/variable-linked-attrs.js) s'ouvre sur la ligne de la fiche - jamais sur celle que la page affiche - pour changer la colonne que la pastille lit
 // (« Remplacer », le nom de la pastille devient celui de la nouvelle colonne) ou en citer d'autres à la suite (« Insérer »).
 //
+// Une pastille peut citer la fiche VOISINE de la sienne dans une série (attribut `step`, le maillon « +1(Date;Cycle) » de GristAPI.stepOf, comme dans le chemin d'une variable) : « la séance
+// suivante de @Séance 3 » reste liée à la fiche choisie, mais écrit le nom de celle qui la suit quand les fiches de la table sont rangées selon la colonne d'ordre. Le signe « +1 » est
+// dessiné après le nom (css/mention.css) ; au bout de la série la pastille n'écrit rien. Posée par la fenêtre « Autres colonnes de la même fiche, ou fiche suivante ou précédente ».
+//
 // Les tables se lisent en entier (fetchTable) : une table lue il y a moins de FRESH_MS est réutilisée, pour que l'export d'un lot de lignes ne la relise pas à
 // chaque document. La lecture n'est pas celle de GristAPI.withReadPass : elle ne dépend d'aucun rendu en cours.
 const Mention = (function () {
@@ -267,10 +271,19 @@ const Mention = (function () {
   // texte de la pastille (régénéré à chaque rendu depuis l'attribut `label` du nœud, jamais stocké en double). Le « @ » n'est pas dans le texte : le CSS le
   // dessine (css/mention.css), le nom reste donc seul dans le presse-papiers, les lecteurs d'écran et les enregistrements.
   // `data-cond-style` : la mise en forme selon la ligne de la page (js/conditional-style.js), écrite seulement quand elle est posée - une pastille sans réglage garde le HTML d'avant.
+  // `data-mention-step` : le maillon « ligne voisine » de la pastille, écrit seulement quand il est posé ; `data-mention-sign` en est le signe lisible (« +1 », « −2 »), que le CSS
+  // dessine après le nom, et que personne ne relit (il se déduit du maillon).
+  const signOf = step => {
+    const jump = GristAPI.stepOf(step);
+    return jump ? (jump.offset < 0 ? '\u2212' : '+') + Math.abs(jump.offset) : '';
+  };
   const refAttributes = attrs => Object.assign({ 'data-mention-table': attrs.table, 'data-mention-row': attrs.row, 'data-mention-column': attrs.column },
+    attrs.step ? { 'data-mention-step': attrs.step, 'data-mention-sign': signOf(attrs.step) } : {},
     attrs.condStyle ? { 'data-cond-style': JSON.stringify(attrs.condStyle) } : {});
   function refOf(element) {
-    return { table: element.getAttribute('data-mention-table'), row: Number(element.getAttribute('data-mention-row')), column: element.getAttribute('data-mention-column') };
+    const step = element.getAttribute('data-mention-step');
+    return Object.assign({ table: element.getAttribute('data-mention-table'), row: Number(element.getAttribute('data-mention-row')), column: element.getAttribute('data-mention-column') },
+      step ? { step } : {});
   }
   const attrsOf = (element) => {
     const condStyle = ConditionalStyle.parse(element.getAttribute('data-cond-style'));
@@ -284,7 +297,7 @@ const Mention = (function () {
     const span = document.createElement('span');
     span.className = 'mention-chip';
     span.setAttribute('contenteditable', 'false');
-    const ref = refAttributes({ table: attrs.table, row: attrs.row, column: attrs.column });
+    const ref = refAttributes({ table: attrs.table, row: attrs.row, column: attrs.column, step: attrs.step });
     Object.keys(ref).forEach(name => span.setAttribute(name, ref[name]));
     span.textContent = attrs.label || '';
     return span.outerHTML;
@@ -298,7 +311,7 @@ const Mention = (function () {
       name: 'mention',
       addAttributes() {
         // `label` : le nom de la fiche quand elle a été posée - le seul texte d'une pastille dont la table ne se lit plus, jamais celui qu'un export écrit.
-        return { table: EditorNodes.internalAttr(null), row: EditorNodes.internalAttr(null), column: EditorNodes.internalAttr(null), label: EditorNodes.internalAttr(''), condStyle: EditorNodes.internalAttr(null) };
+        return { table: EditorNodes.internalAttr(null), row: EditorNodes.internalAttr(null), column: EditorNodes.internalAttr(null), step: EditorNodes.internalAttr(null), label: EditorNodes.internalAttr(''), condStyle: EditorNodes.internalAttr(null) };
       },
       parseHTML() {
         return [{ tag: 'span.mention-chip', getAttrs: attrsOf }];
@@ -339,6 +352,21 @@ const Mention = (function () {
     return { dom };
   }
 
+  // Les fiches voisines
+
+  // Le maillon `step` (GristAPI.stepOf) d'une pastille de `table`, quand ses colonnes d'ordre et de groupe existent encore ; null sinon.
+  function jumpOf(table, step) {
+    const jump = step ? GristAPI.stepOf(step) : null;
+    return jump && GristAPI.tableAtEndOf(table, [step]) ? jump : null;
+  }
+  // Le rang, dans `entry`, de la fiche voisine de la ligne `row` pour le maillon `jump` ; undefined au bout de la série, pour une ligne hors série ou disparue. Le rangement est celui
+  // des variables (Variables.stepNeighbor), gardé avec les lignes de la lecture.
+  function neighborIndex(entry, table, row, jump) {
+    if (!entry.rows) entry.rows = GristAPI.rowsOf(entry.data);
+    const found = Variables.stepNeighbor(table, entry.rows, Number(row), jump);
+    return found ? rowIndex(entry, found.id) : undefined;
+  }
+
   // Ce que la fiche devient dans un document
 
   const missing = () => ({ text: I18n.t('reader.mentionMissing'), isError: true });
@@ -357,7 +385,12 @@ const Mention = (function () {
     try { entry = await read(attrs.table, FRESH_MS); } catch (e) { return unreadable(attrs); }
     const index = rowIndex(entry, attrs.row);
     if (index === undefined || !(attrs.column in entry.data)) return missing();
-    return { text: labelsOf(entry, attrs.table, attrs.column)[index], isError: false };
+    if (!attrs.step) return { text: labelsOf(entry, attrs.table, attrs.column)[index], isError: false };
+    // La fiche voisine : sa colonne d'ordre disparue rend la pastille introuvable ; au bout de la série elle n'écrit rien, sans erreur.
+    const jump = jumpOf(attrs.table, attrs.step);
+    if (!jump) return missing();
+    const neighbor = neighborIndex(entry, attrs.table, attrs.row, jump);
+    return { text: neighbor === undefined ? '' : labelsOf(entry, attrs.table, attrs.column)[neighbor], isError: false };
   }
 
   // La pastille dans l'éditeur
@@ -369,17 +402,31 @@ const Mention = (function () {
     if (tables.length && tables.indexOf(ref.table) === -1) return 'table';
     const columns = GristAPI.getVisibleColumns(ref.table);
     if (columns.length && columns.indexOf(ref.column) === -1) return 'column';
+    // Une colonne d'ordre ou de groupe de la fiche voisine qui a disparu : la même cause qu'une colonne lue.
+    if (columns.length && ref.step && !jumpOf(ref.table, ref.step)) return 'column';
     const entry = last.get(ref.table);
     return entry && rowIndex(entry, ref.row) === undefined ? 'row' : '';
   }
+  // La colonne que la pastille ne trouve plus : la sienne ou, pour une fiche voisine, la colonne d'ordre ou de groupe de son maillon.
+  function missingColumnOf(ref) {
+    const jump = ref.step ? GristAPI.stepOf(ref.step) : null;
+    const known = GristAPI.getVisibleColumns(ref.table);
+    if (!jump || known.indexOf(ref.column) === -1) return ref.column;
+    return [jump.order, jump.group].filter(Boolean).find(column => GristAPI.getColumnType(ref.table, column) === null) || ref.column;
+  }
 
+  // L'info-bulle d'une pastille qui cite la fiche voisine : le sens, le rang, la table et la colonne d'ordre.
+  function stepTitle(ref) {
+    const jump = GristAPI.stepOf(ref.step);
+    return I18n.t('mention.titleStep', { which: I18n.t(jump.offset < 0 ? 'varLinked.stepBefore' : 'varLinked.stepAfter'), rank: Math.abs(jump.offset), table: ref.table, order: jump.order });
+  }
   // L'info-bulle d'une pastille : le message de ce qui ne va plus, sinon la table de la fiche.
   function tooltipOf(problem, ref) {
     switch (problem) {
       case 'table': return I18n.t('mention.broken.table', { table: ref.table });
-      case 'column': return I18n.t('mention.broken.column', { column: ref.column, table: ref.table });
+      case 'column': return I18n.t('mention.broken.column', { column: missingColumnOf(ref), table: ref.table });
       case 'row': return I18n.t('mention.broken.row', { table: ref.table });
-      default: return I18n.t('mention.title', { table: ref.table });
+      default: return ref.step && GristAPI.stepOf(ref.step) ? stepTitle(ref) : I18n.t('mention.title', { table: ref.table });
     }
   }
 
@@ -388,7 +435,18 @@ const Mention = (function () {
     const entry = last.get(ref.table);
     const index = entry ? rowIndex(entry, ref.row) : undefined;
     if (index === undefined || !(ref.column in entry.data)) return null;
-    return labelsOf(entry, ref.table, ref.column)[index];
+    if (!ref.step) return labelsOf(entry, ref.table, ref.column)[index];
+    const jump = jumpOf(ref.table, ref.step);
+    if (!jump) return null;
+    const neighbor = neighborIndex(entry, ref.table, ref.row, jump);
+    return neighbor === undefined ? '' : labelsOf(entry, ref.table, ref.column)[neighbor];
+  }
+  // Une pastille de fiche voisine qui, d'après la dernière lecture de sa table, n'a pas de voisine à ce rang : elle n'écrit rien.
+  function isAlone(ref) {
+    const entry = last.get(ref.table);
+    const index = entry ? rowIndex(entry, ref.row) : undefined;
+    const jump = ref.step ? jumpOf(ref.table, ref.step) : null;
+    return !!jump && index !== undefined && neighborIndex(entry, ref.table, ref.row, jump) === undefined;
   }
 
   // Repeint une pastille : une classe, une info-bulle et le nom du moment (dans son <span> de début, cf. chipView) sur le <span> rendu, jamais dans le nœud (cela
@@ -397,7 +455,9 @@ const Mention = (function () {
     const ref = refOf(chip);
     const problem = problemOf(ref);
     chip.classList.toggle('mention-chip-broken', !!problem);
-    const tooltip = tooltipOf(problem, ref);
+    const alone = !problem && isAlone(ref);
+    chip.classList.toggle('mention-chip-alone', alone);
+    const tooltip = alone ? I18n.t('mention.alone') : tooltipOf(problem, ref);
     if (chip.title !== tooltip) chip.title = tooltip;
     const label = problem ? null : liveLabel(ref);
     if (label !== null && label !== '' && chip.textContent !== label) (chip.querySelector('.mention-chip-head') || chip).textContent = label;
@@ -426,7 +486,7 @@ const Mention = (function () {
   // Le bouton de la barre de la pastille : actif tant que la table et la ligne de sa fiche existent - une colonne disparue est justement ce que « Remplacer » répare - ; grisé sinon,
   // avec le message que dit la pastille rouge. { enabled, title }
   function columnsStatus(attrs) {
-    const ref = { table: attrs.table, row: attrs.row, column: attrs.column };
+    const ref = { table: attrs.table, row: attrs.row, column: attrs.column, step: attrs.step };
     const problem = problemOf(ref);
     if (problem === 'table' || problem === 'row') return { enabled: false, title: tooltipOf(problem, ref) };
     return { enabled: true, title: I18n.t('mention.toolbar.linked') };
@@ -435,10 +495,18 @@ const Mention = (function () {
   // Ce que la fiche (`table`, ligne `row`) écrirait dans chacune des colonnes visibles de sa table, d'après la table lue il y a moins de FRESH_MS : { labels } - colonne → texte,
   // '' pour une cellule vide, sans les pièces jointes (rien à écrire en texte) - ou { gone: true } quand sa ligne n'y est plus. Refuse quand la table ne se lit pas. Les mêmes
   // textes que `resolve`, donc ceux de la pastille une fois la colonne choisie.
-  async function valuesOf(table, row) {
+  // `step` : le maillon d'une pastille de fiche voisine : les textes sont alors ceux de la voisine, { none: true } quand elle n'existe pas (bout de la série), { gone: true } aussi quand
+  // la colonne d'ordre du maillon n'existe plus.
+  async function valuesOf(table, row, step) {
     const entry = await read(table, FRESH_MS);
-    const index = rowIndex(entry, row);
+    let index = rowIndex(entry, row);
     if (index === undefined) return { gone: true };
+    if (step) {
+      const jump = jumpOf(table, step);
+      if (!jump) return { gone: true };
+      index = neighborIndex(entry, table, row, jump);
+      if (index === undefined) return { none: true };
+    }
     const labels = new Map();
     GristAPI.getVisibleColumns(table).forEach(column => {
       if (column in entry.data && GristAPI.getColumnType(table, column) !== 'Attachments') labels.set(column, labelAt(entry, table, column, index));
