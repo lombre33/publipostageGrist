@@ -903,7 +903,8 @@
       autosaveSwitch(false);
       const watch = watchBanner();
       const plain = (value) => JSON.parse(JSON.stringify(value));
-      const differing = (a, b) => Object.keys(Object.assign({}, a, b)).filter(key => JSON.stringify(a[key]) !== JSON.stringify(b[key]));
+      // `poids` : ce que la liste légère pèse (js/templates.js), la comptabilité d'une lecture et pas un champ du modèle : une écriture ne le refait pas.
+      const differing = (a, b) => Object.keys(Object.assign({}, a, b)).filter(key => key !== 'poids' && JSON.stringify(a[key]) !== JSON.stringify(b[key]));
       try {
         const headerFooter = { enabled: true, differentFirstPage: false, header: { default: '<p>En-tête écrit</p>', first: '' }, footer: { default: '<p>Pied écrit</p>', first: '' } };
         const margins = Object.assign({}, PageLayout.getMarginsMm(), { orientation: 'landscape' });

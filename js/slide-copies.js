@@ -67,9 +67,11 @@ const SlideCopies = (function () {
   // { action, model, remote, srcHash, at } pour la copie du repère `attrs` : 'missing' (la présentation n'existe plus, ou plus cette diapositive : la copie reste en l'état), 'none' (la diapositive
   // est celle de la dernière synchro), 'pull' (elle a changé : la copie la reprend).
   function planOf(editor, attrs) {
-    const { parseModel, slideHash, parseBase } = kit();
+    const { parseModel, slideHash, parseBase, wantsReading } = kit();
     const model = sourceOf(attrs);
     if (!model) return { action: 'missing', model: null };
+    // La source dont le texte n'est pas lu (lecture légère, js/templates.js) : rien ne bouge ; elle est lue, puis la copie se compare (Templates.onEntriesLoaded).
+    if (model.chargee === false) { wantsReading(model.id); return { action: 'none', model, at: -1 }; }
     const parsed = parseModel(editor, model);
     const at = parsed.byId.get(attrs.linkSlide);
     if (at === undefined) return { action: 'missing', model };
@@ -254,9 +256,10 @@ const SlideCopies = (function () {
 
   // Ce qu'il y a à faire d'un bloc lié : { action, model, remote, srcHash, at } comme `planOf` ('missing' : la présentation ou la diapositive n'existe plus, le bloc reste tel quel ; 'none' ; 'pull').
   function blockPlanOf(editor, link) {
-    const { parseModel, slideHash } = kit();
+    const { parseModel, slideHash, wantsReading } = kit();
     const model = Templates.byId(link.model);
     if (!model || model.typeModele !== SOURCE_TYPE || model.jeton !== link.key) return { action: 'missing', model: null };
+    if (model.chargee === false) { wantsReading(model.id); return { action: 'none', model, at: -1, total: 0 }; }
     const parsed = parseModel(editor, model);
     const at = parsed.byId.get(link.slide);
     if (at === undefined) return { action: 'missing', model };
@@ -340,6 +343,11 @@ const SlideCopies = (function () {
     say('slides.copy.refreshing', { name });
     try {
       await Templates.loadAll();
+      // Les présentations d'où viennent les copies et les blocs de ce document, lues (lecture légère, js/templates.js : une source changée ailleurs vient de la liste sans son texte).
+      const sources = new Set();
+      copiesOf(editor.state.doc).forEach((copy) => { if (copy.attrs && copy.attrs.linkModel != null) sources.add(copy.attrs.linkModel); });
+      blocksOf(editor.state.doc).forEach((block) => { if (block.link && block.link.model != null) sources.add(block.link.model); });
+      if (!(await Templates.ensureLoaded(Array.from(sources)))) throw new Error('une source ne se lit pas');
       if (editor.isDestroyed) return false;
       if (paused(editor)) { say('slides.copy.refreshOff', null, true); return false; }
       const texts = follow(editor);

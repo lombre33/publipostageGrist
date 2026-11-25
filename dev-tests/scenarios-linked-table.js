@@ -2546,10 +2546,15 @@
     LinkedTable.insert(ed(), m);
     await sleep(150);
   }
-  // Le modèle change ailleurs (une autre personne l'enregistre) et le cache des modèles le relit, comme un passage de l'enregistrement automatique.
+  // Le modèle change ailleurs (une autre personne l'enregistre) et le cache des modèles le relit, comme un passage de l'enregistrement automatique. Quand la liste vient sans les longs textes (lecture légère, js/templates.js),
+  // le texte du tableau se lit aussi, comme LinkedTable.refreshModels et la synchro le font avant de comparer ; son arrivée ferait suivre le document de lui-même (js/main.js, Templates.onEntriesLoaded) : ces cas veulent voir
+  // l'état d'AVANT la synchro (le plan, puis la synchro faite à la main), la synchro est donc retenue le temps de cette lecture.
   async function modelBecomes(m, html) {
     stub().remoteWrite(modelsOnDisk(), m.id, { Contenu: html });
     await Templates.loadAll();
+    const { syncOpen, syncOnLoad } = LinkedTable;
+    LinkedTable.syncOpen = LinkedTable.syncOnLoad = () => null;
+    try { await Templates.ensureLoaded([m.id]); } finally { LinkedTable.syncOpen = syncOpen; LinkedTable.syncOnLoad = syncOnLoad; }
   }
   // Les largeurs de colonnes que la page pose d'elle-même (js/editor.js:clampOverflowingTables) : toutes les cases du tableau de rang `t` à `px`, hors de l'historique.
   function setWidths(t, px) {

@@ -105,7 +105,8 @@ const MainSave = (function () {
         // sans quoi un modèle changé ailleurs depuis serait écrasé sans que personne ne le voie. Une relecture qui échoue renonce à l'envoi, pas à l'enregistrement du document.
         let modelsFresh = true;
         if (LinkedTable.hasPending(EditorCore.getEditor()) || SlideLinks.hasPending(EditorCore.getEditor())) {
-          modelsFresh = await LinkedTable.refreshModels();
+          persist.followHeld++; // l'enregistrement fait suivre les modèles qu'il vient de lire, juste après : voir persist.followHeld (js/main.js)
+          try { modelsFresh = await LinkedTable.refreshModels(); } finally { persist.followHeld--; }
           if (epoch !== persist.autosaveEpoch) return;
           // Les modèles sont frais : les tableaux suivent les leurs comme à un passage de l'enregistrement automatique (un modèle changé ailleurs en même temps que le tableau : l'écart se dit, rien ne part).
           if (modelsFresh) synced = followLinkedModels();
@@ -203,6 +204,8 @@ const MainSave = (function () {
         return;
       }
       // La copie garde la notice du document d'où elle vient (js/template-notice.js) : elle se lit avant que l'écran quitte l'original.
+      // Lecture légère (js/templates.js) : sa notice se lit d'abord quand le modèle d'origine n'a pas son texte.
+      if (from != null) await Templates.ensureLoaded([from]);
       const noticeToCopy = from != null ? String((Templates.byId(from) || {}).notice || '') : '';
       // Une copie est un autre modèle : l'écriture en direct, qui est celle du texte de celui-ci, s'arrête d'abord (js/live-entry.js).
       await LiveEntry.stop();
@@ -246,6 +249,8 @@ const MainSave = (function () {
       if (!id || !tpl) { setStatus(I18n.t('status.versionsNeedSavedTemplate'), true); return; }
       try {
         await VersionsStore.loadWindow();
+        // Lecture légère (js/templates.js) : la « Version actuelle » de la fenêtre est l'état enregistré du modèle ; son texte se lit d'abord s'il ne l'est pas.
+        if (!(await Templates.ensureLoaded([id]))) throw new Error('le modèle ne se lit pas');
         VersionsHistory.open({ id, name: tpl.nom, restore: (snapshot, when) => restoreVersionOnScreen(id, snapshot, when), nameVersion: (target, label) => nameVersionOnScreen(id, target, label) });
       } catch (e) {
         console.error('[main] fenêtre de l’historique des versions impossible', e);
@@ -269,6 +274,11 @@ const MainSave = (function () {
       }
     }
 
+    // Un modèle que l'écran va montrer tout de suite (rendu par Annuler, rouvert par Rétablir, restauré depuis une version) se lit d'abord quand la liste légère ne porte pas son texte (js/templates.js) : le pas d'Annuler
+    // ou de Rétablir ne finit qu'avec lui à l'écran. Sans cela, js/main.js l'ouvrirait après coup (readThenOpen), quand l'historique d'avant est déjà remis et le coin d'état redit « Enregistré ». Sans effet pour un document dont
+    // le texte est là (tout document d'une table peu lourde).
+    async function readToOpen(id) { if (Templates.needsReading(Templates.byId(id))) await Templates.ensureWithReferences([id]); }
+
     // Remet dans le modèle ouvert l'état d'une de ses versions. Ce que l'écran montre et n'est pas encore enregistré part d'abord, comme un Enregistrer (il devient l'état que la restauration
     // remplace) ; l'état remplacé est gardé dans une version (Templates.restoreVersion), puis l'éditeur repart de l'état restauré, comme après « Recharger » du bandeau de conflit.
     async function restoreVersionOnScreen(id, snapshot, when) {
@@ -290,6 +300,7 @@ const MainSave = (function () {
         await refreshTemplateList();
         const restored = Templates.byId(id);
         if (restored) {
+          await readToOpen(id);
           loadTemplateIntoEditor(restored);
           templateSelect.value = id;
           syncDefaultTemplateButton();
@@ -318,7 +329,9 @@ const MainSave = (function () {
         if (back.present) throw ActionHistory.conflict(I18n.t('history.templateBack'));
         rowId = back.id;
         await showTemplateList();
-        if (Templates.getCurrentId() == null && screenLeftBlank() && Templates.openableById(rowId)) {
+        let reopen = Templates.getCurrentId() == null && screenLeftBlank() && !!Templates.openableById(rowId);
+        if (reopen) { await readToOpen(rowId); reopen = Templates.getCurrentId() == null && screenLeftBlank(); }
+        if (reopen) {
           // Charger le modèle vide l'historique, et Ctrl + Y n'aurait plus rien à rétablir : quand le repère de cette suppression est tout ce qui se rétablissait, l'historique d'avant est remis (HistoryMarkers.keep) et Ctrl + Y supprime de nouveau.
           const history = HistoryMarkers.keep();
           templateSelect.value = String(rowId);
@@ -344,8 +357,9 @@ const MainSave = (function () {
       if (isReadOnly()) return;
       const id = Templates.getCurrentId();
       if (!id) { setStatus(I18n.t('status.noTemplateSelected'), true); return; }
-      // Un modèle Grille posé comme tableau lié dans d'autres modèles : la question le dit, ces tableaux gardent leurs cases et perdent leur lien (js/linked-table.js:usedBy).
-      const used = LinkedTable.usedBy(id).length;
+      // Un modèle Grille posé comme tableau lié dans d'autres modèles : la question le dit, ces tableaux gardent leurs cases et perdent leur lien (js/linked-table.js:usedByRead : il lit d'abord, côté Grist, ceux dont le texte
+      // n'est pas encore lu et qui citent ce tableau ; sans réponse de Grist, il parle de ce que le cache sait).
+      const used = (await LinkedTable.usedByRead(id)).length;
       const message = used ? I18n.t('linkedTable.deleteUsed', { n: used }) : '';
       if (!(await Dialogs.confirm({ title: I18n.t('confirm.deleteTemplate'), message, confirmLabel: I18n.t('common.delete'), danger: true }))) return;
       // La ligne telle que Grist la garde, lue avant de la supprimer : Annuler la rend. Une lecture qui échoue ne retient pas la suppression, que la personne a confirmée : seul Annuler n'en saura rien.
@@ -403,6 +417,7 @@ const MainSave = (function () {
           if (shown) {
             const back = from == null ? undefined : Templates.openableById(from);
             if (back) {
+              await readToOpen(back.id);
               templateSelect.value = String(back.id);
               loadTemplateIntoEditor(back);
               syncDefaultTemplateButton();
@@ -427,6 +442,7 @@ const MainSave = (function () {
         const open = reopened && screenLeftAsUndone() && Templates.openableById(rowId);
         reopened = false;
         if (open) {
+          await readToOpen(rowId);
           templateSelect.value = String(rowId);
           loadTemplateIntoEditor(Templates.byId(rowId));
         }

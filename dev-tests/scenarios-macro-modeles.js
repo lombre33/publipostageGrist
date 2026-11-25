@@ -2672,18 +2672,22 @@
           const pencil = entry.querySelector('.macro-summary-edit');
           return { name: entry.querySelector('.macro-summary-model-name').textContent, tags: Array.from(entry.querySelectorAll('.macro-summary-model-tag')).map(t => t.textContent).join('+'), disabled: pencil.disabled, title: pencil.title };
         });
-        const tagsAre = (where, tags) => {
-          const now = entries();
-          const got = JSON.stringify(now.map(e => [e.name, e.tags]));
+        // L'étiquette « Paysage » d'une présentation vient de sa page : tant que la liste ne l'a pas lue (lecture légère de la table, js/templates.js : lue à la demande, le résumé se redessine à son arrivée), elle n'y est
+        // pas encore ; une machine chargée (le groupe joué avec d'autres) la fait venir après le sommeil de `reopen`. On attend donc jusqu'à 5 s que le résumé dise ce qu'on attend, au lieu de le lire à l'instant.
+        const tagsAre = async (where, tags) => {
+          const read = () => JSON.stringify(entries().map(e => [e.name, e.tags]));
           const wanted = JSON.stringify(names.map((name, i) => [name, tags[i]]));
+          const until = Date.now() + 5000;
+          while (read() !== wanted && Date.now() < until) await h.sleep(100);
+          const got = read();
           if (got !== wanted) problems.push(where + ' : ' + got + ' (attendu ' + wanted + ')');
         };
         if (pageChecked() !== 'auto,A4') problems.push('le macro-modèle neuf n\'est pas « Selon chaque modèle » : ' + pageChecked());
-        tagsAre('selon chaque modèle', ['', 'Diapositives', 'Diapositives+Paysage']);
+        await tagsAre('selon chaque modèle', ['', 'Diapositives', 'Diapositives+Paysage']);
         await pickPage(h, 'portrait');
-        tagsAre('portrait imposé', ['', 'Diapositives', 'Diapositives']);
+        await tagsAre('portrait imposé', ['', 'Diapositives', 'Diapositives']);
         await pickPage(h, 'auto');
-        tagsAre('« Selon chaque modèle » rétabli', ['', 'Diapositives', 'Diapositives+Paysage']);
+        await tagsAre('« Selon chaque modèle » rétabli', ['', 'Diapositives', 'Diapositives+Paysage']);
         // Le stylo : celui du document vit, ceux des deux présentations sont grisés avec la raison de la liste des modèles ; un clic ne quitte pas le macro-modèle.
         const reason = Templates.unavailableText('presentation');
         const off = entries();
@@ -2699,7 +2703,7 @@
         const on = entries();
         if (on.some(e => e.disabled)) problems.push('extension allumée, un stylo reste grisé : ' + JSON.stringify(on.map(e => [e.name, e.disabled])));
         if (on[1].title !== on[0].title.replace(names[0], names[1])) problems.push('extension allumée, le libellé du stylo d\'une présentation : « ' + on[1].title + ' » (document : « ' + on[0].title + ' »)');
-        tagsAre('extension allumée', ['', 'Diapositives', 'Diapositives+Paysage']);
+        await tagsAre('extension allumée', ['', 'Diapositives', 'Diapositives+Paysage']);
         declare(() => Extensions.isActive('diapositives'));
         // L'anglais : « Slides », « Landscape » et la raison dite dans la langue de la page.
         I18n.setLang('en');

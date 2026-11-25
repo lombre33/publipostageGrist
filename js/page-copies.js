@@ -110,6 +110,8 @@ const PageCopies = (function () {
   function planOf(editor, group) {
     const model = sourceOf(group.members[0].info);
     if (!model) return { action: 'missing', model: null };
+    // Le document dont le texte n'est pas lu (lecture légère, js/templates.js) : rien ne bouge ; il est lu, puis le groupe se compare (Templates.onEntriesLoaded).
+    if (model.chargee === false) { kit().wantsReading(model.id); return { action: 'none', model, at: -1 }; }
     const parsed = kit().parseModel(editor, model);
     const at = idsOf(parsed).get(group.page);
     if (at === undefined) return { action: 'missing', model };
@@ -258,6 +260,8 @@ const PageCopies = (function () {
     await Templates.loadAll();
     const model = Templates.byId(id);
     if (!model || (model.typeModele || SOURCE_TYPE) !== SOURCE_TYPE) fail('slides.link.gone');
+    // Le document source que la liste légère n'a pas lu (js/templates.js) se lit ici : relu, comme avant, avant qu'un repère y soit posé.
+    if (!(await Templates.ensureLoaded([model.id]))) fail('slides.link.failed');
     const key = model.jeton || await Templates.ensureToken(model.id);
     if (!key) fail('slides.link.failed');
     const parsed = parseHtml(editor, model.contenu);

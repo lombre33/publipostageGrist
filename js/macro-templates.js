@@ -139,6 +139,9 @@ const MacroTemplates = (function () {
       if (modeleId == null) continue;
       const tpl = templates.find(t => String(t.id) === String(modeleId));
       if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
+      // Lecture légère (js/templates.js) : le texte d'un modèle que la liste n'a pas lu se lit ici ; un modèle qui ne se lit pas fait échouer l'assemblage (jamais un document sans une de ses annexes). Sans le module (ce fichier
+      // seul, en test), tout est déjà là.
+      if (tpl.chargee === false && typeof Templates !== 'undefined' && typeof Templates.ensureLoaded === 'function' && !(await Templates.ensureLoaded([tpl.id]))) throw new Error('modèle illisible : ' + tpl.nom);
       const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '', { anchors, theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null });
       fragments.push({ html: perModel ? content : withoutTurnedBreaks(content), page: pageOfTemplate(tpl) });
     }

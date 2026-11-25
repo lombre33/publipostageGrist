@@ -154,6 +154,8 @@ const I18nTextsStatus = {
   'status.noTemplateSelected': { fr: 'Aucun document sélectionné.', en: 'No document selected.' },
   'status.defaultTemplateSet': { fr: 'Document par défaut défini : « {name} » s’ouvrira au démarrage du widget.', en: 'Default document set: “{name}” will open when the widget starts.' },
   'status.defaultTemplateCleared': { fr: 'Document par défaut retiré : « {name} » ne s’ouvrira plus au démarrage.', en: 'Default document removed: “{name}” will no longer open at startup.' },
+  'status.templateReading': { fr: 'Lecture de « {name} » dans Grist…', en: 'Reading “{name}” from Grist…' },
+  'status.templateReadFailed': { fr: 'Impossible de lire « {name} » dans Grist : il reste fermé, rien n’a été changé. Réessayez dans un instant.', en: 'Could not read “{name}” from Grist: it stays closed and nothing was changed. Try again in a moment.' },
   'status.defaultTemplateError': { fr: 'Échec de l’enregistrement du document par défaut.', en: 'Saving the default document failed.' },
   'status.templateUnavailable': { fr: '« {name} » ne s’ouvre pas ici. {reason}.', en: '“{name}” cannot be opened here. {reason}.' },
   'status.templateDeleted': { fr: 'Document supprimé.', en: 'Document deleted.' },

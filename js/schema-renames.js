@@ -768,7 +768,11 @@ const SchemaRenames = (function () {
   // intervalle de quelques millisecondes. La clé du nouveau couple d'abord, l'ancienne retirée ensuite : une panne entre les deux laisse une clé de
   // trop, jamais une clé perdue.
   async function writeRewrites(templates, links) {
-    if (templates.length) await SchemaColumns.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
+    if (templates.length) {
+      await SchemaColumns.docApi.applyUserActions(templates.map(t => ['UpdateRecord', Templates.TABLE_NAME, t.id, t.fields]));
+      // La date de ces lignes ne change pas (ce n'est pas une modification de la personne) : le cache, lu par la liste légère, ne doit pas garder leur ancien texte (Templates.noteRewritten).
+      Templates.noteRewritten(templates.map(t => t.id));
+    }
     for (const link of links) {
       await GristAPI.saveLinkRule(link.rule.tableCible, link.rule);
       if (link.from.tableCible !== link.rule.tableCible || link.from.tableSource !== link.rule.tableSource) await GristAPI.deleteLinkRule(link.from.tableCible, link.from.tableSource);

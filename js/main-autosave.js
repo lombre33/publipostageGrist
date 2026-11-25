@@ -97,6 +97,8 @@ const MainAutosave = (function () {
     // Le poids du modèle ouvert : le texte que le cache de js/templates.js tient de lui (lu ou écrit par ce widget).
     function openModelChars() {
       const open = Templates.byId(Templates.getCurrentId());
+      // Une entrée dont le texte n'est pas lu (lecture légère, js/templates.js : le modèle vient d'être changé ailleurs) pèse ce que la liste en a mesuré.
+      if (open && open.chargee === false) return open.poids && open.poids.Content ? open.poids.Content : 0;
       return open && typeof open.contenu === 'string' ? open.contenu.length : 0;
     }
     // Ce passage doit-il attendre ? Seulement pour un modèle lourd à enregistrer : trop tôt après le passage précédent, ou la personne est en plein geste (un passage reporté trop longtemps part quand même).
@@ -256,7 +258,22 @@ const MainAutosave = (function () {
       const seq = Templates.getWriteSeq();
       const fresh = await Templates.loadAll();
       if (epoch !== persist.autosaveEpoch || seq !== Templates.getWriteSeq()) return null;
-      return { remoteTpl: fresh.find(t => String(t.id) === String(id)) };
+      let remoteTpl = fresh.find(t => String(t.id) === String(id));
+      // Table lourde (liste légère, js/templates.js) : la ligne du modèle ouvert que la liste a rendue sans son texte est celle qui a changé ailleurs (la liste garde l'entrée lue quand la date est la même). Elle seule se lit en entier, par son numéro : le bandeau
+      // « modifié ailleurs », « Recharger la dernière version » et l'adoption d'un repère de diapositive ont besoin de son texte. Une lecture qui n'aboutit pas ne prouve rien : le passage suivant relira.
+      if (remoteTpl && remoteTpl.chargee === false) {
+        if (!(await Templates.ensureLoaded([id], { fresh: true }))) return null;
+        if (epoch !== persist.autosaveEpoch || seq !== Templates.getWriteSeq()) return null;
+        remoteTpl = Templates.byId(id);
+      }
+      // Les modèles que ce document suit (le modèle Grille de ses tableaux liés, la source de ses diapositives liées) et qui ont changé ailleurs : lus avec lui, pour que le passage les fasse suivre AVANT d'écrire (followLinkedModels).
+      // Sans eux, le document s'écrirait avec l'ancien tableau et le nouveau n'arriverait qu'après, dans un document que cette arrivée ne rend pas « à enregistrer ». Une lecture qui n'aboutit pas n'arrête rien : la synchro les relira.
+      const followed = remoteTpl ? Templates.referencedIds(remoteTpl).filter((refId) => { const entry = Templates.byId(refId); return !!entry && entry.chargee === false; }) : [];
+      if (followed.length) {
+        await Templates.ensureLoaded(followed);
+        if (epoch !== persist.autosaveEpoch || seq !== Templates.getWriteSeq()) return null;
+      }
+      return { remoteTpl };
     }
 
     // Un seul passage à la fois : avec Grist lent, un passage (relire la table, écrire, relire la date) dure plus que l'intervalle, et chaque passage
@@ -353,8 +370,11 @@ const MainAutosave = (function () {
       if ((!persist.autosaveDirty || autosaveRefused()) && heavyIdleReadMustWait(checkStartedAt)) return; // une table lourde au repos : sa relecture attend aussi la fin du geste
       const epoch = persist.autosaveEpoch;
       let remote;
+      // Le passage fait suivre les modèles qu'il lit (followLinkedModels, plus bas) et redit ce que la synchro a appris après l'écriture : leur arrivée ne les fait pas suivre à part (persist.followHeld, js/main.js).
+      persist.followHeld++;
       try { remote = await readRemoteTemplate(id, epoch); }
       catch (e) { console.error('[main] auto-save : vérification de conflit impossible', e); return; }
+      finally { persist.followHeld--; }
       if (!remote) return; // lecture sans valeur (cf. readRemoteTemplate) : rien à comparer ce coup-ci, le passage suivant relira
       persist.autosaveLastCheckAt = checkStartedAt;
       adoptTableName(); // un nom donné ailleurs depuis l'ouverture (GFS) : le titre le prend avant que ce passage n'écrive

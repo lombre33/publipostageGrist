@@ -1853,10 +1853,12 @@ const Variables = (function () {
     function findTemplatesUsingTable(tableCible) {
       const needles = ['data-table="' + tableCible + '"', 'data-otherwise-table="' + tableCible + '"'];
       const fields = tpl => [tpl.nomFichierPDF, tpl.objet, tpl.destinataires, tpl.cc, tpl.cci, tpl.pj];
-      return Templates.getCached().filter(tpl => (tpl.contenu && (needles.some(needle => tpl.contenu.indexOf(needle) !== -1) || otherwiseCites(tpl.contenu, tableCible) || loopCites(tpl.contenu, tableCible)))
+      return Templates.getCached().filter(tpl => (tpl.chargee !== false && tpl.contenu && (needles.some(needle => tpl.contenu.indexOf(needle) !== -1) || otherwiseCites(tpl.contenu, tableCible) || loopCites(tpl.contenu, tableCible)))
         || fields(tpl).some(value => value && FieldCodec.variablesIn(value).some(v => v.table === tableCible)));
     }
     async function confirmDeleteLinkRule(rule) {
+      // Lecture légère (js/templates.js) : les modèles dont le texte n'est pas lu et qui nomment cette table se lisent d'abord (la recherche se fait côté Grist, seuls ceux-là sont lus) ; sans réponse, ceux que le cache connaît.
+      try { await Templates.ensureCiting([rule.tableCible]); } catch (e) { /* le cache d'à présent */ }
       const affected = findTemplatesUsingTable(rule.tableCible);
       // La question fait le titre de la fenêtre ; les modèles touchés et leur conséquence en font le message (le texte commence par des retours à la
       // ligne que la fenêtre n'affiche pas).

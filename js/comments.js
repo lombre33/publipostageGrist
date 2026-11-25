@@ -113,7 +113,7 @@ const Comments = (function () {
   function carriesCommentMarks(tpl) {
     // Un modèle sans la moindre marque de commentaire - ni dans son texte, ni dans son en-tête ou son pied - n'a aucun fil à relire. `tpl` est sa
     // ligne (js/templates.js) ; sans elle on ne sait pas, et la table est lue comme avant.
-    if (!tpl) return true;
+    if (!tpl || tpl.chargee === false) return true;
     const hasMark = html => typeof html === 'string' && html.indexOf('data-comment-id') !== -1;
     const headerFooter = tpl.headerFooter || {};
     return hasMark(tpl.contenu) || [headerFooter.header, headerFooter.footer].some(zone => !!zone && (hasMark(zone.default) || hasMark(zone.first)));

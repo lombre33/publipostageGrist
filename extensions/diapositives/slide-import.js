@@ -82,6 +82,8 @@ const SlideImport = (function () {
   let active = 0;                  // la miniature que Tab atteint
   let sizedFor = '';               // la page à laquelle les miniatures sont taillées (geometryKey())
   let said = null;                 // l'indication écrite et le grisé de la liste, pour ne les écrire que quand ils changent : la bande les redemande à chaque transaction
+  let reading = null;              // le nom de la source dont le texte arrive de Grist (lecture légère de la table des modèles, js/templates.js) : l'indication le dit tant qu'il n'est pas là
+  let readTicket = 0;              // le dernier choix qui a demandé un texte : une lecture qui revient après un autre choix, ou la fermeture du volet, ne change plus rien
   let reloadQueued = false;
   let nearObserver = null;         // dit quelles rangées le volet montre, ou presque (DRAW_AHEAD_PX) : elles seules se dessinent
   let resizeObserver = null;
@@ -259,6 +261,8 @@ const SlideImport = (function () {
     clearRows();
     source = null;
     said = null;
+    reading = null;
+    readTicket++;
     editing = null;
     const wasText = inText();
     remembered[mode] = sourceId;
@@ -392,8 +396,11 @@ const SlideImport = (function () {
   // de page de premier niveau, comme la bande coupe le texte de l'éditeur (une présentation qui finit sur un saut de page finit sur une diapositive vide). Les miniatures et l'import en
   // prennent des copies, qu'aucun HTML réécrit ne remplace à l'affichage.
   function readSource() {
+    reading = null;
     const tpl = sourceId == null ? null : Templates.byId(sourceId);
     if (!tpl) { source = null; clearRows(); return; }
+    // Un gros texte que la liste légère de la table n'a pas rapporté : il se demande à Grist, et le volet se remplit à son arrivée (jamais d'un texte vide pris pour la source).
+    if (tpl.chargee === false) { source = null; clearRows(); fetchSource(tpl); return; }
     const contenu = String(tpl.contenu || '');
     // Le même texte relu par le cache est une autre chaîne : gardée, la comparaison suivante est immédiate.
     if (source && String(source.id) === String(tpl.id) && source.contenu === contenu) { source.contenu = contenu; return; }
@@ -408,6 +415,22 @@ const SlideImport = (function () {
     source = { id: tpl.id, contenu, body, doc: body.ownerDocument, slides, marks, kind: tpl.typeModele === SlidesEntry.TYPE ? 'slides' : 'pages' };
     clearRows();
   }
+  // Demande le texte de la source choisie à Grist (Templates.ensureLoaded : seule sa ligne est lue), puis dessine ce que le volet montrait. Un échec laisse le volet sans miniatures, sans relire en boucle.
+  function fetchSource(tpl) {
+    const ticket = ++readTicket;
+    reading = nameOf(tpl);
+    Templates.ensureLoaded([tpl.id]).then(() => {
+      if (ticket !== readTicket) return;
+      reading = null;
+      if (!open) return;
+      const entry = Templates.byId(tpl.id);
+      if (entry && entry.chargee !== false && String(sourceId) === String(tpl.id)) { readSource(); syncRows(); }
+      syncHint();
+      markCurrent();
+    });
+  }
+  // L'indication quand il n'y a pas de source : « Lecture de ... dans Grist » tant que son texte arrive, sinon `fallback`.
+  const idleText = fallback => (reading ? I18n.t('status.templateReading', { name: reading }) : fallback);
   // Une copie des blocs de la diapositive `index`, dans le document inerte de la source, sans ce qui appartient à la source : ses images répétées sur toutes les pages (le fond de ses
   // pages) et ses commentaires (leurs fils vivent dans sa table), comme la copie d'un Ctrl+C (slide-strip.js:slideForClipboard).
   function cleanCopy(index) {
@@ -548,7 +571,7 @@ const SlideImport = (function () {
     const reason = SlideLinks.blockedReason();
     const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
     const linked = keepLinked && !blocked;
-    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(linked ? 'slides.import.hintLinked' : 'slides.import.hint', { n: SlideStrip.current() + 1 });
+    const text = !source ? idleText('') : off ? SlidesEntry.reason() : I18n.t(linked ? 'slides.import.hintLinked' : 'slides.import.hint', { n: SlideStrip.current() + 1 });
     const state = text + '|' + off + '|' + blocked + '|' + keepLinked;
     if (state === said) return;
     said = state;
@@ -572,7 +595,7 @@ const SlideImport = (function () {
     const linked = linkText && !blocked;
     const hintKey = asBlock ? (linked ? 'slides.block.hintLinked' : 'slides.block.hint')
       : linked ? (keepFormat ? 'slides.copy.hintLinkedKeep' : 'slides.copy.hintLinked') : (keepFormat ? 'slides.text.hintKeep' : 'slides.text.hint');
-    const text = !source ? (editing ? I18n.t('slides.edit.pick') : '') : off ? SlidesEntry.reason() : I18n.t(editing ? 'slides.edit.hint' : hintKey);
+    const text = !source ? idleText(editing ? I18n.t('slides.edit.pick') : '') : off ? SlidesEntry.reason() : I18n.t(editing ? 'slides.edit.hint' : hintKey);
     const state = 'text|' + text + '|' + off + '|' + blocked + '|' + linkText + '|' + keepFormat + '|' + asBlock + '|' + !!editing;
     if (state === said) return;
     said = state;
@@ -612,7 +635,7 @@ const SlideImport = (function () {
     const blocked = off ? SlidesEntry.reason() : (reason ? I18n.t(reason) : '');
     const linked = keepLinked && !blocked;
     const hintKey = linked ? (keepFormat ? 'slides.page.hintLinkedKeep' : 'slides.page.hintLinked') : (keepFormat ? 'slides.page.hintKeep' : 'slides.page.hint');
-    const text = !source ? '' : off ? SlidesEntry.reason() : I18n.t(hintKey, { n: SlideStrip.current() + 1 });
+    const text = !source ? idleText('') : off ? SlidesEntry.reason() : I18n.t(hintKey, { n: SlideStrip.current() + 1 });
     const state = 'page|' + text + '|' + off + '|' + blocked + '|' + keepLinked + '|' + keepFormat;
     if (state === said) return;
     said = state;

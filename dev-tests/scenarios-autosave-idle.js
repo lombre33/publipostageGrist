@@ -59,7 +59,10 @@
       if (tableId === TABLE) times.push(performance.now());
       return original.apply(this, arguments);
     };
-    return { times, stop: () => { docApi.fetchTable = original; } };
+    // Lecture légère de la table (js/templates.js, `window.__templatesLight = 'force'` des essais) : la liste des modèles vient du SQL, pas de fetchTable ; c'est elle qui compare le modèle au repos, elle se compte de même.
+    const lightQuery = GristAPI.lightQuery;
+    if (typeof lightQuery === 'function') GristAPI.lightQuery = function () { times.push(performance.now()); return lightQuery.apply(this, arguments); };
+    return { times, stop: () => { docApi.fetchTable = original; if (typeof lightQuery === 'function') GristAPI.lightQuery = lightQuery; } };
   }
 
   // Un modèle RÉELLEMENT enregistré (le vrai bouton Enregistrer : l'auto-save dépend de l'état de main.js), puis rouvert par la liste : c'est ce chargement qui met l'horloge du repos à

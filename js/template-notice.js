@@ -146,6 +146,8 @@ const TemplateNotice = (function () {
     if (!hasId()) return;
     const tpl = Templates.byId(current.id);
     if (!tpl) return;
+    // Un modèle dont la notice n'est pas lue (lecture légère, js/templates.js) ne dit rien d'elle : la notice affichée reste.
+    if (tpl.chargee === false) return;
     const next = clean(tpl.notice);
     if (next === current.notice) return;
     current.notice = next;
@@ -160,8 +162,14 @@ const TemplateNotice = (function () {
   function noticeAction(id, from, to) {
     async function put(target, expected) {
       if (readOnly()) throw new Error('lecture seule');
-      const tpl = Templates.byId(id);
+      let tpl = Templates.byId(id);
       if (!tpl) throw ActionHistory.conflict(t('history.templateGone'));
+      // La notice d'un modèle que la liste légère n'a pas lu se lit avant d'être comparée (js/templates.js, ensureLoaded).
+      if (tpl.chargee === false) {
+        if (!(await Templates.ensureLoaded([id]))) throw ActionHistory.conflict(t('notice.history.changed'));
+        tpl = Templates.byId(id);
+        if (!tpl) throw ActionHistory.conflict(t('history.templateGone'));
+      }
       if (clean(tpl.notice) !== expected) throw ActionHistory.conflict(t('notice.history.changed'));
       await Templates.saveNotice(id, target);
       if (String(current.id) === String(id)) {

@@ -29,6 +29,7 @@
 //   SchemaColumns.actualTable(nom anglais) -> le nom que la table a (ou aura) dans le document : page-tree.js le compare aux métadonnées de Grist
 //   SchemaColumns.whereIs(table, colonne) -> { table, column, label } : où la colonne est dans CE document, avec les noms que la personne voit dans Grist
 //   SchemaColumns.columnIds(table) -> les colonnes de la table sous leurs noms anglais, lues dans les métadonnées de Grist et jamais dans la table (null : le document n'a pas la table)
+//   SchemaColumns.columnMap(table) -> { table: son nom réel, columns: Map(nom anglais -> nom réel) }, lue de même : de quoi parler au document sans docApi (une lecture par SQL)
 //   SchemaColumns.setEnglishOnDisk(vrai | faux), SchemaColumns.reset() -> l'interrupteur, et l'oubli de ce qui a été lu du document (essais)
 const SchemaColumns = (function () {
   // Faux : le document garde (et reçoit) les noms français d'avant. Vrai : les noms anglais.
@@ -225,7 +226,8 @@ const SchemaColumns = (function () {
   // Les colonnes d'une table de la liste SOUS LEURS NOMS ANGLAIS, lues dans les métadonnées de Grist (quelques Ko), jamais dans la table : elle peut peser des dizaines de Mo, et Grist ou son hôte peuvent refuser de la rendre d'un coup
   // (consigne 103 de GFS : au-delà d'un certain poids, chaque lecture entière échoue, et une migration qui la relisait pour compter ses colonnes échouait avec elle). Rend null quand le document n'a pas la table ; rejette quand les métadonnées ne se
   // lisent pas. Une lecture à neuf à chaque appel : celui qui s'en sert ajoute les colonnes qui manquent, il ne doit pas se fier à ce qu'une lecture plus ancienne a vu (pendant l'ouverture, ces métadonnées sont déjà lues en commun : js/open-reads.js).
-  async function columnIds(name) {
+  // `columnMap` en rend aussi le nom RÉEL de chaque colonne, pour parler au document sans passer par docApi (une lecture par SQL, js/templates-light.js) : { table: le nom réel de la table, columns: Map(nom anglais -> nom réel) }.
+  async function columnMap(name) {
     if (migration) await migration;
     const [tables, columns] = await Promise.all([real().fetchTable('_grist_Tables'), real().fetchTable('_grist_Tables_column')]);
     const table = byEnglish.get(name);
@@ -237,12 +239,16 @@ const SchemaColumns = (function () {
     const keys = new Set();
     (columns.colId || []).forEach((colId, i) => { if (columns.parentId[i] === ref) keys.add(colId); });
     columnsByTable.set(actual, keys);
-    if (!table) return new Set(keys);
+    const named = new Map();
+    if (!table) { keys.forEach(key => named.set(key, key)); return { table: actual, columns: named }; }
     const chosen = englishOf(table, keys);
-    const ids = new Set();
-    keys.forEach(key => { if (!chosen.has(key)) ids.add(key); });
-    chosen.forEach(english => ids.add(english));
-    return ids;
+    keys.forEach(key => { if (!chosen.has(key)) named.set(key, key); });
+    chosen.forEach((english, key) => named.set(english, key));
+    return { table: actual, columns: named };
+  }
+  async function columnIds(name) {
+    const found = await columnMap(name);
+    return found ? new Set(found.columns.keys()) : null;
   }
 
   // --- La reprise des documents d'avant ---------------------------------------------------------------------------------------------------------------------------------------
@@ -587,5 +593,5 @@ const SchemaColumns = (function () {
     },
   };
 
-  return { docApi, columnIds, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated, isStale: () => namesChangedElsewhere };
+  return { docApi, columnIds, columnMap, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated, isStale: () => namesChangedElsewhere };
 })();

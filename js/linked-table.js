@@ -95,6 +95,21 @@ const LinkedTable = (function () {
 
   const isLinked = node => !!node && !!node.type && node.type.name === 'table' && !!node.attrs[ATTR];
 
+  // Les numéros des modèles Grille que ce HTML pose en tableaux liés (`data-linked-template` sur un <table>) : Templates les lit avec le modèle qu'on ouvre ou qu'on exporte (lecture légère, js/templates.js), sans quoi son
+  // tableau lié se comparerait à un modèle sans texte.
+  function linkedIdsIn(html) {
+    const text = String(html == null ? '' : html);
+    if (text.indexOf(DOM_ATTR) === -1) return [];
+    const ids = [];
+    (text.match(/<table\b[^>]*>/gi) || []).forEach((tag) => {
+      const found = tag.match(new RegExp('\\s' + DOM_ATTR + '="([^"]*)"', 'i'));
+      const id = found ? idOf(found[1]) : null;
+      if (id) ids.push(id);
+    });
+    return ids;
+  }
+  if (typeof Templates !== 'undefined' && typeof Templates.declareReferences === 'function') Templates.declareReferences(linkedIdsIn);
+
   // L'attribut du tableau : `data-linked-template` s'écrit sur le <table> et se relit au chargement (le schéma est le vrai filtre : un attribut qu'il ne
   // déclare pas se perdrait).
   function withAttributes(TableExtension) {
@@ -128,7 +143,12 @@ const LinkedTable = (function () {
   // personne). Hors ligne, le cache d'avant sert.
   // Rend vrai quand la lecture a réussi, faux quand c'est le cache d'avant qui sert (un envoi au modèle n'a pas lieu sur un cache dont on n'est pas sûr).
   async function refreshModels() {
-    try { await Templates.loadAll(); return true; } catch (e) { return false; /* hors ligne : le cache d'avant sert */ }
+    try {
+      await Templates.loadAll();
+      // Quand la table des modèles est lourde, la liste vient sans les longs textes (js/templates.js, lecture légère) : le tableau d'un modèle Grille, ce que ce module compare et envoie, se lit ici, ligne par ligne,
+      // pour ceux qui n'ont pas leur texte. Rien à lire (et rien à attendre) quand la table se lit en entier.
+      return await Templates.ensureLoaded(Templates.getCached().filter(t => t.typeModele === GridEditor.TYPE).map(t => t.id));
+    } catch (e) { return false; /* hors ligne : le cache d'avant sert */ }
   }
 
   // Le modèle Grille que ce numéro désigne, ou null (supprimé, devenu d'un autre type, liste pas encore lue).
@@ -444,6 +464,8 @@ const LinkedTable = (function () {
     return parsed && parsed.type.name === 'table' ? parsed : null;
   }
   function firstTableOf(editor, model) {
+    // Un modèle dont le texte n'est pas encore lu (lecture légère, js/templates.js) : son tableau n'est pas connu, pas absent. Rien ne se décide sur lui (planOf rend 'none').
+    if (model.chargee === false) return null;
     const contenu = model.contenu || '';
     const kept = parsedTables.get(model.id);
     if (kept && kept.contenu === contenu && kept.schema === editor.schema) return kept.first;
@@ -682,6 +704,7 @@ const LinkedTable = (function () {
   // Ce tableau n'est-il plus celui de son modèle ? Un tableau à jeton se juge sur ses cases (la page rogne ses largeurs de colonnes : ce n'est pas une différence), un lien ancien sur
   // son HTML entier.
   function differsFromModel(editor, node, model) {
+    if (model.chargee === false) return false;
     const remote = firstTableOf(editor, model);
     if (!remote) return true;
     return node.attrs[KEY] ? contentHash(editor, node) !== contentHash(editor, remote) : fullHash(editor, node) !== fullHash(editor, remote);
@@ -689,7 +712,7 @@ const LinkedTable = (function () {
 
   // ---- Les deux sens du lien, à la main ---------------------------------------------------------------------------------------------------------------
 
-  const { pull, push, usedBy, open, reveal } = (function () {
+  const { pull, push, usedBy, usedByRead, open, reveal } = (function () {
     // Mettre à jour le tableau du document depuis son modèle, envoyer le tableau du document à son modèle
 
     // Ce HTML pose-t-il un tableau lié à ce modèle ? Les balises <table> ouvrantes sont lues une à une : le numéro est cherché avec ses guillemets (« 1 » n'est pas « 12 ») et le
@@ -709,7 +732,13 @@ const LinkedTable = (function () {
     function usedBy(id) {
       const model = modelOf(id);
       if (!model) return [];
-      return Templates.getCached().filter(t => t.typeModele !== 'macro' && t.typeModele !== GridEditor.TYPE && !Templates.isCurrent(t.id) && postsLink(t.contenu, model));
+      return Templates.getCached().filter(t => t.chargee !== false && t.typeModele !== 'macro' && t.typeModele !== GridEditor.TYPE && !Templates.isCurrent(t.id) && postsLink(t.contenu, model));
+    }
+
+    // Comme usedBy, après avoir lu ceux des modèles dont le texte n'est pas lu (lecture légère, js/templates.js) qui citent ce tableau : la recherche se fait côté Grist, seuls ceux-là sont lus. Sans réponse, usedBy parle de ce que le cache sait.
+    async function usedByRead(id) {
+      try { await Templates.ensureCiting([DOM_ATTR + '="' + id + '"']); } catch (e) { /* le cache d'à présent */ }
+      return usedBy(id);
     }
 
     // Le lien du tableau sous le curseur quand une action peut partir : éditeur qui écrit, aucune autre action en cours, suivi des modifications éteint ; sinon null.
@@ -772,7 +801,7 @@ const LinkedTable = (function () {
           say('linkedTable.upToDate', { name: model.nom });
           return true;
         }
-        const others = usedBy(id).length;
+        const others = (await usedByRead(id)).length;
         const message = [I18n.t('linkedTable.pushMessage', { name: model.nom }), others ? I18n.t('linkedTable.pushOthers', { n: others }) : ''].filter(Boolean).join(' ');
         const confirmed = await Dialogs.confirm({ title: I18n.t('linkedTable.pushTitle'), message, confirmLabel: I18n.t('linkedTable.pushConfirm') });
         if (!confirmed) return false;
@@ -814,7 +843,7 @@ const LinkedTable = (function () {
       return { name: model.nom, differs: differsFromModel(editor, found.node, model) };
     }
 
-    return { pull, push, usedBy, open, reveal };
+    return { pull, push, usedBy, usedByRead, open, reveal };
   })();
 
   // ---- Le document suit le modèle (lot 6c-2a) ---------------------------------------------------------------------------------------------------------
@@ -866,6 +895,20 @@ const LinkedTable = (function () {
     // modèle a changé et pas ce tableau, il prend celui du modèle, le curseur reste dans sa case ; les deux disent la même chose, la base se met à jour ; les deux ont changé, rien ne
     // bouge et la ligne d'état le dit. Une seule transaction, hors de l'historique (Annuler ne rend pas ce que personne n'a fait) et qui ne rend pas le document « à enregistrer »
     // (isSyncTransaction) : ouvrir un document n'écrit rien. Rend ce qui a été fait { pulled: [noms], differs: [noms], rebased: n }, ou null quand la synchro n'a pas lieu.
+    // Les modèles Grille dont le texte n'est pas lu (js/templates.js, lecture légère : un modèle changé ailleurs depuis la dernière liste) se lisent ; à leur arrivée la page refait suivre leur modèle aux tableaux liés
+    // (Templates.onEntriesLoaded) : un tableau dont on ne connaît pas le modèle ne suit rien. Une lecture à la fois, et jamais en boucle : une lecture qui échoue ne se redemande pas avant READ_RETRY_MS, une lecture
+    // qui a réussi, pas avant READ_AGAIN_MS (un modèle changé deux fois de suite se lit deux fois, un texte qui resterait « pas lu » ne ferait pas tourner la page).
+    const READ_RETRY_MS = 30000;
+    const READ_AGAIN_MS = 1000;
+    let readingModels = false;
+    let waitUntil = 0;
+    function readModels(ids) {
+      if (readingModels || Date.now() < waitUntil) return;
+      readingModels = true;
+      const settle = (ok) => { readingModels = false; waitUntil = Date.now() + (ok ? READ_AGAIN_MS : READ_RETRY_MS); };
+      Templates.ensureLoaded(ids).then((ok) => settle(ok !== false), () => settle(false));
+    }
+
     function syncOpen(editor) {
       if (paused(editor)) return null;
       const entries = liveTables(editor.state.doc).filter(({ node }) => node.attrs[KEY]);
@@ -873,10 +916,12 @@ const LinkedTable = (function () {
       const tr = editor.state.tr;
       const done = { pulled: [], differs: [], rebased: 0 };
       let cursor = null;
+      const unread = [];
       // Du dernier au premier : remplacer un tableau ne déplace pas ceux d'avant.
       for (let i = entries.length - 1; i >= 0; i--) {
         const { node, pos } = entries[i];
         const model = modelFor(node);
+        if (model && model.chargee === false) { unread.push(model.id); continue; }
         const plan = model ? planOf(editor, node, model) : null;
         if (!plan) continue;
         if (plan.action === 'pull') {
@@ -898,6 +943,7 @@ const LinkedTable = (function () {
         if (cursor) cursorTo(tr, tr.mapping.map(cursor.pos, -1), cursor.place);
         editor.view.dispatch(tr.setMeta(OWN_META, 'sync').setMeta('addToHistory', false));
       }
+      if (unread.length) readModels(unread);
       tell(done);
       return done;
     }
@@ -1022,7 +1068,7 @@ const LinkedTable = (function () {
     function resolveTemplates(editor, templates) {
       const list = templates || [];
       const resolved = list.map((tpl) => {
-        if (!tpl || tpl.typeModele === 'macro' || tpl.typeModele === GridEditor.TYPE || typeof tpl.contenu !== 'string' || tpl.contenu.indexOf(DOM_BASE) === -1) return tpl;
+        if (!tpl || tpl.chargee === false || tpl.typeModele === 'macro' || tpl.typeModele === GridEditor.TYPE || typeof tpl.contenu !== 'string' || tpl.contenu.indexOf(DOM_BASE) === -1) return tpl;
         const contenu = resolveHtml(editor, tpl.contenu);
         return contenu === tpl.contenu ? tpl : Object.assign({}, tpl, { contenu });
       });
@@ -1044,7 +1090,7 @@ const LinkedTable = (function () {
   }
 
   return {
-    ATTR, KEY, BASE, configure, wire, withAttributes, createExtension, modelOf, modelFor, linkedTables, liveTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, pull, push, usedBy, open, reveal,
+    ATTR, KEY, BASE, configure, wire, withAttributes, createExtension, modelOf, modelFor, linkedTables, liveTables, tableAt, status, cursorIn, lockReason, placeBlock, detach, insert, openPicker, pull, push, usedBy, usedByRead, open, reveal,
     planOf, syncOpen, syncOnLoad, isSyncTransaction, hasPending, prepareSend, refreshModels, tell, resolveHtml, resolveTemplates, syncRow,
   };
 })();

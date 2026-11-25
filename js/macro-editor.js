@@ -531,7 +531,8 @@ const MacroEditor = (function () {
     const tags = [];
     if (found.typeModele === GRID_TYPE) tags.push('grid');
     if (found.typeModele === SLIDES_TYPE) tags.push('slides');
-    if (perModel && MacroTemplates.senseOfTemplate(found) === PageSections.LANDSCAPE) tags.push('landscape');
+    // Sa page n'est pas encore lue (lecture légère de la table, js/templates.js : renderParts la demande et redessine à son arrivée) : pas d'étiquette « Paysage » d'une page inconnue.
+    if (perModel && found.chargee !== false && MacroTemplates.senseOfTemplate(found) === PageSections.LANDSCAPE) tags.push('landscape');
     return tags;
   }
 
@@ -714,8 +715,10 @@ const MacroEditor = (function () {
     const focusedEye = focused && focused.classList && focused.classList.contains('macro-summary-eye') && list.contains(focused) ? { slot: focused.dataset.slot, id: focused.dataset.templateId } : null;
     list.innerHTML = '';
     const perModel = isPerModelSense(tpl);
+    const waiting = [];
     summaryParts(tpl).forEach(part => {
       const entries = part.ids.map(id => modelEntry(id, Templates.byId(id), part, perModel));
+      part.ids.forEach((id) => { const found = Templates.byId(id); if (perModel && found && found.chargee === false) waiting.push(id); });
       if (!entries.length) entries.push(node('span', 'macro-summary-model-name', I18n.t('macro.summary.noTemplate')));
       const label = node('span', 'macro-summary-part-label', part.label);
       list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, entries.concat(conditionNotes(part.slot)))]));
@@ -724,6 +727,8 @@ const MacroEditor = (function () {
       const again = list.querySelector('.macro-summary-eye[data-slot="' + CSS.escape(focusedEye.slot) + '"][data-template-id="' + CSS.escape(focusedEye.id) + '"]');
       if (again && !again.disabled) again.focus();
     }
+    // Un modèle dont la page n'est pas encore lue (la table est lourde : la liste vient sans les longs textes, js/templates.js) : son étiquette « Paysage » vient à son arrivée, une seule fois (un échec de lecture ne redessine pas).
+    if (waiting.length) Templates.ensureLoaded(waiting).then((ok) => { if (ok && summaryTpl && document.getElementById('macro-summary-parts') === list) renderParts(currentTemplate(summaryTpl)); });
   }
 
   function renderSummary(tpl) {

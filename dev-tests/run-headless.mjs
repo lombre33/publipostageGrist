@@ -20,6 +20,7 @@ import { extname, join, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
+import { createLightServer, tablesFromStubState } from './light-server.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -44,7 +45,10 @@ async function regenerateHarness() {
     '<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>',
     '<script src="dev-tests/grist-stub.js"></script>'
   );
-  await writeFile(join(ROOT, '_test-harness.html'), stubbed);
+  // Jamais réécrit à l'identique : plusieurs lancements côte à côte (un port chacun) ne se coupent pas la page en la rechargeant.
+  const file = join(ROOT, '_test-harness.html');
+  if (existsSync(file) && readFileSync(file, 'utf8') === stubbed) return;
+  await writeFile(file, stubbed);
 }
 await regenerateHarness();
 
@@ -214,6 +218,7 @@ const GROUPS = {
   gridSheets: 'scenarios-grid-sheets', // les ONGLETS d'une grille importée d'un classeur Excel à plusieurs feuilles (js/grid-sheets.js) : « Toutes les feuilles » à l'import, la barre d'onglets (clic, clavier, focus, Lecture, FR/EN), l'historique d'Annuler de chaque feuille, le texte enregistré relu à l'identique, l'Excel (une feuille par onglet)
   gridInDocument: 'scenarios-grid-in-document', // les réglages de la grille sur le tableau d'un DOCUMENT (js/grid-editor.js : `tableInfo(doc, selection)` et `scopedTable`) : alignement vertical, bordures et quadrillage visent le tableau du curseur (un autre tableau, un tableau dans une case), rien hors d'un tableau, refusés sous le suivi des modifications, un seul Annuler, les traits d'une case dans le Word
   linkedTable: 'scenarios-linked-table', // tableau de document LIÉ à un modèle Grille (js/linked-table.js, lots 6a, 6b, 6b-2, 6c-1, 6c-2a et 6c-2b) : l'attribut `data-linked-template`, le jeton du modèle `data-linked-key` (un numéro repris par un autre modèle n'est pas un lien) et la base `data-linked-base` (le document suit son modèle à l'ouverture et à chaque relecture de l'enregistrement automatique, sans rien écrire ; le modèle suit le document : un tableau que le document a changé part dans son modèle, dans le même lot d'écriture que le document), la pose et la liste avec recherche, les règles du contenu (ce qu'une grille refuse l'est aussi, commandes et collage, le même tableau sans lien l'accepte), un lien par modèle et par document, le lien mort inerte, le suivi qui verrouille, le repère, le bouton du lien de la barre et son menu, « Détacher » (un Annuler), les deux sens à la main (« Mettre à jour depuis le modèle », « Envoyer au modèle », ce qui les refuse), « Ouvrir le modèle » et son bandeau « Revenir au document » (questions d'avant de quitter, macro-modèle d'origine, modèle ou document supprimé ailleurs), la confirmation à la suppression d'un modèle lié, un lien ancien (sans jeton) qui reçoit le sien à la main, le plan de la synchro (relève, désaccord, largeurs de la page, commentaires gardés), les sorties hors de l'éditeur, l'envoi au modèle avec l'enregistrement du document (un seul lot, la base qui n'avance qu'une fois Grist d'accord, les pauses, les refus), les boutons et la ligne du menu grisés avec leur raison, la Lecture, le PDF et le Word qui ignorent le lien
+  linkedTableLight: 'scenarios-linked-table', // les MÊMES scénarios que `linkedTable`, joués avec la LECTURE LÉGÈRE de la table des modèles (REPLAYS plus bas ; consigne GFS 103, demande 2) : les textes des autres modèles ne sont lus que quand un geste les demande, et le passage de l'enregistrement automatique (et l'enregistrement à la main) lit lui-même les modèles que le document suit. Garde `persist.followHeld` (js/main.js) : leur arrivée pendant le passage ne les fait pas suivre à part, sinon « Enregistré à… » efface ce que la synchro vient de dire (trois vérifications échouaient sans)
   blankLastPage: 'scenarios-blank-last-page', // page blanche en fin de document : Lecture, PDF, Word, et le repère « Page 2 » de l'éditeur (js/header-footer-preview.js:trailingBlankStart)
   pdfBlankPages: 'scenarios-pdf-blank-pages', // les pages blanches du PDF fini, dites avant l'enregistrement (js/pdf-export.js:blankPagesOf, js/batch-failures.js:confirmBlankPages) : repérées comme pdf.js les lit, pas de fausse alerte (tableau, image, trait, image derrière le texte), le fond (en-tête, pied, filigrane, image répétée) ne les cache pas, la page voulue de deux sauts de suite n'est pas signalée, la fenêtre (Annuler / Exporter quand même, français et anglais), une seule mise en pages par PDF
   macroPages: 'scenarios-macro-pages', // macro-modèle : l'éditeur, la Lecture et le PDF ont les mêmes pages (chaque modèle seul, puis les modèles bout à bout : mots de chaque page, pied « n/total », aucune page blanche), 5 formats de page, le Word et une variable vide en dernière ligne
@@ -485,6 +490,7 @@ const NODE_SCRIPTS = {
   slidesOpenHeavy: 'verify-slides-open-heavy.mjs', // l'OUVERTURE d'une très grosse présentation ENREGISTRÉE (js/import-placing.js `planOpen` / `fillOpened` / `stopFill` / `isFilling` / `whenFilled`, js/main.js `loadTemplateIntoEditor` (option `progressive`), `fillOpenedPresentation`, `settleOpenedPresentation`, js/main-autosave.js, js/main-save.js, js/main-live.js, js/main-export.js, `Editor.appendHTML` avec `dropTrailing`, js/track-changes.js ; nuit du 10/11, « zéro gel à l'ouverture d'un gros PowerPoint »), GFS simulé, extension active, six présentations fabriquées dans la page : le plan (texte coupé aux sauts de page ENREGISTRÉS, sans perte, saut de sens conservé, aucun plan pour un petit modèle ou un saut enfoui dans un tableau), le premier pas d'un seul coup (voile titré « Ouverture de la présentation », avancement, coin d'état, trois sauts de page au plus), la frappe bloquée pendant le remplissage, le texte final identique à l'octet près à celui d'une ouverture d'un bloc ET au texte enregistré, la page jamais arrêtée plus de 300 ms, aucune écriture dans Grist tant que ça remplit (ni après, sans geste), une frappe ensuite enregistre le texte ENTIER, « Enregistrer » pendant le remplissage attend puis écrit tout, un autre modèle choisi pendant ce temps arrête le remplissage, repli sur l'ouverture d'un bloc quand un saut de page est enfoui plus bas, titre, ligne et conseil en anglais (port 9102)
   openJournal: 'verify-open-journal.mjs', // le JOURNAL D'OUVERTURE du rapport de fluidité (js/perf-trace.js : Ctrl+Alt+Maj+L ; 23/11, « explorer des pistes pour que l'ouverture soit encore plus rapide » : tous les documents, le démarrage, le changement de document par le menu) : chaque appel à Grist (`PerfTrace.watchGrist` sur `grist.docApi`) compté par « appel table » avec sa durée et ses signes, la ligne d'un appel lent ou lourd, la surveillance transparente (même résultat, même rejet, même exception, une fonction comptée une fois), une écriture compte ce qu'elle envoie, `menu : document choisi` puis `document ouvert` (`PerfTrace.opened`, `loadTemplateIntoEditor` de js/main.js, `depuisLeMenuMs`), les fichiers du chargement (compte, sans transfert, le dernier reçu de chaque site, les plus lents) (port 9216)
   openReads: 'verify-open-reads.mjs', // ce que l'OUVERTURE demande à Grist (consigne GFS 095 : « vise une dizaine d'appels », 25 mesurés dont 14 différents ; port 9223) : journal tenu au plus près du faux Grist ; sur un document à jour avec l'adresse de GFS chaque métadonnée, la liste des tables et le jeton de lecture ne sont demandés qu'une fois, aucun appel ne touche la ligne-sonde, 10 appels au plus ; sans adresse de GFS (null, pas de clé, app seule) la sonde reprend (une ligne ajoutée, lue, retirée) et les lectures restent partagées ; l'événement `identite` ; TÉMOIN sans js/open-reads.js ; document pas à jour (les migrations vident ce qui est en commun) ; le premier geste vrai ferme l'ouverture, le jeton qui peut écrire n'est jamais partagé
+  templatesLightOpen: 'verify-templates-light-open.mjs', // la LECTURE LÉGÈRE de la table des modèles dans la vraie page (consigne GFS 103, demande 2 ; port 9225) : sur un document de deux gros textes (700 Ko chacun), la liste se lit par SQL avec les longueurs, la table n'est JAMAIS lue en entier, les gros documents sont « pas chargés » avec leur poids, le document par défaut s'ouvre avec la liste ; un macro-modèle lit le document de son emplacement par sa seule ligne ; un gros document choisi se lit par son numéro, aucun module ne lit un texte avant qu'il soit chargé ; TÉMOIN « off » = la lecture d'avant ; SQL refusé (403), longueurs interrompues et lignes refusées : la page s'ouvre quand même (dev-tests/light-server.mjs répond à la page sur un vrai moteur SQL)
   lightProbe: 'verify-light-probe.mjs', // la SONDE de la lecture légère (js/grist-api.js:lightQuery, js/perf-trace.js:probeLight, 23/11) : une lecture SQL des seuls noms, dates et longueurs des modèles, faite quand on enregistre le rapport de fluidité (Ctrl+Alt+Maj+L), jamais avant ; GET simple en lecture seule, comparée au cache (dates et longueurs qui s'égalent), refus / réseau coupé / réponse illisible / délai dits dans le rapport sans rien lever
   openingScreen: 'verify-opening-screen.mjs', // L'ÉCRAN D'ATTENTE du démarrage (index.html `<html class="pp-opening">`, css/first-contact.css, js/first-contact.js:endOpeningScreen, 23/11) : une feuille grise qui pulse recouvre le plan de travail tant que le premier document n'est pas à l'écran ; premier affichage avant les scripts, clics laissés passer, retirée par ready/failed/60 s
   earlyPreview: 'verify-early-preview.mjs', // L'APERÇU DE LECTURE du démarrage (js/early-preview.js, 23/11, « document lisible d'abord ») : tant que la table des modèles se lit (4 s), la feuille du document que GFS ouvre se pose en lecture seule (sa ligne seule, par REST, le jeton parti AVANT la grosse lecture) ; inerte, nettoyée, effacée à l'ouverture réelle ; rien ne se pose au moindre doute (import, lecture de PDF, présentation, 403, suivi, format libre, table déjà arrivée) ; port 9221
@@ -669,6 +675,7 @@ const NODE_SCRIPTS = {
   formatPainterMouse: 'verify-format-painter-mouse.mjs', // pinceau de mise en forme à la vraie souris et au vrai clavier à 700x400 : le bouton sur la 2e rangée sans en ajouter, un mot, un glissé, un triple-clic, des cases de tableau, le double-clic qui garde le pinceau, Échap, Alt+Maj+C / V, clair, sombre et anglais
   startupReadsUnit: 'unit-startup-reads.mjs', // Node pur (vm + faux docApi qui compte ses appels) : ce que l'ouverture lit dans Grist - Templates.loadAll (une lecture), GristAPI.init (aucune table du document), GristAPI.refreshSchema (colonnes exactes, une passe à la fois), câblage d'index.html et de js/main.js
   openReadsUnit: 'unit-open-reads.mjs', // Node pur (vm + faux docApi qui compte ses appels) : js/open-reads.js, les lectures que l'ouverture ne refait pas (consigne GFS 095) - listTables, `_grist_Tables`, `_grist_Tables_column`, `_grist_DocInfo` et le jeton de LECTURE ne partent qu'une fois, simultanés ou à la suite ; une table de la personne, `_grist_Pages`, le jeton qui peut écrire et tout argument de plus partent seuls ; un refus n'est pas gardé ; une écriture de structure vide avant et à son retour, une écriture de lignes non ; premier geste vrai, délai ou end() ferment, écouteurs retirés ; `this`, arguments, résultat, rejet et exception gardés
+  templatesLightUnit: 'unit-templates-light.mjs', // Node pur (vm + dev-tests/light-server.mjs : un faux Grist SQL/REST sur node:sqlite) : js/templates.js et js/templates-light.js, la lecture légère de la table des modèles (consigne GFS 103, demande 2) - le SQL de la liste (longueurs, seuil, types toujours courts, noms réels d'un ancien document), la liste d'une table lourde sans ses textes ni lecture entière, ensureLoaded par paquets de numéros, ensureCiting / ensureAllLoaded / ensureWithReferences, needsReading et onEntriesLoaded, les replis (SQL refusé, longueurs interrompues, lignes refusées, table peu lourde), l'interrupteur « off », le mode automatique de la production
   userIdentityUnit: 'unit-user-identity.mjs', // Node pur (vm + faux docApi) : js/grist-api.js, la lecture du nom et de l'email de la personne - table-sonde d'avant la puce Nom migrée UNE fois, aucune écriture de schéma pour l'email seul, plusieurs puces = une lecture et une colonne ajoutée, compte sans nom, colonne refusée, lecteur du document
   nameSearchUnit: 'unit-name-search.mjs', // Node pur (vm) : js/search-select.js, la recherche par nom (searchWords, searchKey, foundIn, filterItems) - les écritures de Projets.Porteur_3, accents et casse, tous les noms d'une colonne (table, libellé Grist, indice), l'ordre de la liste, le coût sur 20 000 colonnes
   templateNoticeUnit: 'unit-template-notice.mjs', // Node pur (vm + faux docApi qui journalise ses écritures) : js/templates.js, la colonne `Notice` (créée à la première notice, jamais pour lire), Templates.saveNotice (la colonne seule, le cache, une relecture en vol), l'enregistrement du texte qui ne l'efface pas, un type inconnu qui refuse, une écriture refusée, supprimer puis rétablir
@@ -815,6 +822,13 @@ const GREYED_GROUPS = new Set(['rowAttachment']);
 // Les groupes joués avec un autre mode des noms du widget que les noms d'avant (`window.__schemaNames`, posé avant le chargement : js/schema-columns.js et dev-tests/grist-stub.js le lisent) : un document
 // déjà aux noms anglais, ou un document d'avant que le widget renomme.
 const SCHEMA_MODES = { schemaEnglish: 'english', schemaMigration: 'migrate' };
+// `PP_TEMPLATES_LIGHT=1` : tous les groupes joués avec la LECTURE LÉGÈRE de la table des modèles (consigne 103 de GFS, js/templates.js) : la liste se lit par SQL et chaque texte non vide, sauf celui d'un macro-modèle et la
+// ligne des réglages, reste « pas chargé » jusqu'à ce qu'un geste le demande (`window.__templatesLight = 'force'`, `window.__templatesLightSmall = 0`, posés avant le chargement). dev-tests/light-server.mjs répond aux demandes de la page
+// (`/sql`, `/tables/<table>/records`) sur l'état du faux Grist, relu à chaque demande. Un module qui lit le texte d'un modèle sans l'avoir fait charger (Templates.ensureLoaded) reçoit un texte vide ET le dit : chaque groupe finit
+// par une vérification, « aucun texte lu avant d'être chargé » (Templates.getUnloadedReads vide). Les groupes qui comptent les lectures du faux Grist (openReads, columnsReread...) comptent alors autre chose : à comparer avec la passe sans.
+const LIGHT_MODE = process.env.PP_TEMPLATES_LIGHT === '1';
+// Les groupes qui rejouent les scénarios d'un autre groupe (`of`), avec en plus la lecture légère (`light`) sans qu'on ait à poser PP_TEMPLATES_LIGHT=1 : le groupe `linkedTableLight` garde en permanence ce que seule la lecture légère fait voir.
+const REPLAYS = { linkedTableLight: { of: 'linkedTable', light: true } };
 // Ce que le faux Grist porte d'avance, avant que le widget ne lise quoi que ce soit (window.__preSeedGristStub, dev-tests/grist-stub.js) : le document d'avant du groupe schemaMigration.
 const SCHEMA_PRESEED = {
   schemaMigration: () => {
@@ -898,6 +912,18 @@ async function runGroup(name, probeExpr, lang) {
   // Le mode des noms du widget dans le document (js/schema-columns.js lit `globalThis.__schemaNames` au chargement ; le faux Grist, dev-tests/grist-stub.js, aussi) : « legacy » (le défaut des essais) pour
   // les noms d'avant, « english » pour un document déjà aux noms anglais, « migrate » pour un document d'avant que le widget renomme à sa première lecture.
   if (SCHEMA_MODES[name]) await page.addInitScript(mode => { window.__schemaNames = mode; }, SCHEMA_MODES[name]);
+  let lightServer = null;
+  if (LIGHT_MODE || (REPLAYS[name] && REPLAYS[name].light)) {
+    await page.addInitScript(() => { window.__templatesLight = 'force'; window.__templatesLightSmall = 0; window.__templatesLightStacks = true; });
+    lightServer = createLightServer(async () => tablesFromStubState(await page.evaluate(() => ({ rows: window.__gristStub.state.rows, columns: window.__gristStub.state.columns }))));
+    await page.route('**://localhost/api/docs/**', async (route) => {
+      // Seules la liste (`/sql`) et les lignes par numéro (`/tables/<table>/records`) sont les siennes ; une pièce jointe ou un autre appel garde son sort d'avant.
+      if (!/\/api\/docs\/[^/]+\/(sql|tables\/[^/]+\/records)(\?|$)/.test(route.request().url())) { await route.fallback(); return; }
+      let answer;
+      try { answer = await lightServer.handle(route.request().url()); } catch (e) { answer = { status: 500, body: JSON.stringify({ error: String(e && e.message || e) }) }; }
+      await route.fulfill({ status: answer.status, contentType: answer.noCors ? 'text/html' : 'application/json', headers: answer.noCors ? {} : { 'Access-Control-Allow-Origin': '*' }, body: answer.body });
+    });
+  }
   if (SCHEMA_PRESEED[name]) await page.addInitScript(SCHEMA_PRESEED[name]);
   if (NAMES_WINDOW_GROUPS.has(name)) {
     await page.route('**/api/docs/**/webhooks*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ webhooks: [] }) }));
@@ -946,13 +972,23 @@ async function runGroup(name, probeExpr, lang) {
   for (const f of [...DEV_FILES, GROUPS[name]]) {
     await page.addScriptTag({ url: `/dev-tests/${f}.js` });
   }
-  const result = await page.evaluate(async groupName => {
-    const suite = window.EditorTestSuites[groupName];
+  const result = await page.evaluate(async ([groupName, suiteName]) => {
+    const suite = window.EditorTestSuites[suiteName];
     if (!suite) return { missing: true };
     const results = await window.TestRunner.runGroup(groupName, suite);
     return { report: window.TestRunner.report(results), results: results.map(r => ({ name: r.id || r.name, pass: r.pass, notes: r.notes })), deferred: results.deferred };
-  }, name);
+  }, [name, REPLAYS[name] ? REPLAYS[name].of : name]);
 
+  if (lightServer && !result.missing) {
+    // Ce que la page a lu avant que le texte soit chargé, et ce que le faux serveur a refusé : la passe légère ne vaut que si les deux sont vides.
+    // Un texte que l'ESSAI lit lui-même sans l'avoir fait charger (la trame qui suit le lecteur est dans dev-tests/) n'est pas une faute de l'application : l'essai y voit un texte vide et conclut ce qu'il conclut.
+    const readByTest = note => /dev-tests\//.test(String(note.pile || '').split(' < ')[1] || '');
+    const unloaded = (await page.evaluate(() => (typeof Templates !== 'undefined' && Templates.getUnloadedReads ? Templates.getUnloadedReads() : []))).filter(note => !readByTest(note));
+    const refused = lightServer.log.filter(entry => entry.status >= 400).map(entry => entry.status + ' ' + (entry.kind || '') + ' ' + (entry.sql ? entry.sql.slice(0, 80) : entry.path));
+    result.results.push({ name: 'lecture légère : aucun texte lu avant d\'être chargé', pass: unloaded.length === 0, notes: JSON.stringify(unloaded) });
+    result.results.push({ name: 'lecture légère : aucune demande refusée par le faux serveur', pass: refused.length === 0, notes: JSON.stringify(refused.slice(0, 5)) });
+    result.report += '\n  [lecture légère] demandes SQL : ' + lightServer.log.filter(entry => entry.kind === 'sql').length + ', par numéros : ' + lightServer.log.filter(entry => entry.kind === 'records').length;
+  }
   if (collectFile) {
     const got = await page.evaluate(async () => { if (window.__collectedReady) await window.__collectedReady; return window.__collected || null; });
     if (got) collected[name] = Object.assign(collected[name] || {}, got);
@@ -1015,7 +1051,8 @@ for (const s of runnableNodeScripts) {
   const r = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8', env: { ...process.env, WHEEL_SCROLL_PORT: String(port + 53) } });
   const out = ((r.stdout || '') + (r.stderr || '')).trimEnd();
   console.log(out);
-  const m = out.match(/(\d+)\/(\d+) passés\s*$/);
+  // Le décompte est la dernière ligne de la SORTIE du script : ce que Node écrit ensuite sur l'erreur (l'avertissement « SQLite is an experimental feature » des essais qui lancent le faux Grist SQL, dev-tests/light-server.mjs) ne le cache pas.
+  const m = (r.stdout || '').trimEnd().match(/(\d+)\/(\d+) passés\s*$/) || out.match(/(\d+)\/(\d+) passés\s*$/);
   if (m) {
     const pass = Number(m[1]), tot = Number(m[2]), fail = tot - pass;
     totalPass += pass; totalFail += fail;

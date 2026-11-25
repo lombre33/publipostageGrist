@@ -784,6 +784,9 @@ const MainExport = (function () {
         catch (e) { console.error('[main] export en lot : modèle de la ligne impossible à choisir, celui de l’écran est gardé', row.id, e); }
         if (id == null || Templates.isCurrent(id)) return openSource;
         if (!byTemplate.has(id)) {
+          // Lecture légère (js/templates.js) : le modèle de la ligne se lit, avec ceux qu'il désigne (les modèles d'un macro-modèle, un tableau lié), avant d'être la source de ses lignes. Jamais un autre modèle à sa place :
+          // une ligne exportée avec le modèle de l'écran sans que personne le sache serait pire qu'une ligne en échec.
+          if (!(await Templates.ensureWithReferences([id]))) throw new Error('modèle de la ligne illisible : ' + id);
           const tpl = Templates.byId(id);
           byTemplate.set(id, tpl ? templateSource(tpl, cfg) : openSource);
         }
@@ -801,7 +804,7 @@ const MainExport = (function () {
     function sourceMaySplit(source, templatesCache) {
       if (source.maySplit === undefined) {
         const footerParts = ListSplit.partsOf('', source.headerFooterData).slice(1);
-        source.maySplit = ListSplit.hasMarker(footerParts) || (source.isMacro ? templatesCache.some(tpl => ListSplit.hasMarker([tpl.contenu])) : ListSplit.hasMarker([source.html]));
+        source.maySplit = ListSplit.hasMarker(footerParts) || (source.isMacro ? templatesCache.some(tpl => tpl.chargee !== false && ListSplit.hasMarker([tpl.contenu])) : ListSplit.hasMarker([source.html]));
       }
       return source.maySplit;
     }
@@ -949,7 +952,7 @@ const MainExport = (function () {
       const texts = [];
       new Set(jobs.map(job => job.source)).forEach((source) => { texts.push(source.html, source.headerFooterData); });
       jobs.forEach((job) => { if (job.rowHtml !== undefined) texts.push(job.rowHtml); });
-      if (jobs.some(job => job.source.isMacro)) (templatesCache || []).forEach((tpl) => { texts.push(tpl.contenu, tpl.headerFooter); });
+      if (jobs.some(job => job.source.isMacro)) (templatesCache || []).forEach((tpl) => { if (tpl.chargee !== false) texts.push(tpl.contenu, tpl.headerFooter); });
       return texts;
     }
     async function runBatchExport(kind, only, preset) {
@@ -1025,6 +1028,8 @@ const MainExport = (function () {
       // la concaténation est refaite ligne par ligne dans la boucle de runBatchJobs ; un modèle normal garde le même gabarit pour toutes les lignes,
       // seule la résolution des #Variable change. Pas de modèle unique non plus quand « Modèle selon la ligne » est réglé : chaque ligne a la source
       // du modèle que ses règles lui donnent (rowSourceResolver), comme à l'écran.
+      // Lecture légère (js/templates.js) : le modèle ouvert et ceux qu'il désigne (les modèles d'un macro-modèle) se lisent d'abord ; la liste ne les porte pas tous en entier.
+      if (Templates.getCurrentId() != null && !(await Templates.ensureWithReferences([Templates.getCurrentId()]))) throw new Error('un modèle du lot est illisible');
       const templatesCache = LinkedTable.resolveTemplates(EditorCore.getEditor(), Templates.getCached());
       const openSource = openTemplateSource(cfg);
       const sourceOf = only ? async () => openSource : rowSourceResolver(tableId, cfg, openSource);

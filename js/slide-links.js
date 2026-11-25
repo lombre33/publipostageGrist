@@ -305,6 +305,40 @@ const SlideLinks = (function () {
     const model = Templates.byId(attrs.linkModel);
     return model && model.typeModele === TYPE && model.jeton === attrs.linkKey ? model : null;
   }
+  // Une présentation dont le texte n'est pas lu (lecture légère, js/templates.js : une source changée ailleurs depuis la dernière liste, une présentation qui en bloque une diapositive) n'est lue qu'à la demande : les
+  // appels du même instant partent ensemble, et à leur arrivée la page refait suivre leur source aux diapositives liées (Templates.onEntriesLoaded). Une présentation qui n'a pas pu être lue n'est pas redemandée avant
+  // READ_RETRY_MS (pas de lecture en boucle).
+  const READ_RETRY_MS = 30000;
+  const wantedReads = new Set();
+  const triedReads = new Map();
+  let readScheduled = false;
+  function wantsReading(id) {
+    const key = String(id);
+    if (Date.now() - (triedReads.get(key) || 0) < READ_RETRY_MS) return;
+    wantedReads.add(key);
+    if (readScheduled) return;
+    readScheduled = true;
+    Promise.resolve().then(() => {
+      const ids = Array.from(wantedReads);
+      wantedReads.clear();
+      ids.forEach((one) => { triedReads.set(one, Date.now()); });
+      return Templates.ensureLoaded(ids);
+    }).then(() => { readScheduled = false; ui.changed(); }, () => { readScheduled = false; });
+  }
+  // Les présentations que ce HTML désigne : celles dont il importe des diapositives (`data-link-model`) et celles qui en bloquent une (`data-slide-lock`). Templates les lit avec le modèle qu'on ouvre ou qu'on exporte
+  // (lecture légère, js/templates.js), sans quoi ses diapositives liées se comparaient à des sources sans texte.
+  function linkedModelsIn(html) {
+    const text = String(html == null ? '' : html);
+    if (text.indexOf('data-link-model') === -1 && text.indexOf('data-slide-lock') === -1) return [];
+    // Les attributs seuls, sans les balises (un texte de dizaines de Mo ne se découpe pas en balises) : un texte qui les écrirait en toutes lettres ferait lire un modèle de plus, rien d'autre.
+    const ids = new Set();
+    for (const found of text.matchAll(/\sdata-(?:link-model|slide-lock)="(\d+)"/g)) {
+      const id = idOf(found[1]);
+      if (id) ids.add(id);
+    }
+    return Array.from(ids);
+  }
+  if (typeof Templates !== 'undefined' && typeof Templates.declareReferences === 'function') Templates.declareReferences(linkedModelsIn);
   // Les numéros des diapositives source qu'une présentation envoie (« Envoie à la source »), lus dans son texte enregistré, une fois tant qu'il ne change pas.
   const pushedBy = new Map();
   const PUSH_TAG = /<div\b[^>]*\sdata-link-slide="([a-z0-9]{8,24})"[^>]*>/g;
@@ -324,7 +358,10 @@ const SlideLinks = (function () {
   function lockerOf(attrs) {
     if (!attrs || !attrs.slideId || !attrs.slideLock) return null;
     const model = Templates.byId(attrs.slideLock);
-    return model && model.typeModele === TYPE && !Templates.isCurrent(model.id) && pushesOf(model).has(attrs.slideId) ? model : null;
+    if (!model || model.typeModele !== TYPE || Templates.isCurrent(model.id)) return null;
+    // Une présentation dont le texte n'est pas lu : on ne sait pas si elle envoie encore cette diapositive, le verrou reste jusqu'à ce qu'elle soit lue.
+    if (model.chargee === false) { wantsReading(model.id); return model; }
+    return pushesOf(model).has(attrs.slideId) ? model : null;
   }
 
   // ---- Ce qu'il y a à faire d'une diapositive liée ------------------------------------------------------------------------------------------------------
@@ -373,6 +410,8 @@ const SlideLinks = (function () {
   function planOf(editor, slide, attrs) {
     const model = sourceOf(attrs);
     if (!model) return { action: 'missing', model: null };
+    // La source dont le texte n'est pas lu (lecture légère, js/templates.js) : on ne sait pas ce qu'elle dit, rien ne bouge (ni 'push', ni 'pull', ni 'missing') ; elle est lue, puis la synchro reprend.
+    if (model.chargee === false) { wantsReading(model.id); return { action: 'none', model }; }
     const parsed = parseModel(editor, model);
     const at = parsed.byId.get(attrs.linkSlide);
     if (at === undefined) return { action: 'missing', model };
@@ -1037,7 +1076,7 @@ const SlideLinks = (function () {
     const wantedHash = slideHash(wanted);
     // Le texte que le cache garde porte-t-il déjà son numéro ? (le volet vient de le lire, ou une liaison d'avant l'a posé)
     const known = Templates.byId(id);
-    if (known && known.typeModele === TYPE && known.jeton) {
+    if (known && known.typeModele === TYPE && known.jeton && known.chargee !== false) {
       const cached = String(known.contenu || '') === String(seen || '') ? before : (keptFor(known, known.contenu) || parseModel(editor, known));
       const at = findIn(cached, wantedHash);
       const slideId = at < 0 ? '' : ownId(cached, at);
@@ -1048,6 +1087,8 @@ const SlideLinks = (function () {
     await breathe();
     const model = Templates.byId(id);
     if (!model || model.typeModele !== TYPE) fail('slides.link.gone');
+    // Une source que la liste légère n'a pas lue (js/templates.js) se lit ici : relue, comme avant, avant qu'un repère y soit posé.
+    if (!(await Templates.ensureLoaded([model.id]))) fail('slides.link.failed');
     const key = model.jeton || await Templates.ensureToken(model.id, { fresh: true });
     if (!key) fail('slides.link.failed');
     // La source relue est celle que la personne a vue (le cas courant) : la lecture d'avant sert, rien n'est relu.
@@ -1245,7 +1286,7 @@ const SlideLinks = (function () {
     // d'un texte à l'autre. Une fonction, pour que `libs` soit lu à l'usage (il est posé à la création de l'éditeur).
     kit: () => ({
       libs, slidesOf, parseModel, parseHtml, slideHash, hashOfNodes, portable, replaceSpan, makeBase, parseBase, hasLink, isTag, OWN_META, TYPE, NODE, CLASS, blockedReason, attrsOfEl, domAttrs,
-      newSlideId, slideIdOf, pageOf, pageKey, changed: () => ui.changed(),
+      newSlideId, slideIdOf, pageOf, pageKey, wantsReading, changed: () => ui.changed(),
     }),
   };
 })();

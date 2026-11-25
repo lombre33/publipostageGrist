@@ -86,6 +86,8 @@ const SlideLinksLive = (function () {
   const mediaByModel = new Map();   // numéro du modèle -> { contenu, map }
   function mediaOfModel(id) {
     const model = Templates.byId(id);
+    // Un modèle dont le texte n'est pas lu (lecture légère, js/templates.js) n'a pas d'images à rendre : rien n'est gardé de sa lecture (elle serait vide).
+    if (model && model.chargee === false) return new Map();
     const contenu = model ? String(model.contenu || '') : '';
     const kept = mediaByModel.get(String(id));
     if (kept && kept.contenu === contenu) return kept.map;

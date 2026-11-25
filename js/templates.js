@@ -310,6 +310,8 @@ const Templates = (function () {
     const typeModele = cell('TemplateType', '') || 'document';
     return {
       id: data.id[i],
+      // Vrai : l'entrée porte tout ce que la ligne contient (texte, en-tête, marges, suivi, notice). Faux seulement pour une entrée de la lecture légère dont un texte long reste à lire (cf. ensureLoaded).
+      chargee: true,
       nom: cell('Name', ''),
       contenu: cell('Content', ''),
       nomFichierPDF: cell('PdfFileName', ''),
@@ -367,9 +369,26 @@ const Templates = (function () {
     cacheWritten(id);
     const cached = byId(id);
     if (!cached) return;
-    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], [LINKED_EMAIL_COLUMN]: [cached.emailLie], [NOTICE_COLUMN]: [cached.notice], ModifiedAt: [dateModif] };
+    // La notice n'est pas dans ce que l'enregistrement écrit : celle d'une entrée dont le texte n'a pas été lu n'est pas connue, et l'entrée le reste (jamais une notice vide de plus).
+    const noticeKnown = cached.chargee !== false;
+    const row = { id: [cached.id], Name: [cached.nom], IsDefault: [cached.estParDefaut], Token: [cached.jeton], [LINKED_EMAIL_COLUMN]: [cached.emailLie], ModifiedAt: [dateModif] };
+    if (noticeKnown) row[NOTICE_COLUMN] = [cached.notice];
     Object.keys(columns).forEach(column => { if (column !== 'ModifiedAt') row[column] = [columns[column]]; });
-    Object.assign(cached, templateFromRow(row, 0));
+    fillEntry(cached, templateFromRow(row, 0));
+    if (!noticeKnown) { leaveUnloaded(cached, 'notice', ''); cached.chargee = false; }
+  }
+
+  // La ligne que saveRow vient de CRÉER, au format du cache et telle que ce widget l'a écrite (texte compris). La liste légère qui suit (la création relance la liste, `createdHook`) ne rend d'une ligne neuve dont le texte est long
+  // que son nom et son poids : sans cette entrée, le document à l'écran deviendrait « pas chargé » sous ses pieds. adoptLight la garde (même date, texte lu). Une lecture entière n'en a pas besoin : elle rend la ligne telle quelle.
+  function settleCreated(id, columns, dateModif) {
+    if (lightState !== 'light') return;
+    const row = { id: [id], IsDefault: [false], Token: [''], [LINKED_EMAIL_COLUMN]: [''], [NOTICE_COLUMN]: [''], ModifiedAt: [dateModif] };
+    Object.keys(columns).forEach((column) => { if (column !== 'ModifiedAt') row[column] = [columns[column]]; });
+    const entry = templateFromRow(row, 0);
+    const known = byId(id);
+    cacheWritten(id);
+    if (!known) templatesCache.push(entry);
+    else if (known.chargee === false) fillEntry(known, entry);
   }
 
   // Le contenu seul d'une ligne que ce widget vient d'écrire (saveContent, les modèles Grille écrits avec un document) : ses autres champs ne bougent pas.
@@ -589,10 +608,356 @@ const Templates = (function () {
     return found;
   }
 
-  async function readAll() {
-    const settingsEpochAtStart = settingsEpoch;
+  // ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // LA LECTURE LÉGÈRE (consigne 103 de GFS, demande 2 : « rien ne relit la table entière après l'ouverture »). La table des modèles porte les noms ET les textes ; chez une personne elle pèse des dizaines de Mo (une
+  // présentation de 29 Mo importée : 38 millions de signes dans une ligne) et chaque lecture la rapporte d'un coup, page prise, jusqu'à ce que Grist ou son hôte ne la rendent plus (~500 Mo). Quand la table est lourde,
+  // la liste des modèles se lit donc par SQL (js/templates-light.js, GristAPI.lightQuery) SANS leurs longs textes, dont seule la longueur est rendue : le cache garde pour chaque modèle ses noms, son type, sa date, ses
+  // adresses... et, pour un texte long, une entrée « pas chargée » (`chargee` faux) que ensureLoaded lit à la demande, ligne par ligne (interface REST, GristAPI.lightRecords), quand un geste en a besoin : ouvrir ce
+  // modèle, l'exporter, le monter dans un macro-modèle. Une table qui n'est pas lourde se lit en entier comme avant (rien ne change pour un document ordinaire), et un document dont les droits refusent le SQL aussi.
+  //
+  // L'échelle : le SQL (la liste) -> l'interface REST par numéros de ligne (les textes) -> la lecture entière (quand ni l'un ni l'autre ne répond). `__templatesLight` (les essais) : 'force' lit toujours par la liste
+  // légère, 'off' ne la tente jamais ; sans lui, c'est le poids de la table qui décide.
+  const LIGHT_MIN_CHARS = 1000 * 1000;
+  const LIGHT_LIST_TIMEOUT_MS = 30000;
+  const LIGHT_ROW_TIMEOUT_MS = 120000;
+  const LIGHT_RETRY_MS = 10 * 60 * 1000;
+  const lightSwitch = () => (typeof globalThis !== 'undefined' && globalThis.__templatesLight) || 'auto';
+  // 'unknown' : pas encore sondé ; 'light' : la table est lourde, la liste légère la lit ; 'whole' : elle ne l'est pas, lecture entière ; 'refused' : le SQL a été refusé (droits, instance, réseau), lecture entière jusqu'à LIGHT_RETRY_MS.
+  let lightState = 'unknown';
+  let lightRefusedAt = 0;
+  let lightMap = null;    // { table, columns } (SchemaColumns.columnMap) : les noms réels que la dernière liste a utilisés, pour relire une ligne
+  const hydrating = new Map();   // numéro de ligne (en texte) -> la lecture de son texte en cours, que tous ceux qui la demandent se partagent
+  // Les lignes qu'un autre module de ce widget vient de réécrire SANS changer leur date (la passe de js/schema-renames.js après un renommage fait dans Grist : elle remet les nouveaux noms dans le texte, la date est celle de la personne) :
+  // le texte que le cache en garde n'est plus celui de Grist, et la date, seule preuve qu'un texte chargé est à jour, ne le dit pas. La liste qui suit ne garde donc pas l'ancienne entrée de ces lignes ; la première lecture partie
+  // après l'écriture efface la marque (numéro de ligne en texte -> l'instant de l'écriture).
+  const rewrittenAt = new Map();
+  function noteRewritten(ids) {
+    if (lightState !== 'light') return;
+    const at = Date.now();
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => { if (id != null) rewrittenAt.set(String(id), at); });
+  }
+  function settleRewrites(readStartedAt) { rewrittenAt.forEach((at, id) => { if (readStartedAt >= at) rewrittenAt.delete(id); }); }
+
+  // Les champs de l'entrée que portent les colonnes longues, et ce que lit un modèle dont le texte n'est pas là.
+  const HEAVY_FIELDS = { Content: 'contenu', HeaderFooter: 'headerFooter', Margins: 'marginsMm', TrackedChanges: 'suiviModifications', Notice: 'notice' };
+  const HEAVY_PLACEHOLDERS = {
+    Content: () => '',
+    HeaderFooter: () => safeParseHeaderFooter(null),
+    Margins: () => safeParseMargins(null),
+    TrackedChanges: entry => (entry.typeModele === 'macro' ? null : {}),
+    Notice: () => '',
+  };
+
+  // Un champ d'une entrée « pas chargée » qu'un module a lu quand même : il a reçu le texte vide, et le dit ici (les essais exigent que cette liste reste vide : un module qui lit le texte d'un autre modèle le charge d'abord).
+  const unloadedReads = [];
+  const unloadedSeen = new Set();
+  function noteUnloadedRead(id, field) {
+    const key = id + ':' + field;
+    if (unloadedSeen.has(key) || unloadedReads.length >= 50) return;
+    unloadedSeen.add(key);
+    const note = { id, field };
+    // Les essais veulent savoir d'où vient la lecture (`window.__templatesLightStacks`) : la pile, ramenée aux fichiers de l'app.
+    if (globalThis.__templatesLightStacks) note.pile = String(new Error().stack).split('\n').slice(2, 10).map(line => line.replace(/^\s*at\s+/, '').replace(/https?:\/\/[^/]+\//, '').replace(/\?v=[^:)]*/, '')).join(' < ');
+    unloadedReads.push(note);
+    console.warn('[Templates] le champ « ' + field + ' » du modèle ' + id + ' a été lu avant d’être chargé (Templates.ensureLoaded)');
+  }
+  function getUnloadedReads() { return unloadedReads.slice(); }
+  function clearUnloadedReads() { unloadedReads.length = 0; unloadedSeen.clear(); }
+
+  // Le champ `field` de l'entrée devient « pas chargé » : il rend `placeholder` et note la lecture ; une écriture (cached.contenu = ...) le remplace par une valeur ordinaire.
+  function leaveUnloaded(entry, field, placeholder) {
+    Object.defineProperty(entry, field, {
+      configurable: true,
+      enumerable: true,
+      get() { noteUnloadedRead(entry.id, field); return placeholder; },
+      set(value) { Object.defineProperty(entry, field, { value, writable: true, enumerable: true, configurable: true }); },
+    });
+  }
+
+  // Les champs de `full` (une entrée complète, de templateFromRow) posés sur l'entrée `entry` : ses accesseurs « pas chargé » deviennent des valeurs ordinaires.
+  function fillEntry(entry, full) {
+    Object.keys(full).forEach((key) => { Object.defineProperty(entry, key, { value: full[key], writable: true, enumerable: true, configurable: true }); });
+  }
+
+  function lightAvailable() {
+    if (lightSwitch() === 'off') return false;
+    if (typeof GristAPI === 'undefined' || typeof GristAPI.lightQuery !== 'function' || typeof GristAPI.lightRecords !== 'function' || typeof TemplatesLight === 'undefined') return false;
+    if (lightState === 'whole') return false;
+    if (lightState === 'refused') return Date.now() - lightRefusedAt >= LIGHT_RETRY_MS;
+    return true;
+  }
+  function refuseLight(error) {
+    lightState = 'refused';
+    lightRefusedAt = Date.now();
+    traceStep('modèles : liste légère refusée', { raison: (error && error.reason) || 'erreur', status: error && error.status });
+  }
+
+  // La liste, avec ses longueurs quand Grist les calcule dans le temps qu'il laisse à une requête SQL (une seconde par défaut : au-delà, il l'interrompt) ; sinon sans (`weighed` faux : on ne sait pas ce que pèsent les textes, la table
+  // est tenue pour lourde). Un refus des droits, de l'instance ou du réseau remonte : la lecture entière suivra.
+  async function listRows(map) {
+    // `__templatesLightSmall` (les essais) : le seuil des textes qui viennent avec la liste (0 : tout se lit à la demande).
+    const small = typeof globalThis !== 'undefined' && typeof globalThis.__templatesLightSmall === 'number' ? { smallBytes: globalThis.__templatesLightSmall } : {};
+    try {
+      return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, small), LIGHT_LIST_TIMEOUT_MS), weighed: true };
+    } catch (error) {
+      const reason = error && error.reason;
+      if (reason === 'jeton' || reason === 'réseau' || (reason === 'http' && [401, 403, 404].indexOf(error.status) !== -1)) throw error;
+      return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, Object.assign({ weights: false }, small)), LIGHT_LIST_TIMEOUT_MS), weighed: false };
+    }
+  }
+
+  // Les octets de textes longs de la liste : ce que la lecture entière aurait rapporté.
+  function listedBytes(listing) {
+    let bytes = 0;
+    listing.rows.forEach((row) => { TemplatesLight.HEAVY_COLUMNS.forEach((column) => { bytes += Number(row[column + TemplatesLight.LEN_SUFFIX]) || 0; }); });
+    return bytes;
+  }
+
+  // Rend { map, listing } quand la table se lit par la liste légère ; { declined: true } quand la personne a refusé la table ; null quand la lecture entière s'applique (table peu lourde, SQL refusé, pas de table encore).
+  async function readLight() {
+    if (!lightAvailable()) return null;
+    let map = null;
+    try { map = await SchemaColumns.columnMap(TABLE_NAME); } catch (e) { return null; }
+    if (!map) return null;
+    let listing;
+    try { listing = await listRows(map); } catch (e) { refuseLight(e); return null; }
+    if (lightSwitch() !== 'force' && listing.weighed && listedBytes(listing) < LIGHT_MIN_CHARS) { lightState = 'whole'; return null; }
+    lightState = 'light';
+    // Les colonnes que disent les métadonnées : les migrations ne lisent jamais la table (cf. readColumnsFromMetadata).
+    const known = new Set(map.columns.keys());
+    markDoneMigrations(known);
+    const changesBefore = tableChanges;
+    try {
+      await ensureTableExists();
+      await runMigrations(known);
+    } catch (e) {
+      if (!GristAPI.isTablesDeclined(e)) throw e;
+      return { declined: true };
+    }
+    if (tableChanges !== changesBefore) {
+      // Une colonne vient d'être ajoutée : la liste se relit avec elle.
+      try {
+        map = (await SchemaColumns.columnMap(TABLE_NAME)) || map;
+        listing = await listRows(map);
+      } catch (e) { refuseLight(e); return null; }
+    }
+    lightMap = map;
+    return { map, listing };
+  }
+
+  // Le cache d'après une liste légère. Un modèle déjà lu en entier (le document ouvert, un modèle monté depuis) garde son texte tant que sa date est celle que Grist porte ; les autres n'ont que ce que la liste donne.
+  function adoptLight(read, started) {
+    const { data, lens } = TemplatesLight.columnar(read.listing.rows);
+    const weighed = read.listing.weighed;
+    const previous = new Map(templatesCache.map(t => [String(t.id), t]));
+    const entries = [];
+    let settingsAt = -1;
+    const weights = { columns: {}, rows: 0, heaviest: [], weighMs: 0, light: true };
+    TemplatesLight.HEAVY_COLUMNS.forEach((column) => { weights.columns[column] = 0; });
+    const rowBytes = [];
+    data.id.forEach((id, i) => {
+      if (isSettingsRow(data, i)) { if (settingsAt === -1) settingsAt = i; }
+      const poids = weighed ? {} : null;
+      let bytes = 0;
+      let whole = true;
+      const entry = templateFromRow(data, i);
+      TemplatesLight.HEAVY_COLUMNS.forEach((column) => {
+        const field = HEAVY_FIELDS[column];
+        const length = weighed && lens[column] ? Number(lens[column][i]) || 0 : null;
+        if (poids) poids[column] = length;
+        if (length) { weights.columns[column] += length; bytes += length; }
+        const given = data[column] ? data[column][i] : null;
+        // Le texte est là (court, ou d'un type qui vient toujours avec la liste) ; ou la colonne est vide ; sinon il reste à lire.
+        if (given == null && (weighed ? length > 0 : true) && !(data.TemplateType && TemplatesLight.ALWAYS_TYPES.indexOf(data.TemplateType[i]) !== -1)) {
+          leaveUnloaded(entry, field, HEAVY_PLACEHOLDERS[column](entry));
+          whole = false;
+        } else if (given == null && field === 'contenu') {
+          entry.contenu = '';
+        }
+      });
+      entry.chargee = whole;
+      entry.poids = poids;
+      rowBytes.push({ id, chars: bytes, type: entry.typeModele, name: String(entry.nom || '').slice(0, 24) });
+      if (!isSettingsRow(data, i)) entries.push(entry);
+    });
+    weights.rows = data.id.length;
+    weights.heaviest = rowBytes.sort((a, b) => b.chars - a.chars).slice(0, HEAVIEST_ROWS);
+    loadedChars = weighed ? Object.keys(weights.columns).reduce((sum, column) => sum + weights.columns[column], 0) : HEAVY_TABLE_CHARS;
+    loadWeights = weights;
+    traceStep('modèles : table reçue', { lignes: weights.rows, signesMo: Math.round(loadedChars / 104857.6) / 10, liste: 'légère' });
+    confirmPredictedDates(data, started.written);
+    const rewritten = new Set(rewrittenAt.keys());
+    settleRewrites(started.at);
+    const merged = entries.map((next) => {
+      const old = previous.get(String(next.id));
+      if (!old || !old.chargee || next.chargee || rewritten.has(String(next.id)) || old.typeModele !== next.typeModele || !sameDateModif(old.dateModif, next.dateModif)) return next;
+      // Grist garde de ce modèle l'état que le cache a lu ou écrit : son texte reste, ses autres champs prennent la liste.
+      ['nom', 'nomFichierPDF', 'estParDefaut', 'destinataires', 'cc', 'cci', 'objet', 'pj', 'jeton', 'modifiePar', 'emailLie', 'dateModif', 'poids'].forEach((key) => { old[key] = next[key]; });
+      return old;
+    });
+    templatesCache = keepWrittenSince(merged, started.written);
+    cacheReadAt = started.at;
+    cacheArrivedAt = Date.now();
+    adoptDocumentSettings(data, settingsAt, started.settingsEpoch);
+    traceStep('modèles : en cache', { liste: 'légère' });
+    markComplete();
+    return templatesCache;
+  }
+
+  // La ligne `at` de `data` (au format de fetchTable, sous les noms anglais) prise comme le modèle complet du cache : ses champs remplacent ceux de l'entrée. Une ligne que ce widget a écrite depuis le début de la lecture garde ses champs
+  // écrits ; seuls ceux qui restaient « pas chargés » prennent ce que Grist rend (une entrée lue avec succès n'est jamais laissée « pas chargée », sans quoi un module qui la redemande la relirait sans fin).
+  function adoptRow(data, at, writtenAtStart) {
+    const full = templateFromRow(data, at);
+    const entry = byId(full.id);
+    if (!entry || isSettingsRow(data, at)) return false;
+    if (cacheWrittenAt.get(String(full.id)) > writtenAtStart) {
+      Object.keys(full).forEach((key) => {
+        const own = Object.getOwnPropertyDescriptor(entry, key);
+        if (own && own.get) Object.defineProperty(entry, key, { value: full[key], writable: true, enumerable: true, configurable: true });
+      });
+      entry.chargee = true;
+      return true;
+    }
+    fillEntry(entry, full);
+    return true;
+  }
+
+  // Les modules qui suivent l'arrivée de textes lus à la demande : js/main.js refait suivre leur modèle aux tableaux et aux diapositives liés, qu'un modèle sans texte ne laissait pas comparer.
+  const loadedListeners = [];
+  function onEntriesLoaded(listener) { if (typeof listener === 'function' && loadedListeners.indexOf(listener) === -1) loadedListeners.push(listener); }
+  function notifyLoaded(ids) { loadedListeners.slice().forEach((listener) => { try { listener(ids); } catch (e) { console.warn('[Templates] suite d’une lecture à la demande', e); } }); }
+
+  // Lit les lignes `keys` : par l'interface REST, en paquets que la page peut recevoir ; à défaut (refus, délai), par la lecture entière, qui rend tout ce que la table porte. Vrai quand chaque ligne demandée est rendue.
+  async function readEntries(keys) {
     const writtenAtStart = cacheWrites;
-    const readStartedAt = Date.now();
+    const found = new Set();
+    const rows = keys.map(key => byId(key)).filter(Boolean);
+    try {
+      if (!lightMap) throw new Error('aucune liste légère lue');
+      const chunks = TemplatesLight.chunkIds(rows.map(row => row.id), (id) => { const entry = byId(id); return entry && entry.poids ? Object.keys(entry.poids).reduce((sum, column) => sum + (entry.poids[column] || 0), 0) : 0; });
+      for (const chunk of chunks) {
+        const { records } = await GristAPI.lightRecords(lightMap.table, chunk, LIGHT_ROW_TIMEOUT_MS);
+        const rowsRead = TemplatesLight.englishRecords(records, lightMap);
+        rowsRead.id.forEach((id, at) => { if (adoptRow(rowsRead, at, writtenAtStart)) found.add(String(id)); });
+      }
+    } catch (error) {
+      traceStep('modèles : lecture par numéros refusée', { raison: (error && error.reason) || 'erreur', status: error && error.status });
+      const whole = await readTable();
+      if (!whole || !Array.isArray(whole.id)) return false;
+      // La lecture entière rend tout ce que la table porte : elle remplit les textes demandés ET ceux qui restaient à lire (les lignes ne se redemandent pas une à une, ni la table une seconde fois pour le document suivant).
+      whole.id.forEach((id, at) => {
+        const entry = byId(id);
+        if (entry && (keys.indexOf(String(id)) !== -1 || entry.chargee === false) && adoptRow(whole, at, writtenAtStart)) found.add(String(id));
+      });
+    }
+    if (found.size) notifyLoaded(Array.from(found));
+    return rows.every(row => found.has(String(row.id)));
+  }
+
+  // Charge (lit dans Grist) les modèles `ids` dont le texte n'est pas là ; `options.fresh` les relit même quand ils sont chargés (l'état que Grist garde maintenant). Rend vrai quand chacun est chargé : à faux, un modèle n'a pas pu être lu et son
+  // texte est vide - jamais l'ouvrir dans l'éditeur, l'enregistrement le remplacerait. Sans lecture légère (une table peu lourde, la lecture entière) tout est déjà là : rend vrai tout de suite.
+  function ensureLoaded(ids, options) {
+    const list = Array.from(new Set((Array.isArray(ids) ? ids : [ids]).filter(id => id != null).map(String)));
+    const fresh = !!(options && options.fresh) && lightState === 'light';
+    const wanted = list.filter((key) => { const entry = byId(key); return !!entry && (fresh || entry.chargee === false); });
+    if (!wanted.length) return Promise.resolve(true);
+    const waits = [];
+    const toRead = [];
+    wanted.forEach((key) => { if (hydrating.has(key)) waits.push(hydrating.get(key)); else toRead.push(key); });
+    if (toRead.length) {
+      const run = readEntries(toRead);
+      toRead.forEach((key) => { hydrating.set(key, run); });
+      const done = () => toRead.forEach((key) => { if (hydrating.get(key) === run) hydrating.delete(key); });
+      run.then(done, done);
+      waits.push(run);
+    }
+    return Promise.all(waits).then(results => results.every(Boolean), () => false);
+  }
+  // Tous les modèles : pour un geste qui parcourt le texte de chacun (la liste de ceux qu'un export assemble, l'impact d'un renommage). Rend vrai quand tout est lu.
+  function ensureAllLoaded() { return ensureLoaded(templatesCache.filter(t => t.chargee === false).map(t => t.id)); }
+  // Les modèles dont le texte cite l'un de ces mots, chargés : la recherche se fait côté Grist (SQL instr, seuls les numéros reviennent) et ne lit que ceux-là. Sans réponse du SQL, tout se lit.
+  async function ensureCiting(words) {
+    const unloaded = templatesCache.filter(t => t.chargee === false);
+    if (!unloaded.length) return true;
+    let ids = null;
+    const sql = lightMap ? TemplatesLight.citingSql(lightMap, words) : null;
+    if (sql) { try { ids = (await GristAPI.lightQuery(sql, LIGHT_LIST_TIMEOUT_MS)).map(row => String(row.id)); } catch (e) { ids = null; } }
+    return ensureLoaded(unloaded.filter(t => !ids || ids.indexOf(String(t.id)) !== -1).map(t => t.id));
+  }
+  // Les autres modèles que le texte d'un modèle désigne (un tableau lié à une grille, une diapositive liée à une présentation, les emplacements d'un macro-modèle) : chaque module qui sait en lire un l'annonce par `declareReferences(lecteur)`,
+  // `lecteur(html)` rendant leurs numéros. Un modèle qu'on ouvre ou qu'on exporte ne se lit pas seul : ceux qu'il désigne se lisent avec lui (ensureWithReferences), sans quoi son tableau lié ou sa diapositive liée s'afficherait vide.
+  const referenceReaders = [];
+  function declareReferences(reader) { if (typeof reader === 'function' && referenceReaders.indexOf(reader) === -1) referenceReaders.push(reader); }
+  function referencedIds(entry) {
+    const found = new Set();
+    if (!entry) return [];
+    if (entry.typeModele === 'macro') {
+      ((entry.macroSlots && entry.macroSlots.slots) || []).forEach((slot) => { if (slot && slot.modeleId != null) found.add(String(slot.modeleId)); });
+    } else if (entry.chargee !== false && typeof entry.contenu === 'string' && entry.contenu) {
+      referenceReaders.forEach((reader) => { try { (reader(entry.contenu) || []).forEach(id => found.add(String(id))); } catch (e) { /* un lecteur qui échoue ne retient pas l'ouverture */ } });
+    }
+    found.delete(String(entry.id));
+    return Array.from(found);
+  }
+  // Charge les modèles `ids` et, de proche en proche (trois niveaux au plus), ceux que leur texte désigne. Rend vrai quand TOUS les modèles demandés sont chargés ; ceux qu'ils désignent se lisent de leur mieux (un lien vers un modèle supprimé ou
+  // illisible n'empêche pas d'ouvrir le document : le tableau ou la diapositive liée le dit comme avant).
+  async function ensureWithReferences(ids) {
+    const wanted = (Array.isArray(ids) ? ids : [ids]).filter(id => id != null);
+    const ok = await ensureLoaded(wanted);
+    const seen = new Set(wanted.map(String));
+    let level = wanted.map(String);
+    for (let depth = 0; depth < 3 && level.length; depth++) {
+      const next = [];
+      level.forEach((id) => { referencedIds(byId(id)).forEach((ref) => { if (!seen.has(ref) && byId(ref)) { seen.add(ref); next.push(ref); } }); });
+      if (next.length) await ensureLoaded(next);
+      level = next;
+    }
+    return ok;
+  }
+  // Faux, sans rien lire, quand tout ce qu'il faut pour ouvrir ce modèle est déjà là (le cas de toute table peu lourde) : vrai quand le texte du modèle, ou celui d'un modèle qu'il désigne, reste à lire (ensureWithReferences).
+  function needsReading(entry) {
+    if (!entry || lightState !== 'light') return false;
+    if (entry.chargee === false) return true;
+    return referencedIds(entry).some((id) => { const other = byId(id); return !!other && other.chargee === false; });
+  }
+  // Quel mode lit la table en ce moment ('light' : la liste légère) : les essais et le rapport de fluidité.
+  function getLightState() { return lightState; }
+
+  // La lecture de la table des modèles : par la liste légère quand la table est lourde et que le document la sert (cf. readLight), sinon en entier.
+  async function readAll() {
+    const started = { settingsEpoch, written: cacheWrites, at: Date.now() };
+    // Pas de lecture légère possible (table peu lourde, SQL refusé, mode coupé) : la table se lit tout de suite, sans attendre un tour de plus : l'appelant reste dans la pile de la lecture (les essais y reconnaissent le passage de
+    // l'enregistrement automatique) et rien ne retarde la lecture d'une table qu'on sait ordinaire.
+    if (!lightAvailable()) return readWhole(started);
+    const light = await readLight();
+    if (light) return light.declined ? readDeclined() : adoptLight(light, started);
+    return readWhole(started);
+  }
+
+  // Les migrations de colonnes de la table, dans l'ordre. `known` : les colonnes de la table (une lecture, ou les métadonnées de Grist).
+  async function runMigrations(known) {
+    await ensureHeaderFooterColumn(known);
+    await ensureDefaultColumn(known);
+    await ensureMarginsColumn(known);
+    await ensureDateModifColumn(known);
+    await ensureEmailColumns(known);
+    await pjColumnReady(known);
+    await ensureTrackChangesColumn(known);
+    await modifiedByColumnReady(known);
+  }
+
+  // Table refusée par la personne : aucun modèle à lire, et rien d'une erreur (ni ici ni dans le démarrage qui attend cette liste).
+  function readDeclined() {
+    templatesCache = [];
+    loadedChars = 0;
+    markComplete();
+    return templatesCache;
+  }
+
+  async function readWhole(started) {
+    const settingsEpochAtStart = started.settingsEpoch;
+    const writtenAtStart = started.written;
+    const readStartedAt = started.at;
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
     let first = await readTable();
     // Une lecture qui échoue ne dit rien des colonnes. Une seule nouvelle tentative (une table absente, un document neuf, échoue vite aux deux), jamais davantage : au-dessus d'un certain poids Grist ou son hôte ne rendent plus la table
@@ -608,23 +973,10 @@ const Templates = (function () {
       await ensureTableExists();
       // Une table qui ne s'est pas lue dit ses colonnes par les métadonnées de Grist : les migrations ne la relisent JAMAIS. Sans elles non plus (métadonnées illisibles, table absente), les migrations attendent le passage suivant.
       if (!known) known = await readColumnsFromMetadata();
-      if (known) {
-        await ensureHeaderFooterColumn(known);
-        await ensureDefaultColumn(known);
-        await ensureMarginsColumn(known);
-        await ensureDateModifColumn(known);
-        await ensureEmailColumns(known);
-        await pjColumnReady(known);
-        await ensureTrackChangesColumn(known);
-        await modifiedByColumnReady(known);
-      }
+      if (known) await runMigrations(known);
     } catch (e) {
-      // Table refusée par la personne : aucun modèle à lire, et rien d'une erreur (ni ici ni dans le démarrage qui attend cette liste).
       if (!GristAPI.isTablesDeclined(e)) throw e;
-      templatesCache = [];
-      loadedChars = 0;
-      markComplete();
-      return templatesCache;
+      return readDeclined();
     }
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
@@ -638,6 +990,8 @@ const Templates = (function () {
       const weighStart = Date.now();
       loadedChars = charsOf(tableData, weights);
       loadWeights = Object.assign(weights, { weighMs: Date.now() - weighStart });
+      // Une table qui a grossi au point d'être lourde se lit désormais par la liste légère : elle sera sondée à la prochaine lecture.
+      if (lightState === 'whole' && loadedChars >= LIGHT_MIN_CHARS) lightState = 'unknown';
       traceStep('modèles : table reçue', { lignes: weights.rows, signesMo: Math.round(loadedChars / 104857.6) / 10 });
       confirmPredictedDates(tableData, writtenAtStart);
       // La ligne des réglages du document n'est pas un modèle : mise de côté, jamais dans le cache.
@@ -650,6 +1004,7 @@ const Templates = (function () {
       });
       loadWeights.rowsMs = Date.now() - rowsStart;
       templatesCache = keepWrittenSince(templates, writtenAtStart);
+      settleRewrites(readStartedAt);
       cacheReadAt = readStartedAt;
       cacheArrivedAt = Date.now();
       adoptDocumentSettings(tableData, settingsAt, settingsEpochAtStart);
@@ -887,7 +1242,14 @@ const Templates = (function () {
   async function storedStateFor(id) {
     const cached = byId(id);
     const freshAt = Math.max(loadedChars >= HEAVY_TABLE_CHARS ? cacheArrivedAt : cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0);
-    if (cached && Date.now() - freshAt <= CACHE_FRESH_MS) return cached;
+    // Une entrée dont le texte n'a pas été lu n'est pas un état : jamais rendue telle quelle (l'historique y garderait un texte vide).
+    if (cached && cached.chargee !== false && Date.now() - freshAt <= CACHE_FRESH_MS) return cached;
+    // Une table lue par la liste légère ne se relit jamais en entier pour cela : la seule ligne, par son numéro.
+    if (cached && lightState === 'light') {
+      const read = await ensureLoaded([id], { fresh: true });
+      const now = byId(id);
+      return read && now && now.chargee !== false ? now : null;
+    }
     const tableData = await readTable();
     if (!tableData || !Array.isArray(tableData.id)) return cached || null;
     const at = tableData.id.findIndex(rowId => sameId(rowId, id));
@@ -991,7 +1353,7 @@ const Templates = (function () {
       // quitté puis rouvert aussitôt y est lu - avant la relecture de la date ci-dessous, qui dure des secondes quand Grist est lent.
       settleWritten(id, columns, now);
       settleOthersContent();
-      if (typeof contenuHtml === 'string') writtenTextSize.set(String(id), contenuHtml.length);
+      noteWrittenText(id, contenuHtml);
       const dates = await readBackDateModifs([id, ...others.map(({ id: modelId }) => modelId)], now, writtenChars);
       const dateModif = dates.get(id);
       writes.remember(id, dateModif);
@@ -1009,11 +1371,12 @@ const Templates = (function () {
       // est à l'écran, et l'enregistrement automatique y écrirait ensuite, sous l'identifiant du modèle neuf, ce que l'écran montre.
       if (currentIdSeq === seqAtStart) currentTemplateId = newId;
       settleOthersContent();
-      if (typeof contenuHtml === 'string') writtenTextSize.set(String(newId), contenuHtml.length);
+      noteWrittenText(newId, contenuHtml);
       const dates = await readBackDateModifs([newId, ...others.map(({ id: modelId }) => modelId)], now, writtenChars);
       const dateModif = dates.get(newId);
       writes.remember(newId, dateModif);
       settleOthers(dates);
+      settleCreated(newId, columns, dateModif);
       if (createdHook) {
         try { await createdHook(newId); } catch (e) { console.warn('[Templates] suite de la création impossible', e); }
       }
@@ -1034,7 +1397,7 @@ const Templates = (function () {
       ['UpdateRecord', TABLE_NAME, id, { Content: contenuHtml, ModifiedAt: now }]
     ]);
     settleContent(id, contenuHtml, now);
-    if (typeof contenuHtml === 'string') writtenTextSize.set(String(id), contenuHtml.length);
+    noteWrittenText(id, contenuHtml);
     const dateModif = await readBackDateModif(id, now, typeof contenuHtml === 'string' ? contenuHtml.length : 0);
     writes.remember(id, dateModif);
     noteDateModif(id, dateModif);
@@ -1167,6 +1530,13 @@ const Templates = (function () {
 
   // Le nombre de signes du texte que le dernier enregistrement de chaque ligne a écrit : verifyStored le compare à ce que Grist rend à la relecture de la table (loadAll). Seul le nombre est gardé, jamais le texte.
   const writtenTextSize = new Map();
+  // Son poids en octets, seulement quand la table se lit par la liste légère : celle-ci pèse les textes en octets (js/templates-light.js), et c'est avec ce poids que verifyStored compare.
+  const writtenTextBytes = new Map();
+  function noteWrittenText(id, text) {
+    if (typeof text !== 'string') return;
+    writtenTextSize.set(String(id), text.length);
+    if (lightState === 'light' && typeof TemplatesLight !== 'undefined') writtenTextBytes.set(String(id), TemplatesLight.utf8Length(text)); else writtenTextBytes.delete(String(id));
+  }
   // Ce que Grist garde de la ligne `id` d'après la dernière lecture de la table : 'ok' (la ligne est là, avec le nom et le texte que le dernier enregistrement de CE widget a écrits), 'missing' (la ligne n'est pas dans
   // la table lue) ou 'differs' (elle y est, mais son texte n'a pas la taille de celui qui est parti). À appeler après l'enregistrement ET la relecture de la liste (js/main-save.js la fait avant de rendre la main) : le cache
   // est alors ce que Grist a rendu, pas ce que le widget a écrit (js/templates.js:keepWrittenSince ne garde la valeur écrite que pour une ligne écrite PENDANT la lecture).
@@ -1175,7 +1545,9 @@ const Templates = (function () {
     if (!row) return 'missing';
     if (typeof name === 'string' && name.trim() !== '' && String(row.nom).trim() !== name.trim()) return 'differs';
     const size = writtenTextSize.get(String(id));
-    if (size !== undefined && typeof row.contenu === 'string' && row.contenu.length !== size) return 'differs';
+    // Une table lue par la liste légère : le poids que Grist a rendu pour ce texte, en octets, contre celui qui est parti ; le texte lui-même n'est pas relu.
+    if (size !== undefined && writtenTextBytes.has(String(id)) && row.poids && row.poids.Content != null) return row.poids.Content === writtenTextBytes.get(String(id)) ? 'ok' : 'differs';
+    if (size !== undefined && row.chargee !== false && typeof row.contenu === 'string' && row.contenu.length !== size) return 'differs';
     return 'ok';
   }
 
@@ -1274,6 +1646,7 @@ const Templates = (function () {
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, verifyStored, getLoadedChars, getLoadWeights, templateFromRecord, hasLoaded, SETTINGS_TYPE, seedPartial, isComplete, whenComplete, onCompleted, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
+    ensureLoaded, ensureAllLoaded, ensureCiting, ensureWithReferences, declareReferences, referencedIds, needsReading, noteRewritten, onEntriesLoaded, getUnloadedReads, clearUnloadedReads, getLightState,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();

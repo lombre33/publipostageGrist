@@ -356,7 +356,30 @@
   // forcedTypeModele : seulement pour tpl = null (nouveau modèle vide, cf. startNewTemplate) ; un modèle existant porte son propre type, jamais
   // réécrit ici. options.progressive : le choix d'un modèle dans la liste (onTemplateSelectChange) - un gros modèle de présentation enregistré s'ouvre alors par morceaux sous un voile (fillOpenedPresentation) ;
   // les autres chemins (restauration d'une version, retours, conflit d'enregistrement) chargent le texte d'un bloc, comme avant.
+  // Un document de la table lourde (lecture légère, js/templates.js) dont le texte, ou celui d'un modèle qu'il désigne (tableau lié, diapositive liée), n'est pas encore lu : lu AVANT d'entrer dans l'éditeur, jamais vide (l'enregistrement
+  // automatique l'aurait écrit tel quel). Un autre document demandé pendant la lecture la remplace (`openReadTicket`). Vrai : il est à l'écran. Faux : la lecture a échoué (un message le dit, la liste retrouve le document ouvert) ou un autre
+  // choix l'a remplacée.
+  let openReadTicket = 0;
+  async function readThenOpen(tpl, forcedTypeModele, options) {
+    const ticket = ++openReadTicket;
+    setStatus(I18n.t('status.templateReading', { name: tpl.nom }));
+    const ok = await Templates.ensureWithReferences([tpl.id]);
+    if (ticket !== openReadTicket) return false;
+    const fresh = Templates.byId(tpl.id);
+    if (!ok || !fresh || fresh.chargee === false) {
+      setStatus(I18n.t('status.templateReadFailed', { name: tpl.nom }), true);
+      const currentId = Templates.getCurrentId();
+      if (templateSelect) templateSelect.value = currentId == null ? '' : currentId;
+      return false;
+    }
+    loadTemplateIntoEditor(fresh, forcedTypeModele, options);
+    return true;
+  }
+
   function loadTemplateIntoEditor(tpl, forcedTypeModele, options) {
+    // Le point de passage de toute ouverture : un modèle qu'il faut lire d'abord (cf. readThenOpen) est lu, puis ouvert ; celui qui l'appelle n'attend pas, `onTemplateSelectChange` si.
+    if (tpl && Templates.needsReading(tpl)) { readThenOpen(tpl, forcedTypeModele, options); return; }
+    openReadTicket++;
     const openedAt = performance.now();
     // L'aperçu de lecture du démarrage (js/early-preview.js) : une feuille qui n'est pas encore posée ne se posera plus ; celle qui l'est s'efface à la fin de cette ouverture.
     EarlyPreview.opening();
@@ -503,6 +526,12 @@
     return synced;
   }
 
+  // Un texte lu à la demande (lecture légère, js/templates.js) est arrivé : les tableaux et les diapositives liés du document ouvert, qui ne pouvaient pas se comparer à un modèle sans texte, le font maintenant.
+  Templates.onEntriesLoaded(() => {
+    const editor = EditorCore.getEditor();
+    if (editor && !editor.isDestroyed && !persist.followHeld) followLinkedModels();
+  });
+
   function typeModeleOf(tpl, forcedTypeModele) {
     // Le genre propre au modèle, « document » à défaut ; forcedTypeModele ne sert qu'à un nouveau modèle vide (tpl = null).
     return tpl ? (tpl.typeModele || 'document') : (forcedTypeModele || 'document');
@@ -564,7 +593,9 @@
     }
     if (!id) { loadTemplateIntoEditor(null); return; }
     const tpl = Templates.byId(id);
-    if (tpl) loadTemplateIntoEditor(tpl, undefined, { progressive: true });
+    if (!tpl) return;
+    if (Templates.needsReading(tpl)) { await readThenOpen(tpl, undefined, { progressive: true }); return; }
+    loadTemplateIntoEditor(tpl, undefined, { progressive: true });
   }
 
   // « Modèle selon la ligne » (js/row-template.js) : ouvre le modèle que la ligne désigne, par le chemin ordinaire de la liste - donc avec sa
@@ -724,6 +755,10 @@
     // minute (un appel à Grist qui ne revient jamais ne doit pas arrêter l'enregistrement automatique pour de bon).
     autosaveTickPending: false,
     autosaveTickStartedAt: 0,
+    // Un passage de l'auto-save ou un Enregistrer à la main est en train de lire les modèles que le document suit (lecture légère, js/templates.js) : l'arrivée d'un texte pendant cette lecture ne fait pas suivre les
+    // tableaux à part (Templates.onEntriesLoaded), le passage ou l'enregistrement le fait lui-même juste après et redit ce que la synchro a appris à la personne une fois le document écrit. Sans cela, la synchro
+    // se dirait avant l'écriture, et « Enregistré à… » l'effacerait.
+    followHeld: 0,
   };
 
   // Un tableau de tableur plus grand que ce que la mise en forme garde (js/grid-table.js) est collé tel quel : la fenêtre le dit, une fois le

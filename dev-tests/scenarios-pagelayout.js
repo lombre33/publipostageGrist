@@ -595,6 +595,7 @@ window.EditorTestSuites.pageLayout = (function () {
           const saved = await Templates.save(null, 'PlOrientationPaysage', '<p>Contenu</p>', '', null, PageLayout.getMarginsMm(), 'document', null);
           savedId = saved.id;
           await Templates.loadAll();
+          await Templates.ensureLoaded([savedId]); // comme js/main.js avant d'ouvrir un modèle : en lecture légère, les marges d'un modèle se lisent à la demande
           const tpl = Templates.getCached().find(t => t.id === savedId);
           const raw = await SchemaColumns.docApi.fetchTable(Templates.TABLE_NAME);
           const rawMargins = JSON.parse(raw.Margins[raw.id.indexOf(savedId)]);

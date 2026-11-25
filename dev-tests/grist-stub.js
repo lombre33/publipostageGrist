@@ -31,6 +31,11 @@ try { if (!window.__newsUnseen && localStorage.getItem('pp_news_seen') === null)
 // Le mode des noms du widget (js/schema-columns.js le lit au chargement) : sans autre mot de la page, les essais jouent un document aux noms d'avant et un widget qui n'y touche pas.
 if (!window.__schemaNames) window.__schemaNames = 'legacy';
 
+// La lecture légère de la table des modèles (consigne 103 de GFS, js/templates.js : la liste par SQL, les textes longs lus à la demande) : le faux Grist n'a ni SQL ni interface REST, les essais lisent donc la table en entier
+// comme avant (`'off'`). Un essai de la lecture légère pose `window.__templatesLight = 'force'` (toujours la liste légère) ou `'auto'` (le poids de la table décide, comme en production) AVANT le chargement, et
+// `window.__templatesLightSmall = 0` pour que tout texte se lise à la demande ; dev-tests/light-server.mjs répond à ses demandes (cf. dev-tests/verify-templates-light-open.mjs, et `PP_TEMPLATES_LIGHT=1` de run-headless.mjs).
+if (!window.__templatesLight) window.__templatesLight = 'off';
+
 (function () {
   // Les noms que le document porte pour les tables du widget qu'il crée d'avance : ceux d'avant (Publipostage_Modeles, Nom, Contenu...), par défaut - un document créé par la bêta ou par une
   // version d'avant -, ou les noms anglais (Publipostage_Templates, Name, Content...) quand la page est posée avec `window.__schemaNames = 'english'` avant le chargement (dev-tests/run-headless.mjs,
@@ -270,9 +275,11 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   // Les colonnes d'une table que les métadonnées de Grist décrivent : celles de son schéma (state.columns) ; pour une table du widget, seulement quand la page joue un document que le widget
   // renomme (`__schemaNames` = « migrate », groupe schemaMigration) ou que le faux Grist est « strict » (setStrictTables : le vrai Grist décrit toutes les colonnes) : les clés de ses lignes, toutes en Texte. Dans les autres modes
   // les tables du widget n'ont pas de colonnes dans les métadonnées, comme avant.
+  // La lecture légère de la table des modèles (`window.__templatesLight` 'force' ou 'auto') lit les noms des colonnes dans ces métadonnées pour composer son SQL (js/schema-columns.js:columnMap) : le faux Grist les décrit alors comme le vrai.
+  const describesWidgetTables = () => window.__schemaNames === 'migrate' || !!state.strictTables || (!!window.__templatesLight && window.__templatesLight !== 'off');
   function metaColumns(t) {
     if (state.columns[t]) return state.columns[t];
-    if ((window.__schemaNames !== 'migrate' && !state.strictTables) || !/^Publipostage_/.test(t) || !state.rows[t]) return {};
+    if (!describesWidgetTables() || !/^Publipostage_/.test(t) || !state.rows[t]) return {};
     const out = {};
     Object.keys(state.rows[t]).forEach(colId => { if (colId !== 'id' && colId !== 'manualSort') out[colId] = 'Text'; });
     return out;
@@ -848,6 +855,7 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
         }
         // Une table dont le schéma est connu (setVariables, ou AddTable d'un modèle de la galerie) garde la colonne dans ses métadonnées. Les tables du widget, non : voir isWidgetTable.
         if (!isWidgetTable(tableId) && state.columns[tableId]) { registerColumn(tableId, colId, action[3] || {}); rebuildColumnMeta(); }
+        else if (isWidgetTable(tableId) && describesWidgetTables()) rebuildColumnMeta();
         retValues.push({ colId });
       } else if (type === 'RenameTable' && isWidgetTable(tableId)) {
         // Comme le vrai Grist (mesuré dans grist-static 0.1.6 le 18/11) : un nom déjà pris, à la casse près, est numéroté (« Publipostage_templates2 ») au lieu d'être refusé ; une table inconnue lève.
@@ -887,15 +895,25 @@ if (!window.__schemaNames) window.__schemaNames = 'legacy';
   // Simule l'écriture d'un AUTRE utilisateur/onglet directement dans les données (pas d'action journalisée : ce
   // n'est pas une action de CE client) - utilisé par les scénarios de conflit d'auto-save pour changer le
   // DateModif d'un modèle "sous les pieds" du client testé, sans passer par applyUserActions.
+  // Lecture légère forcée (`window.__templatesLight = 'force'`, dev-tests/run-headless.mjs) : le widget garde le texte déjà lu d'un modèle tant que sa date ne bouge pas (js/templates.js, adoptLight), et la date d'une ligne
+  // est celle de son dernier enregistrement. Une autre personne qui enregistre un modèle en change donc aussi la date, comme tout enregistrement du widget : une écriture d'ailleurs qui change un texte fait avancer la date
+  // (strictement, à la seconde du stub), qu'elle la donne ou non. Les écritures qui ne touchent à aucun texte (un nom, un jeton) gardent la date.
+  const REMOTE_TEXT_COLUMNS = ['Contenu', 'Content', 'HeaderFooter', 'Margins', 'SuiviModifications', 'TrackedChanges', 'Notice'];
   function remoteWrite(tableId, rowId, fields) {
     const table = state.rows[tableId];
     if (!table) return;
     const idx = table.id.indexOf(rowId);
     if (idx === -1) return;
+    const writesText = tableId === NAMES.models && window.__templatesLight === 'force' && REMOTE_TEXT_COLUMNS.some(name => Object.prototype.hasOwnProperty.call(fields, name));
+    const before = writesText && table[NAMES.date] ? table[NAMES.date][idx] : null;
     Object.keys(fields).forEach(k => {
       if (!table[k]) table[k] = table.id.map(() => null);
       table[k][idx] = (tableId === NAMES.models && k === NAMES.date) ? coerceDateModif(fields[k]) : fields[k];
     });
+    if (writesText && typeof before === 'number') {
+      const written = Object.prototype.hasOwnProperty.call(fields, NAMES.date) ? table[NAMES.date][idx] : coerceDateModif(new Date().toISOString());
+      table[NAMES.date][idx] = typeof written === 'number' && written > before ? written : before + 1;
+    }
   }
 
   // Retire une colonne d'une table - simule un document EXISTANT créé avant qu'une colonne donnée n'existe (ex. DateModif avant l'auto-save), pour tester

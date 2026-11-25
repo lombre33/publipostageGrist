@@ -321,7 +321,7 @@ const PerfTrace = (function () {
         if (!template) return;
         seen += 1;
         if (Templates.sameDateModif(row.ModifiedAt, template.dateModif)) sameDates += 1;
-        if (typeof template.contenu === 'string' && Number(row.taille) === codePoints(template.contenu)) sameLengths += 1;
+        if (template.chargee !== false && typeof template.contenu === 'string' && Number(row.taille) === codePoints(template.contenu)) sameLengths += 1;
       });
       return done({ state: 'ok', rows: rows.length, cached: cached.length, seen, sameDates, sameLengths, chars: charsOf(rows, 0) });
     } catch (error) {
@@ -341,7 +341,7 @@ const PerfTrace = (function () {
       const contentAt = SchemaColumns.whereIs(Templates.TABLE_NAME, 'Content');
       const { records, bytes } = await GristAPI.lightRecords(contentAt.table, [target.id], PROBE_TIMEOUT_MS);
       const fields = records[0] && records[0].fields;
-      const result = { state: 'ok', rows: records.length, bytes, id: target.id, same: !!fields && fields[contentAt.column] === target.contenu };
+      const result = { state: 'ok', rows: records.length, bytes, id: target.id, same: !!fields && target.chargee !== false && fields[contentAt.column] === target.contenu };
       return done(result);
     } catch (error) {
       return done({ state: 'refused', reason: (error && error.reason) || 'erreur', status: error && error.status, detail: error && error.detail });

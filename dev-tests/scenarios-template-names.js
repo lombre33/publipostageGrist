@@ -402,9 +402,10 @@
       await h.sleep(80);
       const whileComposing = { open: !nameInput().hidden, field: nameInput().value, kept: !composing.defaultPrevented };
       const escape = pressKey(nameInput(), 'Escape');
+      // Dans le même tour : Échap n'écrit rien lui-même. Un passage de l'enregistrement automatique (toutes les 2,5 s) qui tomberait dans les 80 ms suivantes écrirait le nom d'avant, et ce ne serait pas Échap.
+      const justAfter = nameOfId(id);
       await h.sleep(80);
       const cancelled = { field: nameInput().value, label: triggerLabel(), closed: nameInput().hidden, taken: escape.defaultPrevented, status: status() };
-      const justAfter = nameOfId(id);
       await h.sleep(3400);                                   // le passage suivant réécrit le nom d'avant
       const writtenBack = { stored: nameOfId(id), count: count('Brouillon de nom') };
       // Entrée valide toujours un nom changé

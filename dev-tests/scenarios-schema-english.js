@@ -80,6 +80,7 @@
       const saved = await savedTemplate(h, 'Facture anglaise', '<p>Total : 42</p>');
       const token = await Templates.ensureToken(saved.id);
       await Templates.loadAll();
+      await Templates.ensureLoaded([saved.id]); // en lecture légère, le texte d'un modèle se lit à la demande
       const row = rowsOf('Publipostage_Templates').find(r => r.id === saved.id);
       if (!row) problems.push('la ligne du modèle est introuvable');
       else {
