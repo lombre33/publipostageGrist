@@ -7,6 +7,9 @@
 #                                                       [--version 1.0.0-beta.1] [--sortie <dossier>] [--message "…"] [--sans-commit] [--ecraser]
 #   --sans-commit : prépare l'arbre et lance les contrôles, sans committer (pour relire le résultat). L'identité n'est alors pas demandée.
 #   --ecraser     : publie même si le dépôt public a reçu, depuis la dernière étiquette de version, des changements aux fichiers que ce script remplace.
+#   --version     : le numéro publié. Sans lui, celui de js/version.js du dépôt de développement SANS son « -dev » : le développement porte le numéro de la prochaine version suivi de « -dev »
+#                   (consigne 105 de GFS : « quelle version tourne ? » doit avoir une réponse), et le numéro d'une version publiée ne s'écrit que dans le dépôt public, où js/version.js le reçoit.
+#                   Un numéro qui finit par « -dev » ne se publie pas. Après la publication, le numéro du dépôt de développement passe à la version suivante (-dev).
 #
 # Ce que fait le script, dans l'ordre :
 #   1. vérifie que le dépôt de développement est propre et sur origin/main, et que le clone public est propre et à jour, avec sa copie figée de la bêta (beta/, posée à la main une fois) identique
@@ -126,8 +129,13 @@ beta_ecarts="$(node "$ICI/beta-bandeau.mjs" --ecarts "$PROPRE" --etiquette "$BET
 # --- version et dates ----------------------------------------------------------------------------------------------------------------------
 if [ -z "$VERSION" ]; then
   VERSION="$(git -C "$DEV" show HEAD:js/version.js 2>/dev/null | sed -n "s/.*PP_VERSION *= *['\"]\([^'\"]*\)['\"].*/\1/p" | head -1)"
+  # Le développement porte « X.Y.Z-dev » (consigne 105 de GFS) : la version qui part est ce numéro sans son « -dev » ; --version la remplace.
+  VERSION="${VERSION%-dev}"
 fi
 [ -n "$VERSION" ] || die "version inconnue : js/version.js n'existe pas encore dans le dépôt de développement, donne --version"
+case "$VERSION" in
+  *-dev|*-dev.*) die "la version « $VERSION » est un numéro de développement : il ne se publie pas (le numéro d'une version publiée ne s'écrit que dans le dépôt public, consigne 105 de GFS). Donne --version X.Y.Z." ;;
+esac
 echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   || die "la version « $VERSION » n'est pas de la forme 1.0.0 ou 1.0.0-beta.1 (versionnement sémantique)"
 git -C "$PROPRE" rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && die "l'étiquette v$VERSION existe déjà dans le dépôt public : choisis une autre version"
@@ -200,6 +208,9 @@ fi
 MODIFIE=1
 for x in "${PUBLIES[@]}"; do rm -rf "${PROPRE:?}/$x"; done
 git -C "$DEV" archive --format=tar HEAD "${PUBLIES[@]}" | tar -x -C "$PROPRE"
+# Le numéro publié ne s'écrit que dans le dépôt public (consigne 105 de GFS) : js/version.js de l'arbre qui part le reçoit, celui du développement dit « -dev ». Une seule ligne change, le reste du fichier part tel quel.
+[ -f "$PROPRE/js/version.js" ] || die "js/version.js n'est pas dans l'arbre à publier : Réglages > Crédits n'afficherait aucune version"
+sed -E "s/(PP_VERSION *= *['\"])[^'\"]*(['\"])/\1$VERSION\2/" "$PROPRE/js/version.js" > "$PROPRE/js/version.js.nouveau" && mv "$PROPRE/js/version.js.nouveau" "$PROPRE/js/version.js"
 # La bêta figée est recomposée à chaque publication : les fichiers de l'étiquette de la bêta, le bandeau et le garde-fou de outils/depot-propre/beta/ (un bandeau ou un garde-fou modifié dans le dépôt de développement
 # se pose à la publication suivante ; rien d'autre de beta/ ne change jamais). nouveautes.html, que le bouton du bandeau ouvre, part dans la même publication : un seul envoi, aucune adresse qui répond 404.
 node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" >/dev/null || die "le bandeau et le garde-fou n'ont pas pu être posés dans beta/ (beta-bandeau.mjs --poser, voir le message au-dessus)"

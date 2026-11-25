@@ -287,6 +287,9 @@ for (const file of files) if (file.size > 2_500_000) warn(`fichier de plus de 2,
 report('error', 'un gabarit {{…}} resté dans un document', grep(/\{\{[A-Z_]+\}\}/, textFiles.filter(file => /\.md$|^NOTICE$/.test(file.rel))));
 
 if (version) {
+  // Le numéro d'une version publiée ne s'écrit que dans le dépôt public, sans « -dev » (consigne 105 de GFS : le développement porte « X.Y.Z-dev », publier.sh écrit le numéro publié dans js/version.js de l'arbre) :
+  // un arbre dont la version, ou celle que js/version.js annonce, finit par « -dev » n'est pas une version qu'on publie.
+  if (/-dev(?:\.|$)/.test(version)) fail(`la publication vise ${version} : un numéro de développement (« -dev ») ne se publie pas, donne un numéro de version (publier.sh --version X.Y.Z)`);
   if (has('CHANGELOG.md') && !new RegExp(`^##\\s*\\[?${version.replace(/[.+*?^${}()|[\]\\]/g, '\\$&')}\\]?`, 'm').test(read('CHANGELOG.md'))) {
     fail(`CHANGELOG.md : aucune section « ## [${version}] »`);
   }
@@ -297,6 +300,7 @@ if (version) {
     const declared = (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1];
     if (!declared) fail('js/version.js ne déclare pas PP_VERSION');
     else if (declared !== version) fail(`js/version.js annonce ${declared}, la publication vise ${version}`);
+    else if (/-dev(?:\.|$)/.test(declared)) fail(`js/version.js annonce ${declared} : un numéro de développement (« -dev ») ne part pas dans le dépôt public (publier.sh y écrit le numéro publié)`);
     if (has('index.html') && !/<script\b[^>]*\bsrc\s*=\s*["']js\/version\.js(?:\?[^"']*)?["']/.test(read('index.html'))) fail('index.html ne charge pas js/version.js');
   }
 }

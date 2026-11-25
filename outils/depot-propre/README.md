@@ -22,7 +22,12 @@ Ce dossier ne part pas sur le dépôt public (`outils/` est dans les exclusions 
 1. Dépôt de développement : propre, sur `origin/main`, clone complet (`git fetch --unshallow origin main`
    sur un clone partiel), kit récupéré (`git submodule update --init kit`). Tous les lots à publier y sont déjà.
 2. Clone du dépôt public, une fois pour toutes : `git clone https://github.com/grist-factory/Publipostage-Plus.git`.
-3. Version : `PP_VERSION` dans `js/version.js` (semver, `1.0.0-beta.1` pour la première bêta), et la section
+3. Version : le développement porte le numéro de la PROCHAINE version suivi de `-dev` (`PP_VERSION = '1.2.0-dev'`
+   dans `js/version.js`, consigne 105 de GFS : « quelle version tourne ? » a une réponse) ; le numéro d'une version
+   publiée ne s'écrit que dans le dépôt public. `publier.sh` l'y écrit : celui de `--version`, sinon celui du
+   développement sans son `-dev` (`1.2.0-dev` publie `1.2.0`, `1.0.0-beta.1` pour la première bêta), et il refuse
+   un numéro qui finit par `-dev`. Après la publication, passer `js/version.js` au numéro suivant (`1.3.0-dev`) dans
+   le dépôt de développement. Puis la section
    `## [{{VERSION}}] - {{DATE}}` du `public/CHANGELOG.md`, en français et en anglais : elle reste ouverte entre
    deux publications, et les changements s'y écrivent au fil de l'eau. Une fois la version publiée, la section
    prend sa version et sa date en clair (`## [1.0.0-beta.1] - 2026-10-05`) et une nouvelle section

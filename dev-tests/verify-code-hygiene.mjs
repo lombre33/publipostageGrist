@@ -1733,7 +1733,9 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // STORED, posée dans une copie de l'arbre, doit faire échouer controles.mjs, qui la nomme - c'est ce qui échouait avec pp_versions_added.
 {
   const publiees = ((read('outils/depot-propre/publier.sh').match(/^PUBLIES=\(([^)]*)\)/m) || [])[1] || '').split(/\s+/).filter(Boolean);
-  const version = (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
+  // Le développement porte « X.Y.Z-dev » (consigne 105 de GFS) ; l'arbre qui part porte X.Y.Z, que publier.sh écrit dans js/version.js comme ici.
+  const devVersion = (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
+  const version = devVersion.replace(/-dev$/, '');
   const arbre = mkdtempSync(join(tmpdir(), 'arbre-publier-'));
   try {
     // Une entrée de PUBLIES absente du dossier de travail n'est pas copiée : controles.mjs la signale (sa liste de fichiers requis) et la section 30 la nomme, au lieu d'un plantage ici.
@@ -1748,6 +1750,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       }
       if (existsSync(join(ROOT, entree))) cpSync(join(ROOT, entree), join(arbre, entree), { recursive: true });
     }
+    // Le numéro publié s'écrit dans js/version.js de l'arbre qui part (publier.sh, une ligne remplacée sur place).
+    writeFileSync(join(arbre, 'js/version.js'), readFileSync(join(arbre, 'js/version.js'), 'utf8').replace(/(PP_VERSION\s*=\s*['"])[^'"]*(['"])/, `$1${version}$2`));
     const documents = join(ROOT, 'outils/depot-propre/public');
     for (const doc of readdirSync(documents, { withFileTypes: true })) {
       if (doc.isDirectory()) { if (doc.name === 'screenshots') cpSync(join(documents, doc.name), join(arbre, doc.name), { recursive: true }); continue; }
@@ -1764,6 +1768,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
       publiees.length >= 7 && /^\d+\.\d+\.\d+/.test(version) && clean.read >= 300, JSON.stringify({ publiees: publiees.length, version, lus: clean.read, erreur: clean.error }));
     check('envoi public : controles.mjs (outils/depot-propre) ne trouve aucune erreur sur l\'arbre qu\'on publierait - une clé « pp_ » que le README ne nomme pas, un fichier cité qui n\'existe plus, un lien cassé : l\'envoi suivant ne sera pas refusé',
       clean.status === 0 && clean.errors.length === 0, clean.errors.slice(0, 3).map(line => line.slice(0, 240)).join(' | ') || `sortie ${clean.status} ${clean.error}`);
+    check('envoi public : le développement porte un numéro « -dev » (js/version.js : la prochaine version suivie de -dev, consigne 105 de GFS : « quelle version tourne ? ») et l\'arbre qui part porte le numéro publié, sans -dev',
+      /^\d+\.\d+\.\d+-dev$/.test(devVersion) && (readFileSync(join(arbre, 'js/version.js'), 'utf8').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] === version && !/-dev$/.test(version), JSON.stringify({ devVersion, version }));
+    const avecDev = spawnSync(process.execPath, [join(ROOT, 'outils/depot-propre/controles.mjs'), arbre, '--version', devVersion], { encoding: 'utf8', timeout: 120000 });
+    check('envoi public : controles.mjs refuse de publier un numéro de développement (« -dev » ne part pas dans le dépôt public)', avecDev.status === 1 && /ne se publie pas/.test((avecDev.stdout || '') + (avecDev.stderr || '')), JSON.stringify({ sortie: avecDev.status }));
     rmSync(join(arbre, '.nojekyll'), { force: true });
     const sansNojekyll = lancer();
     check('envoi public : un arbre sans .nojekyll, posé dans une copie de l\'arbre, fait échouer controles.mjs, qui le nomme (le dépôt public a son propre site GitHub Pages : sans lui, Pages passe ses .md dans Jekyll et une accolade double ouverte fait échouer la publication en silence)',

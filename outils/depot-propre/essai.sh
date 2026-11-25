@@ -458,6 +458,29 @@ vrai "beta/ porte le garde-fou corrigé (le script du dépôt de développement,
 vrai "... et beta/ est le bandeau et le garde-fou du dépôt de développement + l'étiquette de la bêta, rien d'autre" node "$T/dev/outils/depot-propre/beta-bandeau.mjs" --verifier "$P"
 vrai "... le reste de beta/ n'a pas bougé (js/version.js est celui de l'étiquette)" test "$(git -C "$P" rev-parse HEAD:beta/js/version.js)" = "$(git -C "$P" rev-parse "$PP_BETA_ETIQUETTE:js/version.js")"
 
+echo "publier.sh : le numéro de développement (-dev), consigne 105 de GFS"
+# Le développement porte le numéro de la prochaine version suivi de « -dev » (« quelle version tourne ? » a une réponse) ; le numéro d'une version publiée ne s'écrit que dans le dépôt public, où publier.sh l'écrit.
+git -C "$P" push -q origin main v1.0.0-beta.3
+(cd "$T/dev" && sed -i "s/PP_VERSION = '[^']*'/PP_VERSION = '1.0.1-dev'/" js/version.js && G commit -qam "numéro de développement" && git push -q origin main)
+SORTIE="$(publier --sortie "$T/sortie7")"
+attend "sans --version, le numéro de développement part sans son -dev" "étiquette v1.0.1 prêts" "$SORTIE"
+vrai "... js/version.js du dépôt public porte le numéro publié, sans -dev" grep -q "PP_VERSION = '1.0.1'" "$P/js/version.js"
+vrai "... et aucun « -dev » ne part dans cet arbre-là" bash -c "! grep -q -- '-dev' '$P/js/version.js'"
+vrai "... alors que celui du dépôt de développement garde son -dev" grep -q "PP_VERSION = '1.0.1-dev'" "$T/dev/js/version.js"
+vrai "... et le journal du dépôt public porte la section de la version publiée" grep -q '^## \[1.0.1\]' "$P/CHANGELOG.md"
+git -C "$P" push -q origin main v1.0.1
+SORTIE="$(publier --version 2.0.0 --sortie "$T/sortie8")"
+attend "--version remplace le numéro de développement" "étiquette v2.0.0 prêts" "$SORTIE"
+vrai "... et js/version.js du dépôt public porte celui de --version" grep -q "PP_VERSION = '2.0.0'" "$P/js/version.js"
+git -C "$P" push -q origin main v2.0.0
+SORTIE="$(publier --version 2.0.1-dev --sortie "$T/sortie9")"
+attend "refuse de publier un numéro de développement" "ne se publie pas" "$SORTIE"
+vrai "... le clone public reste à son état d'origine" test -z "$(git -C "$P" status --porcelain)"
+vrai "... et rien n'est étiqueté" test -z "$(git -C "$P" tag --list 'v2.0.1*')"
+rm -rf "$T/mut"; cp -a "$P" "$T/mut"; rm -rf "$T/mut/.git"; sed -i "s/PP_VERSION = '[^']*'/PP_VERSION = '2.0.1-dev'/" "$T/mut/js/version.js"
+attend "controles.mjs refuse un arbre dont js/version.js annonce un numéro de développement" "un numéro de développement" "$(node "$C" "$T/mut" --version 2.0.1-dev 2>&1)"
+attend "... même quand la version visée est un vrai numéro (il dit ce que js/version.js annonce)" "js/version.js annonce 2.0.1-dev, la publication vise 2.0.0" "$(node "$C" "$T/mut" --version 2.0.0 2>&1)"
+
 echo
 echo "$OK réussi(s), $KO échec(s)."
 [ "$KO" -eq 0 ]
