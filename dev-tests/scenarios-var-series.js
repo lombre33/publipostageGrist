@@ -917,6 +917,42 @@
     },
   });
 
+  cases.push({
+    id: 'varseries_a_big_table_is_ordered_once_and_neighbors_are_read_fast',
+    description: 'Sur une table de 30 000 lignes (50 cycles, dates mêlées), la série est rangée UNE fois (le premier appel, tri compris, tient dans quelques secondes), puis chaque ligne voisine se lit sans retrier (5 000 lectures de suivante, précédente, première et dernière en moins d’une demi-seconde) ; les voisines sont les bonnes, et une variable lue par la Lecture sur cette table reste vite',
+    run: async (h) => {
+      await seed(h);
+      const stub = window.__gristStub;
+      const N = 30000;
+      const big = [];
+      for (let i = 1; i <= N; i++) big.push({ id: i, Titre: 'L' + i, Cycle: 'C' + (i % 50), Date: DAY((i * 7919) % 3650), Numero: i, Responsable: 0, gristHelper_Display: '' });
+      stub.setRows(PAGE, big);
+      const rows = await GristAPI.fetchTableRows(PAGE);
+      const jump = GristAPI.stepOf('+1(Date;Cycle)');
+      const t0 = performance.now();
+      const first = Variables.stepNeighbor(PAGE, rows, 50, jump);
+      const sortMs = performance.now() - t0;
+      const t1 = performance.now();
+      let found = 0;
+      const jumps = ['+1(Date;Cycle)', '-1(Date;Cycle)', 'first(Date;Cycle)', 'last(Date;Cycle)'].map(GristAPI.stepOf);
+      for (let i = 0; i < 5000; i++) if (Variables.stepNeighbor(PAGE, rows, 1 + ((i * 37) % N), jumps[i % 4])) found++;
+      const readMs = performance.now() - t1;
+      // La bonne voisine : la suivante de la ligne 50 est, dans son cycle, la ligne de la date juste après (ou, à égalité, de rang d'après).
+      const sameCycle = big.filter(r => r.Cycle === big[49].Cycle && r.Date !== null).sort((a, b) => (a.Date - b.Date) || (a.id - b.id));
+      const at = sameCycle.findIndex(r => r.id === 50);
+      const expected = sameCycle[at + 1] ? sameCycle[at + 1].id : null;
+      const t2 = performance.now();
+      stub.fireRecord({ id: 50, Titre: 'L50', Cycle: big[49].Cycle, Date: big[49].Date, Numero: 50, Responsable: '' }, PAGE);
+      await h.sleep(50);
+      const reading = await readerText(`<p>${badgeHtml(PAGE, '+1(Date;Cycle).Titre')}</p>`);
+      const readerMs = performance.now() - t2;
+      stub.setRows(PAGE, ROWS.map(r => Object.assign({}, r)));
+      await GristAPI.refreshSchema();
+      const pass = !!first && first.id === expected && found > 4000 && sortMs < 5000 && readMs < 500 && reading === 'L' + expected;
+      return { pass, notes: JSON.stringify({ sortMs: Math.round(sortMs), readMs: Math.round(readMs), readerMs: Math.round(readerMs), found, firstId: first && first.id, expected, reading }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.varSeries = cases;
 })();
