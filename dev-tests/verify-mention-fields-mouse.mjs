@@ -226,7 +226,7 @@ const barState = () => page.evaluate(() => {
   const linked = bar.querySelector('button[data-action="mention-linked"]');
   const style = bar.querySelector('button[data-action="mention-style"]');
   return {
-    inViewport: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, buttons: bar.querySelectorAll('button').length,
+    inViewport: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, buttons: Array.from(bar.querySelectorAll('button')).filter(b => b.getClientRects().length > 0).length,
     linkedOn: linked.getAttribute('aria-disabled') !== 'true', styleOff: style.getAttribute('aria-disabled') === 'true', styleTitle: style.title,
   };
 });

@@ -491,6 +491,84 @@
     { document: true },
   );
 
+  // ============================================================================================================
+  // 4) Le réglage de date et de nombre d'une pastille (retour d'Antoine du 25/11 : « pour bien tout uniformiser »)
+  // ============================================================================================================
+  // Une pastille d'un champ porte aussi son réglage (`data-mention-format`) : l'objet, les adresses et le nom du fichier écrivent la date ou le nombre ainsi - le zéro s'y écrit toujours, comme pour une
+  // bulle dans un champ -, sa barre a les sous-panneaux de la barre d'une bulle (pas les cases d'un Oui / Non : un champ écrit « true » / « false »), et un choix se défait d'un seul Annuler.
+  async function seedFormats(h) {
+    await seed(h);
+    stub().setVariables(PEOPLE, { Email: 'Text', NomComplet: 'Text', Poste: 'Text', Montant: 'Numeric', Naissance: 'Date', Actif: 'Bool' });
+    stub().setRows(PEOPLE, [
+      { id: 1, Email: 'jean.dupont@example.fr', NomComplet: 'Jean Dupont', Poste: 'Maire', Montant: 10, Naissance: 631152000, Actif: false },
+      { id: 2, Email: 'marie.martin@example.fr', NomComplet: 'Marie Martin', Poste: 'Adjointe', Montant: 1234.5, Naissance: 662688000, Actif: true },
+      { id: 3, Email: 'marc.armand@example.fr', NomComplet: 'Marc Armand', Poste: 'Trésorier', Montant: 0, Naissance: 694224000, Actif: true },
+    ]);
+    await GristAPI.refreshSchema();
+    Mention.reset();
+    await h.sleep(60);
+  }
+  const fmtChip = (row, column, format) => Mention.html({ table: PEOPLE, row, column, label: 'x', format });
+  const plainText = value => value.replace(/ | /g, ' ');
+  const barPanel = name => { const bar = barOf(); const el = bar && bar.querySelector('[data-var-panel="' + name + '"]'); return !!el && !el.hidden && el.getClientRects().length > 0; };
+
+  scenario(
+    'mentionfields_a_chip_with_a_format_writes_the_date_and_the_number_in_a_field_and_keeps_the_zero',
+    'Dans l\'Objet, une pastille réglée écrit la date (« 1991-01-01 », « 1er janvier 1991 ») et le nombre (« 1 234,50 ») comme une bulle réglée ; sans réglage rien ne change (« 01/01/1991 », « 1234.5 ») ; ' +
+      'le zéro s\'écrit toujours dans un champ (« 0,00 »), et le HTML enregistré se relit avec son réglage.',
+    async (h) => {
+      await seedFormats(h);
+      const read = async html => plainText(await text(rich('Le ' + html)));
+      const was = {
+        plainDate: await read(fmtChip(2, 'Naissance')),
+        iso: await read(fmtChip(2, 'Naissance', { type: 'date', preset: 'iso' })),
+        long: await read(fmtChip(2, 'Naissance', { type: 'date', preset: 'd_mmmm_yyyy' })),
+        plainNumber: await read(fmtChip(2, 'Montant')),
+        twoDecimals: await read(fmtChip(2, 'Montant', { type: 'number', decimals: 2 })),
+        zero: await read(fmtChip(3, 'Montant', { type: 'number', decimals: 2 })),
+      };
+      field(SUBJECT).value = rich(fmtChip(2, 'Naissance', { type: 'date', preset: 'iso' }));
+      const nodes = mentionsOf(SUBJECT).map(m => m.node.attrs.format);
+      const stored = field(SUBJECT).value;
+      const items = FieldCodec.itemsOf(stored).map(item => item.mention && item.mention.format);
+      const ok = was.plainDate === 'Le 01/01/1991' && was.iso === 'Le 1991-01-01' && was.long === 'Le 1er janvier 1991' && was.plainNumber === 'Le 1234.5' && was.twoDecimals === 'Le 1 234,50' && was.zero === 'Le 0,00'
+        && same(nodes, [{ type: 'date', preset: 'iso' }]) && /data-mention-format=/.test(stored) && same(items, [{ type: 'date', preset: 'iso' }]);
+      return { pass: ok, notes: JSON.stringify({ was, nodes, stored, items }) };
+    },
+  );
+
+  scenario(
+    'mentionfields_the_bar_of_a_date_chip_in_a_field_sets_the_writing_with_one_undo_and_has_no_yes_no_panel',
+    'Dans À ou l\'Objet, la barre d\'une pastille de date a J / M / A, la liste des formats et « Lettres » ; un choix se range dans le champ (un seul Annuler) ; celle d\'une pastille Oui / Non n\'a pas de cases, ' +
+      'celle d\'un nombre a le zéro grisé (un champ l\'écrit toujours).',
+    async (h) => {
+      await seedFormats(h);
+      field(SUBJECT).value = rich(fmtChip(2, 'Naissance'));
+      const ed = editorOf(SUBJECT);
+      const before = field(SUBJECT).value;
+      await selectChip(h, SUBJECT);
+      const dateBar = { date: barPanel('date'), number: barPanel('number'), bool: barPanel('bool') };
+      const select = barOf().querySelector('[data-role="date-preset"]');
+      select.value = 'iso';
+      select.dispatchEvent(new Event('input', { bubbles: true }));
+      await h.sleep(300);
+      const after = { nodes: mentionsOf(SUBJECT).map(m => m.node.attrs.format), read: await text(field(SUBJECT).value) };
+      ed.commands.undo();
+      await h.sleep(200);
+      const undone = field(SUBJECT).value === before;
+      field(SUBJECT).value = rich(fmtChip(2, 'Actif'));
+      await selectChip(h, SUBJECT);
+      const yesNo = { bool: barPanel('bool'), number: barPanel('number') };
+      field(SUBJECT).value = rich(fmtChip(2, 'Montant'));
+      await selectChip(h, SUBJECT);
+      const zero = barOf().querySelector('button[data-action="num-zero"]');
+      const numberBar = { number: barPanel('number'), zeroGrey: !!zero && zero.getAttribute('aria-disabled') === 'true', zeroTitle: zero ? zero.title : '' };
+      const ok = dateBar.date && !dateBar.number && !dateBar.bool && same(after.nodes, [{ type: 'date', preset: 'iso' }]) && after.read === '1991-01-01' && undone
+        && !yesNo.bool && !yesNo.number && numberBar.number && numberBar.zeroGrey && numberBar.zeroTitle === I18n.t('varFmt.zeroInField');
+      return { pass: ok, notes: JSON.stringify({ dateBar, after, undone, yesNo, numberBar }) };
+    },
+  );
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.mentionFields = cases;
 })();

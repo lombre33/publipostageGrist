@@ -2075,6 +2075,14 @@ va dans le même sens que la cohérence visuelle demandée par Antoine.
   l'éditeur. Échap ou « Annuler » ne touchent à rien. En suivi des modifications le remplacement s'écrit comme tout remplacement (l'ancienne pastille barrée, la nouvelle soulignée). Si la pastille a bougé
   ou disparu pendant le choix, une alerte le dit et rien n'est écrit ; si la table ou la ligne de la fiche n'existe plus (pastille rouge), le bouton de la barre est GRISÉ avec le message de la pastille et
   ne s'ouvre pas. Dans le document seulement : les champs texte (Objet, À, Cc…) n'ont pas de pastille « @ ». Gardé par le groupe `mention` (32 scénarios) et par `mentionKeyboard`.
+- Réglages de format d'une pastille « @ » (suite du retour d'Antoine du 25/11, « vérifier si d'autres cas comme ça ont été oubliés ») : une pastille qui cite une colonne Date, Date et heure,
+  Nombre ou Oui / Non a, dans sa barre, après ses deux boutons, les mêmes réglages qu'une bulle sur cette colonne - « Comme dans Grist », FR / US, décimales, devise, %, Lettres, Jour / Mois /
+  Année, la liste des formats de date, les cases d'un Oui / Non -, sous les mêmes noms et dans les mêmes sous-panneaux (`.v2-mention-toolbar` reprend les règles de `.v2-varfmt-toolbar`) :
+  ce sont les mêmes fonctions, la pastille pour cible, jamais une seconde copie. Ce que la barre montre suit le type de la colonne citée ; une colonne de texte n'ajoute rien. Le choix est
+  l'attribut `format` du nœud (`data-mention-format`, absent tant que rien n'est réglé : une pastille d'avant s'écrit comme avant). Dans un champ texte (Objet, À, Cc, Cci, nom du PDF) la
+  valeur reste du texte : un zéro s'y écrit toujours (le bouton « sans zéro » est grisé avec sa raison) et le Oui / Non en cases n'y est pas proposé. « Remplacer » par une colonne d'un autre
+  type retire le réglage. La Lecture et tous les exports écrivent la valeur dans l'écriture choisie. Gardé par les groupes `mention`, `mentionFields`, `undoSweep` (le registre d'Annuler) et
+  `mentionKeyboard` (vraie souris à 700×400).
 - Raccourcis clavier (demande d'Antoine du 01/10, « pouvoir définir des raccourcis personnalisés » ; sa réponse à la carte : « Tout, par personne ») : l'onglet « Raccourcis » s'ouvre sur
   les touches, un commutateur à deux boutons (Touches / Abréviations, `.settings-switch`, le bouton choisi plein en `--accent-solid`) montre l'une ou l'autre section et se souvient du
   choix, par navigateur (`pp_shortcuts_view`). Une ligne par action (54, en cinq groupes : Modèles, Affichage, Mise en forme, Insertion, Historique et suivi) : le nom à gauche (aucun

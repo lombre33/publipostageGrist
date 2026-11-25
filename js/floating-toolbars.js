@@ -1237,9 +1237,6 @@ const FloatingToolbars = (function () {
     // Le HTML de la barre d'une bulle : les boutons de gauche, puis les sous-panneaux de format (nombre, date, Oui / Non)
 
     function variableToolbarHtml() {
-      const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
-      const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
-      const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
       return [
         '<div class="v2-varbadge-actions">',
         `<button data-action="calc-edit" title="${I18n.t('varToolbar.calcEdit')}" aria-label="${I18n.t('varToolbar.calcEdit')}" hidden>${Icons.svg('calc')}</button>`,
@@ -1253,6 +1250,16 @@ const FloatingToolbars = (function () {
         // « revoir la règle de liaison » sans faire doublon avec « Colonne… », et une icône est une fonction.
         `<button data-action="var-link" title="${I18n.t('varToolbar.linkMiss')}" aria-label="${I18n.t('varToolbar.linkMiss')}" hidden>${I18n.t('varToolbar.linkButton')}</button>`,
         '</div>',
+      ].join('') + variableFormatHtml();
+    }
+
+    // Les sous-panneaux de format d'une bulle (Comme dans Grist, nombre, date, Oui / Non), précédés de leur séparateur : ceux de la barre d'une bulle et ceux de la barre d'une pastille « @ »
+    // (createMentionToolbar), écrits une seule fois. Ce que la barre en montre suit le type de la colonne (showVariableFormatPanels).
+    function variableFormatHtml() {
+      const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+      const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+      const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
+      return [
         '<span class="v2-floating-sep" data-var-sep></span>',
         // « Comme dans Grist » : pour une colonne nombre ou date seulement (showVariableFormatPanels) ; son info-bulle dit ce que le bouton écrirait, ou pourquoi il est
         // grisé (syncGristButton).
@@ -1294,7 +1301,7 @@ const FloatingToolbars = (function () {
       ].join('');
     }
 
-    return { variableToolbarHtml };
+    return { variableToolbarHtml, variableFormatHtml };
   }
 
   function createVariableTarget({ editor }) {
@@ -1326,11 +1333,12 @@ const FloatingToolbars = (function () {
     return { isFormatKind, variableTarget, variableColumnType };
   }
 
-  function createVariableFormat({ editor, rawText, refreshToolbar, isFormatKind, variableTarget, variableColumnType }) {
+  function createVariableFormat({ editor, rawText, refreshToolbar, isFormatKind, variableTarget, variableColumnType, refit }) {
     // Le format d'une bulle ou d'un calcul
 
     // `setVariableFormat` le remplace (null = format vide), `patchVariableFormat` fusionne dans l'existant.
-    const setVariableFormat = ({ node, pos }, format) => EditorCore.patchNodeAndReselect(editor, pos, Object.assign({}, node.attrs, { format }));
+    // `refit` : ce qui reste à mettre à jour dans les attributs d'un élément dont le format change (le nom que garde une pastille « @ », cf. Mention.refit).
+    const setVariableFormat = ({ node, pos }, format) => EditorCore.patchNodeAndReselect(editor, pos, refit ? refit(Object.assign({}, node.attrs, { format })) : Object.assign({}, node.attrs, { format }));
     // Une clé laissée à `undefined` est retirée du format (« Sans heure » : le format garde la forme d'avant ce réglage).
     const patchVariableFormat = (t, patch) => {
       const next = Object.assign({}, t.node.attrs.format, patch);
@@ -1555,8 +1563,11 @@ const FloatingToolbars = (function () {
     // Une variable ou un calcul : la condition, les boutons de gauche et le sous-panneau de format que choisit le type de la colonne
 
     function syncVariableState(ui, node, pos) {
-      const format = node.attrs.format || {};
       syncVariableActions(ui, node, pos);
+      syncFormatControls(ui, node, node.attrs.format || {});
+    }
+    // Les réglages de format, ceux d'une bulle comme ceux d'une pastille « @ » (createMentionToolbar) : « Comme dans Grist », le nombre, la date et le Oui / Non.
+    function syncFormatControls(ui, node, format) {
       syncGristButton(ui, node, format);
       syncNumberFormat(ui, node, format);
       syncDateFormat(ui, format);
@@ -1646,29 +1657,34 @@ const FloatingToolbars = (function () {
       ui.setActive('date-words', isDate && format.words);
     }
 
-    return { syncVariableState };
+    return { syncVariableState, syncFormatControls };
+  }
+
+  // Les sous-panneaux de format que montre une barre selon le type de la colonne Grist (`type`) : celle d'une bulle et celle d'une pastille « @ ». `rawText` : un champ texte, où un Oui / Non s'écrit
+  // « true » / « false » quel que soit le réglage (pas de cases) ; `checkbox` : la case conditionnelle, dont la barre n'a pas « vrai / faux ».
+  function showFormatPanels(ui, panel, type, { rawText, checkbox }) {
+    const isNumber = type === 'Numeric' || type === 'Int';
+    // Le type d'une colonne « Date et heure » est « DateTime:<fuseau> » (VariableFormat.isDateType) ; elle seule a la liste « Heure ».
+    const isDate = VariableFormat.isDateType(type);
+    // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
+    // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
+    const isBool = !rawText && (type === 'Bool' || !!checkbox);
+    ui.section('grist').hidden = !isNumber && !isDate;
+    ui.section('number').hidden = !isNumber;
+    ui.section('date').hidden = !isDate;
+    const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
+    if (timeSelect) timeSelect.hidden = !VariableFormat.isDateTimeType(type);
+    ui.section('bool').hidden = !isBool;
+    const textButton = ui.button('bool-style:text');
+    if (textButton) textButton.hidden = !!checkbox;
+    panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
   }
 
   function createVariableToolbarWiring({ editor, options, inField, rawText, loopWindowTaken, setRefreshToolbar, variableToolbarHtml, isFormatKind, variableTarget, variableColumnType, onVariableAction, onVariableInput, syncConditionalState, syncBoolButtons, syncVariableState, syncStyleButton }) {
     // Barre flottante d'une bulle #Variable : ce qu'elle montre selon la sélection, où elle se pose, et son câblage
 
     function showVariableFormatPanels(ui, panel, kind, node) {
-      const type = isFormatKind(kind) ? variableColumnType(node) : null;
-      const isNumber = type === 'Numeric' || type === 'Int';
-      // Le type d'une colonne « Date et heure » est « DateTime:<fuseau> » (VariableFormat.isDateType) ; elle seule a la liste « Heure ».
-      const isDate = VariableFormat.isDateType(type);
-      // Les trois cases : une colonne Oui / Non, et la case conditionnelle - dont la barre n'a pas « vrai / faux », elle est toujours une case.
-      // Pas de cases dans un champ texte : un Oui / Non y est écrit « true » / « false », quel que soit le réglage (Variables.formatValue).
-      const isBool = !rawText && (type === 'Bool' || kind === 'checkbox');
-      ui.section('grist').hidden = !isNumber && !isDate;
-      ui.section('number').hidden = !isNumber;
-      ui.section('date').hidden = !isDate;
-      const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
-      if (timeSelect) timeSelect.hidden = !VariableFormat.isDateTimeType(type);
-      ui.section('bool').hidden = !isBool;
-      const textButton = ui.button('bool-style:text');
-      if (textButton) textButton.hidden = kind === 'checkbox';
-      panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
+      showFormatPanels(ui, panel, isFormatKind(kind) ? variableColumnType(node) : null, { rawText, checkbox: kind === 'checkbox' });
     }
 
     function variableToolbarCheck(panel, ui) {
@@ -1938,20 +1954,41 @@ const FloatingToolbars = (function () {
       const node = editor.state.selection.node;
       return node && node.type.name === 'mention' ? { node, pos: editor.state.selection.from } : null;
     }
+    // Le réglage de la pastille : quand la colonne qu'elle cite est une date, un nombre ou un Oui / Non, la barre porte les mêmes sous-panneaux, les mêmes gestes et le même texte que la barre d'une
+    // bulle sur cette colonne (« Comme dans Grist », FR / US, décimales, devise, %, Lettres, J / M / A, formats de date, cases) : ce sont les mêmes fonctions, avec la pastille pour cible. Le réglage
+    // est l'attribut `format` du nœud, absent tant que rien n'est réglé : une pastille d'avant s'écrit comme avant.
+    const mentionTarget = () => {
+      const chip = selectedMention();
+      return chip ? { kind: 'badge', node: chip.node, pos: chip.pos } : null;
+    };
+    const isFormatKind = kind => kind === 'badge';
+    const columnTypeOf = node => GristAPI.getColumnType(node.attrs.table, node.attrs.column);
+    let refreshToolbar = () => {};
+    const { variableFormatHtml } = createVariableToolbarHtml();
+    const { patchVariableFormat, applyVariableFormat, gristFormatOf } = createVariableFormat({ editor, rawText: inField, refreshToolbar: () => refreshToolbar(), isFormatKind,
+      variableTarget: mentionTarget, variableColumnType: columnTypeOf, refit: attrs => Mention.refit(attrs, inField) });
+    const { onVariableAction, onVariableInput } = createVariableHandlers({ editor, inField, loopWindowTaken: () => false, isFormatKind, variableTarget: mentionTarget, patchVariableFormat, applyVariableFormat });
+    const { setLabeled } = createVariableButtons({ editor, inField });
+    const { syncBoolButtons } = createConditionalState({});
+    const { syncFormatControls } = createVariableState({ editor, rawText: inField, variableColumnType: columnTypeOf, gristFormatOf, setLabeled, syncBoolButtons });
     function onAction(action) {
       const chip = selectedMention();
-      if (action === 'mention-linked' && chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.openAt(editor, chip.pos);
+      if (action === 'mention-linked') {
+        if (chip && Mention.columnsStatus(chip.node.attrs).enabled) VariableLinkedAttrs.openAt(editor, chip.pos);
       // Mise en forme conditionnelle (js/conditional-style-window.js) : selon la ligne de la page, comme celle d'une puce.
-      if (action === 'mention-style' && chip && !inField) ConditionalStyleWindow.openAt(editor, chip.pos);
+      } else if (action === 'mention-style') {
+        if (chip && !inField) ConditionalStyleWindow.openAt(editor, chip.pos);
+      } else onVariableAction(action);
     }
     function wire() {
       const label = I18n.t('mention.toolbar.linked');
       const styleLabel = I18n.t('varToolbar.style');
       const html = `<button data-action="mention-linked" title="${label}" aria-label="${label}">${Icons.svg('varLinked')}</button>`
-        + `<button data-action="mention-style" title="${styleLabel}" aria-label="${styleLabel}">${Icons.svg('varStyle')}</button>`;
-      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-mention-toolbar', html, onAction);
+        + `<button data-action="mention-style" title="${styleLabel}" aria-label="${styleLabel}">${Icons.svg('varStyle')}</button>`
+        + variableFormatHtml();
+      const panel = EditorCore.createFloatingPanel('v2-floating-toolbar v2-mention-toolbar', html, onAction, onVariableInput);
       EditorCore.registerFloatingPanel(panel, inField ? options.ownerEl : null);
-      const ui = controlsOf(panel);
+      const ui = Object.assign(controlsOf(panel), { section: name => panel.el.querySelector(`[data-var-panel="${name}"]`) });
       const check = ({ transaction } = {}) => {
         // Le blur de l'éditeur ne change ni la sélection ni le document : cf. wireImageFloatingToolbar.
         if (transaction && transaction.getMeta('blur')) return;
@@ -1968,8 +2005,11 @@ const FloatingToolbars = (function () {
           ui.setDisabled('mention-style', true, styleTitle);
           ui.button('mention-style').setAttribute('aria-label', styleTitle);
         } else ui.setActive('mention-style', ConditionalStyle.isSet(chip.node.attrs.condStyle));
+        showFormatPanels(ui, panel, columnTypeOf(chip.node), { rawText: inField });
+        syncFormatControls(ui, chip.node, chip.node.attrs.format || {});
         panel.show(dom, inField ? undefined : anchoredBarOptions);
       };
+      refreshToolbar = () => check();
       editor.on('selectionUpdate', check);
       editor.on('transaction', check);
       return panel;

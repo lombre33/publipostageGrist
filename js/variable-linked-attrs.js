@@ -663,6 +663,8 @@ const VariableLinkedAttrs = (function () {
     const first = state.mention.labels && state.mention.labels.get(picks[0].col);
     if (!first) return;
     const attrs = Object.assign({}, node.attrs, { column: picks[0].col, step: mentionStep() || null, label: first });
+    // Son réglage de date, de nombre ou de Oui / Non ne suit que vers une colonne du même genre (une date reste une date, un nombre un nombre) : sur une autre, il n'aurait pas de sens.
+    if (attrs.format && VariableFormat.formatKindOf(attrs.format) !== VariableFormat.columnKind(GristAPI.getColumnType(attrs.table, attrs.column))) attrs.format = null;
     const after = pos + node.nodeSize;
     const content = mentionContent(picks.slice(1), node);
     close({ keepFocus: true });

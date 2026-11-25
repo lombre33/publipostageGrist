@@ -694,7 +694,7 @@ const barState = () => page.evaluate(() => {
   const chip = document.querySelector('.tiptap .mention-chip.ProseMirror-selectednode');
   const c = chip && chip.getBoundingClientRect();
   return {
-    visible: true, buttons: bar.querySelectorAll('button').length, title: button.title, label: button.getAttribute('aria-label'), grey: button.classList.contains('is-disabled'),
+    visible: true, buttons: Array.from(bar.querySelectorAll('button')).filter(b => b.getClientRects().length > 0).length, title: button.title, label: button.getAttribute('aria-label'), grey: button.classList.contains('is-disabled'),
     inPanel: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
     reachable: !!top && (top === button || button.contains(top)),
     nearChip: !!c && Math.abs(b.left + b.width / 2 - (c.left + c.width / 2)) <= Math.max(c.width / 2 + 20, 40) && (r.bottom <= c.top + 2 || r.top >= c.bottom - 2),
@@ -730,7 +730,7 @@ async function columnsPart(T) {
   await clickOn('.tiptap .mention-chip');
   let bar = await barState();
   check(`${T} : un clic sur la pastille ouvre sa barre - deux boutons (« Autres colonnes de la même fiche » d'abord, puis « Style », ajouté le 07/11), dans le panneau, juste à côté de la pastille, rien par-dessus`,
-    bar.visible && bar.buttons === 2 && bar.title === 'Autres colonnes de la même fiche' && bar.label === bar.title && !bar.grey && bar.inPanel && bar.reachable && bar.nearChip, bar);
+    bar.visible && bar.buttons === 2 && bar.title === 'Autres colonnes de la même fiche, ou fiche suivante ou précédente' && bar.label === bar.title && !bar.grey && bar.inPanel && bar.reachable && bar.nearChip, bar);
   await snap(`${T}-10-barre-pastille`);
   await clickOn('.v2-mention-toolbar.visible button');
   await page.waitForTimeout(300);
@@ -740,7 +740,7 @@ async function columnsPart(T) {
   check(`${T} : la fenêtre lit la ligne de la FICHE (la ligne 2), pas celle que la page affiche (la ligne 1 de la même table) : le texte de chaque colonne, celle de la pastille et les colonnes sans texte grisées`,
     win.open && win.rows === 'Email=marie.martin@example.fr ; NomComplet=Marie Martin [grisée] ; Poste=Adjointe ; Notes= [grisée] ; Photo=(pièce jointe) [grisée]'
       && win.subtitle === 'Même fiche que @Marie Martin : la ligne n° 2 de « MnPersonnes », quelle que soit la ligne sélectionnée dans Grist.'
-      && win.buttons.map(b => b.text + (b.off ? ' (éteint)' : '')).join(' | ') === 'Annuler | Remplacer (éteint) | Insérer 0 colonne (éteint)', win);
+      && win.buttons.map(b => b.text + (b.off ? ' (éteint)' : '')).join(' | ') === 'Annuler | Remplacer (éteint) | Insérer (éteint)', win);
   await snap(`${T}-11-fenetre-pastille`);
 
   // « Remplacer », un seul Annuler.
@@ -828,6 +828,80 @@ async function columnsPart(T) {
   await unseed();
 }
 
+// Le réglage de la pastille (retour d'Antoine du 25/11, « pour bien tout uniformiser ») : une pastille qui cite une date ou un nombre a, dans sa barre, les réglages d'une bulle sur la même colonne.
+// Au vrai clic et à 700x400 : la barre tient dans le panneau sans recouvrir la pastille, la liste est atteignable, le choix s'écrit dans la pastille, dans la Lecture, et un Ctrl+Z le défait.
+async function formatPart(T) {
+  // La partie d'avant a fini sur un clic sur un bouton grisé : sa bulle d'explication (js/lock-bubble.js) reste ouverte, juste sous la souris, et couvrirait la pastille. Échap la ferme.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  await seed();
+  await page.evaluate(async () => {
+    const s = window.__gristStub;
+    s.setVariables('MnPersonnes', { Email: 'Text', NomComplet: 'Text', Poste: 'Text', Montant: 'Numeric', Naissance: 'Date' });
+    s.setRows('MnPersonnes', [
+      { id: 1, Email: 'jean.dupont@example.fr', NomComplet: 'Jean Dupont', Poste: 'Maire', Montant: 10, Naissance: 631152000 },
+      { id: 2, Email: 'marie.martin@example.fr', NomComplet: 'Marie Martin', Poste: 'Adjointe', Montant: 1234.5, Naissance: 662688000 },
+    ]);
+    await GristAPI.refreshSchema();
+    s.fireRecord({ id: 1, Titre: 'Dossier Alpha', Responsable: 2 }, 'MnDossiers');
+    Mention.reset();
+  });
+  await page.waitForTimeout(200);
+  await setDoc('<p>Né le ' + mentionHtml(2, 'Naissance', '01/01/1991') + ' pour ' + mentionHtml(2, 'Montant', '1234.5') + '.</p>');
+  await page.waitForTimeout(600);
+  const original = await html();
+  // La souris du pas d'avant repose peut-être sur un menu au survol (le pinceau) dont le menu ouvert couvre le point du clic : on la pose hors de la barre d'outils (cf. focusEnd).
+  await page.mouse.move(680, 250);
+  await page.waitForTimeout(300);
+  const formatBar = () => page.evaluate(() => {
+    const bar = document.querySelector('.v2-mention-toolbar.visible');
+    if (!bar) return null;
+    const r = bar.getBoundingClientRect();
+    const shownPanel = name => { const el = bar.querySelector('[data-var-panel="' + name + '"]'); return !!el && !el.hidden && el.getClientRects().length > 0; };
+    const select = bar.querySelector('select[data-role="' + (shownPanel('date') ? 'date-preset' : 'num-decimals') + '"]');
+    const sr = select.getBoundingClientRect();
+    const top = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+    const chip = document.querySelector('.tiptap .mention-chip.ProseMirror-selectednode');
+    const c = chip && chip.getBoundingClientRect();
+    return { date: shownPanel('date'), number: shownPanel('number'), bool: shownPanel('bool'), value: select.value, title: select.title,
+      inPanel: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, height: r.height, reachable: !!top && (top === select || select.contains(top)),
+      coversChip: !!c && c.left + c.width / 2 >= r.left && c.left + c.width / 2 <= r.right && c.top + c.height / 2 >= r.top && c.top + c.height / 2 <= r.bottom, overflowX: document.scrollingElement.scrollWidth - innerWidth };
+  });
+  await clickOn('.tiptap .mention-chip');
+  const dateBar = await formatBar();
+  check(`${T} : un clic sur une pastille de date ouvre sa barre avec J / M / A, la liste des formats et « Lettres » (rien du nombre ni du Oui / Non), dans le panneau de ${WIDTH}x${HEIGHT}, sans recouvrir la pastille, la liste atteignable`,
+    !!dateBar && dateBar.date && !dateBar.number && !dateBar.bool && dateBar.value === 'dmy_slash_full' && dateBar.title === 'Format de date' && dateBar.inPanel && dateBar.reachable && !dateBar.coversChip && dateBar.overflowX <= 0, dateBar);
+  await snap(`${T}-20-barre-date`);
+  await page.selectOption('.v2-mention-toolbar.visible select[data-role="date-preset"]', 'd_mmmm_yyyy');
+  await page.waitForTimeout(400);
+  const dateChipText = () => page.evaluate(() => document.querySelector('.tiptap .mention-chip').textContent);
+  check(`${T} : choisir « 1er janvier 1991 » écrit la date ainsi dans la pastille, la barre reste ouverte sur ce choix`, (await dateChipText()) === '1er janvier 1991' && (await formatBar() || {}).value === 'd_mmmm_yyyy', { text: await dateChipText(), bar: await formatBar() });
+  await snap(`${T}-21-date-reglee`);
+  await page.click('#btn-mode-read');
+  await page.waitForTimeout(700);
+  const readerText = await page.evaluate(() => document.getElementById('reader-container').textContent.replace(/\s+/g, ' ').trim());
+  check(`${T} : en Lecture, la date s'écrit « 1er janvier 1991 » et le nombre sans réglage comme avant`, /Né le 1er janvier 1991 pour 1234\.5\./.test(readerText), readerText);
+  await page.click('#btn-mode-edit');
+  await page.waitForTimeout(500);
+  await clickOn('.tiptap .mention-chip');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  check(`${T} : un seul Ctrl+Z rend la pastille sans réglage`, (await html()) === original, { now: await html() });
+  await clickOn('.tiptap p span.mention-chip:nth-of-type(2)');
+  const numberBar = await formatBar();
+  check(`${T} : la pastille d'un nombre a la barre d'un nombre (FR / US, décimales, devise, %…), rien de la date, dans le panneau, la liste atteignable`,
+    !!numberBar && numberBar.number && !numberBar.date && !numberBar.bool && numberBar.inPanel && numberBar.reachable && !numberBar.coversChip && numberBar.overflowX <= 0, numberBar);
+  await page.selectOption('.v2-mention-toolbar.visible select[data-role="num-decimals"]', '2');
+  await page.waitForTimeout(400);
+  const numberText = await page.evaluate(() => document.querySelectorAll('.tiptap .mention-chip')[1].textContent.replace(/[\u00a0\u202f]/g, ' '));
+  check(`${T} : deux décimales écrivent « 1 234,50 » dans la pastille`, numberText === '1 234,50', numberText);
+  await snap(`${T}-22-nombre-regle`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  check(`${T} : un seul Ctrl+Z rend le nombre sans réglage`, (await html()) === original, { now: await html() });
+  await unseed();
+}
+
 async function runEnglish() {
   await page.evaluate(() => I18n.setLang('en'));
   await page.waitForTimeout(250);
@@ -871,13 +945,13 @@ async function runEnglish() {
   await page.waitForTimeout(500);
   await clickOn('.tiptap .mention-chip');
   const barEn = await barState();
-  check('anglais : la barre de la pastille a son bouton « Other columns of the same record »', barEn.visible && barEn.title === 'Other columns of the same record' && barEn.label === barEn.title && barEn.reachable, barEn);
+  check('anglais : la barre de la pastille a son bouton « Other columns of the same record »', barEn.visible && barEn.title === 'Other columns of the same record, or the next or previous record' && barEn.label === barEn.title && barEn.reachable, barEn);
   await clickOn('.v2-mention-toolbar.visible button');
   await page.waitForTimeout(300);
   const winEn = await windowState();
   check('anglais : la fenêtre s\'appelle « Other columns of “MnPersonnes” », dit « Same record as @Marie Martin: row #2… », et ses boutons sont « Cancel », « Replace », « Insert … »',
     winEn.open && winEn.title === 'Other columns of “MnPersonnes”' && winEn.subtitle === 'Same record as @Marie Martin: row #2 of “MnPersonnes”, whichever row is selected in Grist.'
-      && winEn.buttons[0].text === 'Cancel' && winEn.buttons[1].text === 'Replace' && /^Insert 0 columns?$/.test(winEn.buttons[2].text) && winEn.rows.indexOf('Photo=(attachment) [grisée]') !== -1 && winEn.inPanel && winEn.onTop, winEn);
+      && winEn.buttons[0].text === 'Cancel' && winEn.buttons[1].text === 'Replace' && winEn.buttons[2].text === 'Insert' && winEn.rows.indexOf('Photo=(attachment) [grisée]') !== -1 && winEn.inPanel && winEn.onTop, winEn);
   await snap('anglais-fenetre-pastille');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
@@ -886,16 +960,29 @@ async function runEnglish() {
   await page.waitForTimeout(250);
 }
 
-await run('clair');
-await noFlickerPart('clair');
-await columnsPart('clair');
-await page.evaluate(() => Settings.setTheme('dark'));
-await page.waitForTimeout(250);
-await run('sombre');
-await columnsPart('sombre');
-await page.evaluate(() => Settings.setTheme('light'));
-await page.waitForTimeout(250);
-await runEnglish();
+// MN_ONLY=format : seulement le réglage de format de la pastille, en clair puis en sombre (un parcours entier prend plusieurs minutes) ; MN_ONLY=columns : la fenêtre des colonnes, puis le réglage, en clair.
+if (process.env.MN_ONLY === 'columns') {
+  await columnsPart('clair');
+  await formatPart('clair');
+} else if (process.env.MN_ONLY === 'format') {
+  await formatPart('clair');
+  await page.evaluate(() => Settings.setTheme('dark'));
+  await page.waitForTimeout(250);
+  await formatPart('sombre');
+} else {
+  await run('clair');
+  await noFlickerPart('clair');
+  await columnsPart('clair');
+  await formatPart('clair');
+  await page.evaluate(() => Settings.setTheme('dark'));
+  await page.waitForTimeout(250);
+  await run('sombre');
+  await columnsPart('sombre');
+  await formatPart('sombre');
+  await page.evaluate(() => Settings.setTheme('light'));
+  await page.waitForTimeout(250);
+  await runEnglish();
+}
 
 check('aucune boîte native (prompt, confirm, alert) ne s’est ouverte', nativeDialogs.length === 0, nativeDialogs);
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);

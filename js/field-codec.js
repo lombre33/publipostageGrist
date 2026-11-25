@@ -131,7 +131,8 @@ const FieldCodec = (function () {
       if (isText(item) || isText(other)) return isText(item) && isText(other) && item.text === other.text;
       if (isChip(item) || isChip(other)) return isChip(item) && isChip(other) && item.chip.kind === other.chip.kind && (item.chip.time || null) === (other.chip.time || null) && JSON.stringify(item.chip.date || null) === JSON.stringify(other.chip.date || null);
       if (isMention(item) || isMention(other)) {
-        return isMention(item) && isMention(other) && item.mention.table === other.mention.table && Number(item.mention.row) === Number(other.mention.row) && item.mention.column === other.mention.column;
+        return isMention(item) && isMention(other) && item.mention.table === other.mention.table && Number(item.mention.row) === Number(other.mention.row) && item.mention.column === other.mention.column
+          && JSON.stringify(item.mention.format || null) === JSON.stringify(other.mention.format || null);
       }
       return item.badge.table === other.badge.table && item.badge.column === other.badge.column && item.badge.key === other.badge.key;
     });

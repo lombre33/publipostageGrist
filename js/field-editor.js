@@ -40,8 +40,8 @@ const FieldEditor = (function () {
         if (node.isText) items.push({ text: node.text });
         else if (node.type.name === 'varBadge') items.push({ badge: Object.assign({}, node.attrs) });
         else if (node.type.name === 'smartChip') items.push({ chip: Object.assign({}, node.attrs) });
-        // La pastille d'un champ ne garde que sa fiche et son nom : pas de mise en forme selon la ligne (`condStyle`), propre au document.
-        else if (node.type.name === 'mention') items.push({ mention: { table: node.attrs.table, row: node.attrs.row, column: node.attrs.column, label: node.attrs.label } });
+        // La pastille d'un champ ne garde que sa fiche, son réglage de date ou de nombre (`format`) et son nom : pas de mise en forme selon la ligne (`condStyle`), propre au document.
+        else if (node.type.name === 'mention') items.push({ mention: Object.assign({ table: node.attrs.table, row: node.attrs.row, column: node.attrs.column, label: node.attrs.label }, node.attrs.format ? { format: node.attrs.format } : {}) });
         return true;
       });
       return items;
@@ -462,7 +462,7 @@ const FieldEditor = (function () {
       onUpdate: () => { field.shown = null; sync(field); unfold(field); keepAboveResult(field); emit(host, 'input', true); },
       onSelectionUpdate: () => keepAboveResult(field),
       // Une pastille « @ » posée ou collée prend son état du moment (nom à jour, info-bulle, rouge quand sa fiche n'existe plus) : js/mention.js la repeint, comme dans le document.
-      onTransaction: () => { sync(field); if (field.mentions) Mention.markChips(field.editor.view.dom); },
+      onTransaction: () => { sync(field); if (field.mentions) Mention.markChips(field.editor.view.dom, { field: true }); },
       onFocus: () => { open(field); unfold(field); watchResult(field, true); },
       onBlur: () => {
         emit(host, 'blur');

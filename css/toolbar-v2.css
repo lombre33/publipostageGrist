@@ -508,26 +508,26 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 /* Largeur = son contenu, jamais plus que la fenêtre (moins la marge de 8 px du positionnement) : dans un panneau étroit les réglages passent à la
    ligne au lieu de déborder (avec « Si la valeur vaut zéro », la barre nombre fait environ 530 px). `width: max-content` : la largeur ne dépend
    pas de la position `left` que lui donne le positionnement, sans quoi la mesure et le placement se répondraient l'un à l'autre. */
-.v2-varfmt-toolbar { align-items: center; flex-wrap: wrap; width: max-content; max-width: calc(100vw - 16px); }
-.v2-varfmt-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.v2-varfmt-toolbar [data-var-panel][hidden] { display: none; }
+.v2-varfmt-toolbar, .v2-mention-toolbar { align-items: center; flex-wrap: wrap; width: max-content; max-width: calc(100vw - 16px); }
+.v2-varfmt-toolbar [data-var-panel], .v2-mention-toolbar [data-var-panel] { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.v2-varfmt-toolbar [data-var-panel][hidden], .v2-mention-toolbar [data-var-panel][hidden] { display: none; }
 .v2-varfmt-seg { display: inline-flex; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); overflow: hidden; }
-.v2-varfmt-toolbar .v2-varfmt-seg button, .v2-timechip-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }
-.v2-varfmt-toolbar .v2-varfmt-seg button:first-child, .v2-timechip-toolbar .v2-varfmt-seg button:first-child { border-left: none; }
+.v2-varfmt-toolbar .v2-varfmt-seg button, .v2-mention-toolbar .v2-varfmt-seg button, .v2-timechip-toolbar .v2-varfmt-seg button { width: auto; height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 700; border-radius: 0; border-left: 1px solid var(--border, #d7dde3); }
+.v2-varfmt-toolbar .v2-varfmt-seg button:first-child, .v2-mention-toolbar .v2-varfmt-seg button:first-child, .v2-timechip-toolbar .v2-varfmt-seg button:first-child { border-left: none; }
 /* Les trois cases de la barre « Oui / Non » sont les icônes de la liste à cases, dessinées dans un coin d'un cadre de 24 : à 15 px la case ne fait
    que 4 px et les styles « texte barré » et « texte normal » (deux traits de longueur différente) ne se distinguent plus ; à 20 px ils se lisent,
    dans la hauteur de 26 px des autres boutons de la barre. */
-.v2-varfmt-toolbar [data-var-panel="bool"] .v2-varfmt-seg button svg { width: 20px; height: 20px; }
-.v2-varfmt-toolbar select, .v2-varfmt-toolbar input[type="text"] { height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
-.v2-varfmt-toolbar input[data-role="num-currency"] { width: 56px; }
-.v2-varfmt-toolbar select[data-role="date-preset"] { width: 190px; }
+.v2-varfmt-toolbar [data-var-panel="bool"] .v2-varfmt-seg button svg, .v2-mention-toolbar [data-var-panel="bool"] .v2-varfmt-seg button svg { width: 20px; height: 20px; }
+.v2-varfmt-toolbar select, .v2-mention-toolbar select, .v2-varfmt-toolbar input[type="text"], .v2-mention-toolbar input[type="text"] { height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
+.v2-varfmt-toolbar input[data-role="num-currency"], .v2-mention-toolbar input[data-role="num-currency"] { width: 56px; }
+.v2-varfmt-toolbar select[data-role="date-preset"], .v2-mention-toolbar select[data-role="date-preset"] { width: 190px; }
 /* La liste « Heure » (colonne « Date et heure » seulement, cachée par l'attribut `hidden`) : « Sans heure » est son texte le plus long. */
-.v2-varfmt-toolbar select[data-role="date-time"] { width: 96px; }
-.v2-varfmt-toolbar select[data-role="date-time"][hidden] { display: none; }
+.v2-varfmt-toolbar select[data-role="date-time"], .v2-mention-toolbar select[data-role="date-time"] { width: 96px; }
+.v2-varfmt-toolbar select[data-role="date-time"][hidden], .v2-mention-toolbar select[data-role="date-time"][hidden] { display: none; }
 /* Barre flottante d'une puce : le chrome de `.v2-floating-toolbar`, la liste « Heure » d'une bulle pour la puce « Heure actuelle » seule, les boutons J / M / A, la liste des écritures et « Lettres » d'une bulle sur
    une colonne Date pour la puce « Date du jour » seule (mêmes mesures que celles de `.v2-varfmt-toolbar`) et le bouton de mise en forme conditionnelle. Dans un panneau étroit les réglages passent à la ligne, comme ceux d'une bulle. */
 .v2-timechip-toolbar, .v2-mention-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }
-.v2-timechip-toolbar { flex-wrap: wrap; }
+.v2-timechip-toolbar, .v2-mention-toolbar { flex-wrap: wrap; }
 .v2-timechip-toolbar select { width: 96px; height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 6px; background: var(--surface, #fff); color: var(--text, #3a4452); }
 .v2-timechip-toolbar select[hidden] { display: none; }
 .v2-timechip-toolbar select[data-role="chip-date"] { width: 190px; }
@@ -541,7 +541,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .v2-toc-toolbar select { width: 54px; height: 26px; border: 1px solid var(--border, #d7dde3); border-radius: var(--radius-xs, 4px); font-size: 12px; padding: 0 4px; background: var(--surface, #fff); color: var(--text, #3a4452); }
 .v2-toc-toolbar .v2-toc-sep { align-self: stretch; width: 1px; margin: 3px 4px; background: var(--border, #d7dde3); }
 .v2-toc-toolbar button[data-action="toc-pages"] { width: auto; padding: 0 8px; font: 600 12px/1 var(--font-ui); }
-.v2-varfmt-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"], .v2-varfmt-toolbar button[data-action="num-percent"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
+.v2-varfmt-toolbar button[data-action="num-words"], .v2-mention-toolbar button[data-action="num-words"], .v2-varfmt-toolbar button[data-action="date-words"], .v2-mention-toolbar button[data-action="date-words"], .v2-varfmt-toolbar button[data-action="num-percent"], .v2-mention-toolbar button[data-action="num-percent"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
 /* Écriture en lettres active : le style de séparateur (FR/US/aucun) n'a plus de sens, il est grisé et non retiré. Les décimales restent actives :
    la partie décimale s'écrit aussi en toutes lettres (« virgule cinquante-six »), sans arrondi silencieux ; la devise reste utilisable (« mille
    euros »). */

@@ -124,10 +124,14 @@ const Mention = (function () {
 
   // Le nom de la fiche n° `index` de `entry` d'après `column`, sur une ligne, comme la cellule s'écrit dans un champ texte (nombre et date tels que Grist les montre, sans
   // mise en forme de bulle) ; '' pour une cellule vide. `shownBy` : la colonne cachée que Grist montre à la place de `column` (une Référence), s'il y en a une.
-  function cellLabel(entry, table, column, shownBy, index) {
+  // `format` : le réglage de la pastille (date, nombre ou Oui / Non, le même qu'une bulle sur cette colonne), null tant que rien n'est réglé. Dans le document, une pastille réglée s'écrit comme une
+  // bulle réglée (le zéro caché, la case d'un Oui / Non) ; sans réglage, comme avant, nombre et booléen tels quels. Dans un champ texte (`field`), la valeur de Grist, comme celle d'une bulle
+  // (Variables.formatValue, `rawNumbers`) : le zéro s'y écrit toujours et un Oui / Non y reste « true » / « false ».
+  function cellLabel(entry, table, column, shownBy, index, format, field) {
     const row = { [column]: (entry.data[column] || [])[index] };
     if (shownBy && entry.data[shownBy]) row[shownBy] = entry.data[shownBy][index];
-    const text = Variables.formatValue(Variables.cellValue(table, column, row), null, table, column, { rawNumbers: true });
+    const set = hasFormat(format);
+    const text = Variables.formatValue(Variables.cellValue(table, column, row), set ? format : null, table, column, { rawNumbers: !set || !!field });
     return String(text).replace(/\s+/g, ' ').trim();
   }
 
@@ -146,6 +150,12 @@ const Mention = (function () {
   function labelAt(entry, table, column, index) {
     const known = entry.labels.get(column);
     return known ? known[index] : cellLabel(entry, table, column, GristAPI.getDisplayColumn(table, column), index);
+  }
+  // Le nom de la fiche n° `index` comme l'écrit la pastille de `ref` : celui que `labelsOf` a déjà bâti tant qu'elle n'a pas de réglage, sa cellule mise en forme sinon (un réglage est propre à
+  // chaque pastille : rien ne s'en range avec les noms de la colonne).
+  function labelFor(entry, ref, index) {
+    if (!hasFormat(ref.format)) return labelsOf(entry, ref.table, ref.column)[index];
+    return cellLabel(entry, ref.table, ref.column, GristAPI.getDisplayColumn(ref.table, ref.column), index, ref.format, ref.field);
   }
 
   // Les textes où chercher chaque fiche : son nom et celui de sa table (SearchSelect.searchKey), préparés une fois par lecture.
@@ -278,27 +288,37 @@ const Mention = (function () {
     if (jump && jump.edge) return I18n.t(jump.edge === 'first' ? 'mention.signFirst' : 'mention.signLast');
     return jump ? (jump.offset < 0 ? '\u2212' : '+') + Math.abs(jump.offset) : '';
   };
+  // Le réglage de la pastille (`data-mention-format`, un JSON : le format d'une bulle sur la même colonne), absent tant que rien n'est réglé : une pastille d'avant s'écrit comme avant.
+  const hasFormat = format => !!format && typeof format === 'object' && Object.keys(format).length > 0;
+  function formatOf(element) {
+    const raw = element.getAttribute('data-mention-format');
+    if (!raw) return null;
+    try { const format = JSON.parse(raw); return hasFormat(format) ? format : null; } catch (e) { return null; }
+  }
   const refAttributes = attrs => Object.assign({ 'data-mention-table': attrs.table, 'data-mention-row': attrs.row, 'data-mention-column': attrs.column },
     attrs.step ? { 'data-mention-step': attrs.step, 'data-mention-sign': signOf(attrs.step) } : {},
+    hasFormat(attrs.format) ? { 'data-mention-format': JSON.stringify(attrs.format) } : {},
     attrs.condStyle ? { 'data-cond-style': JSON.stringify(attrs.condStyle) } : {});
   function refOf(element) {
     const step = element.getAttribute('data-mention-step');
+    const format = formatOf(element);
     return Object.assign({ table: element.getAttribute('data-mention-table'), row: Number(element.getAttribute('data-mention-row')), column: element.getAttribute('data-mention-column') },
-      step ? { step } : {});
+      step ? { step } : {}, format ? { format } : {});
   }
   const attrsOf = (element) => {
     const condStyle = ConditionalStyle.parse(element.getAttribute('data-cond-style'));
     return Object.assign(refOf(element), { label: element.textContent }, condStyle ? { condStyle } : {});
   };
 
-  // Les attributs d'une pastille dans un champ texte (js/field-codec.js) : la fiche et son nom, rien d'autre - la mise en forme selon la ligne est propre au document.
-  const fieldAttrsOf = element => Object.assign(refOf(element), { label: element.textContent });
+  // Les attributs d'une pastille dans un champ texte (js/field-codec.js) : la fiche, son réglage et son nom, rien d'autre - la mise en forme selon la ligne est propre au document. `field` : l'écrire
+  // comme un champ texte (cellLabel) ; la pastille d'un champ le sait par ici, jamais par son HTML.
+  const fieldAttrsOf = element => Object.assign(refOf(element), { label: element.textContent, field: true });
   // Le HTML d'une pastille posée dans un champ texte (valeur enregistrée, texte collé) : sans TipTap, la même que celle que l'éditeur écrit.
   function html(attrs) {
     const span = document.createElement('span');
     span.className = 'mention-chip';
     span.setAttribute('contenteditable', 'false');
-    const ref = refAttributes({ table: attrs.table, row: attrs.row, column: attrs.column, step: attrs.step });
+    const ref = refAttributes({ table: attrs.table, row: attrs.row, column: attrs.column, step: attrs.step, format: attrs.format });
     Object.keys(ref).forEach(name => span.setAttribute(name, ref[name]));
     span.textContent = attrs.label || '';
     return span.outerHTML;
@@ -312,7 +332,7 @@ const Mention = (function () {
       name: 'mention',
       addAttributes() {
         // `label` : le nom de la fiche quand elle a été posée - le seul texte d'une pastille dont la table ne se lit plus, jamais celui qu'un export écrit.
-        return { table: EditorNodes.internalAttr(null), row: EditorNodes.internalAttr(null), column: EditorNodes.internalAttr(null), step: EditorNodes.internalAttr(null), label: EditorNodes.internalAttr(''), condStyle: EditorNodes.internalAttr(null) };
+        return { table: EditorNodes.internalAttr(null), row: EditorNodes.internalAttr(null), column: EditorNodes.internalAttr(null), step: EditorNodes.internalAttr(null), label: EditorNodes.internalAttr(''), condStyle: EditorNodes.internalAttr(null), format: EditorNodes.internalAttr(null) };
       },
       parseHTML() {
         return [{ tag: 'span.mention-chip', getAttrs: attrsOf }];
@@ -386,12 +406,12 @@ const Mention = (function () {
     try { entry = await read(attrs.table, FRESH_MS); } catch (e) { return unreadable(attrs); }
     const index = rowIndex(entry, attrs.row);
     if (index === undefined || !(attrs.column in entry.data)) return missing();
-    if (!attrs.step) return { text: labelsOf(entry, attrs.table, attrs.column)[index], isError: false };
+    if (!attrs.step) return { text: labelFor(entry, attrs, index), isError: false };
     // La fiche voisine : sa colonne d'ordre disparue rend la pastille introuvable ; au bout de la série elle n'écrit rien, sans erreur.
     const jump = jumpOf(attrs.table, attrs.step);
     if (!jump) return missing();
     const neighbor = neighborIndex(entry, attrs.table, attrs.row, jump);
-    return { text: neighbor === undefined ? '' : labelsOf(entry, attrs.table, attrs.column)[neighbor], isError: false };
+    return { text: neighbor === undefined ? '' : labelFor(entry, attrs, neighbor), isError: false };
   }
 
   // La pastille dans l'éditeur
@@ -437,11 +457,11 @@ const Mention = (function () {
     const entry = last.get(ref.table);
     const index = entry ? rowIndex(entry, ref.row) : undefined;
     if (index === undefined || !(ref.column in entry.data)) return null;
-    if (!ref.step) return labelsOf(entry, ref.table, ref.column)[index];
+    if (!ref.step) return labelFor(entry, ref, index);
     const jump = jumpOf(ref.table, ref.step);
     if (!jump) return null;
     const neighbor = neighborIndex(entry, ref.table, ref.row, jump);
-    return neighbor === undefined ? '' : labelsOf(entry, ref.table, ref.column)[neighbor];
+    return neighbor === undefined ? '' : labelFor(entry, ref, neighbor);
   }
   // Une pastille de fiche voisine qui, d'après la dernière lecture de sa table, n'a pas de voisine à ce rang : elle n'écrit rien.
   function isAlone(ref) {
@@ -451,10 +471,18 @@ const Mention = (function () {
     return !!jump && index !== undefined && neighborIndex(entry, ref.table, ref.row, jump) === undefined;
   }
 
+  // Les attributs d'une pastille dont le réglage vient de changer (js/floating-toolbars.js:createMentionToolbar), avec son nom tel qu'elle l'écrit maintenant : c'est celui qu'elle garde, dans
+  // l'éditeur, si sa table ne se lit plus. Inchangés tant que sa table n'est pas lue. `field` : la pastille d'un champ texte.
+  function refit(attrs, field) {
+    const label = liveLabel({ table: attrs.table, row: attrs.row, column: attrs.column, step: attrs.step, format: attrs.format, field: !!field });
+    return label ? Object.assign({}, attrs, { label }) : attrs;
+  }
+
   // Repeint une pastille : une classe, une info-bulle et le nom du moment (dans son <span> de début, cf. chipView) sur le <span> rendu, jamais dans le nœud (cela
   // dépend d'un état externe, pas du contenu), comme Editor.markBadgeValidity pour une #variable.
-  function paint(chip) {
+  function paint(chip, field) {
     const ref = refOf(chip);
+    if (field) ref.field = true;
     const problem = problemOf(ref);
     chip.classList.toggle('mention-chip-broken', !!problem);
     const alone = !problem && isAlone(ref);
@@ -467,16 +495,18 @@ const Mention = (function () {
 
   // Signale, dans `root` (le DOM d'un éditeur), l'état de chaque pastille « @ » : rouge quand sa fiche n'existe plus, son nom à jour sinon. ProseMirror peut
   // reconstruire un <span> à tout moment : appelée à chaque mise à jour du document (js/editor.js:markBadgeValidity), elle repeint d'après ce qui est déjà lu
-  // et ne relit une table qu'au plus toutes les EDITOR_REFRESH_MS (puis repeint).
-  function markChips(root) {
+  // et ne relit une table qu'au plus toutes les EDITOR_REFRESH_MS (puis repeint). `options.field` : l'éditeur d'un champ texte (js/field-editor.js), où une pastille réglée s'écrit comme dans le
+  // texte d'un e-mail (cellLabel).
+  function markChips(root, options) {
     const chips = root.querySelectorAll('span.mention-chip');
     if (!chips.length) return;
+    const field = !!(options && options.field);
     const tables = new Set();
-    chips.forEach(chip => { paint(chip); tables.add(chip.getAttribute('data-mention-table')); });
+    chips.forEach(chip => { paint(chip, field); tables.add(chip.getAttribute('data-mention-table')); });
     tables.forEach(table => {
       if (!table || (asked.has(table) && Date.now() - asked.get(table) < EDITOR_REFRESH_MS)) return;
       asked.set(table, Date.now());
-      read(table, FRESH_MS).then(() => { if (root.isConnected) markChips(root); }, () => { /* table illisible : la pastille garde son nom */ });
+      read(table, FRESH_MS).then(() => { if (root.isConnected) markChips(root, options); }, () => { /* table illisible : la pastille garde son nom */ });
     });
   }
 
@@ -516,5 +546,5 @@ const Mention = (function () {
     return { labels };
   }
 
-  return { triggerChar, createNode, createExtension, items, resolve, attrsOf, refOf, fieldAttrsOf, html, markChips, labelColumnOf, reset, chipText, columnsStatus, valuesOf, hideList: suggestions.hide };
+  return { triggerChar, createNode, createExtension, items, resolve, attrsOf, refOf, fieldAttrsOf, html, markChips, labelColumnOf, reset, chipText, columnsStatus, valuesOf, refit, hideList: suggestions.hide };
 })();

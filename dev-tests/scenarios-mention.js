@@ -762,7 +762,7 @@
       for (let i = 0; i < 4; i++) {
         await selectChip(h, i);
         const button = barButton();
-        got.push({ shown: barOf().classList.contains('visible'), buttons: barOf().querySelectorAll('button').length, grey: button.classList.contains('is-disabled'), aria: button.getAttribute('aria-disabled'), title: button.title, label: button.getAttribute('aria-label') });
+        got.push({ shown: barOf().classList.contains('visible'), buttons: Array.from(barOf().querySelectorAll('button')).filter(b => b.getClientRects().length).length, grey: button.classList.contains('is-disabled'), aria: button.getAttribute('aria-disabled'), title: button.title, label: button.getAttribute('aria-label') });
       }
       // Le bouton grisé ne fait rien.
       await selectChip(h, 1);
@@ -1118,6 +1118,276 @@
           && english.cancel === 'Cancel';
         return { pass, notes: JSON.stringify(english) };
       } finally { closeWindow(); await h.resetEditor(); }
+    },
+  });
+
+  // === 6) Le réglage d'une pastille : date, nombre, Oui / Non ==============================================================================================
+  // Retour d'Antoine du 25/11 (« la date du jour (puce) n'a pas d'option pour sa mise en forme de date » ; « pour bien tout uniformiser ») : une pastille « @ » qui cite une date, un nombre ou un
+  // Oui / Non l'écrivait comme Grist l'affiche, sans les réglages d'une bulle sur la même colonne. Sa barre porte maintenant les mêmes sous-panneaux (js/floating-toolbars.js:createMentionToolbar),
+  // le réglage est l'attribut `format` du nœud (HTML : `data-mention-format`, absent tant que rien n'est réglé), la Lecture et les exports l'écrivent (js/mention.js:cellLabel).
+
+  const FORMATS = [
+    { id: 1, Email: 'jean.dupont@example.fr', NomComplet: 'Jean Dupont', Poste: 'Maire', Montant: 10, Naissance: 631152000, Actif: false },
+    { id: 2, Email: 'marie.martin@example.fr', NomComplet: 'Marie Martin', Poste: 'Adjointe', Montant: 1234.5, Naissance: 662688000, Actif: true },
+    { id: 3, Email: 'marc.armand@example.fr', NomComplet: 'Marc Armand', Poste: 'Trésorier', Montant: 0, Naissance: 694224000, Actif: true },
+  ];
+  async function seedFormats() {
+    await seed();
+    stub().setVariables(PEOPLE, { Email: 'Text', NomComplet: 'Text', Poste: 'Text', Montant: 'Numeric', Naissance: 'Date', Actif: 'Bool' });
+    stub().setColumnFormats(PEOPLE, { Naissance: { dateFormat: 'YYYY-MM-DD' }, Montant: { numMode: 'decimal', decimals: 2 } });
+    stub().setRows(PEOPLE, FORMATS);
+    await GristAPI.refreshSchema();
+    stub().fireRecord(FORMATS[0], PEOPLE);
+    Mention.reset();
+    await sleep(60);
+  }
+  // Une pastille avec son réglage, telle que l'éditeur l'enregistre.
+  const chipFmt = (row, column, label, format) => '<span class="mention-chip" contenteditable="false" data-mention-table="' + PEOPLE + '" data-mention-row="' + row + '" data-mention-column="' + column
+    + '"' + (format ? ' data-mention-format=\'' + JSON.stringify(format) + '\'' : '') + '>' + label + '</span>';
+  const plain = text => text.replace(/ | /g, ' ');
+  const readerText = async html => plain((await resolvedIn('<p>' + html + '</p>', FILES, { id: 1, Titre: 'Dossier Alpha' })).text);
+  const formatBar = () => document.querySelector('.v2-mention-toolbar.visible');
+  const panelShown = name => { const bar = formatBar(); const el = bar && bar.querySelector('[data-var-panel="' + name + '"]'); return !!el && !el.hidden && el.getClientRects().length > 0; };
+  const visibleButtons = () => Array.from(formatBar().querySelectorAll('button')).filter(b => b.getClientRects().length > 0).map(b => b.dataset.action);
+  const press = action => formatBar().querySelector('button[data-action="' + action + '"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  const setField = (role, value) => {
+    const field = formatBar().querySelector('[data-role="' + role + '"]');
+    field.value = value;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const formatOfNode = (ed, index) => (mentionNodes(ed)[index || 0] || { node: { attrs: {} } }).node.attrs.format;
+
+  cases.push({
+    id: 'mention_format_is_written_in_the_html_read_back_and_absent_on_an_unset_chip',
+    description: 'Le réglage d\'une pastille est l\'attribut `data-mention-format` (un JSON) : absent tant que rien n\'est réglé (une pastille d\'avant s\'enregistre comme avant), relu à l\'identique par l\'éditeur, ' +
+      'et un JSON illisible ou vide est ignoré.',
+    run: async (h) => {
+      await seedFormats();
+      await h.resetEditor();
+      const ed = EditorCore.getEditor();
+      const iso = { type: 'date', preset: 'iso' };
+      Editor.setHTML('<p>' + chipFmt(2, 'Naissance', '01/01/1991', iso) + ' ' + chipFmt(2, 'Poste', 'Adjointe') + ' ' + chipFmt(2, 'Naissance', '01/01/1991', {}) + '</p>');
+      await h.sleep(300);
+      const html = Editor.getHTML();
+      const nodes = mentionNodes(ed).map(n => n.node.attrs.format);
+      const attributes = Array.from(dom(html).querySelectorAll('.mention-chip')).map(el => el.getAttribute('data-mention-format'));
+      Editor.setHTML('<p><span class="mention-chip" contenteditable="false" data-mention-table="' + PEOPLE + '" data-mention-row="2" data-mention-column="Naissance" data-mention-format="pas du json">x</span></p>');
+      await h.sleep(300);
+      const broken = formatOfNode(ed);
+      await h.resetEditor();
+      const pass = JSON.stringify(nodes) === JSON.stringify([iso, null, null]) && JSON.stringify(attributes) === JSON.stringify([JSON.stringify(iso), null, null]) && broken === null;
+      return { pass, notes: JSON.stringify({ nodes, attributes, broken }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_format_changes_what_the_reader_writes_for_a_date_a_number_and_a_yes_no',
+    description: 'Lecture et exports : une pastille réglée s\'écrit comme une bulle réglée sur la même colonne (date « 1991-01-01 », « 1er janvier 1991 », nombre à deux décimales, zéro caché, case d\'un Oui / Non) ; ' +
+      'sans réglage elle s\'écrit comme avant (« 01/01/1991 », « 1234.5 », « 0 », « true »).',
+    run: async (h) => {
+      await seedFormats();
+      const was = {
+        plainDate: await readerText(chipFmt(2, 'Naissance', 'x')),
+        isoDate: await readerText(chipFmt(2, 'Naissance', 'x', { type: 'date', preset: 'iso' })),
+        longDate: await readerText(chipFmt(2, 'Naissance', 'x', { type: 'date', preset: 'd_mmmm_yyyy' })),
+        monthYear: await readerText(chipFmt(2, 'Naissance', 'x', { type: 'date', day: false, words: true, preset: 'd_mmmm_yyyy' })),
+        plainNumber: await readerText(chipFmt(2, 'Montant', 'x')),
+        twoDecimals: await readerText(chipFmt(2, 'Montant', 'x', { type: 'number', decimals: 2 })),
+        plainZero: await readerText(chipFmt(3, 'Montant', 'x')),
+        hiddenZero: await readerText(chipFmt(3, 'Montant', 'x', { type: 'number', decimals: 2 })),
+        shownZero: await readerText(chipFmt(3, 'Montant', 'x', { type: 'number', decimals: 2, zero: 'show' })),
+        plainBool: await readerText(chipFmt(2, 'Actif', 'x')),
+        boxBool: await readerText(chipFmt(2, 'Actif', 'x', { type: 'bool', style: 'accentStrike' })),
+        textOfPoste: await readerText(chipFmt(2, 'Poste', 'x')),
+      };
+      const box = VariableFormat.formatBool(true, { type: 'bool', style: 'accentStrike' });
+      const pass = was.plainDate === '01/01/1991' && was.isoDate === '1991-01-01' && was.longDate === '1er janvier 1991' && was.plainNumber === '1234.5' && was.twoDecimals === '1 234,50'
+        && was.plainZero === '0' && was.hiddenZero === '' && was.shownZero === '0,00' && was.plainBool === 'true' && was.boxBool === box && box !== 'true' && was.textOfPoste === 'Adjointe';
+      return { pass, notes: JSON.stringify({ was, box }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_bar_shows_the_date_panel_on_a_date_column_and_sets_the_writing_in_one_undo_step',
+    description: 'La pastille d\'une colonne Date a, dans sa barre, J / M / A, la liste des formats et « Lettres » d\'une bulle Date (le départ est l\'écriture de Grist) ; un choix se range dans la pastille, ' +
+      'la pastille écrit la date ainsi dans l\'éditeur comme dans la Lecture, un seul Annuler le défait, le dernier de J / M / A ne s\'éteint pas.',
+    run: async (h) => {
+      await seedFormats();
+      await h.resetEditor();
+      const ed = EditorCore.getEditor();
+      Editor.setHTML('<p>Né le ' + chipFmt(2, 'Naissance', '01/01/1991') + '.</p>');
+      await h.sleep(400);
+      const before = Editor.getHTML();
+      await selectChip(h, 0);
+      const opened = { date: panelShown('date'), number: panelShown('number'), bool: panelShown('bool'), buttons: visibleButtons(), select: formatBar().querySelector('[data-role="date-preset"]').value,
+        parts: ['day', 'month', 'year'].map(p => formatBar().querySelector('button[data-action="date-part:' + p + '"]').classList.contains('is-active')) };
+      setField('date-preset', 'd_mmmm_yyyy');
+      await h.sleep(400);
+      const afterLong = { format: formatOfNode(ed), chip: document.querySelector('.tiptap .mention-chip').textContent, reader: await readerText(Editor.getHTML().replace(/^<p>/, '').replace(/<\/p>$/, '')) };
+      await h.sleep(700);
+      press('date-part:day');
+      await h.sleep(400);
+      const afterDay = { format: formatOfNode(ed), chip: document.querySelector('.tiptap .mention-chip').textContent };
+      await h.sleep(700);
+      press('date-part:month');
+      press('date-part:year');
+      await h.sleep(300);
+      const lastKept = formatOfNode(ed);
+      for (let step = 0; step < 3; step++) { ed.commands.undo(); await h.sleep(200); }
+      const undone = { format: formatOfNode(ed), html: Editor.getHTML() };
+      await h.resetEditor();
+      const pass = opened.date && !opened.number && !opened.bool && JSON.stringify(opened.parts) === '[true,true,true]' && opened.select === 'dmy_slash_full'
+        && JSON.stringify(opened.buttons.filter(a => /^date-/.test(a))) === JSON.stringify(['date-part:day', 'date-part:month', 'date-part:year', 'date-words']) && opened.buttons.indexOf('grist-format') !== -1
+        && JSON.stringify(afterLong.format) === JSON.stringify({ type: 'date', preset: 'd_mmmm_yyyy' }) && afterLong.chip === '1er janvier 1991' && afterLong.reader === 'Né le 1er janvier 1991.'
+        && JSON.stringify(afterDay.format) === JSON.stringify({ type: 'date', preset: 'd_mmmm_yyyy', day: false }) && afterDay.chip === 'janvier 1991'
+        && JSON.stringify(lastKept) === JSON.stringify({ type: 'date', preset: 'd_mmmm_yyyy', day: false, month: false })
+        && undone.format === null && undone.html === before;
+      return { pass, notes: JSON.stringify({ opened, afterLong, afterDay, lastKept, undone }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_bar_shows_the_number_panel_on_a_number_column_and_the_yes_no_panel_on_a_yes_no_column',
+    description: 'Une colonne Numérique a, dans la barre de sa pastille, FR / US / aucun, les décimales, la devise, %, « Lettres » et le zéro ; une colonne Oui / Non ses trois cases et « vrai / faux » ; ' +
+      'chaque choix se range dans la pastille et s\'écrit dans l\'éditeur et la Lecture.',
+    run: async (h) => {
+      await seedFormats();
+      await h.resetEditor();
+      const ed = EditorCore.getEditor();
+      Editor.setHTML('<p>' + chipFmt(2, 'Montant', '1234.5') + ' ' + chipFmt(2, 'Actif', 'true') + '</p>');
+      await h.sleep(400);
+      await selectChip(h, 0);
+      const number = { number: panelShown('number'), date: panelShown('date'), bool: panelShown('bool'), grist: panelShown('grist') };
+      setField('num-decimals', '2');
+      await h.sleep(400);
+      const decimals = { format: formatOfNode(ed), chip: plain(document.querySelector('.tiptap .mention-chip').textContent) };
+      await h.sleep(700);
+      setField('num-currency', '€');
+      await h.sleep(400);
+      const currency = { format: formatOfNode(ed), chip: plain(document.querySelector('.tiptap .mention-chip').textContent) };
+      await selectChip(h, 1);
+      const yesNo = { bool: panelShown('bool'), number: panelShown('number'), buttons: visibleButtons().filter(a => /^bool-style:/.test(a)) };
+      press('bool-style:accentStrike');
+      await h.sleep(400);
+      const nodes = mentionNodes(ed);
+      const box = {
+        format: nodes[1].node.attrs.format, chip: document.querySelectorAll('.tiptap .mention-chip')[1].textContent,
+        active: formatBar().querySelector('button[data-action="bool-style:accentStrike"]').classList.contains('is-active'),
+      };
+      const expectedBox = VariableFormat.formatBool(true, { type: 'bool', style: 'accentStrike' });
+      await h.resetEditor();
+      const pass = number.number && !number.date && !number.bool && number.grist
+        && JSON.stringify(decimals.format) === JSON.stringify({ type: 'number', decimals: 2 }) && decimals.chip === '1 234,50'
+        && JSON.stringify(currency.format) === JSON.stringify({ type: 'number', decimals: 2, currency: '€' }) && /^1 234,50\s?€$/.test(currency.chip)
+        && yesNo.bool && !yesNo.number && yesNo.buttons.length === 4 && JSON.stringify(box.format) === JSON.stringify({ type: 'bool', style: 'accentStrike' }) && box.chip === expectedBox && box.active;
+      return { pass, notes: JSON.stringify({ number, decimals, currency, yesNo, box, expectedBox }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_every_format_button_is_one_undo_step',
+    description: 'Chaque bouton du réglage d\'une pastille (J / M / A, « Lettres », FR / US / aucun, %, « Lettres » d\'un nombre, le zéro, les cases, « vrai / faux », « Comme dans Grist ») change son réglage en UN pas ' +
+      'd\'historique : un seul Annuler le rend (le registre d\'Annuler, dev-tests/undo-ledger.json, renvoie ces boutons à ce cas).',
+    run: async (h) => {
+      await seedFormats();
+      await h.resetEditor();
+      const ed = EditorCore.getEditor();
+      const results = {};
+      // Un geste, puis un seul Annuler : le réglage d'avant revient. `before` : la pastille a déjà ce réglage (le point de départ de « vrai / faux »).
+      async function oneUndo(index, action) {
+        await selectChip(h, index);
+        const before = JSON.stringify(formatOfNode(ed, index) || null);
+        press(action);
+        await h.sleep(700);
+        const after = JSON.stringify(formatOfNode(ed, index) || null);
+        ed.commands.undo();
+        await h.sleep(250);
+        const back = JSON.stringify(formatOfNode(ed, index) || null);
+        results[action] = { changed: after !== before, back: back === before };
+        await h.sleep(700);
+      }
+      Editor.setHTML('<p>' + chipFmt(2, 'Naissance', '01/01/1991') + '</p>');
+      await h.sleep(400);
+      for (const action of ['date-part:day', 'date-words', 'grist-format']) await oneUndo(0, action);
+      Editor.setHTML('<p>' + chipFmt(2, 'Montant', '1234.5') + '</p>');
+      await h.sleep(400);
+      for (const action of ['num-style:us', 'num-style:none', 'num-percent', 'num-words', 'num-zero']) await oneUndo(0, action);
+      Editor.setHTML('<p>' + chipFmt(2, 'Actif', 'true') + '</p>');
+      await h.sleep(400);
+      for (const action of ['bool-style:classic', 'bool-style:accentPlain']) await oneUndo(0, action);
+      Editor.setHTML('<p>' + chipFmt(2, 'Actif', 'x', { type: 'bool', style: 'classic' }) + '</p>');
+      await h.sleep(400);
+      await oneUndo(0, 'bool-style:text');
+      await h.resetEditor();
+      const bad = Object.keys(results).filter(action => !results[action].changed || !results[action].back);
+      return { pass: bad.length === 0 && Object.keys(results).length === 11, notes: JSON.stringify({ bad, results }) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_bar_has_no_format_panel_on_a_text_column_and_keeps_its_two_buttons',
+    description: 'Une pastille qui cite un texte n\'a pas de réglage de date ni de nombre : sa barre garde ses deux boutons (« Autres colonnes » et « Mise en forme conditionnelle »), rien d\'autre n\'est visible.',
+    run: async (h) => {
+      await seedFormats();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipFmt(2, 'Poste', 'Adjointe') + '</p>');
+      await h.sleep(300);
+      await selectChip(h, 0);
+      const out = { buttons: visibleButtons(), date: panelShown('date'), number: panelShown('number'), bool: panelShown('bool'), grist: panelShown('grist') };
+      await h.resetEditor();
+      const pass = JSON.stringify(out.buttons) === JSON.stringify(['mention-linked', 'mention-style']) && !out.date && !out.number && !out.bool && !out.grist;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_replace_keeps_the_format_for_a_column_of_the_same_kind_and_drops_it_for_another',
+    description: '« Remplacer » : le réglage de date ne suit que vers une autre colonne de date (une date reste une date) ; vers un texte il est retiré, la pastille écrit le texte tel quel.',
+    run: async (h) => {
+      await seedFormats();
+      stub().setVariables(PEOPLE, { Email: 'Text', NomComplet: 'Text', Poste: 'Text', Montant: 'Numeric', Naissance: 'Date', Actif: 'Bool', Embauche: 'Date' });
+      stub().setRows(PEOPLE, FORMATS.map(r => Object.assign({}, r, { Embauche: 1000000000 + r.id * 86400 })));
+      await GristAPI.refreshSchema();
+      Mention.reset();
+      await sleep(60);
+      await h.resetEditor();
+      const ed = EditorCore.getEditor();
+      const iso = { type: 'date', preset: 'iso' };
+      const results = {};
+      try {
+        for (const target of ['Embauche', 'Email']) {
+          Editor.setHTML('<p>' + chipFmt(2, 'Naissance', '1991-01-01', iso) + '</p>');
+          await h.sleep(400);
+          const modal = await openWindow(h);
+          tick(modal, [target]);
+          replaceButton(modal).click();
+          await h.sleep(300);
+          const attrs = mentionNodes(ed)[0].node.attrs;
+          results[target] = { column: attrs.column, format: attrs.format };
+          await h.resetEditor();
+        }
+      } finally { closeWindow(); await h.resetEditor(); }
+      const pass = results.Embauche.column === 'Embauche' && JSON.stringify(results.Embauche.format) === JSON.stringify(iso) && results.Email.column === 'Email' && results.Email.format === null;
+      return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  cases.push({
+    id: 'mention_format_panels_read_in_an_english_page',
+    lang: 'en',
+    description: 'Dans une page qui démarre en anglais, la barre d\'une pastille Date dit « Date format », « Words » et D M Y : les textes sont ceux de la barre d\'une bulle.',
+    run: async (h) => {
+      await seedFormats();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipFmt(2, 'Naissance', '01/01/1991') + '</p>');
+      await h.sleep(300);
+      await selectChip(h, 0);
+      const bar = formatBar();
+      const seen = { lang: I18n.getLang(), preset: bar.querySelector('[data-role="date-preset"]').title, words: bar.querySelector('button[data-action="date-words"]').textContent,
+        letters: Array.from(bar.querySelectorAll('button[data-action^="date-part:"]')).map(b => b.textContent).join(' '), grist: bar.querySelector('button[data-action="grist-format"]').title.slice(0, 12) };
+      await h.resetEditor();
+      const pass = seen.lang === 'en' && seen.preset === 'Date format' && seen.words === 'Words' && seen.letters === 'D M Y';
+      return { pass, notes: JSON.stringify(seen) };
     },
   });
 
