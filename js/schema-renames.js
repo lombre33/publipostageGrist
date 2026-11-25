@@ -259,7 +259,7 @@ const SchemaRenames = (function () {
           const order = renamedIn(tRow, jump.order);
           const group = jump.group ? renamedIn(tRow, jump.group) : '';
           if (order === null || group === null) return null;
-          names.push(GristAPI.stepToken(jump.offset, order, group));
+          names.push(GristAPI.stepToken(jump.offset, order, group, jump.edge));
           continue;
         }
         const cRow = (o.colRow[tRow] || {})[hops[i]];

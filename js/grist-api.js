@@ -875,26 +875,30 @@ const GristAPI = (function () {
   }
   // Un maillon « ligne voisine » dans le chemin d'une variable : « +1(Date;Instance) » est la ligne qui suit celle-ci quand les lignes de la table sont rangées
   // selon la colonne Date, parmi celles qui ont la même valeur dans Instance (« ;Instance » est facultatif : sans lui, toute la table) ; « -2(Date) » la deuxième
-  // d'avant. Les identifiants de colonne de Grist ne contiennent ni point, ni parenthèse, ni point-virgule, ni espace : le maillon passe tel quel là où un chemin
-  // se coupe aux points (resolveColumnPath, Variables.resolveRows) et ne se confond jamais avec une colonne. { offset, order, group } (group : '' sans groupe),
-  // ou null pour tout autre maillon - y compris un décalage nul, qui ne désigne aucune autre ligne.
-  const STEP_HOP = /^([+-])(\d{1,3})\(([^;().\s]+)(?:;([^;().\s]*))?\)$/;
+  // d'avant ; « first(Date;Instance) » et « last(Date;Instance) » la PREMIÈRE et la DERNIÈRE de cette série (la ligne elle-même quand elle l'est). Les identifiants de
+  // colonne de Grist ne contiennent ni point, ni parenthèse, ni point-virgule, ni espace : le maillon passe tel quel là où un chemin se coupe aux points
+  // (resolveColumnPath, Variables.resolveRows) et ne se confond jamais avec une colonne. { offset, order, group } (group : '' sans groupe) ; { offset: 0, edge:
+  // 'first' | 'last', order, group } pour le début ou la fin de la série ; null pour tout autre maillon - y compris un décalage nul, qui ne désigne aucune autre ligne.
+  const STEP_HOP = /^(?:([+-])(\d{1,3})|(first|last))\(([^;().\s]+)(?:;([^;().\s]*))?\)$/;
   function stepOf(hop) {
     const found = STEP_HOP.exec(String(hop));
-    const offset = found ? Number(found[2]) * (found[1] === '-' ? -1 : 1) : 0;
-    return offset ? { offset, order: found[3], group: found[4] || '' } : null;
+    if (!found) return null;
+    if (found[3]) return { offset: 0, edge: found[3], order: found[4], group: found[5] || '' };
+    const offset = Number(found[2]) * (found[1] === '-' ? -1 : 1);
+    return offset ? { offset, order: found[4], group: found[5] || '' } : null;
   }
   // Le maillon « ligne voisine » qui commence à la position `from` d'un texte (« +1(Date;Instance) » dans « #Séances.+1(Date;Instance).Titre ») : son écriture, ou
   // null quand il n'y en a pas. Ne dit pas si ses colonnes existent (tableAtEndOf).
-  const STEP_IN_TEXT = /[+-]\d{1,3}\([^;().\s]+(?:;[^;().\s]*)?\)/y;
+  const STEP_IN_TEXT = /(?:[+-]\d{1,3}|first|last)\([^;().\s]+(?:;[^;().\s]*)?\)/y;
   function stepAt(text, from) {
     STEP_IN_TEXT.lastIndex = from;
     const found = STEP_IN_TEXT.exec(text);
     return found && stepOf(found[0]) ? found[0] : null;
   }
-  // Le maillon qui désigne la ligne `offset` rangs plus loin (négatif : avant), rangée selon `order`, dans le groupe `group` ('' : toute la table).
-  function stepToken(offset, order, group) {
-    return (offset < 0 ? '-' : '+') + Math.abs(offset) + '(' + order + (group ? ';' + group : '') + ')';
+  // Le maillon qui désigne la ligne `offset` rangs plus loin (négatif : avant), rangée selon `order`, dans le groupe `group` ('' : toute la table), ou, avec `edge`
+  // ('first' | 'last'), la première ou la dernière de la série (`offset` ne compte alors pas).
+  function stepToken(offset, order, group, edge) {
+    return (edge === 'first' || edge === 'last' ? edge : (offset < 0 ? '-' : '+') + Math.abs(offset)) + '(' + order + (group ? ';' + group : '') + ')';
   }
   // Les colonnes d'un maillon existent-elles dans `table` ?
   function stepColumnsExist(table, jump) {

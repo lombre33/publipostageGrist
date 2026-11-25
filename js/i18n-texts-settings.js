@@ -660,6 +660,9 @@ const I18nTextsSettings = {
   // Le bouton de la barre d'une pastille sélectionnée : la fenêtre « Autres colonnes de « {table} » » des bulles (varLinked.*), ouverte sur la ligne de la fiche.
   'mention.toolbar.linked': { fr: 'Autres colonnes de la même fiche, ou fiche suivante ou précédente', en: 'Other columns of the same record, or the next or previous record' },
   'mention.titleStep': { fr: 'La fiche {which} (rang {rank}) de la table « {table} », rangée selon « {order} »', en: 'The {which} record (distance {rank}) in table “{table}”, ordered by “{order}”' },
+  'mention.titleEdge': { fr: 'La {which} de la série de la table « {table} », rangée selon « {order} »', en: 'The {which} of the series in table “{table}”, ordered by “{order}”' },
+  'mention.signFirst': { fr: 'début', en: 'first' },
+  'mention.signLast': { fr: 'fin', en: 'last' },
   'mention.alone': { fr: 'Aucune fiche à ce rang dans cette série : la pastille n’écrit rien.', en: 'No record at this distance in this series: the chip writes nothing.' },
 
   // --- Réglages > Raccourcis : touches du clavier (js/shortcuts.js, js/shortcuts-panel.js) ---

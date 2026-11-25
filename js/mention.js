@@ -271,10 +271,11 @@ const Mention = (function () {
   // texte de la pastille (régénéré à chaque rendu depuis l'attribut `label` du nœud, jamais stocké en double). Le « @ » n'est pas dans le texte : le CSS le
   // dessine (css/mention.css), le nom reste donc seul dans le presse-papiers, les lecteurs d'écran et les enregistrements.
   // `data-cond-style` : la mise en forme selon la ligne de la page (js/conditional-style.js), écrite seulement quand elle est posée - une pastille sans réglage garde le HTML d'avant.
-  // `data-mention-step` : le maillon « ligne voisine » de la pastille, écrit seulement quand il est posé ; `data-mention-sign` en est le signe lisible (« +1 », « −2 »), que le CSS
+  // `data-mention-step` : le maillon « ligne voisine » de la pastille, écrit seulement quand il est posé ; `data-mention-sign` en est le signe lisible (« +1 », « −2 », « début », « fin »), que le CSS
   // dessine après le nom, et que personne ne relit (il se déduit du maillon).
   const signOf = step => {
     const jump = GristAPI.stepOf(step);
+    if (jump && jump.edge) return I18n.t(jump.edge === 'first' ? 'mention.signFirst' : 'mention.signLast');
     return jump ? (jump.offset < 0 ? '\u2212' : '+') + Math.abs(jump.offset) : '';
   };
   const refAttributes = attrs => Object.assign({ 'data-mention-table': attrs.table, 'data-mention-row': attrs.row, 'data-mention-column': attrs.column },
@@ -418,6 +419,7 @@ const Mention = (function () {
   // L'info-bulle d'une pastille qui cite la fiche voisine : le sens, le rang, la table et la colonne d'ordre.
   function stepTitle(ref) {
     const jump = GristAPI.stepOf(ref.step);
+    if (jump.edge) return I18n.t('mention.titleEdge', { which: I18n.t(jump.edge === 'first' ? 'varLinked.edgeFirst' : 'varLinked.edgeLast'), table: ref.table, order: jump.order });
     return I18n.t('mention.titleStep', { which: I18n.t(jump.offset < 0 ? 'varLinked.stepBefore' : 'varLinked.stepAfter'), rank: Math.abs(jump.offset), table: ref.table, order: jump.order });
   }
   // L'info-bulle d'une pastille : le message de ce qui ne va plus, sinon la table de la fiche.

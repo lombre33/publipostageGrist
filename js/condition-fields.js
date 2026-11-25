@@ -95,7 +95,7 @@ const ConditionFields = (function () {
     return chosen || { base: pageTable, hops: [], column: '' };
   }
 
-  async function browseColumn(select, search, context) {
+  async function browseColumn(select, search, context, setOperator) {
     // Ce que fait le bouton (ou Ctrl+Entrée, ou un clic sur la bulle du choix) d'une liste de colonnes qui a `attributesWindow` : la fenêtre « Autres attributs »
     // s'ouvre pour choisir UNE colonne de la page ou, de Référence en Référence, d'une table qu'elle désigne, avec la valeur de chacune sur la ligne sélectionnée.
     // La colonne choisie est posée comme la liste l'aurait posée : sa ligne si la liste n'en a pas (un chemin, addSavedPathOption), `select.value`, puis le
@@ -105,7 +105,7 @@ const ConditionFields = (function () {
     if (!pageTable) return;
     const start = windowStart(context, pageTable);
     let picked = null;
-    try { picked = await VariableLinkedAttrs.pickColumn({ base: start.base, hops: start.hops, column: start.column, query: context.query }); }
+    try { picked = await VariableLinkedAttrs.pickColumn({ base: start.base, hops: start.hops, column: start.column, query: context.query, canTest: !!setOperator }); }
     catch (e) { console.error('[ConditionFields] fenêtre des attributs indisponible', e); }
     if (!select.isConnected) return; // la règle a été redessinée ou retirée pendant le choix
     const key = picked ? [picked.base].concat(picked.hops, picked.column).join('.') : '';
@@ -120,6 +120,8 @@ const ConditionFields = (function () {
     } else {
       search.sync();
     }
+    // « Y a-t-il une suivante ? » (le volet de la fenêtre) choisit aussi l'opérateur de la règle, après que la colonne a changé la liste des opérateurs.
+    if (picked && picked.operator && setOperator) setOperator(picked.operator);
     search.focus({ preventScroll: true });
   }
 
@@ -288,7 +290,7 @@ const ConditionFields = (function () {
       const windowed = !!opts.attributesWindow && !opts.table && typeof VariableLinkedAttrs !== 'undefined';
       search = SearchSelect.attachColumns(select, {
         inline: true, hintInTrigger: false, expand: opts.table ? undefined : item => columnsBelow(item, GristAPI.getCurrentTableId()),
-        browse: windowed ? context => browseColumn(select, search, context) : undefined,
+        browse: windowed ? context => browseColumn(select, search, context, opts.setOperator) : undefined,
         pill: windowed ? columnPill : undefined,
       });
     } catch (e) { console.warn('[ConditionFields] recherche de colonne indisponible, liste native conservée', e); }
@@ -524,7 +526,15 @@ const ConditionFields = (function () {
       if (options && options.onColumnResolved) options.onColumnResolved(linkTable || table, colId, type);
     }
 
-    const columnField = buildColumnField(rule, renderValue, options);
+    // L'opérateur que la fenêtre des attributs peut poser avec la colonne (« Y a-t-il une suivante ? » : « non vide ») ; seulement sur le champ de la colonne, pas sur celui de
+    // l'autre colonne d'une comparaison.
+    const setOperator = operator => {
+      const available = Array.from(operatorSelect.options).some(option => option.value === operator && !option.disabled);
+      if (!available || operatorSelect.value === operator) return;
+      operatorSelect.value = operator;
+      operatorSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const columnField = buildColumnField(rule, renderValue, Object.assign({}, options, { setOperator }));
 
     ConditionRules.OPERATORS.forEach(op => operatorSelect.appendChild(Dom.option(op, op)));
     operatorSelect.value = rule.operator || '=';

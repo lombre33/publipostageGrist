@@ -260,6 +260,35 @@ async function runMode(mode) {
     await page.mouse.click(5, 5);
     await page.waitForTimeout(200);
     await shot(page, `${mode.lang}-${mode.theme}-7-pastille-apres`);
+
+    // 5. Le choix de colonne d'une règle de condition : « première » / « dernière » grisent le rang, « Y a-t-il une suivante ? » reçoit le vrai clic et rend la colonne d'ordre
+    // de la voisine avec « non vide » ; la fenêtre entière reste dans le panneau avec ses deux boutons côte à côte.
+    await page.evaluate(() => { window.__picked = undefined; VariableLinkedAttrs.pickColumn({ base: 'VsInstances', hops: [], column: '', canTest: true }).then(result => { window.__picked = result || null; }); });
+    await page.waitForTimeout(400);
+    const pickBox = await centerOf(page, '#var-linked-modal .var-modal-content');
+    check(`${label} : condition, la fenêtre de choix de colonne tient dans le panneau (${WIDTH}x${HEIGHT})`, !!pickBox && pickBox.left >= 0 && pickBox.right <= WIDTH && pickBox.top >= 0 && pickBox.bottom <= HEIGHT, pickBox);
+    const pickSummary = await centerOf(page, '.var-linked-step > summary');
+    await page.mouse.click(pickSummary.x, pickSummary.y);
+    await page.waitForTimeout(250);
+    const existsAt = await centerOf(page, '.var-linked-step-exists');
+    const goAt = await centerOf(page, '.var-linked-step-go');
+    check(`${label} : condition, « Y a-t-il une suivante ? » est dans la fenêtre, atteignable à la souris, et ne recouvre pas « Aller à cette ligne »`,
+      !!existsAt && await reachable(page, '.var-linked-step-exists') && existsAt.right <= pickBox.right + 1 && existsAt.left >= pickBox.left - 1 && (existsAt.left >= goAt.right - 1 || existsAt.top >= goAt.bottom - 1 || existsAt.bottom <= goAt.top + 1), { existsAt, goAt });
+    // La colonne d'ordre réglée avant (pour cette table) est reprise : le bouton peut déjà être dégrisé.
+    const grayBefore = await page.evaluate(() => document.querySelector('.var-linked-step-exists').disabled);
+    await page.selectOption('.var-linked-step-order', 'Date');
+    await page.selectOption('.var-linked-step-group', 'Cycle');
+    await page.selectOption('.var-linked-step-direction', 'last');
+    const edge = await page.evaluate(() => ({ rank: document.querySelector('.var-linked-step-rank').disabled, exists: document.querySelector('.var-linked-step-exists').disabled }));
+    check(`${label} : condition, « dernière de la série » grise le rang et « Y a-t-il une suivante ? »`, edge.rank === true && edge.exists === true, { grayBefore, edge });
+    await shot(page, `${mode.lang}-${mode.theme}-8-condition-derniere`);
+    await page.selectOption('.var-linked-step-direction', 'after');
+    const existsReady = await centerOf(page, '.var-linked-step-exists');
+    await shot(page, `${mode.lang}-${mode.theme}-9-condition-suivante`);
+    await page.mouse.click(existsReady.x, existsReady.y);
+    await page.waitForTimeout(400);
+    const picked = await page.evaluate(() => window.__picked);
+    check(`${label} : condition, le clic rend la colonne d'ordre de la ligne suivante avec « non vide »`, !!picked && picked.base === 'VsInstances' && JSON.stringify(picked.hops) === JSON.stringify(['+1(Date;Cycle)']) && picked.column === 'Date' && picked.operator === 'non vide', picked);
   } finally {
     await context.close();
   }

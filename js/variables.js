@@ -1057,7 +1057,8 @@ const Variables = (function () {
     // la table elle-même.
     function stepNeighbor(table, rows, id, jump) {
       const place = seriesOf(table, rows, jump).get(id);
-      return (place && place.list[place.at + jump.offset]) || null;
+      if (!place) return null;
+      return (jump.edge === 'first' ? place.list[0] : jump.edge === 'last' ? place.list[place.list.length - 1] : place.list[place.at + jump.offset]) || null;
     }
     // Les lignes de la table où mène le chemin `hops` (suite de colonnes Référence ou liste de références) à partir de la ligne courante de `varTable` :
     // { table, rows, multi } (une ligne, ou null si le chemin s'arrête sur une référence vide, par ligne de départ ; toutes celles des listes quand le chemin en

@@ -141,17 +141,20 @@ const VariableLinkedAttrs = (function () {
     const stepOrder = el('select', 'var-linked-step-order');
     const stepGroup = el('select', 'var-linked-step-group');
     const stepGo = button('var-linked-step-go');
+    const stepExists = button('var-linked-step-exists');
+    stepExists.hidden = true; // seulement pour le choix d'une colonne de règle de condition (cf. pickColumn)
     const stepHint = el('p', 'var-linked-step-hint');
     const labelled = (text, control) => { const wrap = el('label', 'var-linked-step-field'); wrap.append(el('span', null, text), control); return wrap; };
     stepTitle.textContent = I18n.t('varLinked.stepTitle');
     stepHint.textContent = I18n.t('varLinked.stepHint');
-    [['after', 'varLinked.stepAfter'], ['before', 'varLinked.stepBefore']].forEach(([value, key]) => { const option = el('option', null, I18n.t(key)); option.value = value; stepDirection.appendChild(option); });
+    [['after', 'varLinked.stepAfter'], ['before', 'varLinked.stepBefore'], ['first', 'varLinked.stepFirst'], ['last', 'varLinked.stepLast']].forEach(([value, key]) => { const option = el('option', null, I18n.t(key)); option.value = value; stepDirection.appendChild(option); });
     stepRank.value = '1';
     stepRank.title = I18n.t('varLinked.stepRankTitle');
     stepGo.textContent = I18n.t('varLinked.stepGo');
+    stepExists.title = I18n.t('varLinked.stepExistsTitle');
     stepWhich.append(labelled(I18n.t('varLinked.stepWhich'), stepDirection), labelled(I18n.t('varLinked.stepRank'), stepRank), labelled(I18n.t('varLinked.stepOrder'), stepOrder));
     const stepWho = el('div', 'var-linked-step-line');
-    stepWho.append(labelled(I18n.t('varLinked.stepGroup'), stepGroup), stepGo);
+    stepWho.append(labelled(I18n.t('varLinked.stepGroup'), stepGroup), stepGo, stepExists);
     stepBox.append(stepTitle, stepWhich, stepWho, stepHint);
     // Proposée seulement si la variable d'origine a une condition (cf. renderInheritOption), cochée à chaque ouverture.
     const inheritRow = el('label', 'var-linked-inherit');
@@ -168,12 +171,14 @@ const VariableLinkedAttrs = (function () {
     win.body.append(subtitle, inheritRow, path, stepBox, filter, list, note);
     refs = {
       title: win.title, subtitle, path, filter, list, note, inheritRow, inheritBox, inheritText, inheritSummary, cancelBtn, replaceBtn, insertBtn,
-      stepBox, stepDirection, stepRank, stepOrder, stepGroup, stepGo, stepHint,
+      stepBox, stepDirection, stepRank, stepOrder, stepGroup, stepGo, stepExists, stepHint,
     };
 
     filter.addEventListener('input', applyFilter);
     stepGo.addEventListener('click', goToStep);
+    stepExists.addEventListener('click', pickExists);
     stepOrder.addEventListener('change', syncStepButton);
+    stepDirection.addEventListener('change', syncStepRank);
     stepRank.addEventListener('keydown', event => { if (event.key === 'Enter' && !stepGo.disabled) { event.preventDefault(); goToStep(); } });
     list.addEventListener('change', onPickChange);
     list.addEventListener('click', event => {
@@ -420,6 +425,7 @@ const VariableLinkedAttrs = (function () {
     const { node, base, hops, refColumn } = state;
     if (state.mention) {
       const jump = GristAPI.stepOf(mentionStep());
+      if (jump && jump.edge) return I18n.t('varLinked.subtitleMentionEdge', { which: I18n.t(jump.edge === 'first' ? 'varLinked.edgeFirst' : 'varLinked.edgeLast'), id: state.mention.row, table: base, order: jump.order });
       if (jump) return I18n.t('varLinked.subtitleMentionStep', { which: I18n.t(jump.offset < 0 ? 'varLinked.stepBefore' : 'varLinked.stepAfter'), rank: Math.abs(jump.offset), id: state.mention.row, table: base, order: jump.order });
       return I18n.t('varLinked.subtitleMention', { badge: Mention.chipText(node.attrs), id: state.mention.row, table: base });
     }
@@ -446,6 +452,19 @@ const VariableLinkedAttrs = (function () {
   // « Aller à cette ligne » ne se propose que quand la colonne d'ordre est choisie.
   function syncStepButton() {
     refs.stepGo.disabled = !refs.stepOrder.value;
+    syncStepExists();
+  }
+  // Le rang ne dit rien pour « première » ni « dernière » de la série : le champ se grise.
+  function syncStepRank() {
+    refs.stepRank.disabled = refs.stepDirection.value === 'first' || refs.stepDirection.value === 'last';
+    syncStepExists();
+  }
+  // « Y a-t-il une suivante ? » (ou une précédente) : pour une suivante ou une précédente seulement, et une fois la colonne d'ordre choisie.
+  function syncStepExists() {
+    const { stepExists, stepDirection, stepOrder } = refs;
+    const edge = stepDirection.value === 'first' || stepDirection.value === 'last';
+    stepExists.textContent = I18n.t(stepDirection.value === 'before' ? 'varLinked.stepExistsBefore' : 'varLinked.stepExistsAfter');
+    stepExists.disabled = edge || !stepOrder.value;
   }
   // Le volet « Ligne suivante ou précédente » du niveau affiché : les colonnes de sa table pour l'ordre et le groupe (une pièce jointe ne range rien). Sur une bulle, pour le choix
   // d'une colonne (une règle de condition : le chemin choisi porte le maillon) et sur une pastille « @ » (elle cite alors la fiche voisine de la sienne).
@@ -460,13 +479,25 @@ const VariableLinkedAttrs = (function () {
     fillSelect(stepGroup, [{ value: '', text: I18n.t('varLinked.stepGroupNone') }].concat(columnOptions), columns.indexOf(last.group) !== -1 ? last.group : '');
     syncStepButton();
   }
+  // « Y a-t-il une suivante ? » : le choix d'une colonne se fait ici d'un coup, la colonne d'ordre de la ligne voisine avec « non vide » - la condition est vraie quand
+  // cette ligne existe (une ligne sans valeur d'ordre est hors série : la colonne d'ordre de la voisine n'est vide que si la voisine n'existe pas).
+  function pickExists() {
+    if (!state || !state.pick || !refs.stepOrder.value || refs.stepExists.disabled) return;
+    const { stepDirection, stepRank, stepOrder, stepGroup } = refs;
+    const rank = Math.max(1, Math.min(99, Math.round(Number(stepRank.value)) || 1));
+    lastSeries[levelTable()] = { order: stepOrder.value, group: stepGroup.value };
+    const token = GristAPI.stepToken(stepDirection.value === 'before' ? -rank : rank, stepOrder.value, stepGroup.value);
+    state.pick.result = { base: state.base, hops: state.hops.concat(token), column: stepOrder.value, operator: 'non vide' };
+    close();
+  }
   // Le maillon réglé (sens, rang, colonne d'ordre, groupe) rejoint le chemin : le niveau d'après montre les colonnes de la ligne voisine, avec leur valeur.
   function goToStep() {
     if (!state || !refs.stepOrder.value) return;
     const { stepDirection, stepRank, stepOrder, stepGroup, stepBox } = refs;
     const rank = Math.max(1, Math.min(99, Math.round(Number(stepRank.value)) || 1));
     lastSeries[levelTable()] = { order: stepOrder.value, group: stepGroup.value };
-    const token = GristAPI.stepToken(stepDirection.value === 'before' ? -rank : rank, stepOrder.value, stepGroup.value);
+    const edge = stepDirection.value === 'first' || stepDirection.value === 'last' ? stepDirection.value : '';
+    const token = GristAPI.stepToken(stepDirection.value === 'before' ? -rank : rank, stepOrder.value, stepGroup.value, edge);
     stepBox.open = false;
     // Une pastille cite UNE fiche voisine de la sienne : le maillon remplace celui d'avant, il ne s'y ajoute pas.
     goTo(state.mention ? [token] : state.hops.concat(token));
@@ -672,12 +703,15 @@ const VariableLinkedAttrs = (function () {
     // Sens et rang repartent de « suivante, 1 » ; le volet s'ouvre d'emblée pour une colonne ordinaire de la page, où il est la raison d'ouvrir la fenêtre.
     refs.stepDirection.value = 'after';
     refs.stepRank.value = '1';
+    refs.stepExists.hidden = true;
+    syncStepRank();
     refs.stepBox.open = !!from.sameRow;
     // Une pastille qui cite déjà une fiche voisine : le volet reprend son sens, son rang et ses colonnes.
     const own = mention && node.attrs.step ? GristAPI.stepOf(node.attrs.step) : null;
     if (own) {
-      refs.stepDirection.value = own.offset < 0 ? 'before' : 'after';
-      refs.stepRank.value = String(Math.abs(own.offset));
+      refs.stepDirection.value = own.edge || (own.offset < 0 ? 'before' : 'after');
+      refs.stepRank.value = String(Math.abs(own.offset) || 1);
+      syncStepRank();
       lastSeries[from.base] = { order: own.order, group: own.group };
     }
     const { filter, cancelBtn, replaceBtn, subtitle, inheritRow } = refs;
@@ -731,8 +765,9 @@ const VariableLinkedAttrs = (function () {
   // Choisir UNE colonne d'une table ou, de Référence en Référence, d'une table qu'elle désigne : ce que fait le champ d'une colonne de règle de condition
   // (js/condition-fields.js) quand on y ouvre la fenêtre des attributs. `request` : { base (la table d'où partent les chemins : celle de la page par défaut, ou la
   // table liée de la colonne déjà choisie), hops (les colonnes Référence déjà suivies depuis elle : le niveau où la fenêtre s'ouvre), column (la colonne déjà
-  // choisie à ce niveau, sélectionnée d'avance), query (ce qui était tapé dans la liste, repris dans le filtre) }. Rend { base, hops, column } - la table de départ,
-  // les Références suivies puis la colonne choisie - ou null quand la fenêtre se ferme sans choix. Une table inconnue (colonne disparue) ne dit rien : la fenêtre
+  // choisie à ce niveau, sélectionnée d'avance), query (ce qui était tapé dans la liste, repris dans le filtre), canTest (la règle sait prendre un opérateur : le volet
+  // « Ligne suivante ou précédente » propose alors « Y a-t-il une suivante ? ») }. Rend { base, hops, column } - la table de départ, les Références suivies puis la colonne
+  // choisie, plus `operator: 'non vide'` quand c'est « Y a-t-il une suivante ? » qui a répondu - ou null quand la fenêtre se ferme sans choix. Une table inconnue (colonne disparue) ne dit rien : la fenêtre
   // s'ouvre sur la table de la page. Rien n'est posé ici : ni bulle, ni lien de table ; celui qui a demandé pose le choix.
   function pickColumn(request) {
     const page = GristAPI.getCurrentTableId();
@@ -748,6 +783,10 @@ const VariableLinkedAttrs = (function () {
         editor: null, pos: null, node: null, base, refColumn: null, minHops: 0, hops, picks: column ? [{ hops: hops.slice(), col: column }] : [],
         pick: { resolve, result: null }, mention: null, noteText: '', noteBare: false,
       };
+      refs.stepDirection.value = 'after';
+      refs.stepRank.value = '1';
+      refs.stepExists.hidden = !(request && request.canTest);
+      syncStepRank();
       const { filter, cancelBtn, replaceBtn, subtitle, inheritRow } = refs;
       filter.placeholder = I18n.t('varLinked.filter');
       filter.setAttribute('aria-label', I18n.t('varLinked.filter'));

@@ -474,6 +474,61 @@
   });
 
   cases.push({
+    id: 'varseries_the_exists_button_of_a_condition_rule_picks_the_order_column_with_not_empty',
+    description: 'Dans le choix de colonne d’une règle de condition, le volet « Ligne suivante ou précédente » a un bouton « Y a-t-il une suivante ? » : grisé tant que la colonne d’ordre n’est pas choisie et pour « première » / « dernière », il devient « Y a-t-il une précédente ? » avec le sens « précédente » ; un clic choisit d’un coup la colonne d’ordre de la ligne voisine (« VsInstances.+1(Date;Cycle).Date ») ET l’opérateur « non vide » de la règle, qui vaut sur la 2 (elle a une suivante) et pas sur la 1 (dernière du cycle) ni la 6 (hors série) ; il n’est jamais proposé pour une bulle ni sans règle à régler',
+    run: async (h) => {
+      await seed(h);
+      const rule = { column: '', operator: '=', value: 'x' };
+      const row = ConditionFields.buildRuleRow(rule, 0, {
+        mode: 'all',
+        options: { allTables: true, compareColumn: true, attributesWindow: true, onColumnChosen: () => true, onColumnResolved: () => {}, onValueColumnResolved: () => {} },
+        onRemove: () => {},
+      });
+      const holder = document.createElement('div');
+      holder.className = 'cd-host';
+      holder.appendChild(row);
+      document.body.appendChild(holder);
+      const wrap = row.querySelector('.macro-rule-column-wrap');
+      wrap.querySelector('.ss-trigger').click();
+      await h.sleep(30);
+      wrap.querySelector('.ss-browse').click();
+      await h.sleep(200);
+      const exists = () => step('exists');
+      // La colonne d'ordre réglée pour cette table par une fenêtre d'avant est reprise : on la vide pour voir le bouton grisé sans elle.
+      choose('order', '');
+      const before = { shown: !exists().hidden, disabled: exists().disabled, label: exists().textContent };
+      choose('order', 'Date');
+      choose('group', 'Cycle');
+      const ready = { disabled: exists().disabled, label: exists().textContent };
+      choose('direction', 'before');
+      const beforeLabel = exists().textContent;
+      choose('direction', 'first');
+      const edgeDisabled = exists().disabled;
+      choose('direction', 'after');
+      exists().click();
+      await h.sleep(250);
+      const chosen = { column: rule.column, operator: rule.operator, closed: !modal() || modal().style.display === 'none' || modal().getClientRects().length === 0 };
+      const operatorShown = row.querySelector('select:not(.macro-rule-column)') ? row.querySelector('select:not(.macro-rule-column)').value : null;
+      const holds = [await ConditionRules.matches(rule, PAGE, recordOf(2)), await ConditionRules.matches(rule, PAGE, recordOf(1)), await ConditionRules.matches(rule, PAGE, recordOf(6))];
+      holder.remove();
+      // Sans règle à régler (aucune demande « canTest ») ou depuis une bulle, le bouton reste caché.
+      const asked = VariableLinkedAttrs.pickColumn({ base: PAGE, hops: [], column: '' });
+      await h.sleep(150);
+      const plainPick = { hidden: exists().hidden };
+      VariableLinkedAttrs.close({ keepFocus: true });
+      await asked;
+      Editor.setHTML(`<p>${badgeHtml(PAGE, 'Titre')}</p>`);
+      await openWindow(h, PAGE, 'Titre');
+      const onBubble = { hidden: exists().hidden };
+      VariableLinkedAttrs.close({ keepFocus: true });
+      const pass = before.shown && before.disabled === true && before.label === 'Y a-t-il une suivante ?' && ready.disabled === false && beforeLabel === 'Y a-t-il une précédente ?' && edgeDisabled === true
+        && chosen.column === `${PAGE}.${NEXT}.Date` && chosen.operator === 'non vide' && chosen.closed && operatorShown === 'non vide'
+        && JSON.stringify(holds) === JSON.stringify([true, false, false]) && plainPick.hidden === true && onBubble.hidden === true;
+      return { pass, notes: JSON.stringify({ before, ready, beforeLabel, edgeDisabled, chosen, operatorShown, holds, plainPick, onBubble }) };
+    },
+  });
+
+  cases.push({
     id: 'varseries_a_calculation_reads_the_neighbor_row',
     description: 'Un calcul peut citer la ligne voisine : {VsInstances.+1(Date;Cycle).Numero}-{VsInstances.Numero} donne 22 − 2 = 20 sur la ligne 4 ; il se relit dans la saisie (« #… ») et s’y réécrit à l’identique ; une colonne d’ordre disparue est dite par calcProblem',
     run: async (h) => {
@@ -719,6 +774,146 @@
       const pass = found.step === '+1(Quand;Serie)' && found.column === 'Intitule' && found.count === 1 && untouched.count === 0
         && /Prochaine : Séance 2, fin : \.?/.test(readerOut) && !/introuvable|Fiche/i.test(readerOut) && docx.indexOf('Prochaine : Séance 2, fin :') !== -1 && !/introuvable/i.test(docx);
       return { pass, notes: JSON.stringify({ found, untouched: untouched.count, readerOut, docx: docx.slice(0, 120) }) };
+    },
+  });
+
+  // --- La première et la dernière de la série (lot 3) : « first(Date;Cycle) » et « last(Date;Cycle) » ---
+  const FIRST = 'first(Date;Cycle)';
+  const LAST = 'last(Date;Cycle)';
+
+  cases.push({
+    id: 'varseries_first_and_last_of_the_series_are_read_like_a_neighbor',
+    description: 'Le maillon « first(Date;Cycle) » est la première ligne de la série (rangée selon Date, dans le même Cycle), « last(Date;Cycle) » la dernière ; la ligne qui est elle-même la première (ou la dernière) se cite elle-même ; une ligne sans date est hors série (rien) ; sans groupe, la série est toute la table ; on peut descendre ensuite de référence en référence ; stepOf / stepToken / stepAt les lisent et les écrivent, et refusent ce qui n’en est pas un',
+    run: async (h) => {
+      await seed(h);
+      const parsed = [GristAPI.stepOf(FIRST), GristAPI.stepOf('last(Date)'), GristAPI.stepOf('first()'), GristAPI.stepOf('First(Date)'), GristAPI.stepOf('firstly(Date)'), GristAPI.stepOf('first(A.B)'), GristAPI.stepOf('+1(Date)')];
+      const tokens = [GristAPI.stepToken(5, 'Date', 'Cycle', 'first'), GristAPI.stepToken(-2, 'Date', '', 'last'), GristAPI.stepToken(-2, 'Date', 'Cycle', '')];
+      const inText = [GristAPI.stepAt(`x.${LAST}.Titre`, 2), GristAPI.stepAt('x.first(Date).Titre', 2), GristAPI.stepAt('x.firstly(Date).Titre', 2)];
+      const got = {
+        row2: [await read(h, 2, `${FIRST}.Titre`), await read(h, 2, `${LAST}.Titre`)],
+        row4: [await read(h, 4, `${FIRST}.Titre`), await read(h, 4, `${LAST}.Titre`)],
+        row1: [await read(h, 1, `${FIRST}.Titre`), await read(h, 1, `${LAST}.Titre`)],
+        b: [await read(h, 3, `${FIRST}.Titre`), await read(h, 3, `${LAST}.Titre`), await read(h, 5, `${FIRST}.Titre`)],
+        outOfSeries: [await read(h, 6, `${FIRST}.Titre`), await read(h, 6, `${LAST}.Titre`)],
+        wholeTable: [await read(h, 3, 'first(Date).Titre'), await read(h, 3, 'last(Date).Titre')],
+        viaReference: [await read(h, 4, `${FIRST}.Responsable.Email`), await read(h, 4, `${LAST}.Responsable.Email`)],
+        date: await read(h, 4, `${FIRST}.Date`),
+        own: await read(h, 4, 'Date'),
+      };
+      const types = [GristAPI.getColumnType(PAGE, `${FIRST}.Date`), GristAPI.getColumnType(PAGE, `${LAST}.Titre`)];
+      const problems = [Variables.badgeProblem(PAGE, `${FIRST}.Titre`), Variables.badgeProblem(PAGE, 'last(Disparue;Cycle).Titre'), Variables.badgeProblem(PAGE, 'first(Date;Disparue).Titre')];
+      const pass = JSON.stringify(parsed) === JSON.stringify([{ offset: 0, edge: 'first', order: 'Date', group: 'Cycle' }, { offset: 0, edge: 'last', order: 'Date', group: '' }, null, null, null, null, { offset: 1, order: 'Date', group: '' }])
+        && JSON.stringify(tokens) === JSON.stringify([FIRST, 'last(Date)', '-2(Date;Cycle)']) && JSON.stringify(inText) === JSON.stringify([LAST, 'first(Date)', null])
+        && JSON.stringify(got.row2) === JSON.stringify(['Séance 1', 'Séance 3']) && JSON.stringify(got.row4) === JSON.stringify(['Séance 1', 'Séance 3']) && JSON.stringify(got.row1) === JSON.stringify(['Séance 1', 'Séance 3'])
+        && JSON.stringify(got.b) === JSON.stringify(['Séance B1', 'Séance B2', 'Séance B1']) && JSON.stringify(got.outOfSeries) === JSON.stringify(['', ''])
+        && JSON.stringify(got.wholeTable) === JSON.stringify(['Séance 1', 'Séance 3']) && JSON.stringify(got.viaReference) === JSON.stringify(['anne@ex.fr', 'jean@ex.fr'])
+        && got.date !== '' && got.date === await read(h, 2, 'Date') && got.own !== got.date
+        && JSON.stringify(types) === JSON.stringify(['Date', 'Text']) && JSON.stringify(problems) === JSON.stringify([null, 'path', 'path']);
+      return { pass, notes: JSON.stringify({ parsed, tokens, inText, got, types, problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_first_and_last_work_in_text_fields_calculations_conditions_and_renames',
+    description: 'La première et la dernière de la série se lisent dans un champ texte (« #VsInstances.first(Date;Cycle).Titre », le point de fin de phrase reste du texte), un calcul, une règle de condition (« last(Date;Cycle).Numero = 3 » ; « première » = elle-même vrai seulement sur la première) et suivent le renommage des colonnes d’ordre et de groupe ; un export en lot lit la même ligne',
+    run: async (h) => {
+      await seed(h);
+      const sentence = `Début : #${PAGE}.${FIRST}.Titre, fin : #${PAGE}.${LAST}.Titre.`;
+      const found = Variables.findTextVariables(sentence).map(v => [v.column, sentence.slice(v.start, v.end)]);
+      const resolved = await Variables.resolveTextVariables(sentence, PAGE, recordOf(4));
+      const stored = `{${PAGE}.${LAST}.Numero}-{${PAGE}.Numero}`;
+      const calc = await Variables.resolveCalc(stored, PAGE, recordOf(4), null);
+      const lastIs3 = { column: `${PAGE}.${LAST}.Numero`, operator: '=', value: '3' };
+      const holds = (id, rule) => ConditionRules.matches(rule, PAGE, recordOf(id));
+      const lastOk = [await holds(2, lastIs3), await holds(4, lastIs3), await holds(3, lastIs3), await holds(6, lastIs3)];
+      const m = SchemaRenames.createMapper(SCHEMA_OLD, SCHEMA_NEW, {});
+      const text = SchemaRenames.rewriteText(`#${PAGE}.${FIRST}.Titre et #${PAGE}.${LAST}.Titre`, m, Variables.triggerChar());
+      const formula = SchemaRenames.rewriteFormula(`{${PAGE}.${LAST}.Numero}*2`, m);
+      const html = `<p>${badgeHtml(PAGE, `${FIRST}.Titre`)}|${badgeHtml(PAGE, `${LAST}.Titre`)}</p>`;
+      const rows = await GristAPI.fetchTableRows(PAGE);
+      const batch = {};
+      for (const row of rows) batch[row.id] = await previewText(html, row);
+      const pass = JSON.stringify(found) === JSON.stringify([[`${FIRST}.Titre`, `#${PAGE}.${FIRST}.Titre`], [`${LAST}.Titre`, `#${PAGE}.${LAST}.Titre`]])
+        && resolved === 'Début : Séance 1, fin : Séance 3.' && String(calc).trim() === '1' && Variables.calcProblem(stored) === ''
+        && JSON.stringify(lastOk) === JSON.stringify([true, true, false, false])
+        && text.text === `#${PAGE}.first(Quand;Serie).Intitule et #${PAGE}.last(Quand;Serie).Intitule` && formula.text === `{${PAGE}.last(Quand;Serie).Numero}*2`
+        && batch[4] === 'Séance 1|Séance 3' && batch[3] === 'Séance B1|Séance B2' && batch[6] === '|';
+      return { pass, notes: JSON.stringify({ found, resolved, calc, lastOk, text, formula, batch }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_the_window_offers_first_and_last_and_a_chip_shows_them',
+    description: 'Dans le volet « Ligne suivante ou précédente » le sens a quatre choix (suivante, précédente, première et dernière de la série) ; « première » ou « dernière » grise le rang ; « Aller à cette ligne » donne un fil d’Ariane « VsInstances › last(Date;Cycle) » et les valeurs de la dernière ligne du cycle ; « Remplacer » met le maillon dans une pastille « @ », qui montre son signe (« début », « fin »), une info-bulle qui le dit, la fiche citée, et rouvre la fenêtre sur « dernière » avec le rang grisé',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      await h.resetEditor();
+      Editor.setHTML('<p>' + chipHtml(2, null, 'Titre', 'Séance 1') + '</p>');
+      await h.sleep(500);
+      let ed = await openChipWindow(h, 0);
+      const offered = Array.from(step('direction').options).map(o => o.value);
+      choose('direction', 'last');
+      const rankOff = step('rank').disabled;
+      choose('order', 'Date');
+      choose('group', 'Cycle');
+      step('go').click();
+      await h.sleep(300);
+      const level = { crumbs: crumbs(), titre: valueOf('Titre'), numero: valueOf('Numero'), subtitle: modal().querySelector('.var-linked-subtitle, .var-modal-intro') ? modal().querySelector('.var-linked-subtitle, .var-modal-intro').textContent : '' };
+      tickColumn('Titre');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(300);
+      const replaced = mentionNodes(ed).map(n => attrsOfChip(n.node));
+      await h.sleep(500);
+      const chip = document.querySelector('.tiptap span.mention-chip');
+      const shown = chip ? { text: chip.textContent, sign: chip.getAttribute('data-mention-sign'), title: chip.title, alone: chip.classList.contains('mention-chip-alone'), broken: chip.classList.contains('mention-chip-broken'), drawn: getComputedStyle(chip, '::after').content } : null;
+      ed = await openChipWindow(h, 0);
+      const reopened = { crumbs: crumbs(), direction: step('direction').value, rankOff: step('rank').disabled, order: step('order').value, group: step('group').value };
+      choose('direction', 'first');
+      step('go').click();
+      await h.sleep(300);
+      tickColumn('Titre');
+      modal().querySelector('button.var-linked-replace').click();
+      await h.sleep(300);
+      await h.sleep(500);
+      const first = mentionNodes(ed).map(n => attrsOfChip(n.node));
+      const firstSign = (document.querySelector('.tiptap span.mention-chip') || {}).getAttribute ? document.querySelector('.tiptap span.mention-chip').getAttribute('data-mention-sign') : null;
+      const withEdge = [Mention.html({ table: PAGE, row: 2, column: 'Titre', step: FIRST, label: 'Séance 1' }), Mention.html({ table: PAGE, row: 2, column: 'Titre', step: LAST, label: 'Séance 3' })];
+      const pass = JSON.stringify(offered) === JSON.stringify(['after', 'before', 'first', 'last']) && rankOff === true
+        && JSON.stringify(level.crumbs) === JSON.stringify([PAGE, LAST]) && level.titre === 'Séance 3' && level.numero === '3' && /dernière fiche/.test(level.subtitle)
+        && replaced.length === 1 && replaced[0].step === LAST && replaced[0].column === 'Titre' && replaced[0].label === 'Séance 3' && replaced[0].row === 2
+        && !!shown && shown.text === 'Séance 3' && shown.sign === 'fin' && /dernière fiche/.test(shown.title) && /Date/.test(shown.title) && !shown.alone && !shown.broken && /fin/.test(shown.drawn)
+        && JSON.stringify(reopened.crumbs) === JSON.stringify([PAGE, LAST]) && reopened.direction === 'last' && reopened.rankOff === true && reopened.order === 'Date' && reopened.group === 'Cycle'
+        && first.length === 1 && first[0].step === FIRST && first[0].label === 'Séance 1' && firstSign === 'début'
+        && withEdge[0].indexOf(`data-mention-step="${FIRST}"`) !== -1 && withEdge[0].indexOf('data-mention-sign="début"') !== -1 && withEdge[1].indexOf('data-mention-sign="fin"') !== -1;
+      return { pass, notes: JSON.stringify({ offered, rankOff, level, replaced, shown, reopened, first, firstSign, withEdge }) };
+    },
+  });
+
+  cases.push({
+    id: 'varseries_a_chip_with_first_or_last_follows_the_data_and_the_renames_and_every_export_writes_it',
+    description: 'Une pastille « première » ou « dernière » relit la table à l’affichage (la dernière change quand une date plus tardive arrive), « seule » pour une fiche hors série, rouge si la colonne d’ordre disparaît, suit le renommage des colonnes d’ordre et de groupe, et la Lecture, le Word et le HTML écrivent la même fiche',
+    run: async (h) => {
+      await seed(h);
+      Mention.reset();
+      const text = async (row, stepToken) => (await Mention.resolve({ table: PAGE, row, column: 'Titre', step: stepToken, label: 'x' })).text;
+      const got = { first: await text(4, FIRST), last: await text(4, LAST), outOfSeries: await text(6, LAST), brokenOrder: await Mention.resolve({ table: PAGE, row: 2, column: 'Titre', step: 'last(Inconnue;Cycle)', label: 'x' }) };
+      const m = SchemaRenames.createMapper(SCHEMA_OLD, SCHEMA_NEW, {});
+      const out = SchemaRenames.rewriteHtml(`<p>${chipHtml(2, LAST, 'Titre', 'Séance 3')}</p>`, m, { page: m.tableContext(PAGE), trigger: Variables.triggerChar() });
+      const renamed = dom(out.html.indexOf('<p>') === 0 ? out.html.replace(/^<p>|<\/p>$/g, '') : out.html);
+      await at(h, 5);
+      const body = `<p>Début : ${chipHtml(4, FIRST)}, fin : ${chipHtml(4, LAST)}.</p>`;
+      const readerOut = await readerText(body);
+      await ExportCommon.ensureJsZipLoaded();
+      await DocxExport.ensureDocxLibLoaded();
+      const noHeaderFooter = { enabled: false, differentFirstPage: false, header: { default: '', first: '' }, footer: { default: '', first: '' } };
+      const { blob } = await DocxExport.getDocxBlobForRecord(body, PAGE, recordOf(5), '', noHeaderFooter, null);
+      const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const docx = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml').documentElement.textContent;
+      const pass = got.first === 'Séance 1' && got.last === 'Séance 3' && got.outOfSeries === '' && got.brokenOrder.isError === true
+        && !!renamed && renamed.getAttribute('data-mention-step') === 'last(Quand;Serie)' && renamed.getAttribute('data-mention-column') === 'Intitule' && out.count === 1
+        && /Début : Séance 1, fin : Séance 3\./.test(readerOut) && docx.indexOf('Début : Séance 1, fin : Séance 3') !== -1;
+      return { pass, notes: JSON.stringify({ got: { first: got.first, last: got.last, outOfSeries: got.outOfSeries, broken: got.brokenOrder.isError }, renamed: renamed && renamed.outerHTML, readerOut, docx: docx.slice(0, 100) }) };
     },
   });
 
