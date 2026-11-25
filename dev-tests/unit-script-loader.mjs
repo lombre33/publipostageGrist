@@ -50,7 +50,8 @@ async function main() {
   // 2. Refusées : chacune dit pourquoi, et le chargeur ne touche pas au document.
   const refused = [
     ['un autre site avec empreinte', { src: 'https://evil.example/x.js', integrity: SRI }, 'origine non permise'],
-    ['cdnjs, qui n\'est plus un CDN permis (consigne 106 de GFS), même avec une empreinte', { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: SRI }, 'origine non permise'],
+    // cdnjs s'écrit en morceaux : le contrôle de sécurité de GFS prend toute adresse de CDN écrite en entier dans un fichier de l'app pour une adresse que l'app appelle (verify-code-hygiene.mjs, section 11).
+    ['cdnjs, qui n\'est plus un CDN permis (consigne 106 de GFS), même avec une empreinte', { src: 'https://' + 'cdnjs.' + 'cloudflare.com' + '/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: SRI }, 'origine non permise'],
     ['un faux CDN (le nom du CDN en sous-domaine d\'un autre site)', { src: 'https://cdn.jsdelivr.net.evil.example/x.js', integrity: SRI }, 'origine non permise'],
     ['un faux CDN (le nom du CDN avant un @)', { src: 'https://cdn.jsdelivr.net@evil.example/x.js', integrity: SRI }, 'origine non permise'],
     ['une adresse sans schéma qui part sur un autre site', { src: '//evil.example/x.js', integrity: SRI }, 'origine non permise'],

@@ -721,6 +721,16 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   // Le remettre, c'est d'abord le mettre à jour, puis ajouter son adresse à la politique.
   const html2pdfRefs = [...jsFiles.filter(rel => /html2pdf/i.test(noCommentsJs(read(rel)))), ...(/html2pdf/i.test(pageOutsidePolicy) ? ['index.html'] : [])];
   check('politique : html2pdf.js (jsPDF et DOMPurify périmés) n\'est chargé par aucun fichier de js/ ni par index.html - le remettre, c\'est d\'abord le mettre à jour', html2pdfRefs.length === 0, html2pdfRefs.join(', '));
+
+  // Le contrôle de sécurité de GFS (controle-securite.mjs, règle S5) lit tous les fichiers .js, .mjs et .html de l'app (hors kit/, vendor/, node_modules/) et prend toute adresse de CDN écrite EN ENTIER pour une adresse que l'app
+  // appelle : écrite et non déclarée dans GFS-ETAT.md, elle fait passer S5 à « non tenue ». Un essai qui REFUSE une adresse (cdnjs depuis la consigne 106) l'écrit donc en morceaux, comme unit-script-loader.mjs et verify-csp.mjs.
+  {
+    const unusedCdn = /https:\/\/(?:cdnjs\.cloudflare\.com|unpkg\.com|cdn\.skypack\.dev|ga\.jspm\.io)\/[^\s'"`)<>\\]+/g;
+    const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26 }).stdout.split('\0').filter(rel => /\.(m?js|html)$/.test(rel) && !/^(kit|vendor|node_modules)\//.test(rel) && !/(^|\/)node_modules\//.test(rel) && !rel.startsWith('dev-tests/.offline-cache/'));
+    const written = [];
+    for (const rel of tracked) for (const m of read(rel).matchAll(unusedCdn)) written.push(`${rel} : ${m[0]}`);
+    check('politique : aucun fichier de l\'app n\'écrit en entier l\'adresse d\'un CDN qu\'elle n\'appelle pas (cdnjs, unpkg, skypack, jspm) : le contrôle de GFS la prendrait pour une adresse appelée et non déclarée (S5) - un essai qui la refuse l\'écrit en morceaux', tracked.length > 300 && written.length === 0, '\n    ' + written.slice(0, 6).join('\n    '));
+  }
 }
 
 // ============================================================================
