@@ -63,15 +63,15 @@ const esmMapPath = join(CACHE, 'esm-map.json');
 const OFFLINE = existsSync(esmMapPath);
 const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
 const UMD_ROUTES = OFFLINE ? [
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdfmake\/[\d.]+\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdfmake\/[\d.]+\/vfs_fonts\.min\.js$/, 'umd/vfs_fonts.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/jszip\/[\d.]+\/jszip\.min\.js$/, 'umd/jszip.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf-lib\/[\d.]+\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@[\d.]+\/dist\/jszip\.min\.js$/, 'umd/jszip.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdf-lib@[\d.]+\/dist\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/index\.iife\.js$/, 'umd/docx.iife.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/charts\.iife\.js$/, 'umd/docx-charts.iife.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/exceljs\/[\d.]+\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/[\d.]+\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/exceljs@[\d.]+\/dist\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/qrcode-generator@[\d.]+\/qrcode\.js$/, 'umd/qrcode.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/marked@[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
 ].filter(([, rel]) => existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[verify-csp] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
 
@@ -234,7 +234,7 @@ const exportsRun = await page.evaluate(async () => {
   // Les graphiques natifs de Word : le second fichier de docx (charts.iife.js, jsDelivr, avec son empreinte), chargé au premier graphique créé, lit le global du premier et fabrique une ligne de graphique.
   await step('docxCharts', async () => { await DocxExport.ensureDocxChartsLoaded(); return typeof docxCharts !== 'undefined' && typeof docxCharts.ChartRun === 'function' && new docxCharts.ChartRun({ type: 'column', categories: ['a'], series: [{ name: 's', values: [1] }] }) instanceof docx.Run; });
   await step('xlsx', async () => { await XlsxExport.ensureExcelLibLoaded(); const wb = new ExcelJS.Workbook(); wb.addWorksheet('a').getCell('A1').value = 'x'; return (await wb.xlsx.writeBuffer()).byteLength > 1000; });
-  // L'import Markdown (js/markdown-import.js) : le lecteur (marked, cdnjs, avec son empreinte) se charge au premier import, sous la politique, et lit un texte.
+  // L'import Markdown (js/markdown-import.js) : le lecteur (marked, jsDelivr, avec son empreinte) se charge au premier import, sous la politique, et lit un texte.
   await step('markdownImport', async () => { await MarkdownImport.ensureLibLoaded(); const imported = MarkdownImport.toDocument('# Titre\n\nTexte **gras**\n'); return imported.html === '<h1>Titre</h1>\n<p>Texte <strong>gras</strong></p>' || imported.html; });
   // Des images dans le document, sous la politique : une adresse data: se lit sur place (jamais par fetch : connect-src n'ouvre pas data:), une image se décode par une adresse blob: (img-src l'ouvre), Word et PDF les embarquent.
   await step('images', async () => {
@@ -305,7 +305,9 @@ async function attempt(label, expectedDirective, run) {
 await attempt('un gestionnaire en ligne (image à onerror) ne court pas', 'script-src', async host => { host.innerHTML = '<img src="x" onerror="window.__csp.handler=1">'; });
 await attempt('un script en ligne ne court pas', 'script-src', async () => { const s = document.createElement('script'); s.textContent = 'window.__csp.inline=1'; document.body.appendChild(s); s.remove(); });
 await attempt('un script d\'une autre adresse ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://exemple.invalid/x.js'; document.body.appendChild(s); });
-await attempt('un script d\'une bibliothèque non figée du même CDN ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.3/angular.min.js'; document.body.appendChild(s); });
+await attempt('un script d\'une bibliothèque non figée du même CDN ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/angular@1.8.3/angular.min.js'; document.body.appendChild(s); });
+// cdnjs n'est plus un CDN de la politique (consigne 106 de GFS) : même un fichier que l'app chargeait avant (jszip 3.10.1) n'y passe plus.
+await attempt('cdnjs.cloudflare.com ne sert plus aucun script : même l\'ancienne adresse de JSZip est refusée', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.body.appendChild(s); });
 // L'éditeur vient d'esm.sh, qui sert aussi tout npm et tout GitHub : ni un autre paquet, ni un dépôt, ni une autre version de TipTap ne se charge (script classique ou import dynamique).
 await attempt('un autre paquet d\'esm.sh (lodash) ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://esm.sh/lodash@4.17.21/es2022/lodash.mjs'; s.type = 'module'; document.body.appendChild(s); });
 await attempt('un dépôt de GitHub servi par esm.sh ne se charge pas', 'script-src', async () => { const s = document.createElement('script'); s.src = 'https://esm.sh/gh/jquery/jquery@3.7.1/dist/jquery.js'; document.body.appendChild(s); });

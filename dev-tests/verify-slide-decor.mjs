@@ -110,8 +110,8 @@ const pixelAt = async (page, x, y) => (await pixelsAt(page, [{ x, y }]))[0];
 // Le PDF relu par pdf.js : le nombre de pages et la couleur de points de chaque page (fractions de sa largeur et de sa hauteur).
 const readPdf = (page, b64, points) => page.evaluate(async ([data64, pts]) => {
   if (!window.pdfjsLib) {
-    await new Promise((ok, ko) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    await new Promise((ok, ko) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   }
   const raw = atob(data64);
   const data = new Uint8Array(raw.length);

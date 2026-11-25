@@ -70,34 +70,34 @@ ProseMirror : prosemirror-model 1.25.11, -state 1.4.4, -view 1.42.3, -transform 
 pdfmake 0.2.7 (et ses polices vfs_fonts / and its vfs_fonts fonts)
   Licence / License : MIT (les polices : voir le point 3 / the fonts: see section 3)
   Droits / Copyright : Copyright (c) 2014-2015 bpampuch, 2016-2022 liborm85
-  Origine / Source : cdnjs.cloudflare.com
+  Origine / Source : cdn.jsdelivr.net
 
 pdf-lib 1.17.1
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2019 Andrew Dillon
-  Origine / Source : cdnjs.cloudflare.com
+  Origine / Source : cdn.jsdelivr.net
 
 JSZip 3.10.1
   Licence / License : MIT ou / or GPL-3.0-or-later, au choix / at your choice (utilisé sous MIT / used under MIT)
   Droits / Copyright : Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso
-  Origine / Source : cdnjs.cloudflare.com
+  Origine / Source : cdn.jsdelivr.net
 
 ExcelJS 4.4.0
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2014-2019 Guyon Roche
-  Origine / Source : cdnjs.cloudflare.com
+  Origine / Source : cdn.jsdelivr.net
 
 qrcode-generator 1.4.4
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2009 Kazuhiko Arase
-  Origine / Source : cdnjs.cloudflare.com
+  Origine / Source : cdn.jsdelivr.net
   Le mot « QR Code » est une marque déposée de DENSO WAVE INCORPORATED.
   The word "QR Code" is a registered trademark of DENSO WAVE INCORPORATED.
 
 marked 15.0.12
   Licence / License : MIT
   Droits / Copyright : Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/) ; Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
-  Origine / Source : cdnjs.cloudflare.com
+  Origine / Source : cdn.jsdelivr.net
   Le widget la charge à la première lecture d'un fichier Markdown seulement / The widget loads it on the first Markdown file read only.
 
 docx 9.7.1

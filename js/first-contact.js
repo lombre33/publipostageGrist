@@ -20,7 +20,6 @@ const FirstContact = (function () {
   const HOSTS = [
     { host: 'esm.sh', why: 'firstContact.host.editor' },
     { host: 'docs.getgrist.com', why: 'firstContact.host.grist' },
-    { host: 'cdnjs.cloudflare.com', why: 'firstContact.host.exports' },
     { host: 'cdn.jsdelivr.net', why: 'firstContact.host.exports' },
   ];
   const TEXTS = {

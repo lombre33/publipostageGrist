@@ -221,12 +221,12 @@
   });
 
   cases.push({
-    id: 'qr_library_is_loaded_from_cdnjs_with_a_sri_hash_like_the_other_libraries',
-    description: 'La bibliothèque est demandée à cdnjs, en version fixe, avec un hash SRI sha384 (comme JSZip et pdfmake) ; le texte s\'encode en UTF-8',
+    id: 'qr_library_is_loaded_from_jsdelivr_with_a_sri_hash_like_the_other_libraries',
+    description: 'La bibliothèque est demandée à jsDelivr (le fichier de npm), en version fixe, avec un hash SRI sha384 (comme JSZip et pdfmake) ; le texte s\'encode en UTF-8',
     run: async () => {
       const lib = NativeLibs.cdnOf('qrcode-generator');
       return {
-        pass: /^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/1\.4\.4\/qrcode\.min\.js$/.test(lib.src) && /^sha384-[A-Za-z0-9+/]{64}$/.test(lib.integrity) && window.qrcode.stringToBytes === window.qrcode.stringToBytesFuncs['UTF-8'],
+        pass: /^https:\/\/cdn\.jsdelivr\.net\/npm\/qrcode-generator@1\.4\.4\/qrcode\.js$/.test(lib.src) && /^sha384-[A-Za-z0-9+/]{64}$/.test(lib.integrity) && window.qrcode.stringToBytes === window.qrcode.stringToBytesFuncs['UTF-8'],
         notes: JSON.stringify(lib),
       };
     },

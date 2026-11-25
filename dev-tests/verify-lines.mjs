@@ -299,8 +299,8 @@ const probeOf = (page, args) => page.evaluate(probeImage, args);
 // Le PDF relu par pdf.js : la page `n` peinte à `scale` pixels par point (PNG en base64) et ses lignes de texte (x, y du haut, largeur, en points).
 const renderPdfPage = (page, b64, n, scale) => page.evaluate(async ([data64, number, factor]) => {
   if (!window.pdfjsLib) {
-    await new Promise((ok, ko) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    await new Promise((ok, ko) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   }
   const raw = atob(data64);
   const data = new Uint8Array(raw.length);

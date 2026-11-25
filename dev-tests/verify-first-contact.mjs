@@ -75,11 +75,11 @@ const esmMapPath = join(CACHE, 'esm-map.json');
 const OFFLINE = existsSync(esmMapPath);
 const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
 const UMD_ROUTES = OFFLINE ? [
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/vfs_fonts\.min\.js$/, 'umd/vfs_fonts.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.min\.js$/, 'umd/pdf.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.min\.js$/, 'umd/pdf.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@[\d.]+\/dist\/jszip\.min\.js$/, 'umd/jszip.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
 ] : [];
 if (!OFFLINE) console.log('[verify-first-contact] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
@@ -319,7 +319,7 @@ const TEXT = {
     reload: 'Reload the page', wait: 'Keep waiting', readme: 'Read the installation guide', copy: 'Copy', copied: 'Copied', technical: 'Technical message', then: 'Then reload the page.',
   },
 };
-const HOSTS = ['esm.sh', 'docs.getgrist.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];
+const HOSTS = ['esm.sh', 'docs.getgrist.com', 'cdn.jsdelivr.net'];
 const INSTALL = { fr: REPO + '#installation-dans-grist', en: REPO + '#installing-in-grist' };
 const LIMITS = { fr: REPO + '#limites-connues', en: REPO + '#known-limitations' };
 const NETWORK_MESSAGE = 'Failed to fetch dynamically imported module: https://esm.sh/@tiptap/core@3.31.3/es2022/core.mjs';

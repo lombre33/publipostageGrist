@@ -143,8 +143,8 @@ await scenario('1) Le vrai clic : menu Qualité, bouton PDF, fenêtre du navigat
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // Le PDF d'impression contre la Lecture. Tout se mesure dans la page du widget (pdf.js du miroir hors ligne) : les pages, les mots, les lignes, les pixels.
-const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
 // Les formats essayés : l'A4 du modèle, l'A5 en paysage, l'A6 et un format libre de 100 x 70 mm (le petit format d'Antoine : marges de 3 mm). Posés dans la page du widget, une fois.
 const installLayouts = page => page.evaluate(() => {

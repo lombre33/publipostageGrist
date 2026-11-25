@@ -784,18 +784,18 @@ const esmMapPath = join(CACHE, 'esm-map.json');
 const OFFLINE = existsSync(esmMapPath);
 const esmMap = OFFLINE ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
 const UMD_ROUTES = OFFLINE ? [
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/vfs_fonts\.min\.js$/, 'umd/vfs_fonts.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.min\.js$/, 'umd/pdf.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.min\.js$/, 'umd/pdf.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@[\d.]+\/dist\/jszip\.min\.js$/, 'umd/jszip.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdf-lib@[\d.]+\/dist\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@(?:(?!charts\.iife\.js).)*$/, 'umd/docx.iife.js'],
   // Les graphiques natifs de Word (lot 3 des graphiques créés) : le second fichier de la même version de docx, qui lit le global `docx` du premier.
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/charts\.iife\.js$/, 'umd/docx-charts.iife.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/qrcode\.min\.js$/, 'umd/qrcode.min.js'],
-  [/^https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/marked\/[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/exceljs@[\d.]+\/dist\/exceljs\.min\.js$/, 'umd/exceljs.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/qrcode-generator@[\d.]+\/qrcode\.js$/, 'umd/qrcode.min.js'],
+  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/marked@[\d.]+\/marked\.min\.js$/, 'umd/marked.min.js'],
   [/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js'],
 ].filter(([, rel]) => (rel !== 'umd/exceljs.min.js' && rel !== 'umd/qrcode.min.js' && rel !== 'umd/marked.min.js' && rel !== 'umd/echarts.min.js' && rel !== 'umd/docx-charts.iife.js') || existsSync(join(CACHE, rel))) : [];
 if (!OFFLINE) console.log('[run-headless] miroir hors-ligne absent (dev-tests/offline-deps.sh) - les CDN seront appelés en direct.');
@@ -893,8 +893,8 @@ async function runGroup(name, probeExpr, lang) {
         body: await readFile(join(CACHE, rel), 'utf8'),
       }));
     }
-    // js/pdf-export.js protège ses scripts CDN par un hash SRI (`integrity`). Un miroir local ne peut PAS le satisfaire : cdnjs sert des variantes
-    // minifiées propres (vfs_fonts.min.js n'existe même pas tel quel dans le paquet npm), donc le hash ne correspondra jamais, et le navigateur refuse le
+    // js/pdf-export.js protège ses scripts CDN par un hash SRI (`integrity`). Un miroir local ne peut PAS toujours le satisfaire : les fichiers des CDN ne sont pas tous ceux du miroir (des paquets reminifiés, des versions
+    // plus récentes), donc le hash peut ne pas correspondre, et le navigateur refuse alors le
     // script AVANT de l'exécuter - erreur "Échec de chargement du script". SRI est neutralisé ici, et UNIQUEMENT ici : c'est une protection contre un CDN
     // compromis, sans objet quand le fichier vient du disque local, et l'application réelle la garde intacte.
     await page.addInitScript(() => {

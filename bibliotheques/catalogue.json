@@ -21,7 +21,7 @@
       "id": "exceljs",
       "version": "4.4.0",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+        "src": "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js",
         "integrite": "sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz"
       }
     },
@@ -29,7 +29,7 @@
       "id": "jszip",
       "version": "3.10.1",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+        "src": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
         "integrite": "sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG"
       }
     },
@@ -37,7 +37,7 @@
       "id": "marked",
       "version": "15.0.12",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js",
+        "src": "https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js",
         "integrite": "sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+"
       }
     },
@@ -45,7 +45,7 @@
       "id": "pdf-lib",
       "version": "1.17.1",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js",
+        "src": "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js",
         "integrite": "sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI"
       }
     },
@@ -53,7 +53,7 @@
       "id": "pdfmake",
       "version": "0.2.7",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js",
+        "src": "https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/pdfmake.min.js",
         "integrite": "sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7"
       }
     },
@@ -61,16 +61,16 @@
       "id": "pdfmake-polices",
       "version": "0.2.7",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js",
-        "integrite": "sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D"
+        "src": "https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/vfs_fonts.js",
+        "integrite": "sha384-go03OGrgP7enVgJF/9UK2k6D5xW+f7Vq1WHLp75VqnMN5uu+CZDXu7uGjjzZReI5"
       }
     },
     {
       "id": "qrcode-generator",
       "version": "1.4.4",
       "cdn": {
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js",
-        "integrite": "sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"
+        "src": "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js",
+        "integrite": "sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k"
       }
     }
   ]

@@ -13,7 +13,7 @@
 const XlsxExport = (function () {
   let excelLibPromise = null;
   async function ensureExcelLibLoaded() {
-    // Chargement paresseux (comme DocxExport) : ExcelJS pèse ~0,9 Mo, inutile au premier chargement du widget. cdnjs le sert tel que publié sur npm
+    // Chargement paresseux (comme DocxExport) : ExcelJS pèse ~0,9 Mo, inutile au premier chargement du widget. jsDelivr le sert tel que publié sur npm
     // (dist/exceljs.min.js), d'où un SRI stable. D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) : js/native-libs.js, fonction « excel ».
     if (!excelLibPromise) excelLibPromise = (window.ExcelJS ? Promise.resolve() : NativeLibs.load('exceljs')).catch(e => { excelLibPromise = null; throw e; });
     return excelLibPromise;

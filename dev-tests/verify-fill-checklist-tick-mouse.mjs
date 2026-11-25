@@ -325,12 +325,12 @@ const HOSTS = ['#tm-ed', '#tm-rd', '#tm-v14', '#tm-v28'];
 // Le PDF : la coche de la case classique d'un item de liste est peinte au milieu de sa case (pdf.js, aux pixels), celle de l'accent est restée où elle était.
 {
   const { page: app } = await t.openPage({ hosted: false, colorScheme: 'light' });
-  await app.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' });
+  await app.addScriptTag({ url: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js' });
   const html = style => `<ul data-type="taskList"${style ? ` data-tasklist-style="${style}"` : ''}><li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked><span></span></label><div><p>Texte</p></div></li></ul>`;
   const result = await app.evaluate(async ({ markups }) => {
     await ExportEngines.loadAll();
     await PdfExport.ensurePdfLibsLoaded();
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
     const out = {};
     for (const [label, markup, classic] of markups) {
       let definition = null;

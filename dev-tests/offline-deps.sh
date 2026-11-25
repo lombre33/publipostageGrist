@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reconstruit dev-tests/.offline-cache/ : un miroir LOCAL des dépendances que index.html charge
-# depuis des CDN publics (esm.sh, cdnjs, jsdelivr). Rien n'est commité - ni node_modules, ni les
+# depuis des CDN publics (esm.sh, jsdelivr). Rien n'est commité - ni node_modules, ni les
 # bundles produits, ni la liste de paquets du dossier (cf. dev-tests/.gitignore) : ce script les
 # retélécharge depuis npm à la demande.
 #

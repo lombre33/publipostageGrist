@@ -5,7 +5,7 @@
 //  - une colonne ou plus (« #Clients.Site », « https://suivi.fr/#Commandes.Numero ») : l'éditeur montre un cadre (comme « Image depuis une variable
 //    »), sans image ; le QR code est dessiné à la Lecture et à l'export pour chaque ligne (resolveImage, appelé par js/reader-mode.js), jamais
 //    enregistré dans le modèle. Une ligne dont toutes les colonnes sont vides n'a pas de QR code, comme une image sans pièce jointe.
-// La bibliothèque (qrcode-generator 1.4.4, MIT) se charge à la première utilisation, depuis cdnjs avec un hash SRI, comme JSZip (js/export-common.js)
+// La bibliothèque (qrcode-generator 1.4.4, MIT) se charge à la première utilisation, depuis jsDelivr avec un hash SRI, comme JSZip (js/export-common.js)
 // ; le dessin (PNG, modules de pixels entiers, marge de 4 modules) se fait ici. La fenêtre « QR code… » s'ouvre depuis le menu « Lien et blocs de
 // contenu » (index.html, js/main-toolbar.js) ; styles dans css/qr-code.css. Elle s'ouvre aussi dans un en-tête ou un pied de page (relance du 14/10) :
 // le QR code y est une image comme une autre (36 px à l'insertion, 60 au plus : la bande de la page), et la Lecture comme les exports en dessinent les

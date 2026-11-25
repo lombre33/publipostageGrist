@@ -17,7 +17,7 @@
 const MarkdownImport = (function () {
   // Au-delà, la page ne tiendrait pas le document (marked, puis l'éditeur, lisent tout en mémoire).
   const MAX_BYTES = 10 * 1024 * 1024;
-  // marked, MIT : ~40 Ko, chargé au premier import seulement (le fichier de cdnjs est celui de npm, octet pour octet). D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) :
+  // marked, MIT : ~40 Ko, chargé au premier import seulement (le fichier de jsDelivr est celui de npm, octet pour octet). D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) :
   // js/native-libs.js, fonction « markdown ».
   let libPromise = null;
   function ensureLibLoaded() {

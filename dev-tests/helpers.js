@@ -428,8 +428,8 @@ window.TestHelpers = (function () {
       pdfJsPromise = new Promise((resolve, reject) => {
         if (window.pdfjsLib) { resolve(); return; }
         const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; resolve(); };
+        s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+        s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; resolve(); };
         s.onerror = reject;
         document.head.appendChild(s);
       }).catch(e => { pdfJsPromise = null; throw e; });

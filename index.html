@@ -59,10 +59,10 @@
     https://esm.sh/node/events.mjs https://esm.sh/node/process.mjs https://esm.sh/node/tty.mjs https://docs.getgrist.com/grist-plugin-api.js
     https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.13.2/plotly-basic.min.js https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js
     https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js
-    https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
-    https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
-    https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js
-    https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
+    https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js
+    https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js
+    https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/pdfmake.min.js https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/vfs_fonts.js
+    https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js
     'sha256-oL7hcWNReCnK8lxGRlbj0IXTGZm4dxBoOerWyA01uig=' 'sha256-KIZ4j7hybLmtOJEselE4MEU3gUkEFffZEC8m7667GaE='
     'sha256-iq6CQ+DhWcuZ+ya2pU8u2kM18gj05wwcnj2Ixs9B/bg=' 'sha256-NOQDvFtAZJzyogwgFo789ZWtP6KbE82bIykO7VsHKO0='
     'sha256-fTV4vYufc0Gz8iZwK7THgpobPlFOtnxeqITfQo1lNsQ=' 'sha256-Ju+vNoncsiRhUbNSxr1nwqCkvJGIjcELvN5FaeZc+xw=';
@@ -463,13 +463,13 @@
 <link rel="preload" as="script" href="js/page-copies.js?v=0.3">
 <link rel="preload" as="script" href="js/email-plain-text.js?v=0.3">
 <link rel="preload" as="script" href="js/editor.js?v=2.127">
-<link rel="preload" as="script" href="js/export-common.js?v=0.43">
-<link rel="preload" as="script" href="js/native-libs.js?v=0.1">
+<link rel="preload" as="script" href="js/export-common.js?v=0.44">
+<link rel="preload" as="script" href="js/native-libs.js?v=0.2">
 <link rel="preload" as="script" href="js/pdf-glyph-fallback.js?v=0.3">
 <link rel="preload" as="script" href="js/export-engines.js?v=0.2">
 <link rel="preload" as="script" href="js/versions-store.js?v=0.8">
 <link rel="preload" as="script" href="js/grid-xlsx-import.js?v=0.14">
-<link rel="preload" as="script" href="js/markdown-import.js?v=0.8">
+<link rel="preload" as="script" href="js/markdown-import.js?v=0.9">
 <link rel="preload" as="script" href="js/html-import.js?v=0.6">
 <link rel="preload" as="script" href="js/mailto-export.js?v=0.20">
 <link rel="preload" as="script" href="js/eml-export.js?v=0.2">
@@ -484,7 +484,7 @@
 <link rel="preload" as="script" href="js/batch-failures.js?v=0.3">
 <link rel="preload" as="script" href="js/view-source.js?v=0.2">
 <link rel="preload" as="script" href="js/batch-scope.js?v=0.5">
-<link rel="preload" as="script" href="js/first-contact.js?v=0.7">
+<link rel="preload" as="script" href="js/first-contact.js?v=0.8">
 <link rel="preload" as="script" href="js/whats-new.js?v=0.5">
 <link rel="preload" as="script" href="js/external-images.js?v=0.11">
 <link rel="preload" as="script" href="js/print-export.js?v=0.13">
@@ -512,7 +512,7 @@
 <link rel="preload" as="script" href="js/bullet-format.js?v=0.5">
 <link rel="preload" as="script" href="js/typing-style.js?v=0.6">
 <link rel="preload" as="script" href="js/anchors.js?v=0.8">
-<link rel="preload" as="script" href="js/qr-code.js?v=0.12">
+<link rel="preload" as="script" href="js/qr-code.js?v=0.13">
 <link rel="preload" as="script" href="js/gfs-open.js?v=0.12">
 <link rel="preload" as="script" href="js/extensions.js?v=0.99">
 <link rel="preload" as="script" href="js/pdf-reading.js?v=0.3">
@@ -1679,8 +1679,8 @@
 <script src="js/page-copies.js?v=0.3"></script>
 <script src="js/email-plain-text.js?v=0.3"></script>
 <script src="js/editor.js?v=2.127"></script>
-<script src="js/export-common.js?v=0.43"></script>
-<script src="js/native-libs.js?v=0.1"></script>
+<script src="js/export-common.js?v=0.44"></script>
+<script src="js/native-libs.js?v=0.2"></script>
 <script src="js/pdf-glyph-fallback.js?v=0.3"></script>
 <!-- Moteurs d'export : js/export-engines.js les charge au premier export (ExportEngines.ensure), pas à l'ouverture. Ces balises ne s'exécutent pas (le
      navigateur ne connaît pas leur type) ; leur version de cache se monte comme celle de tout script. -->
@@ -1689,8 +1689,8 @@
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.10"></script>
 <script type="text/x-lazy-engine" data-engine="archive" src="js/pdf-archive.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.109"></script>
-<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.36"></script>
+<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.110"></script>
+<script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.37"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.4"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxPivot" src="js/xlsx-pivot.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.14"></script>
@@ -1712,7 +1712,7 @@
 <script type="text/x-lazy-module" data-module="versions" src="js/versions-history.js?v=0.6"></script>
 <script type="text/x-lazy-module" data-module="versions-compare" src="js/versions-compare.js?v=0.2"></script>
 <script src="js/grid-xlsx-import.js?v=0.14"></script>
-<script src="js/markdown-import.js?v=0.8"></script>
+<script src="js/markdown-import.js?v=0.9"></script>
 <script src="js/html-import.js?v=0.6"></script>
 <script src="js/mailto-export.js?v=0.20"></script>
 <script src="js/eml-export.js?v=0.2"></script>
@@ -1727,7 +1727,7 @@
 <script src="js/batch-failures.js?v=0.3"></script>
 <script src="js/view-source.js?v=0.2"></script>
 <script src="js/batch-scope.js?v=0.5"></script>
-<script src="js/first-contact.js?v=0.7"></script>
+<script src="js/first-contact.js?v=0.8"></script>
 <script src="js/whats-new.js?v=0.5"></script>
 <script src="js/external-images.js?v=0.11"></script>
 <script src="js/print-export.js?v=0.13"></script>
@@ -1755,7 +1755,7 @@
 <script src="js/bullet-format.js?v=0.5"></script>
 <script src="js/typing-style.js?v=0.6"></script>
 <script src="js/anchors.js?v=0.8"></script>
-<script src="js/qr-code.js?v=0.12"></script>
+<script src="js/qr-code.js?v=0.13"></script>
 <script src="js/gfs-open.js?v=0.12"></script>
 <script src="js/extensions.js?v=0.99"></script>
 <script src="js/pdf-reading.js?v=0.3"></script>

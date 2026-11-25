@@ -299,8 +299,10 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   check('export : un seul téléchargement de Blob (<a>.download hors export-common.js)', downloads.length === 0, downloads.join(', '));
   // JSZip (archive des lots ZIP) se charge seul depuis export-common.js : le lot PDF (pdfmake, polices, ~4 Mo) n'a pas à le traîner, ni le lot DOCX à charger le PDF pour lui. Son adresse est dans le tableau de
   // js/native-libs.js (fonction « zip », consigne 065 : la copie de GFS ou le CDN) ; seul ExportCommon.ensureJsZipLoaded demande `NativeLibs.load('jszip')`, et le lot PDF ne le demande pas avec pdfmake.
-  const jsZipLoaders = others.filter(([f, t]) => f !== 'js/native-libs.js' && (/jszip\/[\d.]+\/jszip/i.test(t) || /NativeLibs\.load\([^)]*['"]jszip['"]/.test(t))).map(([f]) => f);
-  check('export : JSZip ne se charge que par ExportCommon.ensureJsZipLoaded, hors du lot PDF', jsZipLoaders.length === 0 && /NativeLibs\.load\('jszip'\)/.test(read('js/export-common.js')) && /'jszip':[^\n]*jszip\/[\d.]+\/jszip/i.test(read('js/native-libs.js')), jsZipLoaders.join(', '));
+  // L'adresse de JSZip, telle que le CDN la sert : jsDelivr (`jszip@3.10.1/dist/jszip.min.js`, consigne 106 de GFS) ou, avant elle, cdnjs (`jszip/3.10.1/jszip.min.js`) : aucune des deux ne s'écrit hors de js/native-libs.js.
+  const jsZipAddress = /jszip(?:@|\/)[\d.]+\/(?:dist\/)?jszip/i;
+  const jsZipLoaders = others.filter(([f, t]) => f !== 'js/native-libs.js' && (jsZipAddress.test(t) || /NativeLibs\.load\([^)]*['"]jszip['"]/.test(t))).map(([f]) => f);
+  check('export : JSZip ne se charge que par ExportCommon.ensureJsZipLoaded, hors du lot PDF', jsZipLoaders.length === 0 && /NativeLibs\.load\('jszip'\)/.test(read('js/export-common.js')) && /'jszip':[^\n]*jszip@[\d.]+\/dist\/jszip/i.test(read('js/native-libs.js')), jsZipLoaders.join(', '));
 }
 
 // ============================================================================
@@ -787,7 +789,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
   const scriptSrc = (policy.match(/script-src([^;]*);/) || [])[1] || '';
   const allowed = [...new Set([...scriptSrc.matchAll(/https:\/\/([a-z0-9.-]+)/gi)].map(m => m[1]))].sort();
   const listed = [...noCommentsJs(read('js/first-contact.js')).matchAll(/host:\s*'([^']+)'/g)].map(m => m[1]).sort();
-  check('premier contact : la fenêtre « réseau bloqué » (HOSTS de js/first-contact.js) liste exactement les sites dont la politique de sécurité du contenu laisse charger des scripts', allowed.length >= 4 && JSON.stringify(allowed) === JSON.stringify(listed), `politique : ${allowed.join(', ')} ; fenêtre : ${listed.join(', ')}`);
+  check('premier contact : la fenêtre « réseau bloqué » (HOSTS de js/first-contact.js) liste exactement les sites dont la politique de sécurité du contenu laisse charger des scripts', allowed.length >= 3 && JSON.stringify(allowed) === JSON.stringify(listed), `politique : ${allowed.join(', ')} ; fenêtre : ${listed.join(', ')}`);
 }
 
 // ============================================================================

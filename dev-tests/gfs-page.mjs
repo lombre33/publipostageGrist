@@ -96,11 +96,11 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
   const offline = existsSync(esmMapPath);
   const esmMap = offline ? JSON.parse(readFileSync(esmMapPath, 'utf8')) : {};
   const umdRoutes = offline ? [
-    [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
-    [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/vfs_fonts\.min\.js$/, 'umd/vfs_fonts.min.js'],
-    [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.min\.js$/, 'umd/pdf.min.js'],
-    [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
-    [/^https:\/\/cdnjs\.cloudflare\.com\/.*\/jszip\.min\.js$/, 'umd/jszip.min.js'],
+    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
+    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
+    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.min\.js$/, 'umd/pdf.min.js'],
+    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
+    [/^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@[\d.]+\/dist\/jszip\.min\.js$/, 'umd/jszip.min.js'],
     [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@(?:(?!charts\.iife\.js).)*$/, 'umd/docx.iife.js'],
     // Les graphiques natifs de Word (lot 3 des graphiques créés) : le second fichier de la même version de docx, qui lit le global `docx` du premier (sans lui, l'export garde l'image du graphique).
     ...(existsSync(join(CACHE, 'umd/docx-charts.iife.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@[\d.]+\/dist\/charts\.iife\.js$/, 'umd/docx-charts.iife.js']] : []),
@@ -160,7 +160,7 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
       for (const [re, rel] of umdRoutes) {
         await page.route(re, async route => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: await readFile(join(CACHE, rel), 'utf8') }));
       }
-      // L'empreinte (SRI) d'un script est ignorée : le miroir n'a pas les octets exacts de tous les fichiers des CDN (vfs_fonts.min.js et qrcode.min.js de cdnjs ne sont pas ceux de npm). `realIntegrity` la garde VRAIE pour un script qui ne vient
+      // L'empreinte (SRI) d'un script est ignorée : le miroir n'a pas les octets exacts de tous les fichiers des CDN (les paquets reminifiés, les versions plus récentes). `realIntegrity` la garde VRAIE pour un script qui ne vient
       // pas d'un CDN (la copie figée de GFS, que le test sert lui-même : une fausse empreinte y est refusée par le navigateur, comme chez une personne) ; celle des CDN reste ignorée. `window.__integrity` garde chaque empreinte demandée
       // ({ src, integrity, enforced }) : de quoi lire, dans un essai, quelle empreinte l'app a posée sur quel fichier.
       await page.addInitScript((real) => {
@@ -170,7 +170,7 @@ export async function start({ name, port, popupBlocker = false, scrollbars = fal
           configurable: true,
           get() { return real ? native.get.call(this) : ''; },
           set(value) {
-            const enforced = real && !/^https:\/\/(?:cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net)\//.test(this.src);
+            const enforced = real && !/^https:\/\/cdn\.jsdelivr\.net\//.test(this.src);
             window.__integrity.push({ src: this.src, integrity: String(value), enforced });
             if (enforced) native.set.call(this, value);
           },

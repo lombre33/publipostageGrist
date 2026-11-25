@@ -14,7 +14,7 @@
 //   repli silencieux si elles manquent, comme pour tout document éditable.
 const DocxExport = (function () {
   // Chargement paresseux (comme ensurePdfLibsLoaded) : évite ~1,1 Mo au premier chargement du widget pour une fonctionnalité pas toujours utilisée.
-  // `docx` n'est pas sur cdnjs ; jsDelivr sert le fichier tel que publié sur npm (dist/index.iife.js, pas ...iife.min.js, que jsDelivr reminifie à la
+  // jsDelivr sert le fichier de `docx` tel que publié sur npm (dist/index.iife.js, pas ...iife.min.js, que jsDelivr reminifie à la
   // volée : incompatible avec un SRI stable). D'où il vient (la copie figée de GFS ou le CDN, avec son empreinte SRI) : js/native-libs.js, fonction « word ».
   let docxLibPromise = null;
   async function ensureDocxLibLoaded() {

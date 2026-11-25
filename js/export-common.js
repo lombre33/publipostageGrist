@@ -52,10 +52,10 @@ const ExportCommon = (function () {
     return cssColorCache.get(v);
   }
 
-  // D'où un script peut venir : les deux CDN que la politique de sécurité du contenu d'index.html laisse charger des scripts, avec une empreinte (SRI) que
+  // D'où un script peut venir : le CDN que la politique de sécurité du contenu d'index.html laisse charger des scripts (jsDelivr, consigne 106 de GFS), avec une empreinte (SRI) que
   // le navigateur vérifie, ou le dépôt lui-même (même origine que la page, sans SRI). Le texte de refus, ou '' quand la bibliothèque est permise ; la
   // politique du navigateur refuserait déjà le reste, ceci le dit avant d'ajouter la balise.
-  const SCRIPT_CDN_ORIGINS = new Set(['https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net']);
+  const SCRIPT_CDN_ORIGINS = new Set(['https://cdn.jsdelivr.net']);
   function scriptRefusal(lib) {
     const src = String((lib && lib.src) || '').trim();
     if (!src) return 'adresse absente';

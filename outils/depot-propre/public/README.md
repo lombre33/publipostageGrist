@@ -230,7 +230,7 @@ Dans les tables qui portent vos données, le widget n'écrit dans aucune colonne
 
 ### Bibliothèques externes et politique de sécurité
 
-Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition TipTap/ProseMirror), `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` (exports PDF, Word, Excel, lecteur de l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `cdnjs` et de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de style ne vient d'un autre site. Une vidéo YouTube ou Vimeo posée dans un modèle ne se charge qu'au clic sur ▶ : sans Grist Factory Suite, son lecteur est un cadre de `youtube-nocookie.com` ou de `player.vimeo.com`, les deux seuls cadres que la politique de sécurité autorise ; avec Grist Factory Suite, c'est lui qui joue le lecteur et l'app ne pose aucun cadre.
+Le widget charge des bibliothèques tierces à l'exécution, depuis `esm.sh` (moteur d'édition TipTap/ProseMirror), `cdn.jsdelivr.net` (exports PDF, Word, Excel, lecteur de l'import Markdown et QR code, chargés au premier usage) et `docs.getgrist.com` (API de Grist), à des versions figées, sauf le script de l'API de Grist, que Grist sert dans sa version courante. Les fichiers venant de `jsDelivr` sont protégés par une intégrité SRI, qui empêche le navigateur d'exécuter un fichier altéré ; ce n'est techniquement pas possible pour l'import map `esm.sh`. Aucune police ni feuille de style ne vient d'un autre site. Une vidéo YouTube ou Vimeo posée dans un modèle ne se charge qu'au clic sur ▶ : sans Grist Factory Suite, son lecteur est un cadre de `youtube-nocookie.com` ou de `player.vimeo.com`, les deux seuls cadres que la politique de sécurité autorise ; avec Grist Factory Suite, c'est lui qui joue le lecteur et l'app ne pose aucun cadre.
 
 L'éditeur peut aussi démarrer sans rien demander à `esm.sh` : une copie figée de ses modules (TipTap, ProseMirror et leurs dépendances, 616 Ko dont 195 Ko compressés) est rangée dans le dépôt, sous `vendor/editeur/`. Elle est construite d'après les versions figées de la carte d'importation ; `COPIE.json` donne la version de chaque paquet et l'empreinte SHA-384 de chaque fichier, `LICENCES.txt` la licence de chacun (tous sous licence MIT). On la choisit dans Réglages > Thème > « Éditeur hors ligne », ou en ajoutant `copie=editeur` à l'adresse du widget ; Grist Factory Suite l'y met elle-même quand la personne choisit la copie dans sa fenêtre « Apps et extensions ». Seul l'éditeur est concerné : les exports gardent leurs bibliothèques, chargées à leur premier usage.
 
@@ -257,12 +257,12 @@ Aucune étape de build : tous les fichiers sont servis tels quels. Les biblioth�
 | `grist-plugin-api.js` | API du widget Grist (obligatoire) | `docs.getgrist.com` |
 | TipTap 3.31.3 + ProseMirror (une quinzaine de paquets) + `@floating-ui/dom` 1.6.12 | Moteur d'édition riche | `esm.sh`, ou la copie `vendor/editeur/` |
 | `@handlewithcare/prosemirror-suggest-changes` 0.1.8 | Suivi des modifications | `esm.sh`, ou la copie `vendor/editeur/` |
-| pdfmake 0.2.7 + `vfs_fonts` | Export PDF vectoriel | `cdnjs.cloudflare.com` |
-| pdf-lib 1.17.1 | Un seul PDF pour toutes les lignes, assemblage avant impression | `cdnjs.cloudflare.com` |
-| JSZip 3.10.1 | Export en lot (archive ZIP) | `cdnjs.cloudflare.com` |
-| ExcelJS 4.4.0 | Export Excel | `cdnjs.cloudflare.com` |
-| qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
-| marked 15.0.12 | Import Markdown | `cdnjs.cloudflare.com` |
+| pdfmake 0.2.7 + `vfs_fonts` | Export PDF vectoriel | `cdn.jsdelivr.net` |
+| pdf-lib 1.17.1 | Un seul PDF pour toutes les lignes, assemblage avant impression | `cdn.jsdelivr.net` |
+| JSZip 3.10.1 | Export en lot (archive ZIP) | `cdn.jsdelivr.net` |
+| ExcelJS 4.4.0 | Export Excel | `cdn.jsdelivr.net` |
+| qrcode-generator 1.4.4 | QR code | `cdn.jsdelivr.net` |
+| marked 15.0.12 | Import Markdown | `cdn.jsdelivr.net` |
 | docx 9.15.1 (+ `docx/charts`) | Export Word | `cdn.jsdelivr.net` |
 
 L'interface prend la police du système. Les polices des documents sont dans le dépôt : Roboto pour l'éditeur, et pour le PDF Roboto, Arimo, Tinos, Cousine, Gelasio et Carlito, les équivalents libres de même métrique d'Arial, Times New Roman, Courier New, Georgia et Calibri. Les licences de toutes ces bibliothèques et polices sont dans [NOTICE](NOTICE).
@@ -272,7 +272,7 @@ L'interface prend la police du système. Les polices des documents sont dans le 
 **Accès, réseau et sécurité**
 
 - **Accès complet au document** : faute de niveau intermédiaire dans Grist, le widget demande `requiredAccess: 'full'` (voir [Sécurité et permissions](#sécurité-et-permissions)). Les dépendances ne sont pas toutes embarquées : seul l'éditeur existe en copie dans le dépôt (Réglages > Thème > « Éditeur hors ligne »), les bibliothèques des exports se chargent depuis leurs CDN.
-- **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ; `cdnjs.cloudflare.com` et `cdn.jsdelivr.net` le sont au premier export ou au premier import Markdown. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses. L'éditeur peut se passer d'`esm.sh` avec sa copie hors ligne (Réglages > Thème > « Éditeur hors ligne », ou `copie=editeur` dans l'adresse du widget) ; `docs.getgrist.com` reste nécessaire.
+- **Réseau** : `esm.sh` (éditeur) et `docs.getgrist.com` (API de Grist) sont nécessaires au démarrage ; `cdn.jsdelivr.net` l'est au premier export ou au premier import Markdown. Un pare-feu qui bloque l'un d'eux empêche le widget de démarrer ou l'export de se faire : il faut les autoriser. Au démarrage, le widget le dit dans une fenêtre qui liste ces adresses. L'éditeur peut se passer d'`esm.sh` avec sa copie hors ligne (Réglages > Thème > « Éditeur hors ligne », ou `copie=editeur` dans l'adresse du widget) ; `docs.getgrist.com` reste nécessaire.
 - **Audit externe** : un outil d'audit de code, gwaudit, a analysé le widget le 4 octobre 2026, puis de nouveau le 4 novembre 2026 sur la V1. Son verdict est « NON CONFORME », avec 69 points bloquants à la dernière analyse de la V1, et tous viennent d'un seul choix : l'éditeur (TipTap et ProseMirror) se charge depuis `esm.sh`, un site tiers, sans contrôle d'intégrité SRI (cette vérification qu'un fichier venu d'un site tiers n'a pas été modifié, que le mécanisme de chargement de l'éditeur, un import map, ne permet pas ; voir [Dépendances](#dépendances)). Ce choix est conservé dans la version actuelle, donc le verdict reste « NON CONFORME ». Concrètement, l'outil juge qu'un hébergement sur une instance officielle (DINUM, ANCT) est exclu en l'état. Le widget reste installable ailleurs : à chaque personne de juger si ce risque convient à son usage.
 - **Droits par personne** : un verrou d'interface, pas une protection des données (voir [Sécurité et permissions](#sécurité-et-permissions)).
 
@@ -574,7 +574,7 @@ In the tables that hold your data, the widget writes to no existing column, exce
 
 ### External libraries and security policy
 
-The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing engine), `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` (PDF, Word and Excel exports, the Markdown import reader and QR code, loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which Grist serves in its current version. Files from `cdnjs` and `jsDelivr` are protected by SRI integrity hashes, which stop the browser from running a tampered file; this isn't technically possible for the `esm.sh` import map. No font or stylesheet comes from another site. A YouTube or Vimeo video placed in a template is only loaded when ▶ is clicked: without Grist Factory Suite, its player is a frame from `youtube-nocookie.com` or `player.vimeo.com`, the only two frames the content security policy allows; with Grist Factory Suite, it plays the player itself and the app places no frame.
+The widget loads third-party libraries at runtime, from `esm.sh` (the TipTap/ProseMirror editing engine), `cdn.jsdelivr.net` (PDF, Word and Excel exports, the Markdown import reader and QR code, loaded on first use) and `docs.getgrist.com` (the Grist API), at pinned versions, except the Grist API script, which Grist serves in its current version. Files from `jsDelivr` are protected by SRI integrity hashes, which stop the browser from running a tampered file; this isn't technically possible for the `esm.sh` import map. No font or stylesheet comes from another site. A YouTube or Vimeo video placed in a template is only loaded when ▶ is clicked: without Grist Factory Suite, its player is a frame from `youtube-nocookie.com` or `player.vimeo.com`, the only two frames the content security policy allows; with Grist Factory Suite, it plays the player itself and the app places no frame.
 
 The editor can also start without asking `esm.sh` for anything: a frozen copy of its modules (TipTap, ProseMirror and their dependencies, 616 KB of which 195 KB compressed) is stored in the repository, under `vendor/editeur/`. It is built from the pinned versions of the import map; `COPIE.json` gives the version of every package and the SHA-384 hash of every file, `LICENCES.txt` the license of each one (all MIT). It is chosen in Settings > Theme > “Offline editor”, or by adding `copie=editeur` to the widget's address; Grist Factory Suite adds it itself when the person chooses the copy in its “Apps and extensions” window. Only the editor is concerned: the exports keep their libraries, loaded on first use.
 
@@ -601,12 +601,12 @@ No build step: every file is served as-is. Third-party libraries are loaded at r
 | `grist-plugin-api.js` | Grist widget API (required) | `docs.getgrist.com` |
 | TipTap 3.31.3 + ProseMirror (about fifteen packages) + `@floating-ui/dom` 1.6.12 | Rich text editing engine | `esm.sh`, or the copy `vendor/editeur/` |
 | `@handlewithcare/prosemirror-suggest-changes` 0.1.8 | Track changes | `esm.sh`, or the copy `vendor/editeur/` |
-| pdfmake 0.2.7 + `vfs_fonts` | Vector PDF export | `cdnjs.cloudflare.com` |
-| pdf-lib 1.17.1 | Single PDF for all rows, sheet assembly before printing | `cdnjs.cloudflare.com` |
-| JSZip 3.10.1 | Batch export (zip archive) | `cdnjs.cloudflare.com` |
-| ExcelJS 4.4.0 | Excel export | `cdnjs.cloudflare.com` |
-| qrcode-generator 1.4.4 | QR code | `cdnjs.cloudflare.com` |
-| marked 15.0.12 | Markdown import | `cdnjs.cloudflare.com` |
+| pdfmake 0.2.7 + `vfs_fonts` | Vector PDF export | `cdn.jsdelivr.net` |
+| pdf-lib 1.17.1 | Single PDF for all rows, sheet assembly before printing | `cdn.jsdelivr.net` |
+| JSZip 3.10.1 | Batch export (zip archive) | `cdn.jsdelivr.net` |
+| ExcelJS 4.4.0 | Excel export | `cdn.jsdelivr.net` |
+| qrcode-generator 1.4.4 | QR code | `cdn.jsdelivr.net` |
+| marked 15.0.12 | Markdown import | `cdn.jsdelivr.net` |
 | docx 9.15.1 (+ `docx/charts`) | Word export | `cdn.jsdelivr.net` |
 
 The interface uses the system font. The documents' fonts are in the repository: Roboto for the editor, and for the PDF Roboto, Arimo, Tinos, Cousine, Gelasio and Carlito, the free metric-compatible equivalents of Arial, Times New Roman, Courier New, Georgia and Calibri. The licenses of all these libraries and fonts are in [NOTICE](NOTICE).
@@ -616,7 +616,7 @@ The interface uses the system font. The documents' fonts are in the repository: 
 **Access, network and security**
 
 - **Full access to the document**: for lack of a middle level in Grist, the widget requests `requiredAccess: 'full'` (see [Security and permissions](#security-and-permissions)). The dependencies are not all bundled: only the editor exists as a copy in the repository (Settings > Theme > “Offline editor”), the export libraries are loaded from their CDNs.
-- **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup; `cdnjs.cloudflare.com` and `cdn.jsdelivr.net` are needed at the first export or the first Markdown import. A firewall that blocks one of them prevents the widget from starting or the export from working: they must be allowed. At startup, the widget says so in a window that lists these addresses. The editor can do without `esm.sh` thanks to its offline copy (Settings > Theme > “Offline editor”, or `copie=editeur` in the widget's address); `docs.getgrist.com` stays necessary.
+- **Network**: `esm.sh` (editor) and `docs.getgrist.com` (Grist API) are needed at startup; `cdn.jsdelivr.net` is needed at the first export or the first Markdown import. A firewall that blocks one of them prevents the widget from starting or the export from working: they must be allowed. At startup, the widget says so in a window that lists these addresses. The editor can do without `esm.sh` thanks to its offline copy (Settings > Theme > “Offline editor”, or `copie=editeur` in the widget's address); `docs.getgrist.com` stays necessary.
 - **External audit**: a code audit tool, gwaudit, analysed the widget on October 4, 2026, then again on November 4, 2026 on the V1. Its verdict is "NON CONFORME" (non-compliant), with 69 blocking points in the latest analysis of the V1, and they all come down to one choice: the editor (TipTap and ProseMirror) is loaded from `esm.sh`, a third-party site, without an SRI integrity check (the check that a file fetched from a third-party site has not been altered, which the editor's loading mechanism, an import map, doesn't allow; see [Dependencies](#dependencies)). That choice is kept in the current version, so the verdict stays "NON CONFORME". In practice, the tool rules out hosting the widget on an official instance (DINUM, ANCT) as it stands. The widget remains installable elsewhere: it is up to each person to judge whether this risk suits their use.
 - **Per-person rights**: an interface lock, not data protection (see [Security and permissions](#security-and-permissions)).
 

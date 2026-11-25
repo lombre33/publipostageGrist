@@ -127,14 +127,14 @@ function judge(where, rows) {
 // l'échelle 16 et son encre mesurée aux pixels ; côté éditeur, un petit inline-block vide posé au début de la ligne donne la ligne de base).
 {
   const { page: app } = await t.openPage({ hosted: false, colorScheme: 'light' });
-  await app.addScriptTag({ url: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' });
+  await app.addScriptTag({ url: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js' });
   for (const [style, attr] of STYLES) {
     const item = word => `<li data-checked="false" data-type="taskItem"><label><input type="checkbox"><span></span></label><div><p>${word}</p></div></li>`;
     const list = items => `<ul data-type="taskList"${attr ? ` data-tasklist-style="${attr}"` : ''}>${items}</ul>`;
     const result = await app.evaluate(async ({ three, one }) => {
       await ExportEngines.loadAll();
       await PdfExport.ensurePdfLibsLoaded();
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
       const pdfPage = async html => {
         const blob = (await PdfExport.getNativePdfBlobForRecord(html, null, {}, '', null)).blob;
         const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;

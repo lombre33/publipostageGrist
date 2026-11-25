@@ -28,15 +28,15 @@ const NativeLibs = (function () {
   // Chaque bibliothèque : la version de la liste (package.json), le fichier de son CDN et l'empreinte (SRI sha384) que l'outil du kit reporte depuis le catalogue ; recalculée, au besoin, par
   // `curl -s <adresse> | openssl dgst -sha384 -binary | openssl base64 -A`. Une copie de GFS ne se charge que si sa version est exactement celle-ci.
   const LIBRARIES = {
-    'pdfmake': { version: '0.2.7', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' } },
-    'pdfmake-polices': { version: '0.2.7', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js', integrity: 'sha384-dWs4+zGqy/KS6giKxiK+6iowhidQwjVFaiE1lMar36QwIulE44VyBSQp0brMCx4D' } },
-    'pdf-lib': { version: '1.17.1', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', integrity: 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' } },
-    'jszip': { version: '3.10.1', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' } },
+    'pdfmake': { version: '0.2.7', cdn: { src: 'https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/pdfmake.min.js', integrity: 'sha384-VFQrHzqBh5qiJIU0uGU5CIW3+OWpdGGJM9LBnGbuIH2mkICcFZ7lPd/AAtI7SNf7' } },
+    'pdfmake-polices': { version: '0.2.7', cdn: { src: 'https://cdn.jsdelivr.net/npm/pdfmake@0.2.7/build/vfs_fonts.js', integrity: 'sha384-go03OGrgP7enVgJF/9UK2k6D5xW+f7Vq1WHLp75VqnMN5uu+CZDXu7uGjjzZReI5' } },
+    'pdf-lib': { version: '1.17.1', cdn: { src: 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js', integrity: 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI' } },
+    'jszip': { version: '3.10.1', cdn: { src: 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', integrity: 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG' } },
     'docx': { version: '9.15.1', cdn: { src: 'https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/index.iife.js', integrity: 'sha384-ud8085E8t6iW4uUom5nN5cpzTZ4OdsNKB/AKWfOsI62tzsoV2X7r7/o4KWESO8rq' } },
     'docx-charts': { version: '9.15.1', cdn: { src: 'https://cdn.jsdelivr.net/npm/docx@9.15.1/dist/charts.iife.js', integrity: 'sha384-PFbg0J+cwbPG1He8zpFvlw/uXmHMA3ea3Gyyw9aS2IIjX0zKpD7YeprlCNVCMs1Y' } },
-    'exceljs': { version: '4.4.0', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js', integrity: 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' } },
-    'marked': { version: '15.0.12', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js', integrity: 'sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+' } },
-    'qrcode-generator': { version: '1.4.4', cdn: { src: 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', integrity: 'sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1' } },
+    'exceljs': { version: '4.4.0', cdn: { src: 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', integrity: 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz' } },
+    'marked': { version: '15.0.12', cdn: { src: 'https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js', integrity: 'sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+' } },
+    'qrcode-generator': { version: '1.4.4', cdn: { src: 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js', integrity: 'sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k' } },
   };
 
   const FUNCTION_OF = {};

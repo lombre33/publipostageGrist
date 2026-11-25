@@ -63,7 +63,7 @@
       },
       "exceljs": {
         "paquet": "exceljs",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+        "fichier": "dist/exceljs.min.js",
         "miroir": {
           "vers": "umd/exceljs.min.js",
           "depuis": "dist/exceljs.min.js"
@@ -71,7 +71,7 @@
       },
       "jszip": {
         "paquet": "jszip",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+        "fichier": "dist/jszip.min.js",
         "miroir": {
           "vers": "umd/jszip.min.js",
           "depuis": "dist/jszip.min.js"
@@ -79,7 +79,7 @@
       },
       "marked": {
         "paquet": "marked",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.12/marked.min.js",
+        "fichier": "marked.min.js",
         "miroir": {
           "vers": "umd/marked.min.js",
           "depuis": "marked.min.js"
@@ -87,7 +87,7 @@
       },
       "pdf-lib": {
         "paquet": "pdf-lib",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js",
+        "fichier": "dist/pdf-lib.min.js",
         "miroir": {
           "vers": "umd/pdf-lib.min.js",
           "depuis": "dist/pdf-lib.min.js"
@@ -95,7 +95,7 @@
       },
       "pdfmake": {
         "paquet": "pdfmake",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js",
+        "fichier": "build/pdfmake.min.js",
         "miroir": {
           "vers": "umd/pdfmake.min.js",
           "depuis": "build/pdfmake.min.js"
@@ -103,7 +103,7 @@
       },
       "pdfmake-polices": {
         "paquet": "pdfmake",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js",
+        "fichier": "build/vfs_fonts.js",
         "miroir": {
           "vers": "umd/vfs_fonts.min.js",
           "depuis": "build/vfs_fonts.js"
@@ -111,7 +111,7 @@
       },
       "qrcode-generator": {
         "paquet": "qrcode-generator",
-        "src": "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js",
+        "fichier": "qrcode.js",
         "miroir": {
           "vers": "umd/qrcode.min.js",
           "depuis": "qrcode.js"

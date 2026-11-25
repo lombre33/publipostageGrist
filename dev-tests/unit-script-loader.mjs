@@ -3,9 +3,9 @@
 // pour le contexte général. Audit externe de la bêta, 04/10, point C-EXFIL-05 (« URL de script dynamique ») : la bibliothèque à charger vient du tableau écrit dans le code (js/native-libs.js : neuf
 // bibliothèques rangées en sept fonctions - pdfmake et ses polices, pdf-lib, JSZip, docx et ses graphiques, ExcelJS, marked, qrcode-generator -, ou la copie figée que GFS en garde, du même
 // dépôt que la page ou de son origine), et le chargeur refuse tout le reste AVANT d'ajouter la balise :
-//  1) une adresse n'est permise que si elle vient d'un des deux CDN de la politique de sécurité du contenu (cdnjs.cloudflare.com, cdn.jsdelivr.net), en https, ET porte une empreinte SRI
+//  1) une adresse n'est permise que si elle vient du CDN de la politique de sécurité du contenu (cdn.jsdelivr.net : cdnjs n'en fait plus partie, consigne 106 de GFS), en https, ET porte une empreinte SRI
 //     (sha256, sha384 ou sha512), ou si elle vient du dépôt lui-même (même origine que la page, sans empreinte) ;
-//  2) tout autre site, un faux CDN (`cdnjs.cloudflare.com.autre.site`, `cdn.jsdelivr.net@autre.site`), le http, un schéma javascript: ou data:, une adresse vide ou illisible, une empreinte
+//  2) tout autre site (cdnjs compris), un faux CDN (`cdn.jsdelivr.net.autre.site`, `cdn.jsdelivr.net@autre.site`), le http, un schéma javascript: ou data:, une adresse vide ou illisible, une empreinte
 //     absente ou d'un autre algorithme sont refusés, et la promesse est rejetée sans que le document reçoive la moindre balise ;
 //  3) les sept bibliothèques du widget passent la règle (une huitième, ajoutée sans empreinte ou depuis un autre site, la ferait échouer ici) ;
 //  4) `type: 'module'` (le fichier assemblé d'une extension de GFS, js/extensions.js:loadModuleLibrary) pose le type de la balise, avec la même empreinte et le même crossOrigin : le widget n'a
@@ -36,12 +36,12 @@ function fresh() {
 async function main() {
   const { refusal, load, appended } = fresh();
 
-  // 1. Permises : les deux CDN en https avec empreinte, et le dépôt (relatif ou absolu, sans empreinte).
+  // 1. Permises : le CDN en https avec empreinte, et le dépôt (relatif ou absolu, sans empreinte).
   const allowed = [
-    ['cdnjs avec sha384', { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: SRI }],
+    ['jsDelivr avec sha384 (jszip)', { src: 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', integrity: SRI }],
     ['jsDelivr avec sha384', { src: 'https://cdn.jsdelivr.net/npm/docx@9.7.1/dist/index.iife.js', integrity: SRI }],
-    ['cdnjs avec sha256', { src: 'https://cdnjs.cloudflare.com/x.js', integrity: 'sha256-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG=' }],
-    ['cdnjs avec sha512', { src: 'https://cdnjs.cloudflare.com/x.js', integrity: 'sha512-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG+/==' }],
+    ['jsDelivr avec sha256', { src: 'https://cdn.jsdelivr.net/x.js', integrity: 'sha256-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG=' }],
+    ['jsDelivr avec sha512', { src: 'https://cdn.jsdelivr.net/x.js', integrity: 'sha512-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG+/==' }],
     ['dépôt, adresse relative, sans empreinte', { src: 'js/autre.js' }],
     ['dépôt, adresse absolue, sans empreinte', { src: PAGE + '/js/autre.js' }],
   ];
@@ -50,17 +50,18 @@ async function main() {
   // 2. Refusées : chacune dit pourquoi, et le chargeur ne touche pas au document.
   const refused = [
     ['un autre site avec empreinte', { src: 'https://evil.example/x.js', integrity: SRI }, 'origine non permise'],
-    ['un faux CDN (le nom du CDN en sous-domaine d\'un autre site)', { src: 'https://cdnjs.cloudflare.com.evil.example/x.js', integrity: SRI }, 'origine non permise'],
+    ['cdnjs, qui n\'est plus un CDN permis (consigne 106 de GFS), même avec une empreinte', { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', integrity: SRI }, 'origine non permise'],
+    ['un faux CDN (le nom du CDN en sous-domaine d\'un autre site)', { src: 'https://cdn.jsdelivr.net.evil.example/x.js', integrity: SRI }, 'origine non permise'],
     ['un faux CDN (le nom du CDN avant un @)', { src: 'https://cdn.jsdelivr.net@evil.example/x.js', integrity: SRI }, 'origine non permise'],
     ['une adresse sans schéma qui part sur un autre site', { src: '//evil.example/x.js', integrity: SRI }, 'origine non permise'],
-    ['le CDN en http', { src: 'http://cdnjs.cloudflare.com/ajax/libs/x.js', integrity: SRI }, 'origine non permise'],
+    ['le CDN en http', { src: 'http://cdn.jsdelivr.net/npm/x.js', integrity: SRI }, 'origine non permise'],
     ['un schéma javascript:', { src: 'javascript:alert(1)', integrity: SRI }, 'origine non permise'],
     ['un schéma data:', { src: 'data:text/javascript,alert(1)', integrity: SRI }, 'origine non permise'],
     ['un schéma blob:', { src: 'blob:https://widget.exemple.test/abc', integrity: SRI }, 'origine non permise'],
-    ['un CDN sans empreinte', { src: 'https://cdnjs.cloudflare.com/ajax/libs/x.js' }, 'empreinte absente ou illisible'],
-    ['un CDN avec une empreinte vide', { src: 'https://cdnjs.cloudflare.com/ajax/libs/x.js', integrity: '' }, 'empreinte absente ou illisible'],
-    ['un CDN avec une empreinte d\'un autre algorithme', { src: 'https://cdnjs.cloudflare.com/ajax/libs/x.js', integrity: 'md5-abcdef==' }, 'empreinte absente ou illisible'],
-    ['un CDN avec une empreinte mal formée', { src: 'https://cdnjs.cloudflare.com/ajax/libs/x.js', integrity: 'sha384-pas valide !' }, 'empreinte absente ou illisible'],
+    ['un CDN sans empreinte', { src: 'https://cdn.jsdelivr.net/npm/x.js' }, 'empreinte absente ou illisible'],
+    ['un CDN avec une empreinte vide', { src: 'https://cdn.jsdelivr.net/npm/x.js', integrity: '' }, 'empreinte absente ou illisible'],
+    ['un CDN avec une empreinte d\'un autre algorithme', { src: 'https://cdn.jsdelivr.net/npm/x.js', integrity: 'md5-abcdef==' }, 'empreinte absente ou illisible'],
+    ['un CDN avec une empreinte mal formée', { src: 'https://cdn.jsdelivr.net/npm/x.js', integrity: 'sha384-pas valide !' }, 'empreinte absente ou illisible'],
     ['une adresse vide', { src: '' }, 'adresse absente'],
     ['aucune adresse', {}, 'adresse absente'],
     ['aucune bibliothèque', null, 'adresse absente'],
