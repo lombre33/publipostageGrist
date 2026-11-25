@@ -28,6 +28,7 @@
 //   SchemaColumns.docApi.listTables() / .fetchTable(table) / .applyUserActions(actions) -> comme grist.docApi, noms anglais
 //   SchemaColumns.actualTable(nom anglais) -> le nom que la table a (ou aura) dans le document : page-tree.js le compare aux métadonnées de Grist
 //   SchemaColumns.whereIs(table, colonne) -> { table, column, label } : où la colonne est dans CE document, avec les noms que la personne voit dans Grist
+//   SchemaColumns.columnIds(table) -> les colonnes de la table sous leurs noms anglais, lues dans les métadonnées de Grist et jamais dans la table (null : le document n'a pas la table)
 //   SchemaColumns.setEnglishOnDisk(vrai | faux), SchemaColumns.reset() -> l'interrupteur, et l'oubli de ce qui a été lu du document (essais)
 const SchemaColumns = (function () {
   // Faux : le document garde (et reçoit) les noms français d'avant. Vrai : les noms anglais.
@@ -221,6 +222,29 @@ const SchemaColumns = (function () {
     return found;
   }
 
+  // Les colonnes d'une table de la liste SOUS LEURS NOMS ANGLAIS, lues dans les métadonnées de Grist (quelques Ko), jamais dans la table : elle peut peser des dizaines de Mo, et Grist ou son hôte peuvent refuser de la rendre d'un coup
+  // (consigne 103 de GFS : au-delà d'un certain poids, chaque lecture entière échoue, et une migration qui la relisait pour compter ses colonnes échouait avec elle). Rend null quand le document n'a pas la table ; rejette quand les métadonnées ne se
+  // lisent pas. Une lecture à neuf à chaque appel : celui qui s'en sert ajoute les colonnes qui manquent, il ne doit pas se fier à ce qu'une lecture plus ancienne a vu (pendant l'ouverture, ces métadonnées sont déjà lues en commun : js/open-reads.js).
+  async function columnIds(name) {
+    if (migration) await migration;
+    const [tables, columns] = await Promise.all([real().fetchTable('_grist_Tables'), real().fetchTable('_grist_Tables_column')]);
+    const table = byEnglish.get(name);
+    const tableIds = tables.tableId || [];
+    const present = new Set((table ? [table.id, table.legacyId] : [name]).filter(candidate => tableIds.includes(candidate)));
+    if (!present.size) return null;
+    const actual = table ? actualTableIn(table, present) : name;
+    const ref = tables.id[tableIds.indexOf(actual)];
+    const keys = new Set();
+    (columns.colId || []).forEach((colId, i) => { if (columns.parentId[i] === ref) keys.add(colId); });
+    columnsByTable.set(actual, keys);
+    if (!table) return new Set(keys);
+    const chosen = englishOf(table, keys);
+    const ids = new Set();
+    keys.forEach(key => { if (!chosen.has(key)) ids.add(key); });
+    chosen.forEach(english => ids.add(english));
+    return ids;
+  }
+
   // --- La reprise des documents d'avant ---------------------------------------------------------------------------------------------------------------------------------------
 
   // Le lot d'actions qui met à l'anglais les tables et les colonnes que le document porte sous leurs noms d'avant. `names` : les tables du document ; `labelsOf(table)` : les colonnes d'une
@@ -349,14 +373,18 @@ const SchemaColumns = (function () {
   }
 
   // Les colonnes d'une lecture complète, rendues sous leurs noms anglais (les noms que le document porte, sauf une colonne de la personne qui aurait déjà le nom anglais).
-  function toEnglishColumns(table, columnsData) {
-    if (!columnsData || typeof columnsData !== 'object' || Array.isArray(columnsData)) return columnsData;
-    const keys = new Set(Object.keys(columnsData));
+  // Pour chaque colonne que `keys` porte sous un nom de la liste : son nom réel -> son identifiant anglais.
+  function englishOf(table, keys) {
     const chosen = new Map();
     table.pairs.forEach(pair => {
       const actual = columnIn(pair, keys);
       if (keys.has(actual)) chosen.set(actual, pair.id);
     });
+    return chosen;
+  }
+  function toEnglishColumns(table, columnsData) {
+    if (!columnsData || typeof columnsData !== 'object' || Array.isArray(columnsData)) return columnsData;
+    const chosen = englishOf(table, new Set(Object.keys(columnsData)));
     const out = {};
     Object.keys(columnsData).forEach(key => { if (!chosen.has(key)) out[key] = columnsData[key]; });
     chosen.forEach((english, actual) => { out[english] = columnsData[actual]; });
@@ -559,5 +587,5 @@ const SchemaColumns = (function () {
     },
   };
 
-  return { docApi, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated, isStale: () => namesChangedElsewhere };
+  return { docApi, columnIds, actualTable, whereIs, setEnglishOnDisk, setRenameDocuments, reset, TABLES, planRenames, lastMigration, onMigrated, isStale: () => namesChangedElsewhere };
 })();

@@ -29,7 +29,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
+import { createContext, loadScript, evalIn, check, summarizeAndExit, metadataOf } from './unit-harness.mjs';
 import { I18N_FILES, i18nTexts } from './i18n-files.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,6 +90,9 @@ class Doc {
   async listTables() { return Object.keys(this.tables); }
 
   async fetchTable(tableId) {
+    // Les métadonnées de Grist (les colonnes des tables, lues sans les lire : SchemaColumns.columnIds) : ni comptées parmi les lectures de tables, ni refusées.
+    const meta = metadataOf(tableId, Object.fromEntries(Object.keys(this.tables).map((id) => [id, Object.keys(this.tables[id].cols)])));
+    if (meta) return meta;
     this.reads.push(tableId);
     if (this.onRead) this.onRead(tableId);
     if (this.failReads.has(tableId)) throw new Error('Table illisible : ' + tableId);

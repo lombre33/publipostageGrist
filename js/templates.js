@@ -31,6 +31,8 @@ const Templates = (function () {
 
   const columnMigrations = [];
   let migrationRuns = 0; // migrations réellement lancées (pas celles tenues pour faites) : loadAll en déduit si sa lecture initiale est encore juste
+  // Les fois où ce widget a créé la table ou ajouté une colonne à la table des modèles : loadAll en déduit si une table qu'elle n'a pas pu lire vaut d'être relue (cf. loadAll).
+  let tableChanges = 0;
   function ensureOnce(worker, columns) {
     // Chaque migration suit un patron « lire (fetchTable) puis ajouter (AddVisibleColumn) » qui n'est pas atomique. L'enregistrement automatique
     // (js/main.js) appelle loadAll toutes les ~2,5 s et un Enregistrer manuel appelle save : les deux passent par les mêmes migrations. Sur un
@@ -43,8 +45,9 @@ const Templates = (function () {
     // loadAll lit la table une seule fois et tient pour faites celles dont toutes les colonnes s'y trouvent, au lieu d'une lecture complète par
     // migration (contenus et images compris). Sans `columns`, une migration n'est jamais tenue pour faite d'avance : elle tourne au premier appel.
     //
-    // `known` (facultatif) : l'ensemble des colonnes que loadAll vient de lire dans la table. Une migration qui doit ajouter une colonne s'en sert au lieu de relire la table entière : sur une
-    // table de 16 Mo, un document d'avant (huit colonnes à ajouter) relisait neuf fois de suite, ~8 s (constaté par GFS), et une première lecture qui échouait une fois aussi (cf. loadAll).
+    // `known` (facultatif) : l'ensemble des colonnes de la table, que loadAll vient de lire dans la table (ou dans les métadonnées de Grist quand la table ne se lit pas). Une migration qui doit ajouter une colonne s'en sert et, sans lui, lit les
+    // MÉTADONNÉES (SchemaColumns.columnIds) : jamais la table entière. Sur une table de 16 Mo, un document d'avant (huit colonnes à ajouter) la relisait neuf fois de suite, ~8 s (constaté par GFS) ; au-dessus d'un certain poids chaque lecture
+    // échoue, et neuf lectures perdues s'ajoutaient aux deux de loadAll (consigne 103 de GFS, demande 3).
     let inFlight = null;
     function ensure(known) {
       if (!inFlight) {
@@ -54,7 +57,8 @@ const Templates = (function () {
       return inFlight;
     }
     if (columns) {
-      ensure.satisfiedBy = data => columns.every(column => column in data);
+      // `data` : les colonnes d'une lecture de la table (un objet par colonne) ou celles que disent les métadonnées de Grist (un ensemble).
+      ensure.satisfiedBy = data => columns.every(column => (data instanceof Set ? data.has(column) : column in data));
       ensure.markDone = () => { if (!inFlight) inFlight = Promise.resolve(true); };
       columnMigrations.push(ensure);
     }
@@ -63,12 +67,13 @@ const Templates = (function () {
 
   const ensureTableExists = ensureOnce(async function () {
     try {
-      await GristAPI.ensureTable(TABLE_NAME, [
+      const created = await GristAPI.ensureTable(TABLE_NAME, [
         { id: 'Name', type: 'Text' },
         { id: 'Content', type: 'Text' },
         { id: 'PdfFileName', type: 'Text' },
         { id: 'ModifiedAt', type: 'DateTime' },
       ]);
+      if (created) tableChanges++;
       return true;
     } catch (e) {
       // La personne refuse de créer la table : tout ce qui en dépend s'arrête (loadAll rend une liste vide, Enregistrer le dit), sans journal d'erreur.
@@ -87,10 +92,12 @@ const Templates = (function () {
       // compte qui modifie le document la crée à son tour.
       if (GristAPI.isDocumentReadOnly()) return false;
       try {
-        // Les colonnes de la table : celles que loadAll vient de lire (`known`, qui reçoit aussi les colonnes ajoutées) ; sans lui (un enregistrement, un module qui demande sa colonne), une lecture.
-        const present = known instanceof Set ? known : new Set(Object.keys(await SchemaColumns.docApi.fetchTable(TABLE_NAME)));
+        // Les colonnes de la table : celles que loadAll vient de lire (`known`, qui reçoit aussi les colonnes ajoutées) ; sans lui (un enregistrement, un module qui demande sa colonne), les métadonnées de Grist, quelques Ko : la table entière
+        // peut peser des dizaines de Mo, et au-dessus d'un certain poids Grist ne la rend plus (consigne 103 de GFS). Une table que le document n'a pas encore : rien à ajouter, la migration attend la table.
+        const present = known instanceof Set ? known : await SchemaColumns.columnIds(TABLE_NAME);
+        if (!present) return false;
         const actions = columns.filter(([id]) => !present.has(id)).map(([id, type]) => ['AddVisibleColumn', TABLE_NAME, id, { type, isFormula: false }]);
-        if (actions.length) await SchemaColumns.docApi.applyUserActions(actions);
+        if (actions.length) { await SchemaColumns.docApi.applyUserActions(actions); tableChanges++; }
         actions.forEach(action => present.add(action[2]));
         return true;
       } catch (e) {
@@ -571,30 +578,46 @@ const Templates = (function () {
     return fullRead;
   }
 
+  // Les migrations dont toutes les colonnes sont là (`columns` : une lecture de la table, ou l'ensemble que disent les métadonnées) n'ont rien à faire : tenues pour faites.
+  function markDoneMigrations(columns) { columnMigrations.forEach(migration => { if (migration.satisfiedBy(columns)) migration.markDone(); }); }
+
+  // Les colonnes de la table quand elle ne s'est pas lue : les métadonnées de Grist (quelques Ko, SchemaColumns.columnIds). null quand elles ne se lisent pas, ou que le document n'a pas la table.
+  async function readColumnsFromMetadata() {
+    let found = null;
+    try { found = await SchemaColumns.columnIds(TABLE_NAME); } catch (e) { return null; }
+    if (found) markDoneMigrations(found);
+    return found;
+  }
+
   async function readAll() {
     const settingsEpochAtStart = settingsEpoch;
     const writtenAtStart = cacheWrites;
     const readStartedAt = Date.now();
     // Une seule lecture pour tout vérifier : les migrations dont les colonnes sont déjà là n'ont plus rien à relire (cf. ensureOnce).
     let first = await readTable();
-    // Une lecture qui échoue ne dit rien des colonnes, et sans elle chaque migration relit la table entière : neuf lectures de suite, ~8 s sur une table de 16 Mo (constaté par GFS, une ouverture sur six).
-    // Une seule nouvelle tentative avant de s'y résoudre (une table absente, un document neuf, échoue vite aux deux).
+    // Une lecture qui échoue ne dit rien des colonnes. Une seule nouvelle tentative (une table absente, un document neuf, échoue vite aux deux), jamais davantage : au-dessus d'un certain poids Grist ou son hôte ne rendent plus la table
+    // d'un coup, et chaque lecture de plus échoue de même - avant, chaque migration relisait la table entière : jusqu'à onze lectures perdues à la suite, ~8 s sur une table de 16 Mo (constaté par GFS, consigne 103, demande 3).
     if (!first) first = await readTable();
-    if (first) columnMigrations.forEach(migration => { if (migration.satisfiedBy(first)) migration.markDone(); });
+    if (first) markDoneMigrations(first);
     // Les colonnes de cette lecture, que les migrations de ce passage se passent de l'une à l'autre (celles qu'elles ajoutent y entrent) au lieu de relire la table : un document d'avant, dont huit colonnes
     // manquent, lit sa table deux fois (au départ et à la fin) et non dix.
-    const known = first ? new Set(Object.keys(first)) : null;
+    let known = first ? new Set(Object.keys(first)) : null;
     const runsBefore = migrationRuns;
+    const changesBefore = tableChanges;
     try {
       await ensureTableExists();
-      await ensureHeaderFooterColumn(known);
-      await ensureDefaultColumn(known);
-      await ensureMarginsColumn(known);
-      await ensureDateModifColumn(known);
-      await ensureEmailColumns(known);
-      await pjColumnReady(known);
-      await ensureTrackChangesColumn(known);
-      await modifiedByColumnReady(known);
+      // Une table qui ne s'est pas lue dit ses colonnes par les métadonnées de Grist : les migrations ne la relisent JAMAIS. Sans elles non plus (métadonnées illisibles, table absente), les migrations attendent le passage suivant.
+      if (!known) known = await readColumnsFromMetadata();
+      if (known) {
+        await ensureHeaderFooterColumn(known);
+        await ensureDefaultColumn(known);
+        await ensureMarginsColumn(known);
+        await ensureDateModifColumn(known);
+        await ensureEmailColumns(known);
+        await pjColumnReady(known);
+        await ensureTrackChangesColumn(known);
+        await modifiedByColumnReady(known);
+      }
     } catch (e) {
       // Table refusée par la personne : aucun modèle à lire, et rien d'une erreur (ni ici ni dans le démarrage qui attend cette liste).
       if (!GristAPI.isTablesDeclined(e)) throw e;
@@ -605,7 +628,12 @@ const Templates = (function () {
     }
     try {
       // Aucune migration n'a tourné (ni écrit une colonne) depuis la lecture initiale : elle est encore la table, inutile de la relire.
-      const tableData = first && migrationRuns === runsBefore ? first : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
+      let tableData = first && migrationRuns === runsBefore ? first : null;
+      if (!tableData) {
+        // Deux lectures perdues et rien de changé depuis (ni table créée, ni colonne ajoutée) : une troisième échouerait de même. Le cache reste ce qu'il est, le passage suivant réessaiera.
+        if (!first && tableChanges === changesBefore) throw new Error('La table ' + TABLE_NAME + ' ne se lit pas : deux lectures ont échoué.');
+        tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
+      }
       const weights = { columns: {}, rows: 0, heaviest: [] };
       const weighStart = Date.now();
       loadedChars = charsOf(tableData, weights);

@@ -28,6 +28,18 @@ export function evalIn(context, expr) {
   return vm.runInContext(expr, context);
 }
 
+// Ce que Grist rend de `_grist_Tables` et de `_grist_Tables_column` pour un faux document dont les tables sont `{ tableId: [colId, ...] }` (manualSort en plus, comme Grist) : de quoi lire les colonnes d'une
+// table SANS la lire (SchemaColumns.columnIds, consigne 103 de GFS). `null` quand `name` n'est pas une de ces deux métadonnées : le faux document sert alors sa propre table.
+export function metadataOf(name, tables) {
+  const ids = Object.keys(tables);
+  if (name === '_grist_Tables') return { id: ids.map((_, i) => i + 1), tableId: ids.slice() };
+  if (name !== '_grist_Tables_column') return null;
+  const out = { id: [], parentId: [], colId: [] };
+  let rowId = 1;
+  ids.forEach((tableId, at) => ['manualSort'].concat(tables[tableId]).forEach((colId) => { out.id.push(rowId++); out.parentId.push(at + 1); out.colId.push(colId); }));
+  return out;
+}
+
 let failures = 0;
 let total = 0;
 export function check(name, pass, notes) {

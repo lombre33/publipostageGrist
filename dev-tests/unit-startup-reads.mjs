@@ -287,6 +287,81 @@ async function main() {
     check('première lecture en échec : le passage suivant ne relit qu\'une fois', doc.readsOf('Publipostage_Modeles') === 1 && doc.log.length === 1, doc.log.map((c) => c.name + ':' + c.arg));
   }
 
+  // 5 quater. La table ne se lit plus du tout (consigne 103 de GFS, demande 3 : au-dessus d'un certain poids, Grist ou son hôte ne la rendent plus d'un coup, chaque lecture entière échoue). Avant, les deux lectures
+  // de loadAll étaient suivies d'une lecture par migration (huit) puis de la dernière : onze lectures perdues à la suite, à chaque passage. Maintenant les colonnes viennent des MÉTADONNÉES de Grist (quelques Ko) :
+  // deux lectures de la table, et pas une de plus.
+  {
+    const doc = makeDoc();
+    failFirstReads(doc, 'Publipostage_Modeles', Infinity);
+    const { run, errors } = fresh(doc);
+    const templates = await run('Templates.loadAll()');
+    check('table qui ne se lit plus : deux lectures, pas davantage (avant : onze)', doc.readsOf('Publipostage_Modeles') === 2, doc.readsOf('Publipostage_Modeles'));
+    check('table qui ne se lit plus : les colonnes sont lues dans les métadonnées', doc.readsOf('_grist_Tables_column') >= 1 && doc.readsOf('_grist_Tables') >= 1, doc.log.map((c) => c.arg));
+    check('table qui ne se lit plus : rien n\'est ajouté, tout est déjà là', doc.actions.length === 0, doc.actions.map((a) => a[0] + a[2]));
+    check('table qui ne se lit plus : l\'échec est dit une fois, la liste est vide', errors.length === 1 && /Erreur chargement modèles/.test(errors[0]) && Array.isArray(templates) && templates.length === 0, errors);
+    doc.resetLog();
+    await run('Templates.loadAll()');
+    check('table qui ne se lit plus : chaque passage suivant coûte deux lectures, et rien n\'est écrit', doc.readsOf('Publipostage_Modeles') === 2 && doc.actions.length === 0, doc.readsOf('Publipostage_Modeles'));
+    // La table redevient lisible (la lecture suivante passe) : les modèles arrivent, sans migration à refaire.
+    doc.fetchTable = StartupDoc.prototype.fetchTable.bind(doc);
+    doc.resetLog();
+    const back = await run('Templates.loadAll()');
+    check('table qui redevient lisible : les modèles arrivent, par UNE lecture', back.length === 2 && doc.readsOf('Publipostage_Modeles') === 1, { lignes: back.length, lectures: doc.readsOf('Publipostage_Modeles') });
+  }
+
+  // 5 quinquies. Un document d'avant dont la table ne se lit plus : ses colonnes manquantes s'ajoutent quand même, d'après les métadonnées (avant : chaque migration échouait à relire la table, rien ne s'ajoutait).
+  // Trois lectures : les deux qui échouent, et la dernière, tentée parce que la table vient de changer.
+  {
+    const doc = makeDoc({ without: MIGRATED_COLUMNS });
+    failFirstReads(doc, 'Publipostage_Modeles', Infinity);
+    const { run } = fresh(doc);
+    await run('Templates.loadAll()');
+    const added = doc.actions.filter((a) => a[0] === 'AddVisibleColumn').map((a) => a[2]);
+    check('document d\'avant, table illisible : chaque colonne manquante est ajoutée une fois, une écriture par migration', sameList(added.slice().sort(), MIGRATED_COLUMNS.slice().sort()) && doc.log.filter((c) => c.name === 'applyUserActions').length === 8, added);
+    check('document d\'avant, table illisible : trois lectures de la table (avant : onze)', doc.readsOf('Publipostage_Modeles') === 3, doc.readsOf('Publipostage_Modeles'));
+    doc.resetLog();
+    await run('Templates.loadAll()');
+    check('document d\'avant, table illisible : le passage suivant n\'écrit plus rien et ne lit que deux fois', doc.actions.length === added.length && doc.log.filter((c) => c.name === 'applyUserActions').length === 0 && doc.readsOf('Publipostage_Modeles') === 2, doc.log.map((c) => c.name + ':' + c.arg));
+  }
+
+  // 5 sexies. Un document sans la table des modèles : les deux lectures ne la trouvent pas, la table est créée et lue UNE fois à la fin - trois lectures (avant : onze, huit d'elles pour rien).
+  {
+    const doc = makeDoc({ modeles: false });
+    const { run, errors } = fresh(doc);
+    const templates = await run('Templates.loadAll()');
+    check('document sans la table : trois lectures (les deux qui ne la trouvent pas, et celle de la table créée ; avant : onze)', doc.readsOf('Publipostage_Modeles') === 3, doc.readsOf('Publipostage_Modeles'));
+    check('document sans la table : créée une fois, aucune erreur, aucun modèle', doc.actions.filter((a) => a[0] === 'AddTable').length === 1 && errors.length === 0 && templates.length === 0, errors);
+  }
+
+  // 5 septies. Une migration lancée hors de loadAll (le mot de passe commun des PDF : sa colonne n'est pas dans la lecture de loadAll) lit les MÉTADONNÉES pour savoir si sa colonne est là, jamais la table.
+  {
+    const doc = makeDoc();
+    const { run } = fresh(doc);
+    await run('Templates.loadAll()');
+    doc.resetLog();
+    const ok = await run("Templates.writePdfPassword('secret')");
+    const added = doc.actions.filter((a) => a[0] === 'AddVisibleColumn').map((a) => a[2]);
+    check('colonne du mot de passe PDF : ajoutée une fois, le mot de passe est écrit', ok === true && added.length === 1, added);
+    check('colonne du mot de passe PDF : la migration lit les métadonnées, la table n\'est lue que par l\'écriture elle-même (une fois ; avant : deux)', doc.readsOf('Publipostage_Modeles') === 1 && doc.readsOf('_grist_Tables_column') >= 1, doc.log.map((c) => c.name + ':' + c.arg));
+  }
+
+  // 5 octies. SchemaColumns.columnIds : les colonnes d'une table du widget SOUS LEURS NOMS ANGLAIS, par les métadonnées (le document de ce faux Grist porte les noms d'avant) ; null pour une table que le document n'a pas.
+  {
+    const doc = makeDoc({ without: ['Objet'] });
+    const { run } = fresh(doc);
+    const ids = await run("SchemaColumns.columnIds('Publipostage_Templates').then(set => Array.from(set))");
+    check('columnIds : les noms anglais des colonnes d\'un document qui porte les noms d\'avant', ['Name', 'Content', 'IsDefault', 'TemplateType', 'ModifiedAt'].every((c) => ids.includes(c)) && !ids.includes('Nom') && !ids.includes('EstParDefaut'), ids);
+    check('columnIds : une colonne qui manque au document ne s\'y trouve pas', !ids.includes('Subject'), ids);
+    check('columnIds : la table n\'est pas lue, seulement les métadonnées', doc.readsOf('Publipostage_Modeles') === 0, doc.log.map((c) => c.arg));
+    const none = makeDoc({ modeles: false });
+    const absent = await fresh(none).run("SchemaColumns.columnIds('Publipostage_Templates')");
+    check('columnIds : null quand le document n\'a pas la table', absent === null, absent);
+    const broken = makeDoc();
+    broken.fetchTable = () => Promise.reject(new Error('métadonnées illisibles (essai)'));
+    const refused = await fresh(broken).run("SchemaColumns.columnIds('Publipostage_Templates').then(() => 'rendu', () => 'rejeté')");
+    check('columnIds : rejette quand les métadonnées ne se lisent pas (l\'appelant n\'en conclut rien)', refused === 'rejeté', refused);
+  }
+
   // === GristAPI.init : schéma rapide ===
 
   // 6. Aucune table du document n'est lue pendant init() : les noms viennent de listTables, les colonnes et les types des métadonnées.

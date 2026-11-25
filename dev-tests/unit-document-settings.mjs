@@ -21,7 +21,7 @@
 //     titres écoute pour montrer tout de suite le style du document : une écriture d'ici, le retour arrière d'une écriture refusée, une lecture qui apporte le changement d'une autre
 //     personne le donnent - une lecture qui n'apporte rien, jamais ; sans page (ce contexte n'a pas de `document`), rien n'est annoncé et rien ne casse.
 // Lancer : node dev-tests/unit-document-settings.mjs
-import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
+import { createContext, loadScript, evalIn, check, summarizeAndExit, metadataOf } from './unit-harness.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const sameList = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -51,6 +51,8 @@ class Doc {
   listTables() { return Promise.resolve(['Publipostage_Modeles']); }
 
   async fetchTable(table) {
+    const meta = metadataOf(table, { Publipostage_Modeles: this.cols }); // les colonnes que les règles d'accès cachent existent : les métadonnées les montrent
+    if (meta) return meta;
     if (table !== 'Publipostage_Modeles') throw new Error('Invalid table ' + table);
     if (this.failFetch) throw new Error('Table illisible');
     const out = { id: this.rows.map((r) => r.id) };

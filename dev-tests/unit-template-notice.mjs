@@ -15,7 +15,7 @@
 //  8) supprimer puis rétablir un modèle (snapshotRow / restoreRow) lui rend sa notice ;
 //  9) un document aux noms d'avant reçoit la colonne sous le nom `Notice` (js/schema-columns.js la traduit en elle-même : le même id et le même libellé).
 // Lancer : node dev-tests/unit-template-notice.mjs
-import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
+import { createContext, loadScript, evalIn, check, summarizeAndExit, metadataOf } from './unit-harness.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -39,6 +39,8 @@ class Doc {
   listTables() { return Promise.resolve(['Publipostage_Modeles']); }
 
   async fetchTable(table) {
+    const meta = metadataOf(table, { Publipostage_Modeles: this.cols });
+    if (meta) return meta;
     if (table !== 'Publipostage_Modeles') throw new Error('Invalid table ' + table);
     const out = { id: this.rows.map((r) => r.id) };
     this.cols.forEach((c) => { out[c] = this.rows.map((r) => (r[c] === undefined ? null : r[c])); });
