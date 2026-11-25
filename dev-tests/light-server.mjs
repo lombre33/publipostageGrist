@@ -7,7 +7,7 @@
 //     handle(url)  -> { status, body, noCors } (body : le texte JSON de la réponse ; `noCors` vrai : la réponse n'a PAS d'en-tête CORS, comme celle du pare-feu de la DINUM : le navigateur dit « réseau » et le code d'état ne se lit pas)
 //     log          -> toutes les demandes reçues : { kind: 'sql' | 'records', sql | table + ids, status, at }
 //     state        -> { refuse: code HTTP rendu à TOUTES les demandes (403 : règles d'accès), refuseSql, refuseRecords, failWeights: les requêtes qui pèsent (length(CAST…)) sont interrompues comme le fait Grist au-delà d'une seconde,
-//                      delayMs: temps de réponse, auth: le jeton attendu }
+//                      delayMs: temps de réponse, delayRecordsMs: temps de réponse des seules lectures par numéros (REST), en plus, auth: le jeton attendu }
 //   firewallRefuses(texte)                    -> vrai quand un pare-feu comme celui de la DINUM refuserait cette demande (`state.firewall`, vrai par défaut : le faux serveur la refuse, en 403 sans en-tête CORS ; `state.refuseSql = 'firewall'`
 //                                                refuse tout SQL de cette façon)
 //   tablesFromStartupDoc(doc)                 -> readTables d'un StartupDoc (dev-tests/unit-startup-reads.mjs)
@@ -54,7 +54,7 @@ function buildDatabase(tables) {
 
 export function createLightServer(readTables, options = {}) {
   const log = [];
-  const state = { refuse: null, refuseSql: null, refuseRecords: null, failWeights: false, firewall: true, delayMs: 0, auth: options.token || 'stub-token' };
+  const state = { refuse: null, refuseSql: null, refuseRecords: null, failWeights: false, firewall: true, delayMs: 0, delayRecordsMs: 0, auth: options.token || 'stub-token' };
   const reply = (status, body, noCors) => Object.assign({ status, body: typeof body === 'string' ? body : JSON.stringify(body) }, noCors ? { noCors: true } : {});
 
   async function handle(rawUrl) {
@@ -93,6 +93,7 @@ export function createLightServer(readTables, options = {}) {
     const records = path.match(/^\/tables\/([^/]+)\/records$/);
     if (records) {
       entry.kind = 'records';
+      if (state.delayRecordsMs) await new Promise(resolve => setTimeout(resolve, state.delayRecordsMs));
       entry.table = decodeURIComponent(records[1]);
       const filter = url.searchParams.has('filter') ? JSON.parse(url.searchParams.get('filter')) : {};
       entry.ids = Array.isArray(filter.id) ? filter.id.slice() : null;

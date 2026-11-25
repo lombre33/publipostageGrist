@@ -313,10 +313,12 @@ const VersionsStore = (function () {
     return writes.enqueue(() => SchemaColumns.docApi.applyUserActions([['BulkRemoveRecord', TABLE_NAME, rowIds]]));
   }
 
-  // Les jetons des modèles du document, d'après la table des modèles relue à neuf : { token (celui du modèle `rowId`, '' tant qu'aucune copie n'en a été gardée), known (tous
+  // Les jetons des modèles du document, d'après la table des modèles relue à neuf (ses seuls numéros et jetons quand elle est lourde) : { token (celui du modèle `rowId`, '' tant qu'aucune copie n'en a été gardée), known (tous
   // les jetons posés, ou null quand la colonne manque ou que la table n'a aucune ligne : les orphelines ne se cherchent alors pas) }.
   async function readModelTokens(rowId) {
-    const tableData = await SchemaColumns.docApi.fetchTable((typeof Templates !== 'undefined' && Templates.TABLE_NAME) || 'Publipostage_Templates');
+    // Table des modèles lourde (lue par la liste légère, js/templates.js) : le numéro et le jeton de chaque ligne par SQL, jamais la table (consigne 103 de GFS) ; sinon la table, comme avant.
+    const light = typeof Templates !== 'undefined' && typeof Templates.readTokens === 'function' ? await Templates.readTokens() : null;
+    const tableData = light || await SchemaColumns.docApi.fetchTable((typeof Templates !== 'undefined' && Templates.TABLE_NAME) || 'Publipostage_Templates');
     const ids = Array.isArray(tableData.id) ? tableData.id : [];
     const column = Array.isArray(tableData.Token) ? tableData.Token : null;
     const at = ids.findIndex(id => String(id) === String(rowId));

@@ -24,7 +24,28 @@
     selectEl().value = String(id);
     selectEl().dispatchEvent(new Event('change', { bubbles: true }));
   }
-  const inFlightNow = () => stub().state.inFlight.fetchTable + stub().state.inFlight.applyUserActions;
+  // La lecture légère (PP_TEMPLATES_LIGHT=1, `window.__templatesLight === 'force'`) relit la ligne d'un modèle par une demande HTTP (`/sql` ou `/tables/…/records`, js/grist-api.js:lightGet), plus par `fetchTable` : le faux
+  // Grist du stub ne la voit pas. On la prend au `fetch` de la page pour faire pour elle ce que le stub fait pour `fetchTable` : la compter en vol, la ralentir (`delayMs`, voir `setLatency` plus bas) et, une fois après
+  // une écriture du modèle, la faire échouer comme un réseau coupé (failReadBackOnce). Sans lecture légère le `fetch` n'est pas touché : ces compteurs restent à zéro et les cas jouent ce qu'ils jouaient.
+  const lightReads = { inFlight: 0, delayMs: 0 };
+  if (window.__templatesLight === 'force') {
+    const originalFetch = window.fetch;
+    window.fetch = async function (input, init) {
+      const url = String(input && input.url ? input.url : input);
+      if (!/\/sql\?|\/tables\/[^/?]+\/records/.test(url)) return originalFetch.call(this, input, init);
+      lightReads.inFlight++;
+      try {
+        const armed = stub().state;
+        if (armed.failNextModelsFetchAfterWrite && armed.modelsWriteSeen) { armed.failNextModelsFetchAfterWrite = false; armed.modelsWriteSeen = false; throw new TypeError('Failed to fetch (réseau coupé, simulé par failReadBackOnce)'); }
+        if (lightReads.delayMs) await new Promise(resolve => setTimeout(resolve, lightReads.delayMs));
+        return await originalFetch.call(this, input, init);
+      } finally { lightReads.inFlight--; }
+    };
+  }
+  // La lenteur de la lecture d'une table : celle que le stub donne à `fetchTable`, la même pour la lecture légère. Les lectures en vol : les deux.
+  const setLatency = (latency) => { stub().setLatency(latency); lightReads.delayMs = (latency && latency.fetchTable) || 0; };
+  const readsInFlight = () => stub().state.inFlight.fetchTable + lightReads.inFlight;
+  const inFlightNow = () => readsInFlight() + stub().state.inFlight.applyUserActions;
   const contentOf = (id) => { const row = stub().getRow(TABLE, id); return row ? String(row.Contenu) : ''; };
 
   // Surveille le bandeau pendant tout le scénario : `seen()` reste vrai dès qu'il a été visible UN instant.
@@ -74,7 +95,7 @@
   // Fin de chaque cas, quel que soit le verdict : latence rendue, appels en vol retombés, bandeau levé.
   async function leaveClean(h, watch) {
     if (watch) watch.stop();
-    stub().setLatency(0);
+    setLatency(0);
     await untilQuiet(h);
     await clearConflictIfAny(h);
   }
@@ -88,7 +109,7 @@
       if (!id) return { pass: false, notes: 'aucun modèle créé' };
       const watch = watchBanner();
       try {
-        stub().setLatency({ fetchTable: 2000, applyUserActions: 1500 }); // un passage dure ~5,5 s (relecture, écriture, relecture) pour un intervalle de 2,5 s
+        setLatency({ fetchTable: 2000, applyUserActions: 1500 }); // un passage dure ~5,5 s (relecture, écriture, relecture) pour un intervalle de 2,5 s
         stub().resetInFlightStats();
         await h.focusAtEnd();
         for (let i = 0; i < 16 && !watch.seen(); i++) { await h.typeText(' m' + i); await h.sleep(500); }
@@ -110,12 +131,12 @@
       if (!id) return { pass: false, notes: 'aucun modèle créé' };
       const watch = watchBanner();
       try {
-        stub().setLatency({ fetchTable: 1500, applyUserActions: 500 }); // l'Enregistrer relit, écrit, relit, puis relit la liste : ~3,5 s, plus que l'intervalle
+        setLatency({ fetchTable: 1500, applyUserActions: 500 }); // l'Enregistrer relit, écrit, relit, puis relit la liste : ~3,5 s, plus que l'intervalle
         await h.focusAtEnd();
         await h.typeText(' avant');
         // Le clic tombe juste après le départ d'un passage de l'auto-save (sa relecture est en vol) : c'est le moment où l'ancien code se trompait à coup sûr, les passages se
         // répétant toutes les 2,5 s à partir de l'ouverture de la page, l'instant d'un clic quelconque ne le garantissait pas.
-        await waitUntil(h, () => stub().state.inFlight.fetchTable > 0, 8000, 20);
+        await waitUntil(h, () => readsInFlight() > 0, 8000, 20);
         await h.clickButton('btn-save');
         for (let i = 0; i < 12 && !watch.seen(); i++) { await h.typeText(' k' + i); await h.sleep(450); }
         const saved = await waitUntil(h, () => !watch.seen() && contentOf(id).indexOf('k11') !== -1 && inFlightNow() === 0, 30000, 100);
@@ -135,7 +156,7 @@
       if (!id) return { pass: false, notes: 'aucun modèle créé' };
       const watch = watchBanner();
       try {
-        stub().setLatency({ fetchTable: 300, applyUserActions: 1800 }); // l'écriture dure 1,8 s : le temps d'y taper
+        setLatency({ fetchTable: 300, applyUserActions: 1800 }); // l'écriture dure 1,8 s : le temps d'y taper
         await h.focusAtEnd();
         await h.typeText(' alpha');
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 8000, 20);
@@ -161,8 +182,8 @@
       if (!idA || !idB || idA === idB) return { pass: false, notes: 'deux modèles distincts attendus : A=' + idA + ' B=' + idB };
       const watch = watchBanner();
       try {
-        stub().setLatency({ fetchTable: 1600, applyUserActions: 0 });
-        const reading = await waitUntil(h, () => stub().state.inFlight.fetchTable > 0, IDLE_MS + TICK_MS * 2, 20); // un passage de repos part relire la table (une fois toutes les 15 s)
+        setLatency({ fetchTable: 1600, applyUserActions: 0 });
+        const reading = await waitUntil(h, () => readsInFlight() > 0, IDLE_MS + TICK_MS * 2, 20); // un passage de repos part relire la table (une fois toutes les 15 s)
         if (!reading) return { pass: false, notes: 'aucun passage de l\'auto-save en vol à temps, rien à vérifier' };
         chooseTemplate(idA);
         await h.sleep(TICK_MS * 2 + 2500);
@@ -221,7 +242,7 @@
       if (!id) return { pass: false, notes: 'aucun modèle créé' };
       const watch = watchBanner();
       try {
-        stub().setLatency({ fetchTable: 900, applyUserActions: 400 });
+        setLatency({ fetchTable: 900, applyUserActions: 400 });
         stub().remoteWrite(TABLE, id, { Contenu: '<p>Version d\'ailleurs</p>', DateModif: new Date(Date.now() + 60000).toISOString() });
         stub().clearActionLog();
         await h.focusAtEnd();
@@ -279,7 +300,7 @@
         await h.sleep(700);
         await h.focusAtEnd();
         await h.typeText(' modifié');
-        stub().setLatency({ fetchTable: 0, applyUserActions: 2500 });
+        setLatency({ fetchTable: 0, applyUserActions: 2500 });
         await h.clickButton('btn-save');
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
@@ -288,7 +309,7 @@
         const during = screenNow();
         await waitUntil(h, () => inFlightNow() === 0, 8000, 40);
         await h.sleep(900); // la fin de l'enregistrement : la liste relue
-        stub().setLatency(0);
+        setLatency(0);
         const after = screenNow();
         const listHasBoth = Array.from(selectEl().options).filter(o => o.value === String(idA) || o.value === String(idB)).length === 2;
         const rowsAfterSave = { a: contentOf(idA), b: contentOf(idB), nameA: nameOf(idA), nameB: nameOf(idB) };
@@ -320,7 +341,7 @@
         document.getElementById('template-name').value = nameC;
         await h.focusAtEnd();
         await h.typeText('Contenu C');
-        stub().setLatency({ fetchTable: 0, applyUserActions: 2500 });
+        setLatency({ fetchTable: 0, applyUserActions: 2500 });
         await h.clickButton('btn-save');
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
@@ -329,7 +350,7 @@
         const during = screenNow();
         await waitUntil(h, () => inFlightNow() === 0, 8000, 40);
         await h.sleep(900);
-        stub().setLatency(0);
+        setLatency(0);
         const rowsTable = stub().state.rows[TABLE];
         const posC = rowsTable.Nom.indexOf(nameC);
         const idC = posC === -1 ? null : rowsTable.id[posC];
@@ -457,7 +478,7 @@
     };
     await waitUntil(h, done, 12000, 100);
     await h.sleep(1500);
-    stub().setLatency(0);
+    setLatency(0);
     await untilQuiet(h);
   }
 
@@ -472,7 +493,7 @@
       const watch = watchBanner();
       try {
         await readyNewTemplate(h, nom, 'Premier texte');
-        stub().setLatency(SLOW_WRITE);
+        setLatency(SLOW_WRITE);
         await h.clickButton('btn-save');
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
@@ -504,7 +525,7 @@
       const watch = watchBanner();
       try {
         await readyNewTemplate(h, nom, 'Premier texte');
-        stub().setLatency(SLOW_WRITE);
+        setLatency(SLOW_WRITE);
         await h.clickButton('btn-save');
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
@@ -539,7 +560,7 @@
       const watch = watchBanner();
       try {
         await readyNewTemplate(h, nom, 'Premier texte');
-        stub().setLatency({ fetchTable: 0, applyUserActions: 300 });
+        setLatency({ fetchTable: 0, applyUserActions: 300 });
         return await slowIdentification(h, async (state) => {
           await h.clickButton('btn-save');
           const waiting = await waitUntil(h, () => state.waiting, 3000, 20);
@@ -573,7 +594,7 @@
         await h.typeText(' modifié');
         stub().clearActionLog();
         stub().resetInFlightStats();
-        stub().setLatency(SLOW_WRITE);
+        setLatency(SLOW_WRITE);
         await h.clickButton('btn-save'); // la mise à jour de A, en vol
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
@@ -634,7 +655,7 @@
         document.getElementById('macro-editor-name').value = nom;
         stub().clearActionLog();
         stub().resetInFlightStats();
-        stub().setLatency(SLOW_WRITE);
+        setLatency(SLOW_WRITE);
         document.getElementById('macro-editor-save').click();
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 4000, 20);
         if (!writing) return { pass: false, notes: "aucune écriture en vol à temps, rien à vérifier" };
@@ -642,7 +663,7 @@
         document.getElementById('macro-editor-save').click();
         await waitUntil(h, () => rowIdsNamed(nom).length >= 1 && inFlightNow() === 0, 20000, 100);
         await h.sleep(1500);
-        stub().setLatency(0);
+        setLatency(0);
         await untilQuiet(h);
         const ids = rowIdsNamed(nom);
         const counts = countsNow();
@@ -707,7 +728,7 @@
         const expected = Templates.uniqueName(entryName); // le nom que la création doit prendre : celui de la galerie, numéroté seulement s'il est déjà pris avant le geste
         stub().clearActionLog();
         stub().resetInFlightStats();
-        stub().setLatency(SLOW_WRITE);
+        setLatency(SLOW_WRITE);
         const useEmpty = document.getElementById('tpl-preview-use-empty');
         useEmpty.click();
         const writing = await waitUntil(h, () => stub().state.inFlight.applyUserActions > 0, 6000, 20);
@@ -717,7 +738,7 @@
         await waitUntil(h, () => createdSince(before).length >= 1 && inFlightNow() === 0 && !galleryOpen(), 20000, 100);
         await h.sleep(1500); // une création en trop se montrerait ici
         const counts = countsNow();
-        stub().setLatency(0);
+        setLatency(0);
         await untilQuiet(h);
         const created = createdSince(before);
         const id = created.length ? stub().state.rows[TABLE].id[before.length] : null;
@@ -744,14 +765,14 @@
         if (!entryName) return { pass: false, notes: "l'aperçu de la galerie ne s'ouvre pas, rien à vérifier" };
         const before = namesNow();
         stub().clearActionLog();
-        stub().setLatency({ fetchTable: 0, applyUserActions: 1500 });
+        setLatency({ fetchTable: 0, applyUserActions: 1500 });
         const useData = document.getElementById('tpl-preview-use-data');
         useData.click();
         await h.sleep(120);
         useData.click(); // le clic en trop, avant même que la première création ait commencé
         await waitUntil(h, () => createdSince(before).length >= 1 && inFlightNow() === 0 && !galleryOpen(), 20000, 100);
         await h.sleep(1500);
-        stub().setLatency(0);
+        setLatency(0);
         await untilQuiet(h);
         const created = createdSince(before);
         const tables = stub().getActionLog().filter(a => a[0] === 'AddTable' && a[1] === 'Facture_sonde_double_clic').length; // les autres tables du widget ne comptent pas
@@ -876,20 +897,20 @@
       autosaveSwitch(false); // seuls les appels de ce cas lisent et écrivent
       const watch = watchBanner();
       try {
-        stub().setLatency({ fetchTable: 3600, applyUserActions: 0 }); // la photo de la table est prise à 1,8 s, la réponse revient à 3,6 s
+        setLatency({ fetchTable: 3600, applyUserActions: 0 }); // la photo de la table est prise à 1,8 s, la réponse revient à 3,6 s
         const reading = Templates.loadAll();
         await h.sleep(2100); // la photo est prise : elle porte « Avant »
-        stub().setLatency({ fetchTable: 100, applyUserActions: 0 });
+        setLatency({ fetchTable: 100, applyUserActions: 0 });
         await Templates.save(id, 'Course lecture avant écriture', '<p>Après</p>', '', null, null, 'document', null, null);
         const justAfter = (Templates.byId(id) || {}).contenu;
         await reading; // la lecture partie avant l'écriture revient maintenant, avec sa photo d'avant
         const afterRead = (Templates.byId(id) || {}).contenu;
-        stub().setLatency(0);
+        setLatency(0);
         await Templates.loadAll(); // une lecture entière, sans rien en vol : l'état de Grist
         const fresh = (Templates.byId(id) || {}).contenu;
         const pass = justAfter === '<p>Après</p>' && afterRead === '<p>Après</p>' && fresh === '<p>Après</p>' && contentOf(id) === '<p>Après</p>';
         return { pass, notes: 'cache juste après l\'écriture=' + justAfter + ', cache après le retour de la lecture ancienne=' + afterRead + ', cache après une lecture neuve=' + fresh + ', ligne=' + contentOf(id) };
-      } finally { stub().setLatency(0); autosaveSwitch(true); await leaveClean(h, watch); }
+      } finally { setLatency(0); autosaveSwitch(true); await leaveClean(h, watch); }
     },
   });
 

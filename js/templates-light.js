@@ -7,6 +7,10 @@
 //   TemplatesLight.englishRecords(records, map)-> les lignes REST ({ id, fields } sous les noms réels) rangées comme fetchTable, sous les noms anglais
 //   TemplatesLight.chunkIds(ids, weightOf)     -> les identifiants en paquets que la page peut recevoir d'un coup (un identifiant trop lourd part seul)
 //   TemplatesLight.citingSql(map, texts)       -> le SQL des lignes dont le texte cite l'un de ces mots (la recherche d'impact se fait côté Grist : seuls les identifiants reviennent)
+//   TemplatesLight.datesSql(map, ids)          -> le SQL des dates (`ModifiedAt`) de ces lignes seules : ce que l'enregistrement relit après avoir écrit
+//   TemplatesLight.tokensSql(map, ids)         -> le SQL des jetons de ces modèles (ou de tous : le numéro et le jeton, rien d'autre) : ce que la fenêtre des versions cherche pour reconnaître les modèles qui existent encore, et le lien d'un tableau pour poser le sien
+//   TemplatesLight.settingsSql(map, column)    -> le SQL de la ligne des réglages du document, avec la colonne `column` (le mot de passe des PDF protégés) : rien d'une autre ligne
+//   TemplatesLight.identitySql(map)            -> le SQL de ce qui distingue les modèles (numéro, nom, type, ★, jeton), sans un seul texte : de quoi rendre une ligne supprimée sans lire la table
 //   TemplatesLight.utf8Length(text)            -> le poids d'un texte en octets, comme la liste le mesure (sans le copier)
 //
 // Le SQL voyage dans l'adresse de la demande (`GET /sql?q=…`), et le pare-feu devant le Grist de la DINUM (Incapsula) refuse en 403, sans en-tête CORS (le navigateur dit « réseau » : la lecture est perdue sans un mot), toute
@@ -37,6 +41,7 @@ const TemplatesLight = (function () {
   // `weights` faux : la liste sans les longueurs (pas un seul texte lu côté Grist : les seuls textes qui viennent sont ceux des types toujours courts). C'est le repli d'une liste dont les longueurs n'ont pas pu être calculées dans le
   // temps que Grist laisse à une requête SQL (une seconde par défaut).
   // `smallBytes` (les essais) : le seuil en octets sous lequel un texte vient avec la liste (SMALL_BYTES par défaut ; 0 : rien ne vient que les types toujours courts, tout le reste se lit à la demande).
+  // `ids` (consigne 103, lot 3) : seules ces lignes (des numéros entiers) ; la liste d'un modèle et de ceux qu'il désigne, que l'enregistrement relit pour savoir si l'un a changé ailleurs, sans la table.
   function listSql(map, options) {
     const weights = !options || options.weights !== false;
     const small = options && Number.isFinite(options.smallBytes) ? options.smallBytes : SMALL_BYTES;
@@ -57,8 +62,47 @@ const TemplatesLight = (function () {
       parts.push('iif(' + always + (weights ? ' OR ' + size + ' <= ' + small : '') + ', ' + actual + ', NULL) AS ' + quoteName(english));
       if (weights) parts.push(size + ' AS ' + quoteName(english + LEN_SUFFIX));
     });
+    const only = options && Array.isArray(options.ids) ? wholeIds(options.ids) : null;
     // Dans l'ordre de la table, comme la lecture entière : le ★ du document est « le premier de la table » (Templates.getDefaultId).
-    return 'SELECT ' + parts.join(', ') + ' FROM ' + quoteName(map.table) + ' ORDER BY ' + (map.columns.has('manualSort') ? quoteName('manualSort') + ', ' : '') + 'id';
+    return 'SELECT ' + parts.join(', ') + ' FROM ' + quoteName(map.table) + (only ? ' WHERE id IN (' + (only.length ? only.join(', ') : 'NULL') + ')' : '') + ' ORDER BY ' + (map.columns.has('manualSort') ? quoteName('manualSort') + ', ' : '') + 'id';
+  }
+
+  // Les numéros de ligne de `ids` qui sont des entiers, sans doublon : rien d'autre n'entre dans un SQL.
+  function wholeIds(ids) {
+    const seen = new Set();
+    ids.forEach((id) => { const number = Number(id); if (id !== null && id !== '' && Number.isSafeInteger(number)) seen.add(number); });
+    return Array.from(seen);
+  }
+
+  // Les dates de ces lignes seules. null : la table n'a pas de colonne de date, ou rien à demander.
+  function datesSql(map, ids) {
+    const only = wholeIds(ids || []);
+    if (!only.length || !map.columns.has('ModifiedAt')) return null;
+    return 'SELECT id, ' + quoteName(map.columns.get('ModifiedAt')) + ' AS "ModifiedAt" FROM ' + quoteName(map.table) + ' WHERE id IN (' + only.join(', ') + ') ORDER BY id';
+  }
+
+  // Les jetons de ces modèles (`ids` absent : de tous) : le numéro de la ligne et son jeton. Une table qui n'a pas la colonne (aucun lien, aucune version n'en a encore demandé) rend les numéros seuls : celui qui lit y voit qu'aucune
+  // ligne n'a de jeton, comme dans la table entière. null : rien à demander.
+  function tokensSql(map, ids) {
+    const only = Array.isArray(ids) ? wholeIds(ids) : null;
+    if (only && !only.length) return null;
+    const token = map.columns.has('Token') ? ', ' + quoteName(map.columns.get('Token')) + ' AS "Token"' : '';
+    return 'SELECT id' + token + ' FROM ' + quoteName(map.table) + (only ? ' WHERE id IN (' + only.join(', ') + ')' : '') + ' ORDER BY id';
+  }
+
+  // La ou les lignes des réglages du document (celles dont le type est « reglages » ; la première compte, comme la lecture entière) avec leur type et la colonne `column` (son nom anglais) quand la table l'a : une table sans cette colonne
+  // rend ses lignes sans elle, et celui qui lit en conclut qu'il n'y a rien. null : la table n'a pas de colonne de type.
+  function settingsSql(map, column) {
+    if (!map.columns.has('TemplateType')) return null;
+    const type = quoteName(map.columns.get('TemplateType'));
+    const wanted = column && map.columns.has(column) ? ', ' + quoteName(map.columns.get(column)) + ' AS ' + quoteName(column) : '';
+    return 'SELECT id, ' + type + ' AS "TemplateType"' + wanted + ' FROM ' + quoteName(map.table) + ' WHERE ' + type + ' = ' + quoteText('reglages') + ' ORDER BY id';
+  }
+
+  // Ce qui distingue les modèles : leur numéro, leur nom, leur type, le ★ et le jeton, ceux que la table a. Aucun texte long : rendre une ligne supprimée (restoreRow) ne lit que de quoi lui trouver un nom libre et une place.
+  function identitySql(map) {
+    const names = ['Name', 'TemplateType', 'IsDefault', 'Token'].filter(name => map.columns.has(name));
+    return 'SELECT id' + names.map(name => ', ' + quoteName(map.columns.get(name)) + ' AS ' + quoteName(name)).join('') + ' FROM ' + quoteName(map.table) + ' ORDER BY id';
   }
 
   // Les lignes du SQL (des objets { colonne: valeur }) en colonnes, comme fetchTable : templateFromRow les lit telles quelles. `lens` : la longueur (en octets) de chaque colonne longue, ligne par ligne ; absente quand la liste
@@ -141,5 +185,5 @@ const TemplatesLight = (function () {
     return bytes;
   }
 
-  return { SCALAR_COLUMNS, HEAVY_COLUMNS, SMALL_BYTES, ALWAYS_TYPES, LEN_SUFFIX, quoteName, quoteText, listSql, columnar, englishRecords, chunkIds, citingSql, utf8Length };
+  return { SCALAR_COLUMNS, HEAVY_COLUMNS, SMALL_BYTES, ALWAYS_TYPES, LEN_SUFFIX, quoteName, quoteText, listSql, datesSql, tokensSql, settingsSql, identitySql, wholeIds, columnar, englishRecords, chunkIds, citingSql, utf8Length };
 })();

@@ -14,6 +14,8 @@
 //  8. les liens entre modèles : un modèle qui en désigne un autre (declareReferences) se lit avec lui (ensureWithReferences, needsReading) ; onEntriesLoaded dit les numéros lus ; le seuil des essais (`__templatesLightSmall`)
 //     met tout à lire à la demande ;
 //  9. une ligne que ce widget écrit pendant qu'on la lit garde le texte écrit (la réponse est d'avant l'écriture), et la lecture finie la laisse chargée.
+// 10. (lot 3) rien après l'ouverture ne relit la table : Templates.refreshRows (le modèle ouvert et ceux qu'il désigne, par leurs numéros), la date que Grist garde après un enregistrement, le jeton d'une ligne, les jetons
+//     des versions, le mot de passe des PDF, la ligne qu'on supprime (REST) et qu'Annuler rend (numéro, nom, type, ★ et jeton, sans un texte) ; les mêmes gestes lisent la table quand la lecture légère est coupée ou refusée.
 // Lancer : node dev-tests/unit-templates-light.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 import { StartupDoc } from './startup-doc.mjs';
@@ -58,7 +60,7 @@ function fresh(doc, server, { legacy = false, light = 'force', small, scripts } 
     __schemaNames: legacy ? 'legacy' : 'english',
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn(...a) { warnings.push(a.join(' ')); }, error(...a) { errors.push(a.join(' ')); warnings.push(a.join(' ')); } },
-    Date: FakeDate, setTimeout: () => 0, clearTimeout() {}, performance: { now: () => 0 }, AbortController, URL, HtmlSanitize: { clean: html => html },
+    crypto: globalThis.crypto, Date: FakeDate, setTimeout: () => 0, clearTimeout() {}, performance: { now: () => 0 }, AbortController, URL, HtmlSanitize: { clean: html => html },
     fetch: async (url) => { const answer = await server.handle(String(url)); if (answer.noCors) throw new TypeError('Failed to fetch'); return { ok: answer.status >= 200 && answer.status < 300, status: answer.status, text: async () => answer.body }; },
   };
   if (light) globals.__templatesLight = light;
@@ -94,6 +96,13 @@ async function main() {
       'listSql sans longueurs': bare,
       'listSql au seuil de 0 octet': run('TemplatesLight.listSql(__map, { smallBytes: 0 })'),
       citingSql: run("TemplatesLight.citingSql(__map, ['Mes', \"l'été\", 'Publipostage_Templates'])"),
+      'listSql de quelques lignes': run('TemplatesLight.listSql(__map, { ids: [1, 2, 3] })'),
+      'listSql d\'aucune ligne': run('TemplatesLight.listSql(__map, { ids: [] })'),
+      datesSql: run("TemplatesLight.datesSql({ table: 'T', columns: new Map([['ModifiedAt', 'Date']]) }, [1, 2])"),
+      tokensSql: run("TemplatesLight.tokensSql({ table: 'T', columns: new Map([['Token', 'Jeton']]) }, [1, 2])"),
+      'tokensSql de tous': run('TemplatesLight.tokensSql(__map)'),
+      settingsSql: run("TemplatesLight.settingsSql(__map, 'Content')"),
+      identitySql: run('TemplatesLight.identitySql(__map)'),
     };
     Object.keys(built).forEach((label) => { check('le pare-feu de la DINUM ne refuserait pas ' + label + ' (ni case/when, ni or 1=1, ni drop, ni <>, ni substr, ni sous-requête, ni ; ni --)', typeof built[label] === 'string' && built[label].startsWith('SELECT ') && !firewallRefuses(built[label]), built[label]); });
     check('le faux pare-feu refuse chacune des formes que la DINUM refuse (case when, or 1=1, drop table, substr(…) <>, sous-requêtes) et laisse passer iif, instr, COALESCE, length(CAST…), IN, NOT LIKE, !=', [
@@ -352,7 +361,7 @@ async function main() {
     const server = createLightServer(() => stale);
     const { run } = fresh(doc, server);
     await run('Templates.loadAll()');
-    server.state.delayMs = 40;
+    server.state.delayRecordsMs = 150;   // la lecture du texte tarde ; la date que l'enregistrement relit, non
     const reading = run('Templates.ensureLoaded([2])');
     await run("Templates.saveContent(2, '<p>écrit pendant la lecture</p>')");
     check('la ligne est écrite pendant que sa lecture est en route (l\'entrée garde le texte écrit, pas encore chargée en entier)', run('Templates.byId(2).contenu') === '<p>écrit pendant la lecture</p>' && run('Templates.byId(2).chargee') === false);
@@ -360,6 +369,120 @@ async function main() {
     check('la réponse qui arrive après l\'écriture n\'efface pas le texte écrit (elle est d\'avant)', run('Templates.byId(2).contenu') === '<p>écrit pendant la lecture</p>', run('Templates.byId(2).contenu'));
     check('...elle remplit ce que l\'écriture n\'a pas posé (l\'en-tête) et l\'entrée est chargée : un module qui la demande ne la relit pas sans fin', run('Templates.byId(2).headerFooter.enabled') === true && run('Templates.byId(2).chargee') === true && run('Templates.needsReading(Templates.byId(2))') === false);
     check('...sans un seul champ lu avant d\'être chargé', run('Templates.getUnloadedReads()').length === 0, run('Templates.getUnloadedReads()'));
+  }
+
+  // === 10. Lot 3 : relire une ligne, une date, un jeton, un réglage ne relit pas la table ===
+  {
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    const { run } = fresh(doc, server);
+    await run('Templates.loadAll()');
+    const petit = byName(run('Templates.getCached()'), 'Petit');
+    server.log.length = 0;
+    doc.resetLog();
+    // refreshRows : les numéros demandés seuls (un numéro absent est une ligne supprimée, un mot n'entre pas dans le SQL)
+    const first = await run('Templates.refreshRows([2, 99, "x"])');
+    check('refreshRows : une seule requête SQL, les numéros entiers seuls, la table jamais lue en entier', sqlCalls(server).length === 1 && /WHERE id IN \(2, 99\) ORDER BY "manualSort", id$/.test(sqlCalls(server)[0].sql) && recordCalls(server).length === 0 && doc.readsOf(table) === 0, JSON.stringify(server.log.map(entry => entry.sql)));
+    check('refreshRows : les autres lignes gardent leur entrée, la ligne demandée est là', first.length === 5 && byName(first, 'Petit') === petit && !!byName(first, 'Gros'), JSON.stringify(first.map(template => template.nom)));
+    const row2 = doc.tables[table].rows.find(row => row.id === 2);
+    await run('Templates.ensureLoaded([2])');
+    check('refreshRows : une ligne lue en entier garde son texte tant que sa date est la même', (await run('Templates.refreshRows([2])')) && byName(run('Templates.getCached()'), 'Gros').chargee === true && byName(run('Templates.getCached()'), 'Gros').contenu === BIG);
+    row2.ModifiedAt = 1790002000;
+    row2.Content = '<p>ailleurs</p>' + 'q'.repeat(20000);
+    const changed = await run('Templates.refreshRows([2])');
+    check('refreshRows : une ligne changée ailleurs revient « pas chargée » avec sa date neuve, les autres gardent leur entrée', byName(changed, 'Gros').chargee === false && byName(changed, 'Gros').dateModif === 1790002000 && byName(changed, 'Petit') === petit && doc.readsOf(table) === 0, JSON.stringify([byName(changed, 'Gros').chargee, byName(changed, 'Gros').dateModif]));
+    doc.tables[table].rows = doc.tables[table].rows.filter(row => row.id !== 5);
+    const removed = await run('Templates.refreshRows([5])');
+    check('refreshRows : une ligne supprimée ailleurs sort du cache', removed.length === 4 && !byName(removed, 'Courrier') && run('Templates.byId(5)') === undefined, JSON.stringify(removed.map(template => template.nom)));
+    const newId = doc.addRow(table, { Name: 'Neuf', Content: '<p>neuf</p>', ModifiedAt: 1790003000, TemplateType: 'document' });
+    const added = await run('Templates.refreshRows([' + newId + '])');
+    check('refreshRows : une ligne née ailleurs entre dans le cache, chargée (son texte est court)', !!byName(added, 'Neuf') && byName(added, 'Neuf').chargee === true && byName(added, 'Neuf').contenu === '<p>neuf</p>' && added.length === 5);
+    check('refreshRows : sans numéro valable, rien n\'est demandé', (await run('Templates.refreshRows([])')).length === 5 && (await run('Templates.refreshRows(["x", null])')).length === 5 && sqlCalls(server).length === 5, sqlCalls(server).length);
+    check('refreshRows : la table n\'a pas été lue en entier une seule fois', doc.readsOf(table) === 0);
+  }
+  {
+    // une ligne que ce widget écrit pendant la lecture de quelques lignes garde ce qu'il a écrit (la réponse est d'avant l'écriture)
+    const { doc, table } = makeDoc();
+    const stale = tablesFromStartupDoc(doc);
+    const server = createLightServer(() => stale);
+    const { run } = fresh(doc, server);
+    await run('Templates.loadAll()');
+    server.state.delayMs = 150;
+    const reading = run('Templates.refreshRows([1])');
+    await run("Templates.saveContent(1, '<p>écrit pendant la relecture</p>')");
+    await reading;
+    check('refreshRows : la réponse d\'avant l\'écriture n\'efface pas le texte écrit', run('Templates.byId(1).contenu') === '<p>écrit pendant la relecture</p>' && doc.readsOf(table) === 0, run('Templates.byId(1).contenu'));
+  }
+  {
+    // les gestes : une date, un jeton, les jetons, un mot de passe, une ligne supprimée puis rendue
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    const { run } = fresh(doc, server);
+    await run('Templates.loadAll()');
+    server.log.length = 0;
+    doc.resetLog();
+    const saved = await run("Templates.saveContent(1, '<p>neuf</p>')");
+    const stored = doc.tables[table].rows.find(row => row.id === 1).ModifiedAt;
+    check('enregistrer : la date que Grist garde se relit pour cette ligne seule, par SQL (aucune lecture de la table)', doc.readsOf(table) === 0 && sqlCalls(server).some(entry => /^SELECT id, "ModifiedAt" AS "ModifiedAt" FROM "Publipostage_Templates" WHERE id IN \(1\) ORDER BY id$/.test(entry.sql)) && saved.dateModif === stored, JSON.stringify([saved, stored, sqlCalls(server).map(entry => entry.sql.slice(0, 80))]));
+    const noColumn = await run('Templates.readTokens()');
+    check('readTokens : une table sans colonne de jeton rend ses numéros seuls (aucune ligne n\'a de jeton), sans lire la table', !!noColumn && noColumn.id.length === 6 && noColumn.Token === undefined && doc.readsOf(table) === 0, JSON.stringify(noColumn));
+    const token = await run('Templates.ensureToken(1)');
+    check('ensureToken : la ligne seule se lit par SQL (le jeton posé, relu), la table jamais lue', typeof token === 'string' && token.length >= 20 && doc.readsOf(table) === 0 && sqlCalls(server).some(entry => /AS "Token" FROM "Publipostage_Templates" WHERE id IN \(1\) ORDER BY id$/.test(entry.sql)), JSON.stringify(sqlCalls(server).map(entry => entry.sql.slice(0, 90))));
+    const tokens = await run('Templates.readTokens()');
+    check('readTokens : le numéro et le jeton de chaque ligne, par SQL', !!tokens && tokens.id.length === 6 && tokens.Token[0] === token && !tokens.Token[1] && doc.readsOf(table) === 0, JSON.stringify(tokens && tokens.Token));
+    const before = await run('Templates.readPdfPassword()');
+    check('readPdfPassword : la ligne des réglages seule, par SQL ; pas de colonne, pas de mot de passe', before.ok === true && before.password === '' && doc.readsOf(table) === 0 && sqlCalls(server).some(entry => /WHERE "TemplateType" = 'reglages' ORDER BY id$/.test(entry.sql)), JSON.stringify(before));
+    const wrote = await run("Templates.writePdfPassword('s3cret')");
+    const after = await run('Templates.readPdfPassword()');
+    check('writePdfPassword : la colonne est créée, la ligne des réglages écrite, relue par SQL', wrote === true && after.ok === true && after.password === 's3cret' && doc.readsOf(table) === 0 && doc.actions.some(action => action[0] === 'UpdateRecord' && action[3] && action[3].PdfPassword === 's3cret'), JSON.stringify([wrote, after]));
+    const snap = await run('Templates.snapshotRow(2)');
+    check('snapshotRow : la ligne et son texte entier par l\'interface REST (son numéro seul), la table jamais lue', !!snap && snap.id === 2 && snap.values.Content === BIG && snap.values.Name === 'Gros' && recordCalls(server).some(entry => JSON.stringify(entry.ids) === '[2]') && doc.readsOf(table) === 0, JSON.stringify(snap && Object.keys(snap.values)));
+    check('snapshotRow : une ligne qui n\'existe plus ne rend rien', (await run('Templates.snapshotRow(99)')) === null);
+    doc.tables[table].rows = doc.tables[table].rows.filter(row => row.id !== 2);
+    await run('Templates.refreshRows([2])');
+    run('globalThis.__snap = ' + JSON.stringify(snap));
+    const sqlBefore = sqlCalls(server).length;
+    const back = await run('Templates.restoreRow(globalThis.__snap)');
+    const asked = sqlCalls(server).slice(sqlBefore).map(entry => entry.sql);
+    const add = doc.actions.filter(action => action[0] === 'AddRecord').pop();
+    check('restoreRow : le numéro, le nom, le type, le ★ et le jeton suffisent (aucun texte lu), la table jamais lue', asked.length === 1 && /^SELECT id, "Name" AS "Name", "TemplateType" AS "TemplateType", "IsDefault" AS "IsDefault", "Token" AS "Token" FROM "Publipostage_Templates" ORDER BY id$/.test(asked[0]) && doc.readsOf(table) === 0, JSON.stringify(asked));
+    check('restoreRow : la ligne revient sous son numéro, avec son texte et son nom', !!back && back.renamed === false && back.nom === 'Gros' && add[2] === 2 && add[3].Content === BIG && add[3].Name === 'Gros' && add[3].HeaderFooter === '{"enabled":true}', JSON.stringify([back, add && add[2], add && Object.keys(add[3])]));
+    check('restoreRow : un nom pris par une autre ligne reçoit un numéro, comme avant', await (async () => {
+      doc.tables[table].rows = doc.tables[table].rows.filter(row => row.name !== 'x');
+      const second = await run('Templates.restoreRow(globalThis.__snap)');
+      return second.present !== true && second.renamed === true && second.nom === 'Gros (2)';
+    })());
+  }
+  {
+    // La lecture légère coupée, ou refusée en route : les mêmes gestes lisent la table, comme avant
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    const { run } = fresh(doc, server, { light: 'off' });
+    await run('Templates.loadAll()');
+    doc.resetLog();
+    await run('Templates.refreshRows([1])');
+    await run("Templates.saveContent(1, '<p>x</p>')");
+    await run('Templates.snapshotRow(2)');
+    await run('Templates.readPdfPassword()');
+    check('TÉMOIN : lecture légère coupée (« off »), les gestes lisent la table (refreshRows, date, ligne supprimée, mot de passe) et rien n\'est demandé par SQL', doc.readsOf(table) >= 4 && server.log.length === 0, JSON.stringify([doc.readsOf(table), server.log.length]));
+    check('TÉMOIN : readTokens rend null (l\'appelant lit la table)', (await run('Templates.readTokens()')) === null);
+  }
+  {
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    const { run } = fresh(doc, server);
+    await run('Templates.loadAll()');
+    server.state.refuseSql = 500;
+    const flaky = await run('Templates.readTokens()');
+    check('une réponse d\'erreur passagère (500) ne coupe pas la lecture légère : le geste lit la table cette fois-ci (null), le suivant essaiera de nouveau', flaky === null && run('Templates.getLightState()') === 'light', run('Templates.getLightState()'));
+    server.state.refuseSql = null;
+    check('...et la lecture légère répond de nouveau', !!(await run('Templates.readTokens()')) && run('Templates.getLightState()') === 'light');
+    server.state.refuseSql = 403;
+    doc.resetLog();
+    const rows = await run('Templates.refreshRows([1])');
+    check('SQL refusé en route : refreshRows lit la table en entier comme avant, l\'état devient « refused »', rows.length === 5 && rows.every(template => template.chargee === true) && doc.readsOf(table) === 1 && run('Templates.getLightState()') === 'refused', JSON.stringify([doc.readsOf(table), run('Templates.getLightState()')]));
+    const tokens = await run('Templates.readTokens()');
+    check('SQL refusé : readTokens rend null, la fenêtre des versions lit la table', tokens === null);
   }
 
   summarizeAndExit();

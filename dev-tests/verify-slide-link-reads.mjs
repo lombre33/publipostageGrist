@@ -171,11 +171,13 @@ await sleep(1500);
 // Ce que le navigateur fait d'une table lourde : les lectures de la table des modèles et les lectures d'un texte entier de la source, comptées depuis le clic.
 await app.evaluate((size) => {
   window.__reads = 0; window.__parses = 0; window.__writes = 0; window.__big = size;
+  // La pile d'une lecture compte une dizaine de trames avant d'arriver au passage de l'enregistrement automatique (`runAutosaveTick`) : la limite d'usage (10) la coupait avant, et la lecture de ce passage, tombée dans la fenêtre, comptait comme une lecture de la liaison.
+  Error.stackTraceLimit = 50;
   const docApi = grist.docApi;
   const fetchTable = docApi.fetchTable.bind(docApi);
   // Ne comptent que les lectures de la liaison : le passage de l'enregistrement automatique (toutes les 2,5 s) et l'enregistrement du document ouvert (saveRow) lisent la table eux aussi, et selon l'instant
   // où ils tombent par rapport au clic (le moindre retard de la page les déplace) ils se retrouvaient dans la fenêtre : l'essai ne mesurait plus la liaison.
-  docApi.fetchTable = (table) => { if (table === 'Publipostage_Modeles' && !/runAutosaveTick|saveRow/.test(new Error().stack)) { window.__reads++; (window.__readStacks = window.__readStacks || []).push(new Error().stack.split('\n').slice(2, 14).map(l => l.trim().replace(/^at /, '').replace(/\(?http:\/\/[^/]+\//, '(')).join(' < ')); } return fetchTable(table); };
+  docApi.fetchTable = (table) => { if (table === 'Publipostage_Modeles' && !/runAutosaveTick|saveRow/.test(new Error().stack)) { window.__reads++; (window.__readStacks = window.__readStacks || []).push(new Error().stack.split('\n').slice(2, 30).map(l => l.trim().replace(/^at /, '').replace(/\(?http:\/\/[^/]+\//, '(')).join(' < ')); } return fetchTable(table); };
   // Les écritures du texte de la source (une action qui porte un texte aussi long que la source) hors enregistrement du document ouvert.
   const apply = docApi.applyUserActions.bind(docApi);
   docApi.applyUserActions = (actions, ...rest) => { if (Array.isArray(actions) && actions.some(a => a && a[3] && Object.values(a[3]).some(v => typeof v === 'string' && v.length >= window.__big / 2)) && !/runAutosaveTick|saveRow/.test(new Error().stack)) window.__writes++; return apply(actions, ...rest); };

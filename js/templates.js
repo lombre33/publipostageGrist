@@ -18,6 +18,8 @@ const Templates = (function () {
   let cacheReadAt = 0;
   let cacheArrivedAt = 0;
   const cacheRowWrittenAt = new Map();
+  // Quand chaque ligne a été relue seule (refreshRows) : sa fraîcheur compte comme celle d'une ligne écrite, la table entière n'ayant pas été relue.
+  const cacheRowReadAt = new Map();
   const CACHE_FRESH_MS = 3000;
   // Une table LOURDE (11/11, un PowerPoint de 29 Mo importé : 38 millions de signes dans une ligne) : chaque lecture la rapporte en entier, des dizaines de Mo que le navigateur recopie d'un cadre à l'autre
   // (deux fois quand Grist Factory Suite héberge l'app : son courtier la reçoit puis la renvoie), page prise pendant ce temps. À partir de ce poids, un enregistrement ne la relit plus pour rien : ni
@@ -501,7 +503,9 @@ const Templates = (function () {
   // Rend { ok, password } : `ok` faux quand la table n'a pas pu être lue (refusée, absente, Grist injoignable) ; sinon le mot de passe gardé, '' quand il n'y en a pas - ni colonne, ni
   // ligne, ou une colonne que les règles d'accès cachent à cette personne. Lire ne crée jamais rien.
   async function readPdfPassword() {
-    const tableData = await readTable();
+    // Table lourde (liste légère) : la ligne des réglages seule, par SQL (consigne 103 de GFS : aucun geste ne relit la table entière).
+    const light = await lightColumns(map => TemplatesLight.settingsSql(map, PDF_PASSWORD_COLUMN), [PDF_PASSWORD_COLUMN]);
+    const tableData = light ? light.data : await readTable();
     if (!tableData || !Array.isArray(tableData.id)) return { ok: false, password: '' };
     const at = settingsRowAt(tableData);
     const cell = at === -1 || !Array.isArray(tableData[PDF_PASSWORD_COLUMN]) ? '' : tableData[PDF_PASSWORD_COLUMN][at];
@@ -520,7 +524,8 @@ const Templates = (function () {
     return settingsQueue.enqueue(async () => {
       await ensureEmailColumns(); // TemplateType : la colonne qui désigne la ligne
       await ensurePdfPasswordColumn();
-      const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
+      const light = await lightColumns(map => TemplatesLight.settingsSql(map, PDF_PASSWORD_COLUMN), [PDF_PASSWORD_COLUMN]);
+      const tableData = light ? light.data : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
       if (!Array.isArray(tableData[PDF_PASSWORD_COLUMN])) throw new Error('Colonne ' + PDF_PASSWORD_COLUMN + ' absente ou cachée : le mot de passe n’est pas enregistré.');
       const at = settingsRowAt(tableData);
       if (at === -1) {
@@ -686,6 +691,9 @@ const Templates = (function () {
     if (lightState === 'refused') return Date.now() - lightRefusedAt >= LIGHT_RETRY_MS;
     return true;
   }
+  // Un refus qui ne passera pas en réessayant (le jeton, les règles d'accès, une instance sans cette interface) : un geste qui lit une ou deux lignes coupe alors la lecture légère pour dix minutes ; un délai, une coupure
+  // du réseau, une réponse d'erreur passagère ne la coupent pas (le geste lit la table comme avant cette fois-ci, le suivant essaiera de nouveau : une table de 500 Mo ne se relit pas en entier pour une réponse perdue).
+  const isDefiniteRefusal = error => !!error && (error.reason === 'jeton' || (error.reason === 'http' && [401, 403, 404].indexOf(error.status) !== -1));
   function refuseLight(error) {
     lightState = 'refused';
     lightRefusedAt = Date.now();
@@ -694,15 +702,18 @@ const Templates = (function () {
 
   // La liste, avec ses longueurs quand Grist les calcule dans le temps qu'il laisse à une requête SQL (une seconde par défaut : au-delà, il l'interrompt) ; sinon sans (`weighed` faux : on ne sait pas ce que pèsent les textes, la table
   // est tenue pour lourde). Un refus des droits, de l'instance ou du réseau remonte : la lecture entière suivra.
-  async function listRows(map) {
+  // `ids` : seulement ces lignes (refreshRows) ; `options.weights` faux : sans les longueurs (ce que la suppression et sa défaite n'ont pas à peser).
+  async function listRows(map, ids, options) {
     // `__templatesLightSmall` (les essais) : le seuil des textes qui viennent avec la liste (0 : tout se lit à la demande).
     const small = typeof globalThis !== 'undefined' && typeof globalThis.__templatesLightSmall === 'number' ? { smallBytes: globalThis.__templatesLightSmall } : {};
+    const only = Array.isArray(ids) ? { ids } : {};
+    if (options && options.weights === false) return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, Object.assign({ weights: false }, small, only)), LIGHT_LIST_TIMEOUT_MS), weighed: false };
     try {
-      return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, small), LIGHT_LIST_TIMEOUT_MS), weighed: true };
+      return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, Object.assign({}, small, only)), LIGHT_LIST_TIMEOUT_MS), weighed: true };
     } catch (error) {
       const reason = error && error.reason;
       if (reason === 'jeton' || reason === 'réseau' || (reason === 'http' && [401, 403, 404].indexOf(error.status) !== -1)) throw error;
-      return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, Object.assign({ weights: false }, small)), LIGHT_LIST_TIMEOUT_MS), weighed: false };
+      return { rows: await GristAPI.lightQuery(TemplatesLight.listSql(map, Object.assign({ weights: false }, small, only)), LIGHT_LIST_TIMEOUT_MS), weighed: false };
     }
   }
 
@@ -745,6 +756,41 @@ const Templates = (function () {
     return { map, listing };
   }
 
+  // L'entrée du cache que dit la ligne `i` d'une liste légère (`data`, `lens` : TemplatesLight.columnar) : ses champs courts, et pour chaque texte long ce qui en reste à lire. `weights` : le décompte de la liste entière, quand c'est
+  // elle qu'on lit. Rend aussi les octets de textes longs de la ligne.
+  function lightEntry(data, lens, i, weighed, weights) {
+    const poids = weighed ? {} : null;
+    let bytes = 0;
+    let whole = true;
+    const entry = templateFromRow(data, i);
+    TemplatesLight.HEAVY_COLUMNS.forEach((column) => {
+      const field = HEAVY_FIELDS[column];
+      const length = weighed && lens[column] ? Number(lens[column][i]) || 0 : null;
+      if (poids) poids[column] = length;
+      if (length) { if (weights) weights.columns[column] += length; bytes += length; }
+      const given = data[column] ? data[column][i] : null;
+      // Le texte est là (court, ou d'un type qui vient toujours avec la liste) ; ou la colonne est vide ; sinon il reste à lire.
+      if (given == null && (weighed ? length > 0 : true) && !(data.TemplateType && TemplatesLight.ALWAYS_TYPES.indexOf(data.TemplateType[i]) !== -1)) {
+        leaveUnloaded(entry, field, HEAVY_PLACEHOLDERS[column](entry));
+        whole = false;
+      } else if (given == null && field === 'contenu') {
+        entry.contenu = '';
+      }
+    });
+    entry.chargee = whole;
+    entry.poids = poids;
+    return { entry, bytes };
+  }
+
+  // Ce que le cache garde d'une ligne que la liste vient de relire (`old` : l'entrée qu'il avait, `next` : celle de la liste). Un modèle déjà lu en entier garde son texte tant que sa date est celle que Grist porte : ses autres champs
+  // prennent la liste. Sinon (texte jamais lu, date changée, ligne réécrite sans changer de date, autre type) l'entrée de la liste.
+  function mergeListed(old, next, rewritten) {
+    if (!old || !old.chargee || next.chargee || rewritten.has(String(next.id)) || old.typeModele !== next.typeModele || !sameDateModif(old.dateModif, next.dateModif)) return next;
+    // Grist garde de ce modèle l'état que le cache a lu ou écrit : son texte reste, ses autres champs prennent la liste.
+    ['nom', 'nomFichierPDF', 'estParDefaut', 'destinataires', 'cc', 'cci', 'objet', 'pj', 'jeton', 'modifiePar', 'emailLie', 'dateModif', 'poids'].forEach((key) => { old[key] = next[key]; });
+    return old;
+  }
+
   // Le cache d'après une liste légère. Un modèle déjà lu en entier (le document ouvert, un modèle monté depuis) garde son texte tant que sa date est celle que Grist porte ; les autres n'ont que ce que la liste donne.
   function adoptLight(read, started) {
     const { data, lens } = TemplatesLight.columnar(read.listing.rows);
@@ -757,26 +803,7 @@ const Templates = (function () {
     const rowBytes = [];
     data.id.forEach((id, i) => {
       if (isSettingsRow(data, i)) { if (settingsAt === -1) settingsAt = i; }
-      const poids = weighed ? {} : null;
-      let bytes = 0;
-      let whole = true;
-      const entry = templateFromRow(data, i);
-      TemplatesLight.HEAVY_COLUMNS.forEach((column) => {
-        const field = HEAVY_FIELDS[column];
-        const length = weighed && lens[column] ? Number(lens[column][i]) || 0 : null;
-        if (poids) poids[column] = length;
-        if (length) { weights.columns[column] += length; bytes += length; }
-        const given = data[column] ? data[column][i] : null;
-        // Le texte est là (court, ou d'un type qui vient toujours avec la liste) ; ou la colonne est vide ; sinon il reste à lire.
-        if (given == null && (weighed ? length > 0 : true) && !(data.TemplateType && TemplatesLight.ALWAYS_TYPES.indexOf(data.TemplateType[i]) !== -1)) {
-          leaveUnloaded(entry, field, HEAVY_PLACEHOLDERS[column](entry));
-          whole = false;
-        } else if (given == null && field === 'contenu') {
-          entry.contenu = '';
-        }
-      });
-      entry.chargee = whole;
-      entry.poids = poids;
+      const { entry, bytes } = lightEntry(data, lens, i, weighed, weights);
       rowBytes.push({ id, chars: bytes, type: entry.typeModele, name: String(entry.nom || '').slice(0, 24) });
       if (!isSettingsRow(data, i)) entries.push(entry);
     });
@@ -788,13 +815,7 @@ const Templates = (function () {
     confirmPredictedDates(data, started.written);
     const rewritten = new Set(rewrittenAt.keys());
     settleRewrites(started.at);
-    const merged = entries.map((next) => {
-      const old = previous.get(String(next.id));
-      if (!old || !old.chargee || next.chargee || rewritten.has(String(next.id)) || old.typeModele !== next.typeModele || !sameDateModif(old.dateModif, next.dateModif)) return next;
-      // Grist garde de ce modèle l'état que le cache a lu ou écrit : son texte reste, ses autres champs prennent la liste.
-      ['nom', 'nomFichierPDF', 'estParDefaut', 'destinataires', 'cc', 'cci', 'objet', 'pj', 'jeton', 'modifiePar', 'emailLie', 'dateModif', 'poids'].forEach((key) => { old[key] = next[key]; });
-      return old;
-    });
+    const merged = entries.map(next => mergeListed(previous.get(String(next.id)), next, rewritten));
     templatesCache = keepWrittenSince(merged, started.written);
     cacheReadAt = started.at;
     cacheArrivedAt = Date.now();
@@ -820,6 +841,79 @@ const Templates = (function () {
     }
     fillEntry(entry, full);
     return true;
+  }
+
+  // RELIRE QUELQUES LIGNES (consigne 103 de GFS, demande 2, lot 3 : « la vérification de conflit lit la ligne du modèle ouvert, pas la table »). Ce que l'enregistrement automatique, au repos comme à chaque passage qui écrit, veut
+  // savoir, c'est si le modèle ouvert - et ceux que son texte désigne - ont changé ailleurs : leur date, rien d'autre. Table lue par la liste légère, une requête SQL des numéros demandés (la même forme que la liste, sans le texte long : une
+  // ligne dont la date a changé revient « pas chargée », le geste qui en a besoin la lit) remplace les entrées de ces lignes dans le cache et ne touche pas aux autres. Table lue en entier (peu lourde, SQL refusé, cache partiel), ou
+  // SQL qui ne répond pas : la lecture entière d'avant, `loadAll`. Rend le cache.
+  async function refreshRows(ids) {
+    const wanted = TemplatesLight.wholeIds(Array.isArray(ids) ? ids : [ids]).map(String);
+    if (!wanted.length) return templatesCache;
+    if (lightState !== 'light' || !lightMap || partial || lightSwitch() === 'off' || !lightAvailable()) return loadAll();
+    const started = { written: cacheWrites, at: Date.now() };
+    let listing;
+    try { listing = await listRows(lightMap, wanted.map(Number)); } catch (e) { if (isDefiniteRefusal(e)) refuseLight(e); return loadAll(); }
+    const { data, lens } = TemplatesLight.columnar(listing.rows);
+    const previous = new Map(templatesCache.map(t => [String(t.id), t]));
+    const rewritten = new Set(rewrittenAt.keys());
+    const listed = [];
+    data.id.forEach((id, i) => {
+      if (isSettingsRow(data, i)) return;
+      listed.push(mergeListed(previous.get(String(id)), lightEntry(data, lens, i, listing.weighed, null).entry, rewritten));
+    });
+    confirmPredictedDates(data, started.written, true);
+    const seen = new Set(data.id.map(String));
+    rewrittenAt.forEach((at, id) => { if (seen.has(id) && started.at >= at) rewrittenAt.delete(id); });
+    // Une ligne que ce widget a écrite depuis le départ de la lecture garde son entrée (cf. keepWrittenSince) ; une ligne demandée qui n'est plus dans la table a été supprimée ailleurs : elle sort du cache.
+    const replaced = new Map(keepWrittenSince(listed, started.written).map(entry => [String(entry.id), entry]));
+    const asked = new Set(wanted);
+    const next = [];
+    templatesCache.forEach((entry) => {
+      const key = String(entry.id);
+      if (!asked.has(key)) next.push(entry);
+      else if (replaced.has(key)) { next.push(replaced.get(key)); replaced.delete(key); }
+    });
+    replaced.forEach(entry => next.push(entry));
+    templatesCache = next;
+    const at = Date.now();
+    wanted.forEach((key) => { cacheRowReadAt.set(key, at); });
+    traceStep('modèles : lignes relues', { lignes: wanted.length });
+    return templatesCache;
+  }
+
+  // QUELQUES COLONNES, QUELQUES LIGNES (consigne 103, demande 2, lot 3). Un geste qui ne veut qu'une date, un jeton, un réglage ou une ligne ne relit pas la table : tant qu'elle se lit par la liste légère, il la demande à Grist par SQL ou par
+  // l'interface REST, sous les noms réels que disent les métadonnées (lus à neuf : le geste vient peut-être d'ajouter la colonne). Rendent null quand la lecture entière s'applique (table peu lourde, cache partiel, SQL refusé ou en
+  // échec - retenu dix minutes comme la liste -, requête que la table ne permet pas) : l'appelant lit alors la table comme avant.
+  const lightIsOn = () => lightState === 'light' && !partial && lightSwitch() !== 'off' && lightAvailable();
+  async function lightColumns(build, wanted) {
+    if (!lightIsOn()) return null;
+    let map;
+    try { map = await SchemaColumns.columnMap(TABLE_NAME); } catch (e) { return null; }
+    const sql = map ? build(map) : null;
+    if (!sql) return null;
+    try {
+      const byName = TemplatesLight.columnar(await GristAPI.lightQuery(sql, LIGHT_LIST_TIMEOUT_MS)).data;
+      // Une colonne que la table a et que `wanted` désigne existe même sans ligne (la lecture entière la rendrait vide) ; une colonne que la table n'a pas reste absente.
+      (wanted || []).forEach((name) => { if (map.columns.has(name) && !byName[name]) byName[name] = []; });
+      return { data: byName, has: name => map.columns.has(name) };
+    } catch (e) { if (isDefiniteRefusal(e)) refuseLight(e); return null; }
+  }
+  // Les lignes `ids` telles que Grist les garde en ce moment, tous textes compris, rangées comme fetchTable sous les noms anglais : une demande à l'interface REST. Même rendu que lightColumns.
+  async function lightRows(ids) {
+    if (!lightIsOn()) return null;
+    let map;
+    try { map = await SchemaColumns.columnMap(TABLE_NAME); } catch (e) { return null; }
+    if (!map) return null;
+    try {
+      const { records } = await GristAPI.lightRecords(map.table, TemplatesLight.wholeIds(ids), LIGHT_ROW_TIMEOUT_MS);
+      return { data: TemplatesLight.englishRecords(records, map), has: name => map.columns.has(name) };
+    } catch (e) { if (isDefiniteRefusal(e)) refuseLight(e); return null; }
+  }
+  // Les jetons des modèles (le numéro et le jeton), relus à neuf : la fenêtre des versions les compare à ceux de sa table. Rend { id, Token } par SQL quand la table se lit par la liste légère, null sinon (l'appelant lit la table).
+  async function readTokens() {
+    const read = await lightColumns(map => TemplatesLight.tokensSql(map), ['Token']);
+    return read ? read.data : null;
   }
 
   // Les modules qui suivent l'arrivée de textes lus à la demande : js/main.js refait suivre leur modèle aux tableaux et aux diapositives liés, qu'un modèle sans texte ne laissait pas comparer.
@@ -1166,11 +1260,13 @@ const Templates = (function () {
   }
   // `tableData` : la table qui vient d'arriver ; `writtenAtStart` : `cacheWrites` au début de sa lecture. Une ligne écrite pendant cette lecture y a peut-être encore son état d'avant (cf. keepWrittenSince) :
   // sa date prévue attend la lecture suivante.
-  function confirmPredictedDates(tableData, writtenAtStart) {
+  // `onlyListed` : la lecture n'a demandé que quelques lignes (refreshRows) ; la date prévue d'une ligne qu'elle n'a pas rendue attend une lecture qui la rende.
+  function confirmPredictedDates(tableData, writtenAtStart, onlyListed) {
     if (!predictedDates.size || !tableData || !Array.isArray(tableData.id)) return;
     predictedDates.forEach((predicted, key) => {
       if (cacheWrittenAt.get(key) > writtenAtStart) return;
       const at = tableData.id.findIndex(rowId => String(rowId) === key);
+      if (at === -1 && onlyListed) return;
       if (at !== -1 && (!tableData.ModifiedAt || tableData.ModifiedAt[at] !== predicted)) dateModifShape = 'other';
       predictedDates.delete(key);
     });
@@ -1194,7 +1290,9 @@ const Templates = (function () {
     }
     const keep = rowId => dates.set(rowId, fallback);
     try {
-      const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
+      // Table lourde (liste légère) : la date de ces lignes seules, par SQL ; sinon la table, comme avant (consigne 103 de GFS : un enregistrement ne relit pas la table entière).
+      const light = await lightColumns(map => TemplatesLight.datesSql(map, rowIds), ['ModifiedAt']);
+      const tableData = light ? light.data : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
       let asPredicted = predicted !== null;
       rowIds.forEach((rowId) => {
         predictedDates.delete(String(rowId));
@@ -1241,7 +1339,7 @@ const Templates = (function () {
   // passage la relisait aussitôt en entier (une traversée de plus, pour rien : relue, elle aurait eu le même âge en arrivant). Sa fraîcheur se compte donc depuis son arrivée.
   async function storedStateFor(id) {
     const cached = byId(id);
-    const freshAt = Math.max(loadedChars >= HEAVY_TABLE_CHARS ? cacheArrivedAt : cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0);
+    const freshAt = Math.max(loadedChars >= HEAVY_TABLE_CHARS ? cacheArrivedAt : cacheReadAt, cacheRowWrittenAt.get(String(id)) || 0, cacheRowReadAt.get(String(id)) || 0);
     // Une entrée dont le texte n'a pas été lu n'est pas un état : jamais rendue telle quelle (l'historique y garderait un texte vide).
     if (cached && cached.chargee !== false && Date.now() - freshAt <= CACHE_FRESH_MS) return cached;
     // Une table lue par la liste légère ne se relit jamais en entier pour cela : la seule ligne, par son numéro.
@@ -1418,7 +1516,9 @@ const Templates = (function () {
     await ensureTableExists();
     await ensureTokenColumn();
     async function read() {
-      const tableData = await SchemaColumns.docApi.fetchTable(TABLE_NAME);
+      // Table lourde (liste légère) : le jeton de cette ligne seule, par SQL.
+      const light = await lightColumns(map => TemplatesLight.tokensSql(map, [id]), ['Token']);
+      const tableData = light ? light.data : await SchemaColumns.docApi.fetchTable(TABLE_NAME);
       const at = tableData.id.findIndex(rowId => sameId(rowId, id));
       return { rowId: at === -1 ? null : tableData.id[at], token: at === -1 || !tableData.Token ? '' : String(tableData.Token[at] || '') };
     }
@@ -1587,7 +1687,9 @@ const Templates = (function () {
   // La ligne `id` telle que Grist la garde en ce moment - relue, pas celle du cache : une autre personne a pu l'enregistrer depuis -, à lire AVANT de la supprimer (Annuler la rend, cf. restoreRow). { id, values } ; null si la
   // ligne n'existe plus ou si la table ne se lit pas.
   async function snapshotRow(id) {
-    const tableData = await readTable();
+    // Table lourde (liste légère) : cette ligne seule, par l'interface REST (son texte entier : c'est lui que Annuler rendra).
+    const light = await lightRows([id]);
+    const tableData = light ? light.data : await readTable();
     if (!tableData || !Array.isArray(tableData.id)) return null;
     const at = tableData.id.findIndex(rowId => sameId(rowId, id));
     if (at === -1) return null;
@@ -1602,7 +1704,10 @@ const Templates = (function () {
   function restoreRow(snapshot) {
     return writes.track(async () => {
       await ensureTableExists();
-      const tableData = await readTable();
+      // Table lourde (liste légère) : le numéro, le nom, le type, le ★ et le jeton de chaque ligne, sans un texte (de quoi trouver un nom libre et une place) ; sinon la table, comme avant.
+      const light = await lightColumns(map => TemplatesLight.identitySql(map), ['Name', 'TemplateType', 'IsDefault', 'Token']);
+      const tableData = light ? light.data : await readTable();
+      const hasColumn = light ? light.has : column => !!tableData && column in tableData;
       if (!tableData || !Array.isArray(tableData.id)) throw new Error('Table des modèles illisible : rien n’a été rendu.');
       // Un ★ resté sur un email ou un macro-modèle ne compte pas (cf. getDefaultId).
       const rows = tableData.id.map((rowId, i) => ({
@@ -1616,7 +1721,7 @@ const Templates = (function () {
         if (back) return { present: true, id: back.id };
       }
       const values = {};
-      ROW_COLUMNS.forEach(column => { if (column in tableData && snapshot.values[column] !== undefined) values[column] = snapshot.values[column]; });
+      ROW_COLUMNS.forEach(column => { if (hasColumn(column) && snapshot.values[column] !== undefined) values[column] = snapshot.values[column]; });
       const models = rows.filter(row => !row.settings);
       const original = String(values.Name || '').trim();
       const nom = freeName(original, candidate => models.some(row => sameName(row.nom, candidate)));
@@ -1642,11 +1747,11 @@ const Templates = (function () {
   }
 
   return {
-    loadAll, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail, saveNotice,
+    loadAll, refreshRows, readTokens, getCached, byId, openableById, getCurrentId, setCurrentId, onCreated, isCurrent, getDefaultId, isDefault, canBeDocumentDefault, setDefault, save, saveContent: saveContentTracked, ensureToken, remove, snapshotRow, restoreRow, restoreVersion, sameName, uniqueName, setLinkedEmail, saveNotice,
     isOpenableType, isKnownType, declareExtensionType, unavailableOf, unavailableText,
     getWriteSeq: writes.seq, isWriting: writes.isWriting, whenIdle: writes.whenIdle, lastWritten: writes.lastWritten,
     sameDateModif, verifyStored, getLoadedChars, getLoadWeights, templateFromRecord, hasLoaded, SETTINGS_TYPE, seedPartial, isComplete, whenComplete, onCompleted, TABLE_NAME, getDocumentSettings, getDocumentSetting, updateDocumentSettings, readPdfPassword, writePdfPassword,
-    ensureLoaded, ensureAllLoaded, ensureCiting, ensureWithReferences, declareReferences, referencedIds, needsReading, noteRewritten, onEntriesLoaded, getUnloadedReads, clearUnloadedReads, getLightState,
+    ensureLoaded, ensureAllLoaded, ensureCiting, ensureWithReferences, declareReferences, referencedIds, needsReading, noteRewritten, onEntriesLoaded, getUnloadedReads, clearUnloadedReads, getLightState, refreshRows,
     get PDF_PASSWORD_LOCATION() { return pdfPasswordLocation(); },
   };
 })();
