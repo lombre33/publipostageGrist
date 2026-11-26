@@ -365,6 +365,9 @@ const DocxExport = (function () {
     return {
       behindDocument: layer === 'behind',
       zIndex: 1000 + uniqueId,  // unique par image, comme altText.id : sans lui docx.js prend la hauteur de l'image
+      // La place est celle de la PAGE : portée par une cellule (une zone ou un tableau ouvre le document, ou l'image y a été rangée, js/export-common.js:anchorFirstPageImages),
+      // l'image ne doit pas se placer dans la cellule - Word lit `layoutInCell="1"` comme « dans la cellule », et docx.js l'écrit par défaut.
+      layoutInCell: false,
       horizontalPosition: { relative: docx.HorizontalPositionRelativeFrom.PAGE, offset: xEmu },
       verticalPosition: { relative: docx.VerticalPositionRelativeFrom.PAGE, offset: yEmu },
     };
@@ -2252,6 +2255,11 @@ const DocxExport = (function () {
         applyPage(part.orientation, part.format);
         ctx.measureRoot = part.container;
         ctx.sectionStart = index > 0;
+        // Les images en calque des pages 2 et suivantes : au paragraphe de leur page (ExportCommon.anchorLaterPageImages). Un document aux pages tournées n'a pas de pagination d'un seul tenant : il n'y touche pas.
+        if (parts.length === 1) {
+          const pageHeightTwip = PageLayout.pageSizeTwipFor(pageOrientation, pageFormat).height;
+          ExportCommon.anchorLaterPageImages(part.container, { widthPx: Math.round(CONTENT_WIDTH_TWIP / PX_TO_TWIP), pageContentHeightPx: Math.max(50, (pageHeightTwip - marginTopTwip - marginBottomTwip - topBandTwip - bottomBandTwip) / PX_TO_TWIP) });
+        }
         // « Sur toutes les pages » : les images répétées partent dans l'en-tête, le corps ne les compte plus (inlineNodesFrom).
         part.layerImages = PageLayer.collect(part.container);
         part.blocks = await bodyBlocksFrom(part.container, ctx);

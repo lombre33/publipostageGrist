@@ -2219,5 +2219,5 @@ const ReaderMode = (function () {
       catch (e) { return ''; }
     });
   }
-  return { render, lend, renderInto, useInlineMargins, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
+  return { render, lend, renderInto, useInlineMargins, resolvedHtml, preview, peek, inspect, resolveFilename, autoName, isAutoName, fieldText, splitBadges, computePageBreakOffsets, trimTrailingBlankBlocks, trailingTypedBreaks, checkboxNode, textMarksOf, readsAllRows: () => displayedReadsAll, showsNoRow: () => noRowShown, slideShown, showSlide };
 })();

@@ -99,6 +99,54 @@ window.EditorTestSuites.imagePageFidelity = (function () {
     })));
   });
 
+  // Les documents d'avant la grille de page (une image sans `data-page-*`, ou posée Aperçu A4 éteint) : l'image ne connaît que sa place dans le document (style left / top) et les blocs qui l'entourent ;
+  // elle est ancrée à l'un d'eux (placeByAnchors). Un bloc qui COMMENCE sur la page 1 et finit plus loin (la zone de la lettre, un tableau, un long paragraphe), juste sous le logo ou recouvert par lui,
+  // ne doit pas la reporter sur la page où il finit - ni, pour le bloc d'après, sur la dernière page du document.
+  const legacyImgTag = (layer, leftPt, topPt, src, width) => imgTag(layer, leftPt, topPt, 0, src, width).replace(/ data-page-index="[^"]*"| data-page-left-pt="[^"]*"| data-page-top-pt="[^"]*"/g, '');
+  const legacyOnPageOne = (painted, count, pagesWanted) => {
+    const all = painted.reduce((n, list) => n + list.length, 0);
+    const later = painted.slice(1).reduce((n, list) => n + list.length, 0);
+    return count >= pagesWanted && all === 1 && (painted[0] || []).length === 1 && later === 0;
+  };
+  ['zone', 'zoneThreePages', 'table', 'bigParagraph'].forEach((shapeName) => {
+    const shape = SHAPES[shapeName];
+    const hosts = shapeName === 'bigParagraph' ? ['top', 'end'] : ['top', 'end', 'inside'];
+    ['front', 'behind'].forEach(layer => hosts.forEach((host) => {
+      cases.push({
+        id: 'ipf_pdf_legacy_no_grid_' + shapeName + '_' + layer + '_host_' + host,
+        description: 'PDF, document d\'avant la grille de page, ' + shapeName + ' : l\'image ' + (layer === 'front' ? 'devant' : 'derrière') + ' le texte, en haut de la page 1 (portée par ' + host + '), est PEINTE sur la page 1, à la place qu\'elle a dans un document d\'une page',
+        run: async (h) => {
+          await h.resetEditor();
+          const control = await paintedImages(h, SHAPES.short.html(legacyImgTag(layer, 30, 20), host === 'inside' ? 'top' : host));
+          const reference = (control.painted[0] || [])[0];
+          await h.resetEditor();
+          const { count, painted } = await paintedImages(h, shape.html(legacyImgTag(layer, 30, 20), host));
+          const first = (painted[0] || [])[0];
+          // Une image portée par une cellule se place par rapport à elle : seule sa page se vérifie.
+          const placed = host === 'inside' || (!!first && !!reference && near(first.x, reference.x) && near(first.y, reference.y));
+          const pass = legacyOnPageOne(painted, count, shape.pages) && placed;
+          return { pass, notes: JSON.stringify({ pagesDuPdf: count, pagesAttendues: '≥' + shape.pages, imagesParPage: painted.map(list => list.length), peint: first || null, reference: reference || null }) };
+        },
+      });
+    }));
+  });
+  // Le logo ET un bloc qui déborde juste dessous : le logo plus petit ou plus grand que l'écart qui l'en sépare (le bloc est alors en dessous de lui, ou recouvert par lui), sans ou avec une ligne vide entre les deux.
+  ['zone', 'table', 'bigParagraph'].forEach((shapeName) => {
+    const block = { zone: letter(60), table: table(120), bigParagraph: bigParagraph }[shapeName];
+    ['front', 'behind'].forEach(layer => [['small', 20], ['large', 120]].forEach(([sizeName, widthPx]) => [0, 1].forEach((gap) => {
+      cases.push({
+        id: 'ipf_pdf_legacy_logo_above_' + shapeName + '_' + layer + '_' + sizeName + '_gap' + gap,
+        description: 'PDF, document d\'avant la grille de page : un logo ' + (sizeName === 'small' ? 'petit' : 'grand') + ' ' + (layer === 'front' ? 'devant' : 'derrière') + ' le texte, ' + (gap ? 'une ligne vide puis' : 'juste au-dessus d\'') + (shapeName === 'zone' ? ' la zone' : shapeName === 'table' ? ' un tableau' : ' un long paragraphe') + ' qui déborde sur la page 2, est PEINT sur la page 1',
+        run: async (h) => {
+          await h.resetEditor();
+          const html = '<p>Debut' + legacyImgTag(layer, 30, 4, PNG, widthPx) + '</p>' + blanks(gap) + block + '<p>Fin</p>';
+          const { count, painted } = await paintedImages(h, html);
+          return { pass: legacyOnPageOne(painted, count, 2), notes: JSON.stringify({ pagesDuPdf: count, imagesParPage: painted.map(list => list.length), peint: (painted[0] || [])[0] || null }) };
+        },
+      });
+    })));
+  });
+
   // Le pied de page, où se peignent les images « devant » qu'aucun bloc ne peut porter, a lui aussi ses hôtes : bande d'en-tête et de pied, note de bas de page, page en paysage. L'image reste à sa
   // place de grille (marge du haut du document, bande comprise) sur la page 1, et ce que le pied porte déjà (la note) reste.
   const hfOf = (header, footer) => ({ enabled: true, differentFirstPage: false, header: { default: header, first: '' }, footer: { default: footer, first: '' } });
@@ -349,6 +397,25 @@ window.EditorTestSuites.imagePageFidelity = (function () {
     });
   });
 
+  // Word : un document qui s'ouvre sur une zone ou un tableau range le logo de la page 1 dans une cellule. Sa place est celle de la page : `layoutInCell="0"` (docx.js écrit « 1 » par défaut, que Word lit comme
+  // « placé dans la cellule », donc décalé par la cellule et rogné par elle).
+  ['front', 'behind'].forEach(layer => {
+    cases.push({
+      id: 'ipf_docx_logo_carried_by_a_cell_is_laid_out_on_the_page_' + layer,
+      description: 'Word : le logo ' + (layer === 'front' ? 'devant' : 'derrière') + ' le texte, rangé dans une cellule (le document s\'ouvre sur une zone), n\'est pas « placé dans la cellule » (layoutInCell="0")',
+      run: async (h) => {
+        await h.resetEditor();
+        const html = letter(40) + '<p>Fin' + imgTag(layer, 30, 20, 0) + '</p>';
+        const parts = await h.exportDocxParts(html, null, PageLayout.getMarginsTwip());
+        const anchors = Array.from(parts.doc.getElementsByTagName('wp:anchor'));
+        const inCell = anchors.map((anchor) => { let node = anchor; while (node && node.nodeName !== 'w:tc') node = node.parentNode; return !!node; });
+        const flags = anchors.map(anchor => anchor.getAttribute('layoutInCell'));
+        const pass = anchors.length === 1 && inCell[0] === true && flags[0] === '0';
+        return { pass, notes: JSON.stringify({ ancres: anchors.length, dansUneCellule: inCell, layoutInCell: flags }) };
+      },
+    });
+  });
+
   ['docx', 'odt'].forEach(format => ['front', 'behind'].forEach(layer => {
     ['short', 'zone'].forEach((shapeName) => {
       cases.push({
@@ -381,6 +448,114 @@ window.EditorTestSuites.imagePageFidelity = (function () {
       },
     });
   }));
+
+  // ============================================================================================================================================================================================
+  // 4. Word et OpenDocument : une image des pages 2 et suivantes est ancrée à un paragraphe de SA page, pas à celui où elle a été insérée
+  // ============================================================================================================================================================================================
+  // La pagination de Word et d'OpenDocument n'est pas celle de l'éditeur, mais le PDF (pdfmake) est calé dessus : la page où le PDF met le paragraphe porteur est la contre-épreuve, une autre
+  // pagination que celle qui a choisi le paragraphe.
+  const lineNumberOf = text => { const found = /(?:Ligne|A|B) (\d+)/.exec(text || ''); return found ? parseInt(found[1], 10) : null; };
+  // Le texte d'un paragraphe sans ce que l'image y apporte (les nombres du dessin pour Word, le titre du cadre pour OpenDocument).
+  async function anchorHostLines(h, format, html) {
+    if (format === 'docx') {
+      const parts = await h.exportDocxParts(html, null, PageLayout.getMarginsTwip());
+      return Array.from(parts.doc.getElementsByTagName('wp:anchor')).map((anchor) => {
+        let node = anchor; while (node && node.nodeName !== 'w:p') node = node.parentNode;
+        return node ? Array.from(node.getElementsByTagName('w:t')).map(t => t.textContent).join('') : null;
+      });
+    }
+    await ExportEngines.ensure(['odtExport']);
+    const built = await OdtExport.build(html, { margins: PageLayout.getMarginsMm() });
+    const zip = await JSZip.loadAsync(await built.blob.arrayBuffer());
+    const xml = new DOMParser().parseFromString(await zip.file('content.xml').async('string'), 'application/xml');
+    return Array.from(xml.getElementsByTagName('draw:frame')).map((frame) => {
+      let node = frame; while (node && node.nodeName !== 'text:p' && node.nodeName !== 'text:h') node = node.parentNode;
+      if (!node) return null;
+      const copy = node.cloneNode(true);
+      Array.from(copy.getElementsByTagName('draw:frame')).forEach(el => el.parentNode.removeChild(el));
+      return copy.textContent;
+    });
+  }
+  // La page (à partir de 1) que le PDF donne à chaque ligne numérotée du document, par la lettre qui la porte (« Ligne 12 », « A 3 »).
+  async function pdfLinePages(h, html) {
+    const res = await h.exportPdfContent(html, null, PageLayout.getMarginsPt());
+    const truth = await h.extractPdfGroundTruth(res.base64);
+    const pageOfLine = {};
+    truth.pages.forEach((page, index) => {
+      const text = page.textItems.map(item => item.str).join(' ').replace(/\s+/g, ' ');
+      const pattern = /(Ligne|A|B) (\d+)/g; let found;
+      while ((found = pattern.exec(text))) pageOfLine[found[1] + ' ' + found[2]] = index + 1;
+    });
+    return { pageOfLine, count: truth.pages.length };
+  }
+  const longDocument = (image, host) => (host === 'top' ? '<p>Debut' + image + '</p>' : '<p>Debut</p>') + rows(130, 'Ligne') + (host === 'end' ? '<p>Fin' + image + '</p>' : '<p>Fin</p>');
+  const keyOf = text => { const found = /(Ligne|A|B) (\d+)/.exec(text || ''); return found ? found[1] + ' ' + found[2] : null; };
+
+  ['docx', 'odt'].forEach(format => ['front', 'behind'].forEach(layer => [1, 2].forEach(pageIndex => ['top', 'end'].forEach((host) => {
+    cases.push({
+      id: 'ipf_' + format + '_logo_of_page_' + (pageIndex + 1) + '_anchored_in_a_paragraph_of_that_page_' + layer + '_host_' + host,
+      description: format.toUpperCase() + ' : le logo ' + (layer === 'front' ? 'devant' : 'derrière') + ' le texte de la page ' + (pageIndex + 1) + ', inséré dans ' + (host === 'top' ? 'le premier' : 'le dernier') + ' paragraphe, est ancré à un paragraphe que le PDF met sur la page ' + (pageIndex + 1),
+      run: async (h) => {
+        await h.resetEditor();
+        const html = longDocument(imgTag(layer, 30, 20, pageIndex), host);
+        const hosts = await anchorHostLines(h, format, html);
+        const { pageOfLine, count } = await pdfLinePages(h, html);
+        const hostKey = keyOf(hosts[0]);
+        const hostPage = hostKey ? pageOfLine[hostKey] : null;
+        const pass = count > pageIndex && hosts.length === 1 && !!hostKey && hostPage === pageIndex + 1;
+        return { pass, notes: JSON.stringify({ pagesDuPdf: count, paragrapheDAncrage: hosts, pageDuParagrapheAuPDF: hostPage, pageVisee: pageIndex + 1 }) };
+      },
+    });
+  }))));
+
+  ['docx', 'odt'].forEach((format) => {
+    cases.push({
+      id: 'ipf_' + format + '_logo_of_a_page_beyond_the_end_goes_to_the_last_page',
+      description: format.toUpperCase() + ' : un logo visé sur la page 9 d\'un document de 3 pages est ancré à un paragraphe de la dernière page',
+      run: async (h) => {
+        await h.resetEditor();
+        const html = longDocument(imgTag('front', 30, 20, 8), 'top');
+        const hosts = await anchorHostLines(h, format, html);
+        const { pageOfLine, count } = await pdfLinePages(h, html);
+        const hostKey = keyOf(hosts[0]);
+        const pass = count >= 3 && hosts.length === 1 && !!hostKey && pageOfLine[hostKey] === count;
+        return { pass, notes: JSON.stringify({ pagesDuPdf: count, paragrapheDAncrage: hosts, pageDuParagrapheAuPDF: hostKey ? pageOfLine[hostKey] : null }) };
+      },
+    });
+    // Un macro-modèle : « la page 2 » d'un courrier est la 2e page de CE courrier, pas la page 2 du document.
+    cases.push({
+      id: 'ipf_' + format + '_macro_logo_of_the_second_page_in_its_own_letter',
+      description: format.toUpperCase() + ', macro-modèle : le logo de la 2e page de chaque courrier est ancré à un paragraphe de la 2e page de CE courrier',
+      run: async (h) => {
+        await h.resetEditor();
+        const letterOne = '<p>Courrier 1' + imgTag('front', 30, 20, 1) + '</p>' + rows(100, 'A');
+        const letterTwo = '<p>Courrier 2' + imgTag('behind', 200, 40, 1) + '</p>' + rows(100, 'B');
+        const html = letterOne + MacroTemplates.slotBreakHtml(1) + letterTwo;
+        const hosts = await anchorHostLines(h, format, html);
+        const { pageOfLine, count } = await pdfLinePages(h, html);
+        const firstPageOfTwo = Math.min(...Object.keys(pageOfLine).filter(key => key.charAt(0) === 'B').map(key => pageOfLine[key]));
+        const keys = hosts.map(keyOf);
+        const problems = [];
+        if (hosts.length !== 2) problems.push(hosts.length + ' ancre(s) au lieu de 2');
+        else {
+          if (!(keys[0] && keys[0].charAt(0) === 'A' && pageOfLine[keys[0]] === 2)) problems.push('le logo du courrier 1 n\'est pas ancré à une ligne de sa 2e page (PDF : ' + (keys[0] ? pageOfLine[keys[0]] : 'aucune') + ')');
+          if (!(keys[1] && keys[1].charAt(0) === 'B' && pageOfLine[keys[1]] === firstPageOfTwo + 1)) problems.push('le logo du courrier 2 n\'est pas ancré à une ligne de sa 2e page (PDF : ' + (keys[1] ? pageOfLine[keys[1]] : 'aucune') + ', attendu ' + (firstPageOfTwo + 1) + ')');
+        }
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems, pagesDuPdf: count, paragrapheDAncrage: hosts, courrier2CommenceSurLaPage: firstPageOfTwo }) };
+      },
+    });
+    // Une page que rien d'autre qu'une zone remplit n'a pas de paragraphe où ancrer : l'image garde son paragraphe porteur, et n'est jamais perdue.
+    cases.push({
+      id: 'ipf_' + format + '_logo_of_a_page_filled_by_a_zone_keeps_its_host',
+      description: format.toUpperCase() + ' : le logo de la page 2, quand une zone seule remplit cette page, garde son paragraphe porteur (jamais perdu)',
+      run: async (h) => {
+        await h.resetEditor();
+        const html = '<p>Debut ' + imgTag('front', 30, 20, 1) + '</p>' + zone(rows(4, 'Gauche'), rows(130, 'Droite')) + '<p>Fin</p>';
+        const hosts = await anchorHostLines(h, format, html);
+        return { pass: hosts.length === 1 && /Debut/.test(hosts[0] || ''), notes: JSON.stringify({ paragrapheDAncrage: hosts }) };
+      },
+    });
+  });
 
   return cases;
 })();
