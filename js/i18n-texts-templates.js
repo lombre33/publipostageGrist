@@ -503,6 +503,10 @@ const I18nTextsTemplates = {
   'macro.modal.namePlaceholder': { fr: 'Ex. : Dossier client complet', en: 'E.g. Complete client file' },
   'macro.modal.documentsTitle': { fr: 'Documents', en: 'Documents' },
   'macro.modal.addDocument': { fr: '+ Ajouter un document', en: '+ Add a document' },
+  'macro.modal.addFollowing': { fr: '+ Ajouter un modèle à la suite', en: '+ Add a template after it' },
+  'macro.modal.followingTitle': { fr: 'À la suite, sous la même condition', en: 'Then, under the same condition' },
+  'macro.modal.followingAria': { fr: 'Modèle {n} à la suite du document {doc}', en: 'Template {n} after document {doc}' },
+  'macro.modal.followingRemove': { fr: 'Retirer le modèle {n} à la suite du document {doc}', en: 'Remove template {n} after document {doc}' },
   'macro.modal.addSlot': { fr: '+ Ajouter un document choisi selon la ligne', en: '+ Add a document chosen by the row' },
   // Un document de la composition (fenêtre du macro-modèle, résumé, historique des versions) : « Document 2 » est le deuxième de la liste, qu'il soit toujours inclus, sous condition ou choisi selon la ligne.
   'macro.modal.docLabel': { fr: 'Document {n}', en: 'Document {n}' },
@@ -555,6 +559,7 @@ const I18nTextsTemplates = {
   'macro.summary.textSome': { fr: '{count} {count|document|documents}, dont {conditional} sous condition.', en: '{count} {count|document|documents}, {conditional} of them conditional.' },
   // Sous les modèles d'une ligne du résumé : quand elle est incluse (un document sous condition : la condition ; une position qui choisit son modèle selon la ligne).
   'macro.summary.onlyIf': { fr: 'Seulement si : {condition}', en: 'Only if: {condition}' },
+  'macro.summary.then': { fr: 'puis', en: 'then' },
   'macro.summary.byRow': { fr: 'Le modèle est choisi selon la ligne', en: 'The template is chosen by the row' },
   // Les modèles de la composition, un stylo chacun (js/macro-editor.js) : il ouvre ce modèle dans l'éditeur ; le bandeau « Revenir au
   // macro-modèle » (js/main.js) ramène au macro-modèle.

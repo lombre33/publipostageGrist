@@ -42,16 +42,32 @@ const MacroTemplates = (function () {
   // L'évaluation d'une règle { column, operator, value } contre la ligne courante (comparaison, colonnes Oui/Non et Date, fuseau, avertissement
   // « colonne absente de la ligne ») est dans js/condition-rules.js, partagée avec les variables conditionnelles.
 
-  // Les modèles qu'une position de la composition peut donner, sans doublon : celui d'un document (`fixed`), ou celui de chaque règle d'une position qui
-  // choisit son modèle selon la ligne (`conditional`) puis son modèle par défaut. Le résumé du macro-modèle (js/macro-editor.js) en fait une ligne par
-  // position ; l'œil d'un modèle et l'enregistrement de la fenêtre de composition s'en servent pour savoir lesquels existent encore.
-  function slotModelIds(slot) {
+  // Les modèles entre lesquels une position choisit : celui d'un document (`fixed`), ou celui de chaque règle d'une position qui choisit son modèle selon la ligne
+  // (`conditional`) puis son modèle par défaut. Sans doublon.
+  function choiceModelIds(slot) {
     if (!slot) return [];
     const candidates = slot.type === 'fixed'
       ? [slot.modeleId]
       : (Array.isArray(slot.rules) ? slot.rules : []).map(rule => rule && rule.modeleId).concat(slot.defaultModeleId);
+    return uniqueIds(candidates);
+  }
+
+  // Les modèles qui suivent celui de la position (`followingModeleIds`, « + Ajouter un modèle à la suite ») : le bloc d'un document est son modèle puis ceux-là, dans cet ordre, tous sous
+  // la même condition d'inclusion. Une position sans cette clé n'en a pas : la composition d'avant se lit comme avant. Un même modèle peut y figurer deux fois (il s'assemble deux fois) ; la liste
+  // rendue ici n'en garde qu'un, comme celle des modèles de la position.
+  function followingModeleIds(slot) {
+    return uniqueIds(slot && Array.isArray(slot.followingModeleIds) ? slot.followingModeleIds : []);
+  }
+
+  function uniqueIds(candidates) {
     const ids = candidates.filter(id => id != null && id !== '');
     return ids.filter((id, index) => ids.findIndex(other => String(other) === String(id)) === index);
+  }
+
+  // Les modèles qu'une position de la composition peut donner, sans doublon : ceux entre lesquels elle choisit, puis ceux qui les suivent. Le résumé du macro-modèle (js/macro-editor.js) en fait
+  // une ligne par position ; l'œil d'un modèle et l'enregistrement de la fenêtre de composition s'en servent pour savoir lesquels existent encore.
+  function slotModelIds(slot) {
+    return uniqueIds(choiceModelIds(slot).concat(followingModeleIds(slot)));
   }
 
   // Modèle masqué (l'œil du résumé) : `hiddenModeleIds`, dans sa position de la composition, liste les modèles de cette position que la Lecture et
@@ -97,13 +113,23 @@ const MacroTemplates = (function () {
     return condition ? ConditionRules.conditionHolds(condition, tableId, record) : true;
   }
 
-  // Renvoie l'id de modèle choisi pour ce slot contre cette ligne/table, ou null si le slot doit être absent du document assemblé (condition de la position non
+  // Renvoie l'id du modèle CHOISI (le premier du bloc ; ceux qui le suivent sont à pickModeleIds) pour ce slot contre cette ligne/table, ou null si le slot doit être absent du document assemblé (condition de la position non
   // remplie, ni règle ni modèle par défaut, ou modèle masqué par son œil). Le modèle choisi par la première règle qui correspond est le seul candidat, masqué ou
   // non : masquer un modèle ne fait jamais passer une règle suivante ni le modèle par défaut à sa place.
   async function pickModeleId(slot, tableId, record) {
     if (!(await slotIncluded(slot, tableId, record))) return null;
     const chosen = await chooseModeleId(slot, tableId, record);
     return chosen != null && isModelHidden(slot, chosen) ? null : chosen;
+  }
+
+  // Tous les modèles que cette position donne pour cette ligne, dans l'ordre où ils s'assemblent : le modèle choisi (pickModeleId) puis, quand la position est retenue, ceux qui le suivent
+  // (`followingModeleIds`), sans ceux que l'œil masque. Vide quand la condition de la position n'est pas remplie : le bloc entier est absent. Les modèles qui suivent s'assemblent même quand le modèle
+  // choisi selon la ligne est absent (ni règle ni modèle par défaut) : ils n'attendent que la condition du bloc.
+  async function pickModeleIds(slot, tableId, record) {
+    if (!(await slotIncluded(slot, tableId, record))) return [];
+    const chosen = await chooseModeleId(slot, tableId, record);
+    const ids = [chosen].concat(slot && Array.isArray(slot.followingModeleIds) ? slot.followingModeleIds : []);
+    return ids.filter(id => id != null && id !== '' && !isModelHidden(slot, id));
   }
 
   async function chooseModeleId(slot, tableId, record) {
@@ -119,7 +145,7 @@ const MacroTemplates = (function () {
     return null;
   }
 
-  // Construit le HTML brut (pas encore résolu) du document assemblé : un fragment par slot retenu, séparés par un saut de page. `templates` : le
+  // Construit le HTML brut (pas encore résolu) du document assemblé : un fragment par modèle retenu (un par position, plus un par modèle « à la suite » de cette position), séparés par un saut de page. `templates` : le
   // tableau déjà chargé (Templates.getCached()), passé en paramètre plutôt que lu ici pour rester testable sans le module Templates.
   // `options.perModel` (« Selon chaque modèle », PageLayout.isOrientationAuto du macro-modèle) : le document dit lui-même la page de chaque modèle, son sens (celui de sa page, senseOfTemplate) et,
   // pour une présentation, son format de diapositive - un repère de départ devant le premier modèle, `data-page-orientation` (et `data-page-format`) sur le saut de page qui ouvre chacun des
@@ -133,21 +159,22 @@ const MacroTemplates = (function () {
     const slots = (macroSlots && Array.isArray(macroSlots.slots)) ? macroSlots.slots : [];
     const fragments = [];
     for (const slot of slots) {
-      let modeleId;
-      try { modeleId = await pickModeleId(slot, tableId, record); }
+      let modeleIds;
+      try { modeleIds = await pickModeleIds(slot, tableId, record); }
       catch (e) { console.error('[MacroTemplates] échec de sélection de slot', slot, e); continue; }
-      if (modeleId == null) continue;
-      const tpl = templates.find(t => String(t.id) === String(modeleId));
-      if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
-      // Lecture légère (js/templates.js) : le texte d'un modèle que la liste n'a pas lu se lit ici ; un modèle qui ne se lit pas fait échouer l'assemblage (jamais un document sans une de ses annexes). Sans le module (ce fichier
-      // seul, en test), tout est déjà là.
-      if (tpl.chargee === false && typeof Templates !== 'undefined' && typeof Templates.ensureLoaded === 'function' && !(await Templates.ensureLoaded([tpl.id]))) throw new Error('modèle illisible : ' + tpl.nom);
-      const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '', { anchors, theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null });
-      fragments.push({ html: perModel ? content : withoutTurnedBreaks(content), page: pageOfTemplate(tpl) });
+      for (const modeleId of modeleIds) {
+        const tpl = templates.find(t => String(t.id) === String(modeleId));
+        if (!tpl) { console.error('[MacroTemplates] modèle introuvable pour un slot, id=', modeleId); continue; }
+        // Lecture légère (js/templates.js) : le texte d'un modèle que la liste n'a pas lu se lit ici ; un modèle qui ne se lit pas fait échouer l'assemblage (jamais un document sans une de ses annexes). Sans le module (ce fichier
+        // seul, en test), tout est déjà là.
+        if (tpl.chargee === false && typeof Templates !== 'undefined' && typeof Templates.ensureLoaded === 'function' && !(await Templates.ensureLoaded([tpl.id]))) throw new Error('modèle illisible : ' + tpl.nom);
+        const content = SlidesEntry.outputHtml(tpl.typeModele, tpl.contenu || '', { anchors, theme: tpl.marginsMm && tpl.marginsMm.theme, stored: tpl.marginsMm || null });
+        fragments.push({ html: perModel ? content : withoutTurnedBreaks(content), page: pageOfTemplate(tpl) });
+      }
     }
     const body = fragments.reduce((html, fragment, rank) => html + (rank ? slotBreakHtml(rank, perModel ? fragment.page : null) : '') + fragment.html, '');
     return perModel && fragments.length ? PageSections.startHtml(fragments[0].page) + body : body;
   }
 
-  return { pickModeleId, slotCondition, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml, pageOfTemplate, senseOfTemplate, slotModelIds, isModelHidden, withModelHidden, keepHidden };
+  return { pickModeleId, pickModeleIds, slotCondition, buildConcatenatedHtml, PAGE_BREAK_HTML, slotBreakHtml, pageOfTemplate, senseOfTemplate, slotModelIds, choiceModelIds, followingModeleIds, isModelHidden, withModelHidden, keepHidden };
 })();

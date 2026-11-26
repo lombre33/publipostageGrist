@@ -6,6 +6,8 @@
 // groupes, autre colonne). Dans « Modèle », deux sortes de position, enregistrées comme avant :
 //  - un modèle choisi (`fixed`) ;
 //  - « Choisi selon la ligne » (`conditional`, l'ancienne « annexe ») : une cascade « si colonne = valeur, alors ce modèle » et un modèle par défaut, sous la carte.
+// Sous chaque carte, « + Ajouter un modèle à la suite » (`followingModeleIds`) : d'autres modèles qui s'assemblent après celui du document, dans l'ordre, tous sous la condition d'inclusion de la carte
+// (un bloc de plusieurs modèles qu'une seule condition retient ou laisse de côté). Ils n'ont pas de condition propre et ne choisissent pas selon la ligne.
 // Un macro-modèle enregistré avec une page de garde et des annexes s'ouvre tel quel : la page de garde est son premier document, toujours inclus.
 const MacroEditor = (function () {
   let editingId = null;
@@ -78,14 +80,17 @@ const MacroEditor = (function () {
   }
 
   // La liste « Modèle » d'une carte : « — Choisir un modèle — », « Choisi selon la ligne » (toujours proposé, même à la recherche), puis les modèles. `byRow` : la position choisit son modèle.
-  function fillModeleSelect(select, selectedId, byRow) {
+  // `withByRow` faux pour un modèle « à la suite » : il n'est jamais choisi selon la ligne.
+  function fillModeleSelect(select, selectedId, byRow, withByRow = true) {
     select.innerHTML = '';
     select.appendChild(option('', I18n.t('macro.modal.choosePlaceholder')));
-    const choice = option(BY_ROW_VALUE, I18n.t('macro.modal.byRowChoice'));
-    choice.dataset.pinned = 'true';
-    select.appendChild(choice);
+    if (withByRow) {
+      const choice = option(BY_ROW_VALUE, I18n.t('macro.modal.byRowChoice'));
+      choice.dataset.pinned = 'true';
+      select.appendChild(choice);
+    }
     availableTemplates().forEach(t => select.appendChild(option(String(t.id), t.nom)));
-    select.value = byRow ? BY_ROW_VALUE : (selectedId != null ? String(selectedId) : '');
+    select.value = byRow && withByRow ? BY_ROW_VALUE : (selectedId != null ? String(selectedId) : '');
   }
 
   const blankRule = () => ({ column: '', operator: '=', value: '', modeleId: null });
@@ -251,6 +256,41 @@ const MacroEditor = (function () {
     if (again) again.focus({ preventScroll: true });
   }
 
+  // Les modèles « à la suite » d'une carte : sous le modèle du document, un par ligne (la liste « Modèle » sans « Choisi selon la ligne », et sa croix), puis « + Ajouter un modèle à la suite ». Le brouillon est
+  // `slot.followingModeleIds` (un choix pas encore fait y est null ; il n'est pas enregistré). Les listes avec recherche se posent une fois la carte montée (`attach`). Rend { block, attach }.
+  function followingBlock(slot, slotIndex) {
+    if (!Array.isArray(slot.followingModeleIds)) slot.followingModeleIds = [];
+    const list = slot.followingModeleIds;
+    const selects = [];
+    const rows = list.map((id, index) => {
+      const select = node('select', 'macro-following-model');
+      fillModeleSelect(select, id, false, false);
+      select.setAttribute('aria-label', I18n.t('macro.modal.followingAria', { n: index + 1, doc: slotIndex + 1 }));
+      select.addEventListener('change', () => { list[index] = select.value || null; });
+      const remove = iconButton('macro-following-remove', I18n.t('macro.modal.followingRemove', { n: index + 1, doc: slotIndex + 1 }), () => {
+        list.splice(index, 1);
+        renderSlots();
+        const card = slotsContainer() && slotsContainer().children[slotIndex];
+        const again = card && card.querySelector('.macro-following-add');
+        if (again) again.focus({ preventScroll: true });
+      });
+      selects.push(select);
+      return node('div', 'macro-following-row', null, [select, remove]);
+    });
+    const add = node('button', 'macro-following-add', I18n.t('macro.modal.addFollowing'));
+    add.type = 'button';
+    add.addEventListener('click', () => {
+      list.push(null);
+      renderSlots();
+      const card = slotsContainer() && slotsContainer().children[slotIndex];
+      const last = card && card.querySelector('.macro-following-row:last-of-type .ss-trigger, .macro-following-row:last-of-type select');
+      if (last) last.focus({ preventScroll: true });
+    });
+    const title = list.length ? [node('div', 'macro-following-title', I18n.t('macro.modal.followingTitle'))] : [];
+    const block = node('div', 'macro-following', null, title.concat(rows, [add]));
+    return { block, attach: () => selects.forEach(select => searchable(select, { inline: true })) };
+  }
+
   function documentCard(slot, slotIndex) {
     // Le même haut de carte pour toutes les positions : « Modèle » (un modèle, ou « Choisi selon la ligne »), puis « Inclure ce document » - « Toujours » ou « Seulement si… » avec la
     // condition (conditionBox) ; sous « Choisi selon la ligne », les règles de la position.
@@ -272,6 +312,8 @@ const MacroEditor = (function () {
     const parts = [slotHeader(slot, slotIndex), node('div', 'macro-doc-row', null, [modelField, whenField]), condition.box];
     const rowsBody = byRow ? byRowBody(slot) : null;
     if (rowsBody) parts.push(rowsBody.body);
+    const following = followingBlock(slot, slotIndex);
+    parts.push(following.block);
     const card = node('div', 'macro-slot-card macro-doc-card', null, parts);
     card.dataset.kind = byRow ? 'by-row' : 'document';
     card.setAttribute('role', 'group');
@@ -279,6 +321,7 @@ const MacroEditor = (function () {
     syncCondition();
     searchable(modelSelect);
     if (rowsBody) searchable(rowsBody.defaultSelect);
+    following.attach();
     return card;
   }
 
@@ -326,6 +369,13 @@ const MacroEditor = (function () {
     if (first) first.focus({ preventScroll: true });
   }
 
+  // Les modèles « à la suite » d'une carte, tels qu'ils s'enregistrent : ceux qui sont choisis, dans l'ordre, et aucune clé quand il n'y en a pas (une composition sans modèle à la suite ne porte rien de plus).
+  function keepFollowing(saved, slot) {
+    const chosen = (Array.isArray(slot.followingModeleIds) ? slot.followingModeleIds : []).filter(id => id != null && id !== '');
+    if (chosen.length) saved.followingModeleIds = chosen;
+    return saved;
+  }
+
   function collectSlotsForSave() {
     // Les positions, dans l'ordre de la fenêtre. Les modèles masqués par leur œil (js/macro-templates.js:isModelHidden) restent masqués à travers cette fenêtre : une position
     // reconstruite reprend ceux de ses modèles qui y sont encore (un modèle retiré ne laisse pas son masquage derrière lui, un modèle mis à sa place repart affiché). Un document
@@ -335,6 +385,7 @@ const MacroEditor = (function () {
       if (slot.type === DOCUMENT_KIND) {
         if (!slot.modeleId) return;
         const saved = { type: DOCUMENT_KIND, modeleId: slot.modeleId };
+        keepFollowing(saved, slot);
         const condition = slot._when === 'if' ? ConditionRules.plainCondition(slot.condition) : null;
         if (condition) saved.condition = condition;
         result.push(MacroTemplates.keepHidden(saved, slot));
@@ -342,6 +393,7 @@ const MacroEditor = (function () {
       }
       const rules = (slot.rules || []).filter(r => r.column && r.modeleId);
       const saved = { type: BY_ROW_KIND, rules, defaultModeleId: slot.defaultModeleId || null };
+      keepFollowing(saved, slot);
       const condition = slot._when === 'if' ? ConditionRules.plainCondition(slot.condition) : null;
       if (condition) saved.condition = condition;
       result.push(MacroTemplates.keepHidden(saved, slot));
@@ -404,7 +456,7 @@ const MacroEditor = (function () {
   function comparable(composition) {
     return JSON.stringify(composition, (key, value) => {
       if (key === 'modeleId' || key === 'defaultModeleId') return value == null || value === '' ? null : String(value);
-      return key === 'hiddenModeleIds' && Array.isArray(value) ? value.map(String) : value;
+      return (key === 'hiddenModeleIds' || key === 'followingModeleIds') && Array.isArray(value) ? value.map(String) : value;
     });
   }
 
@@ -473,11 +525,13 @@ const MacroEditor = (function () {
     // Les modèles de la composition dans l'ordre où on les lit : un « Document n » par position, avec le modèle du document ou celui de chaque règle de la position qui
     // choisit son modèle et celui de « Si aucune règle ne correspond » (jamais deux fois le même dans une position), sous les mêmes numéros que la fenêtre de composition
     // (renderSlots). Une position sans aucun modèle garde sa ligne : le numéro suivant ne saute pas. `slot` et `slotIndex` disent de quelle position de la composition vient
-    // la ligne : c'est dans cette position que l'œil d'un modèle le masque.
+    // la ligne : c'est dans cette position que l'œil d'un modèle le masque. `thenIds` : les modèles « à la suite » de la position.
     const slots = (tpl && tpl.macroSlots && Array.isArray(tpl.macroSlots.slots)) ? tpl.macroSlots.slots : [];
     return slots.map((slot, slotIndex) => ({
       label: I18n.t('macro.modal.docLabel', { n: slotIndex + 1 }),
-      ids: MacroTemplates.slotModelIds(slot),
+      ids: MacroTemplates.choiceModelIds(slot),
+      // Ceux qui suivent (« + Ajouter un modèle à la suite »), une fois chacun, et sans ceux que la position choisit déjà : la ligne les dit après « puis ».
+      thenIds: MacroTemplates.followingModeleIds(slot).filter(id => !MacroTemplates.choiceModelIds(slot).some(other => String(other) === String(id))),
       slot,
       slotIndex,
     }));
@@ -718,8 +772,10 @@ const MacroEditor = (function () {
     const waiting = [];
     summaryParts(tpl).forEach(part => {
       const entries = part.ids.map(id => modelEntry(id, Templates.byId(id), part, perModel));
-      part.ids.forEach((id) => { const found = Templates.byId(id); if (perModel && found && found.chargee === false) waiting.push(id); });
       if (!entries.length) entries.push(node('span', 'macro-summary-model-name', I18n.t('macro.summary.noTemplate')));
+      // Un modèle « à la suite » se lit après « puis », dans l'ordre du bloc.
+      part.thenIds.forEach(id => entries.push(node('span', 'macro-summary-then', I18n.t('macro.summary.then')), modelEntry(id, Templates.byId(id), part, perModel)));
+      part.ids.concat(part.thenIds).forEach((id) => { const found = Templates.byId(id); if (perModel && found && found.chargee === false) waiting.push(id); });
       const label = node('span', 'macro-summary-part-label', part.label);
       list.appendChild(node('li', 'macro-summary-part', null, [label, node('span', 'macro-summary-models', null, entries.concat(conditionNotes(part.slot)))]));
     });

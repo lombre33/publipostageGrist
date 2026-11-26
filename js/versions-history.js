@@ -196,12 +196,16 @@ const VersionsHistory = (function () {
     return n;
   }
 
-  // Les noms des modèles d'une position de macro-modèle, séparés par des virgules ; « modèle supprimé » pour un modèle qui n'existe plus. Une position qui n'est incluse que sous condition la dit
+  // Les noms des modèles d'une position de macro-modèle, séparés par des virgules (ceux qui la suivent, par « + ») ; « modèle supprimé » pour un modèle qui n'existe plus. Une position qui n'est incluse que sous condition la dit
   // à la suite (« Seulement si : Statut = Urgent ») : deux versions qui ne diffèrent que par la condition d'un document se voient.
   function slotText(slot) {
     const ids = typeof MacroTemplates !== 'undefined' ? MacroTemplates.slotModelIds(slot) : [];
     if (!ids.length) return '—';
-    const names = ids.map(id => { const tpl = Templates.byId(id); return tpl ? tpl.nom : I18n.t('versions.preview.modelGone'); }).join(', ');
+    const nameOf = id => { const tpl = Templates.byId(id); return tpl ? tpl.nom : I18n.t('versions.preview.modelGone'); };
+    // Les modèles entre lesquels la position choisit, séparés par des virgules, puis chacun de ceux qui les suivent après « + » (« Lettre + Annexe 1 »).
+    const choice = MacroTemplates.choiceModelIds(slot);
+    const then = ids.filter(id => !choice.some(other => String(other) === String(id)));
+    const names = [choice.map(nameOf).join(', ')].concat(then.map(nameOf)).filter(Boolean).join(' + ');
     const condition = typeof MacroTemplates !== 'undefined' ? MacroTemplates.slotCondition(slot) : null;
     return condition ? names + ' — ' + I18n.t('macro.summary.onlyIf', { condition: VariableConditionData.conditionSummary(condition, { full: true }) }) : names;
   }
