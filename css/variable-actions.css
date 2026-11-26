@@ -410,3 +410,10 @@ button.var-linked-crumb:focus-visible { outline: 2px solid var(--accent); outlin
 }
 /* Bulle en boucle « dans la phrase » : petite icône bleue à droite dans la bulle (fond, pour laisser ::after aux autres repères de la bulle). */
 :is(.tiptap, .pp-field-editor) .var-badge[data-loop-repeat="inline"], .var-modal-intro .var-badge[data-loop-repeat="inline"] { padding-right: 17px; background-image: var(--pp-loop-icon-accent); background-repeat: no-repeat; background-position: right 3px center; background-size: 10px 10px; }
+
+/* La condition seule choisie (js/condition-pick.js : un deuxième clic sur la bulle bleue d'un objet déjà choisi). Une décoration de la vue, `pp-condition-picked` : rien n'est écrit dans le document. L'objet choisi en
+   entier a son fond plus foncé (ci-dessus) ; la condition seule choisie y ajoute un anneau plein de la couleur d'accent, et le trait pointillé de la bulle devient plein. Le bloc de texte perd l'anneau de l'objet entier
+   et son étiquette « Si … » se remplit, comme un bouton plein. */
+.tiptap :is(.var-badge, .calc-badge, .conditional-checkbox).pp-condition-picked { outline: 2px solid var(--accent-solid); outline-offset: 2px; border-style: solid; border-color: var(--accent-solid); }
+.tiptap .conditional-text.conditional-text-selected.pp-condition-picked { outline: 1px dashed #5b7fc0; }
+.tiptap .conditional-text.conditional-text-selected.pp-condition-picked > .conditional-text-tag { background: var(--accent-solid); color: #fff; border-style: solid; border-color: var(--accent-solid); }

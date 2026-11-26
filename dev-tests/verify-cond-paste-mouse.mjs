@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// Coller la condition d'une pastille sur une autre, à la vraie souris et au vrai clavier (demande d'Antoine du 26/11 : « si on la copie et qu'on va ailleurs sur une autre bulle de condition
-// et qu'on colle, ça prend les éléments de condition »). Dev-tests/scenarios-cond-paste.js (groupe « condPaste ») vérifie le modèle avec un presse-papiers factice ; ici tout est vrai : le VRAI
-// clic sur l'étiquette « Si … » d'un bloc ou sur une pastille (sélection de nœud), le VRAI Ctrl+C, le presse-papiers de Chromium (sous Linux il rend le HTML nu ; le script le réécrit tel que
-// Windows le rend, avec les repères et les retours à la ligne), le VRAI clic sur la cible et le VRAI Ctrl+V, à la taille du panneau Grist d'Antoine (~700x400), clair, sombre et anglais :
-//   - bloc vers bloc : la cible a la condition de la copie, garde son texte et son sinon, reste choisie (barre ouverte), l'étiquette et le coin d'état le disent, Ctrl+Z puis Ctrl+Maj+Z ;
-//   - pastille vers pastille (pointillés bleus), bloc vers pastille (d'un type à l'autre) ;
-//   - la même condition : rien ne change, le coin d'état le dit ;
-//   - un curseur dans le texte : Ctrl+V insère la pastille comme avant.
+// Copier la condition seule d'une pastille ou d'un bloc et la coller sur une autre, à la vraie souris et au vrai clavier (demande d'Antoine du 26/11 : « si on la copie et qu'on va ailleurs sur une autre
+// bulle de condition et qu'on colle, ça prend les éléments de condition » ; puis « il faudrait pouvoir sélectionner le bloc entier, la puce, au premier clic, et après sélection la bulle de la condition -
+// on garde l'option de copier-coller condition et contenu, ou juste condition »). Dev-tests/scenarios-cond-paste.js (groupe « condPaste ») vérifie le modèle avec un presse-papiers factice ; ici tout est
+// vrai : le VRAI premier clic (l'objet entier), le VRAI deuxième clic sur sa bulle bleue (la condition seule), le VRAI Ctrl+C, le presse-papiers de Chromium (sous Linux il rend le HTML nu ; le script le
+// réécrit tel que Windows le rend, avec les repères et les retours à la ligne), le VRAI clic sur la cible et le VRAI Ctrl+V, à la taille du panneau Grist d'Antoine (~700x400), clair, sombre et anglais :
+//   - bloc vers bloc, pastille vers pastille, bloc vers pastille : la cible a la condition copiée seule, garde son contenu, son sinon et sa colonne, reste choisie (barre ouverte), l'étiquette et le coin d'état
+//     le disent, Ctrl+Z puis Ctrl+Maj+Z ;
+//   - le premier clic copie toujours l'objet ENTIER et Ctrl+V le remplace comme avant ; l'objet entier collé sur une condition seule choisie n'en prend que la condition ;
+//   - un troisième clic, Échap, Retour arrière et une lettre : la condition seule est relâchée, l'objet n'est PAS effacé ; la même condition : rien ne change ; un curseur dans le texte : le texte seul s'insère.
 // Lancé par run-headless.mjs (groupe Node « condPasteMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-cond-paste-mouse.mjs (COND_PASTE_SHOTS=<dossier> pour les captures)
 import { createServer } from 'node:http';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -159,11 +160,14 @@ const parkMouse = async page => { await page.mouse.move(WIDTH - 10, HEIGHT - 10)
 async function wrapClipboardLikeWindows(page) {
   return page.evaluate(async () => {
     const items = await navigator.clipboard.read();
-    let html = null;
-    for (const item of items) if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+    let html = null, text = '';
+    for (const item of items) {
+      if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+      if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+    }
     if (html == null) return null;
     const wrapped = '<html>\r\n<body>\r\n<!--StartFragment-->' + html.replace(/^<meta[^>]*>/i, '') + '<!--EndFragment-->\r\n</body>\r\n</html>';
-    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([wrapped], { type: 'text/html' }) }, { unsanitized: ['text/html'] })]);
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([wrapped], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) }, { unsanitized: ['text/html'] })]);
     return wrapped;
   });
 }
@@ -180,51 +184,87 @@ async function clickItem(page, label, selector, index, expected) {
   check(`${label} - un vrai clic le choisit seul (sélection de nœud ${expected})`, selection.type === expected, selection);
   return selection;
 }
-// Le geste d'Antoine : clic sur la source, Ctrl+C, clic sur la cible, Ctrl+V. `wrap` : le presse-papiers est réécrit comme Windows le rend.
-async function copyThenPaste(page, label, source, target, wrap) {
-  await clickItem(page, `${label}, la copie`, source.selector, source.index, source.type);
-  await page.keyboard.press('Control+C');
+const pickedOf = page => page.evaluate(() => ConditionPick.pickedPos(EditorCore.getEditor().state));
+const pickedCount = page => page.evaluate(() => document.querySelectorAll('.tiptap .pp-condition-picked').length);
+// Le deuxième clic, sur la même bulle bleue, laissé le temps qu'un double-clic ne s'en mêle pas (un geste posé, comme celui d'Antoine).
+async function secondClick(page, label, selector, index) {
+  await page.waitForTimeout(650);
+  const point = await centerOf(page, selector, index);
+  await page.mouse.click(point.x, point.y);
   await page.waitForTimeout(250);
-  if (wrap) await wrapClipboardLikeWindows(page);
-  await clickItem(page, `${label}, la cible`, target.selector, target.index, target.type);
-  await page.keyboard.press('Control+V');
-  await page.waitForTimeout(450);
-  const reached = await page.evaluate(() => window.__pasted);
-  if (wrap) check(`${label} - le HTML qui arrive à l'éditeur est celui de Windows (repères et retours à la ligne)`, !!reached && /<!--StartFragment-->/.test(reached) && /<!--EndFragment-->\s+<\/body>/.test(reached), reached && reached.slice(0, 80));
-  else check(`${label} - le HTML qui arrive à l'éditeur est celui de Linux (sans repères)`, !!reached && !/StartFragment/.test(reached), reached && reached.slice(0, 80));
+  const selection = await selectionOf(page);
+  const picked = await pickedOf(page);
+  check(`${label} - le deuxième clic ne choisit que la condition (la sélection de nœud reste, un seul objet porte la marque)`, picked === selection.from && (await pickedCount(page)) === 1, { selection, picked });
+  return selection;
 }
+// Ce que le système a gardé de la copie : le HTML (réécrit comme Windows le rend si `wrap`) et le texte.
+async function clipboardOf(page, wrap) {
+  if (wrap) await wrapClipboardLikeWindows(page);
+  return page.evaluate(async () => {
+    const out = { html: '', text: '' };
+    for (const item of await navigator.clipboard.read()) {
+      if (item.types.includes('text/html')) out.html = await (await item.getType('text/html')).text();
+      if (item.types.includes('text/plain')) out.text = await (await item.getType('text/plain')).text();
+    }
+    return out;
+  });
+}
+const isConditionOnly = clip => /data-pp-condition/.test(clip.html) && !/conditional-text|var-badge|calc-badge|conditional-checkbox/.test(clip.html);
+const toolbarOpen = page => page.evaluate(() => { const bar = document.querySelector('.v2-varfmt-toolbar'); return !!bar && bar.getClientRects().length > 0 && getComputedStyle(bar).display !== 'none'; });
+const countOf = (page, type) => nodesOf(page, type).then(list => list.length);
 
 const T = {
-  fr: { done: 'Condition collée : Statut = Urgent. Ctrl+Z pour revenir.', same: 'La condition est déjà la même : rien n’a changé.', tagUrgentOtherwise: 'Si Statut = Urgent · sinon', tagNormalOtherwise: 'Si Statut = Normal · sinon' },
-  en: { done: 'Condition pasted: Statut = Urgent. Ctrl+Z to undo.', same: 'The condition is already the same: nothing changed.', tagUrgentOtherwise: 'If Statut = Urgent · otherwise', tagNormalOtherwise: 'If Statut = Normal · otherwise' },
+  fr: { done: 'Condition collée : Statut = Urgent. Ctrl+Z pour revenir.', same: 'La condition est déjà la même : rien n’a changé.', on: 'Condition seule choisie. Ctrl+C la copie, Ctrl+V en colle une autre. Un clic de plus la relâche.', copied: 'Condition copiée : Statut = Urgent. Ctrl+V la colle sur une autre pastille ou un autre bloc.', tagUrgentOtherwise: 'Si Statut = Urgent · sinon', tagNormalOtherwise: 'Si Statut = Normal · sinon' },
+  en: { done: 'Condition pasted: Statut = Urgent. Ctrl+Z to undo.', same: 'The condition is already the same: nothing changed.', on: 'Condition only selected. Ctrl+C copies it, Ctrl+V pastes another. One more click releases it.', copied: 'Condition copied: Statut = Urgent. Ctrl+V pastes it onto another item.', tagUrgentOtherwise: 'If Statut = Urgent · otherwise', tagNormalOtherwise: 'If Statut = Normal · otherwise' },
 };
+const TAG = { selector: '.tiptap .conditional-text-tag', type: 'conditionalText' };
+const CHIP = { selector: '.tiptap .var-badge', type: 'varBadge' };
 
 async function flow(scheme, lang) {
   const label = (scheme === 'dark' ? 'sombre' : 'clair') + (lang === 'en' ? ', anglais' : '');
   const words = T[lang];
   const { context, page } = await openWidget(scheme);
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
+  const clearStatus = () => page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
 
   for (const wrap of [false, true]) {
     const how = label + (wrap ? ', Windows' : ', Linux');
+    const shotName = n => `${scheme}-${lang}-${wrap ? 'windows' : 'linux'}-${n}`;
 
-    // --- Un bloc prend la condition d'un autre bloc ---
+    // --- Un bloc prend la condition seule d'un autre bloc : premier clic (entier), deuxième clic (condition seule), Ctrl+C, clic sur la cible, Ctrl+V ---
     await load(page, DOC);
-    await page.evaluate(() => { document.getElementById('status-msg').textContent = ''; });
-    await shot(page, `${scheme}-${lang}-${wrap ? 'windows' : 'linux'}-1-avant`);
+    await clearStatus();
     let before = await docJson(page);
     const blockTexts = (await nodesOf(page, 'conditionalText')).map(n => n.text);
-    await copyThenPaste(page, `${how}, bloc vers bloc`, { selector: '.tiptap .conditional-text-tag', index: 0, type: 'conditionalText' }, { selector: '.tiptap .conditional-text-tag', index: 1, type: 'conditionalText' }, wrap);
+    await shot(page, shotName('1-avant'));
+    await clickItem(page, `${how}, bloc vers bloc, la copie`, TAG.selector, 0, TAG.type);
+    check(`${how}, bloc vers bloc - le premier clic choisit le bloc ENTIER (rien n'est marqué comme condition seule)`, (await pickedOf(page)) === null && (await pickedCount(page)) === 0);
+    await shot(page, shotName('2-bloc-entier'));
+    await secondClick(page, `${how}, bloc vers bloc`, TAG.selector, 0);
+    check(`${how}, bloc vers bloc - le coin d'état dit « condition seule choisie »`, (await statusText(page)) === words.on, await statusText(page));
+    const fill = await page.evaluate(() => { const st = getComputedStyle(document.querySelector('.tiptap .conditional-text-tag')); return { background: st.backgroundColor, color: st.color }; });
+    check(`${how}, bloc vers bloc - l'étiquette bleue se remplit (texte blanc sur fond plein)`, fill.color === 'rgb(255, 255, 255)' && fill.background !== 'rgba(0, 0, 0, 0)', fill);
+    await shot(page, shotName('3-condition-seule'));
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    const clip = await clipboardOf(page, wrap);
+    check(`${how}, bloc vers bloc - le presse-papiers du système porte la condition seule (« Statut = Urgent »), pas le bloc`, isConditionOnly(clip) && clip.text === 'Statut = Urgent', { html: clip.html.slice(0, 120), text: clip.text });
+    check(`${how}, bloc vers bloc - le coin d'état dit « condition copiée » et le document n'a pas bougé`, (await statusText(page)) === words.copied && (await docJson(page)) === before, await statusText(page));
+    await clickItem(page, `${how}, bloc vers bloc, la cible`, TAG.selector, 1, TAG.type);
+    await page.keyboard.press('Control+V');
+    await page.waitForTimeout(450);
+    const reached = await page.evaluate(() => window.__pasted);
+    if (wrap) check(`${how}, bloc vers bloc - le HTML qui arrive à l'éditeur est celui de Windows (repères et retours à la ligne)`, !!reached && /<!--StartFragment-->/.test(reached) && /<!--EndFragment-->\s+<\/body>/.test(reached), reached && reached.slice(0, 80));
+    else check(`${how}, bloc vers bloc - le HTML qui arrive à l'éditeur est celui de Linux (sans repères)`, !!reached && !/StartFragment/.test(reached), reached && reached.slice(0, 80));
     let blocks = await nodesOf(page, 'conditionalText');
     check(`${how}, bloc vers bloc - le second bloc a la condition « Statut = Urgent » du premier`, blocks.length === 2 && same(blocks[1].condition, COND_URGENT), blocks);
     check(`${how}, bloc vers bloc - il garde son texte et son sinon, le premier ne bouge pas`, blocks[1].text === blockTexts[1] && blocks[1].otherwise === 'ailleurs' && blocks[0].text === blockTexts[0] && same(blocks[0].condition, COND_URGENT), blocks);
     check(`${how}, bloc vers bloc - l'étiquette dit « ${words.tagUrgentOtherwise} »`, (await tagTexts(page))[1] === words.tagUrgentOtherwise, await tagTexts(page));
     check(`${how}, bloc vers bloc - le coin d'état dit ce qui s'est passé`, (await statusText(page)) === words.done, await statusText(page));
     const stillChosen = await selectionOf(page);
-    check(`${how}, bloc vers bloc - le bloc reste choisi (la barre ne se ferme pas)`, stillChosen.type === 'conditionalText' && stillChosen.from === blocks[1].pos, stillChosen);
-    const barOpen = await page.evaluate(() => { const bar = document.querySelector('.v2-varfmt-toolbar'); return !!bar && bar.getClientRects().length > 0 && getComputedStyle(bar).display !== 'none'; });
-    check(`${how}, bloc vers bloc - la barre du bloc reste ouverte`, barOpen);
-    await shot(page, `${scheme}-${lang}-${wrap ? 'windows' : 'linux'}-2-apres`);
+    check(`${how}, bloc vers bloc - le bloc reste choisi en entier (la condition seule, non)`, stillChosen.type === 'conditionalText' && stillChosen.from === blocks[1].pos && (await pickedOf(page)) === null, stillChosen);
+    check(`${how}, bloc vers bloc - la barre du bloc reste ouverte`, await toolbarOpen(page));
+    await shot(page, shotName('4-apres'));
     const after = await docJson(page);
     await page.keyboard.press('Control+Z');
     await page.waitForTimeout(300);
@@ -233,31 +273,102 @@ async function flow(scheme, lang) {
     await page.waitForTimeout(300);
     check(`${how}, bloc vers bloc - Ctrl+Maj+Z la redonne`, (await docJson(page)) === after);
 
-    // --- Une pastille prend la condition d'une autre pastille ---
+    // --- Une pastille prend la condition seule d'une autre pastille ---
     await load(page, DOC);
-    await copyThenPaste(page, `${how}, pastille vers pastille`, { selector: '.tiptap .var-badge', index: 0, type: 'varBadge' }, { selector: '.tiptap .var-badge', index: 1, type: 'varBadge' }, wrap);
+    await clickItem(page, `${how}, pastille vers pastille, la copie`, CHIP.selector, 0, CHIP.type);
+    check(`${how}, pastille vers pastille - le premier clic choisit la pastille ENTIÈRE`, (await pickedOf(page)) === null && (await pickedCount(page)) === 0);
+    await secondClick(page, `${how}, pastille vers pastille`, CHIP.selector, 0);
+    await shot(page, shotName('5-pastille-condition-seule'));
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    const chipClip = await clipboardOf(page, wrap);
+    check(`${how}, pastille vers pastille - le presse-papiers porte la condition seule, pas la pastille`, isConditionOnly(chipClip) && chipClip.text === 'Statut = Urgent', { html: chipClip.html.slice(0, 120) });
+    await clickItem(page, `${how}, pastille vers pastille, la cible`, CHIP.selector, 1, CHIP.type);
+    await page.keyboard.press('Control+V');
+    await page.waitForTimeout(450);
     const bubbles = await nodesOf(page, 'varBadge');
     check(`${how}, pastille vers pastille - la seconde a la condition de la première et garde sa colonne « Responsable »`, bubbles.length === 2 && same(bubbles[1].condition, COND_URGENT) && bubbles[1].column === 'Responsable' && bubbles[0].column === 'Titre', bubbles);
+    check(`${how}, pastille vers pastille - le coin d'état dit ce qui s'est passé`, (await statusText(page)) === words.done, await statusText(page));
     const dashed = await page.evaluate(() => getComputedStyle(document.querySelectorAll('.tiptap .var-badge')[1]).borderTopStyle);
     check(`${how}, pastille vers pastille - la seconde est dessinée en pointillés bleus, comme une pastille conditionnelle`, dashed === 'dashed', dashed);
-    await shot(page, `${scheme}-${lang}-${wrap ? 'windows' : 'linux'}-3-pastille`);
+    await shot(page, shotName('6-pastille-apres'));
 
-    // --- Un bloc donne sa condition à une pastille, d'un type à l'autre ---
+    // --- Un bloc donne sa condition seule à une pastille, d'un type à l'autre ---
     await load(page, DOC);
-    await copyThenPaste(page, `${how}, bloc vers pastille`, { selector: '.tiptap .conditional-text-tag', index: 1, type: 'conditionalText' }, { selector: '.tiptap .var-badge', index: 1, type: 'varBadge' }, wrap);
+    await clickItem(page, `${how}, bloc vers pastille, la copie`, TAG.selector, 1, TAG.type);
+    await secondClick(page, `${how}, bloc vers pastille`, TAG.selector, 1);
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    await clipboardOf(page, wrap);
+    await clickItem(page, `${how}, bloc vers pastille, la cible`, CHIP.selector, 1, CHIP.type);
+    await page.keyboard.press('Control+V');
+    await page.waitForTimeout(450);
     const crossed = await nodesOf(page, 'varBadge');
     check(`${how}, bloc vers pastille - la pastille « Responsable » a la condition « Statut = Normal » du bloc B`, crossed.length === 2 && same(crossed[1].condition, COND_NORMAL) && crossed[1].column === 'Responsable', crossed);
+
+    // --- Le premier clic copie toujours l'objet ENTIER, et Ctrl+V le remplace comme avant ---
+    await load(page, DOC);
+    await clickItem(page, `${how}, objet entier, la copie`, TAG.selector, 0, TAG.type);
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    const wholeClip = await clipboardOf(page, wrap);
+    check(`${how}, objet entier - le presse-papiers porte le bloc avec son texte (pas la condition seule)`, /conditional-text/.test(wholeClip.html) && !/data-pp-condition/.test(wholeClip.html) && /Texte du bloc A/.test(wholeClip.html), { html: wholeClip.html.slice(0, 160) });
+    await clickItem(page, `${how}, objet entier, la cible`, TAG.selector, 1, TAG.type);
+    await page.keyboard.press('Control+V');
+    await page.waitForTimeout(450);
+    blocks = await nodesOf(page, 'conditionalText');
+    check(`${how}, objet entier - Ctrl+V remplace le bloc choisi par la copie (texte A, plus de sinon) comme avant`, blocks.length === 2 && blocks[1].text === 'Texte du bloc A' && !blocks[1].otherwise && same(blocks[1].condition, COND_URGENT), blocks);
+
+    // --- L'objet entier copié, collé sur une condition seule choisie : la cible n'en prend que la condition ---
+    await load(page, DOC);
+    await clickItem(page, `${how}, entier vers condition seule, la copie`, CHIP.selector, 0, CHIP.type);
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    await clipboardOf(page, wrap);
+    await clickItem(page, `${how}, entier vers condition seule, la cible`, CHIP.selector, 1, CHIP.type);
+    await secondClick(page, `${how}, entier vers condition seule`, CHIP.selector, 1);
+    await page.keyboard.press('Control+V');
+    await page.waitForTimeout(450);
+    const merged = await nodesOf(page, 'varBadge');
+    check(`${how}, entier vers condition seule - la cible a la condition de la copie et garde sa colonne « Responsable » (la copie ne la remplace pas)`, merged.length === 2 && same(merged[1].condition, COND_URGENT) && merged[1].column === 'Responsable', merged);
+    check(`${how}, entier vers condition seule - la condition seule reste choisie pour en coller une autre`, (await pickedOf(page)) === (await selectionOf(page)).from && (await pickedCount(page)) === 1);
 
     // --- La même condition : rien ne change, et il le dit ---
     await load(page, DOC);
     before = await docJson(page);
-    await copyThenPaste(page, `${how}, même condition`, { selector: '.tiptap .conditional-text-tag', index: 0, type: 'conditionalText' }, { selector: '.tiptap .var-badge', index: 0, type: 'varBadge' }, wrap);
+    await clickItem(page, `${how}, même condition, la copie`, TAG.selector, 0, TAG.type);
+    await secondClick(page, `${how}, même condition`, TAG.selector, 0);
+    await page.keyboard.press('Control+C');
+    await page.waitForTimeout(250);
+    await clipboardOf(page, wrap);
+    await clickItem(page, `${how}, même condition, la cible`, CHIP.selector, 0, CHIP.type);
+    await page.keyboard.press('Control+V');
+    await page.waitForTimeout(450);
     check(`${how}, même condition - le document est identique et le coin d'état le dit`, (await docJson(page)) === before && (await statusText(page)) === words.same, await statusText(page));
   }
 
-  // --- Le collage d'avant, partout où la cible n'est pas choisie ---
+  // --- Relâcher la condition seule : un troisième clic, Échap, Retour arrière et une lettre (l'objet n'est PAS effacé) ---
   await load(page, DOC);
-  await clickItem(page, `${label}, curseur`, '.tiptap .var-badge', 0, 'varBadge');
+  await clickItem(page, `${label}, relâcher`, CHIP.selector, 0, CHIP.type);
+  await secondClick(page, `${label}, relâcher`, CHIP.selector, 0);
+  await page.waitForTimeout(650);
+  const again = await centerOf(page, CHIP.selector, 0);
+  await page.mouse.click(again.x, again.y);
+  await page.waitForTimeout(250);
+  check(`${label} - un troisième clic relâche la condition seule (la pastille reste choisie en entier)`, (await pickedOf(page)) === null && (await pickedCount(page)) === 0 && (await selectionOf(page)).type === 'varBadge');
+  for (const key of ['Escape', 'Backspace', 'Delete', 'a']) {
+    await clickItem(page, `${label}, touche ${key}`, CHIP.selector, 0, CHIP.type);
+    if ((await pickedOf(page)) === null) await secondClick(page, `${label}, touche ${key}`, CHIP.selector, 0);
+    const docBefore = await docJson(page);
+    await page.keyboard.press(key);
+    await page.waitForTimeout(200);
+    check(`${label} - « ${key} » relâche la condition seule sans effacer ni remplacer la pastille`, (await pickedOf(page)) === null && (await pickedCount(page)) === 0 && (await countOf(page, 'varBadge')) === 2 && (await docJson(page)) === docBefore);
+  }
+
+  // --- Un curseur dans le texte : la condition copiée seule s'insère en texte, sans toucher aucun objet ---
+  await load(page, DOC);
+  await clickItem(page, `${label}, curseur, la copie`, CHIP.selector, 0, CHIP.type);
+  await secondClick(page, `${label}, curseur`, CHIP.selector, 0);
   await page.keyboard.press('Control+C');
   await page.waitForTimeout(250);
   const endPoint = await page.evaluate(() => {
@@ -272,11 +383,12 @@ async function flow(scheme, lang) {
   await page.mouse.click(endPoint.x, endPoint.y);
   await page.waitForTimeout(150);
   const caret = await selectionOf(page);
-  check(`${label} - un clic au bout du texte pose un curseur (pas une pastille choisie)`, caret.type !== 'varBadge' && caret.type !== 'conditionalText', caret);
+  check(`${label} - un clic au bout du texte pose un curseur (pas une pastille choisie) et relâche la condition`, caret.type !== 'varBadge' && caret.type !== 'conditionalText' && (await pickedOf(page)) === null, caret);
   await page.keyboard.press('Control+V');
   await page.waitForTimeout(400);
   const inserted = await nodesOf(page, 'varBadge');
-  check(`${label} - Ctrl+V avec un curseur insère la pastille comme avant, sans toucher les autres`, inserted.length === 3 && same(inserted[1].condition, null) && same(inserted[0].condition, COND_URGENT), inserted);
+  const fullText = await page.evaluate(() => EditorCore.getEditor().state.doc.textContent);
+  check(`${label} - Ctrl+V avec un curseur insère le texte « Statut = Urgent » sans toucher aucune pastille`, fullText.includes('Statut = Urgent') && inserted.length === 2 && same(inserted[0].condition, COND_URGENT) && same(inserted[1].condition, null), inserted);
 
   await context.close();
 }

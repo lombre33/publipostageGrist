@@ -1,9 +1,10 @@
-// Suite "condPaste" - coller la condition d'une pastille sur une autre (demande d'Antoine du 2026-11-26 : « sur un bloc de texte conditionnel, ou plus globalement sur une condition,
-// quand on clique sur la bulle bleue de la condition, si on la copie et qu'on va ailleurs sur une autre bulle de condition et qu'on colle, ça prend les éléments de condition »).
-// Ctrl+C sur une pastille ou un bloc à condition (sélection de nœud : un clic sur la bulle, sur l'étiquette « Si … » du bloc, sur la case ou sur l'image), puis Ctrl+V sur un autre
-// choisi de même : il prend la condition de la copie (ses règles et sa combinaison, en entier) et garde le reste - son texte, sa colonne, son « Sinon afficher », son « Avant » / « Après ».
-// Le code : VariableConditionClipboard.pasteOver (js/variable-condition-clipboard.js), appelé par `handlePaste` de js/editor.js. Ici les vrais gestionnaires de copie et de collage de
-// ProseMirror, avec un presse-papiers factice (`DataTransfer`) ; le vrai clavier, la vraie souris et le vrai presse-papiers du système sont dans verify-cond-paste-mouse.mjs (script condPasteMouse).
+// Suite "condPaste" - copier la condition seule d'une pastille ou d'un bloc et la coller sur un autre (demande d'Antoine du 2026-11-26 : « sur un bloc de texte conditionnel, ou plus globalement sur une condition,
+// quand on clique sur la bulle bleue de la condition, si on la copie et qu'on va ailleurs sur une autre bulle de condition et qu'on colle, ça prend les éléments de condition » ; puis « il faudrait pouvoir sélectionner le
+// bloc entier, la puce, au premier clic, et après sélection la bulle de la condition - on garde l'option de copier-coller condition et contenu, ou juste condition »).
+// Deux niveaux (js/condition-pick.js) : le premier clic choisit l'objet ENTIER (Ctrl+C le copie avec son contenu, Ctrl+V sur un objet choisi le remplace, comme toujours) ; un deuxième clic sur sa bulle bleue ne choisit que sa
+// CONDITION (une décoration de la vue) : Ctrl+C la copie seule, Ctrl+V la colle sur un objet choisi - ses règles et sa combinaison remplacées en entier, son contenu, son « Sinon afficher » et son « Avant » / « Après » gardés.
+// Ici les vrais gestionnaires de copie et de collage de ProseMirror, avec un presse-papiers factice (`DataTransfer`) ; le vrai clavier, la vraie souris et le vrai presse-papiers du système sont dans
+// verify-cond-paste-mouse.mjs (script condPasteMouse).
 (function () {
   const cases = [];
   const TABLE = 'CpDossiers';
@@ -57,13 +58,21 @@
     return out;
   }
   const countOf = type => nodesOf(type).length;
+  // Le premier clic : l'objet choisi en entier.
   function select(type, index) {
     const found = nodesOf(type)[index || 0];
     if (!found) return null;
     ed().chain().focus().setNodeSelection(found.pos).run();
     return found;
   }
-  // Ctrl+C : le vrai gestionnaire de copie de ProseMirror, qui écrit dans le presse-papiers factice ce que le navigateur donnerait.
+  // Le deuxième clic : la condition seule de l'objet choisi.
+  function pick(type, index) {
+    const found = select(type, index);
+    if (found) ConditionPick.toggle(ed().view, found.pos);
+    return found;
+  }
+  const pickedPos = () => ConditionPick.pickedPos(ed().state);
+  // Ctrl+C : le vrai gestionnaire de copie, qui écrit dans le presse-papiers factice ce que le navigateur donnerait.
   function copy() {
     const data = new DataTransfer();
     ed().view.dom.dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }));
@@ -91,21 +100,26 @@
   const conditions = type => nodesOf(type).map(f => condOf(f.node));
   const status = () => document.getElementById('status-msg').textContent;
   const selectedType = () => (ed().state.selection.node ? ed().state.selection.node.type.name : null);
+  const payloadHtml = condition => `<span data-pp-condition="${escapeAttr(JSON.stringify(condition))}">${STATUS}</span>`;
+  const tick = h => h.sleep(50);
 
-  // === Un bloc prend la condition d'un autre bloc ===
+  // === Le geste complet : la condition seule d'un bloc copiée, collée sur un autre bloc ===
   cases.push({
-    id: 'condpaste_block_takes_the_condition_of_the_copied_block_and_keeps_its_own_text',
-    description: 'Deux blocs « Si Statut = Urgent » et « Si Statut = Normal » : on choisit le premier, on copie, on choisit le second, on colle - le second a la condition du premier et garde son texte, son sinon et sa place ; le premier ne bouge pas ; le bloc reste choisi.',
+    id: 'condpaste_block_condition_copied_alone_goes_to_another_block_and_keeps_its_content',
+    description: 'Deux blocs « Si Statut = Urgent » et « Si Statut = Normal » : un clic choisit le premier en entier, un deuxième clic sa condition seule, Ctrl+C ; un clic sur le second, Ctrl+V - le second a la condition du premier et garde son texte, son sinon et sa place ; le premier ne bouge pas ; le bloc reste choisi.',
     run: async (h) => {
       await seed(h, html.block('<p>Texte A</p>', COND_URGENT) + html.block('<p>Texte B</p>', COND_NORMAL, 'ailleurs'));
-      select('conditionalText', 0);
+      pick('conditionalText', 0);
       const data = copy();
+      const sourcePicked = pickedPos() === nodesOf('conditionalText')[0].pos;
       select('conditionalText', 1);
       const prevented = paste(data);
       await h.sleep(80);
       const blocks = nodesOf('conditionalText');
       const second = blocks[1] && blocks[1].node;
       const checks = {
+        copy_wrote_the_condition_alone: /data-pp-condition/.test(data.getData('text/html')) && data.getData('text/plain') === STATUS && !/conditional-text/.test(data.getData('text/html')),
+        source_was_picked_when_copied: sourcePicked,
         prevented,
         two_blocks_left: blocks.length === 2,
         second_has_the_copied_condition: !!second && same(condOf(second), COND_URGENT),
@@ -120,13 +134,12 @@
     },
   });
 
-  // === Une pastille de variable prend la condition d'une autre, et garde sa colonne, son « Avant » / « Après » ===
   cases.push({
-    id: 'condpaste_variable_bubble_takes_the_condition_of_another_bubble_and_keeps_its_column',
-    description: 'Une pastille sans condition devient conditionnelle en recevant celle d\'une autre pastille ; sa colonne, son « Avant » / « Après » et la pastille copiée restent ce qu\'ils étaient.',
+    id: 'condpaste_bubble_condition_copied_alone_goes_to_another_bubble_and_keeps_its_column',
+    description: 'Une pastille sans condition devient conditionnelle en recevant la condition seule d\'une autre pastille ; sa colonne, son « Avant » / « Après » et la pastille copiée restent ce qu\'ils étaient.',
     run: async (h) => {
       await seed(h, `<p>Un ${html.badge('Titre', COND_URGENT, ' data-before="("')} et ${html.badge('Responsable', null, ' data-before="« " data-after=" »"')} fin</p>`);
-      select('varBadge', 0);
+      pick('varBadge', 0);
       const data = copy();
       select('varBadge', 1);
       paste(data);
@@ -140,6 +153,7 @@
         second_keeps_its_around_text: !!second && second.attrs.before === '« ' && second.attrs.after === ' »',
         first_is_unchanged: !!first && first.attrs.column === 'Titre' && same(condOf(first), COND_URGENT) && first.attrs.before === '(',
         bubble_is_still_chosen: selectedType() === 'varBadge' && !!bubbles[1] && ed().state.selection.from === bubbles[1].pos,
+        target_was_not_picked_so_it_is_not_now: pickedPos() == null,
       };
       const failed = failedOf(checks);
       return { pass: failed.length === 0, notes: JSON.stringify({ failed, attrs: second && second.attrs }) };
@@ -147,41 +161,42 @@
   });
 
   // === D'un type à l'autre : les six nœuds à condition se donnent la leur ===
-  cases.push({
-    id: 'condpaste_every_kind_of_conditional_item_gives_its_condition_to_every_other_kind',
-    description: 'Bloc, pastille de variable, case, valeur dans la phrase, calcul et image : la condition copiée de l\'un se colle sur chacun des cinq autres, qui garde ce qu\'il est (son type, son texte ou sa colonne) - les trente couples.',
+  function kindsMatrix() {
+    const sources = {
+      badge: () => html.badge('Titre', COND_URGENT),
+      block: () => html.block('<p>Texte du bloc</p>', COND_URGENT),
+      checkbox: () => html.checkbox(COND_URGENT),
+      value: () => html.value('valeur', COND_URGENT),
+      calc: () => html.calc('{' + TABLE + '.Montant} + 1', COND_URGENT),
+      image: () => html.image('Logo', COND_URGENT),
+    };
+    const targets = {
+      badge: () => html.badge('Responsable', COND_NORMAL),
+      block: () => html.block('<p>Autre bloc</p>', COND_NORMAL),
+      checkbox: () => html.checkbox(COND_NORMAL),
+      value: () => html.value('autre', COND_NORMAL),
+      calc: () => html.calc('{' + TABLE + '.Montant} + 2', COND_NORMAL),
+      image: () => html.image('Logo', COND_NORMAL),
+    };
+    // La copie et la cible dans deux paragraphes (ou deux blocs), jamais l'une dans l'autre.
+    const wrap = (kind, markup) => (kind === 'block' ? markup : `<p>${markup}</p>`);
+    return { sources, targets, wrap };
+  }
+  const matrixCase = (id, description, gesture) => ({
+    id, description,
     run: async (h) => {
-      const kinds = {
-        badge: () => html.badge('Titre', COND_URGENT),
-        block: () => html.block('<p>Texte du bloc</p>', COND_URGENT),
-        checkbox: () => html.checkbox(COND_URGENT),
-        value: () => html.value('valeur', COND_URGENT),
-        calc: () => html.calc('{' + TABLE + '.Montant} + 1', COND_URGENT),
-        image: () => html.image('Logo', COND_URGENT),
-      };
-      const targets = {
-        badge: () => html.badge('Responsable', COND_NORMAL),
-        block: () => html.block('<p>Autre bloc</p>', COND_NORMAL),
-        checkbox: () => html.checkbox(COND_NORMAL),
-        value: () => html.value('autre', COND_NORMAL),
-        calc: () => html.calc('{' + TABLE + '.Montant} + 2', COND_NORMAL),
-        image: () => html.image('Logo', COND_NORMAL),
-      };
-      const wrap = (kind, markup) => (kind === 'block' ? markup : `<p>${markup}</p>`);
+      const { sources, targets, wrap } = kindsMatrix();
       const failures = [];
       let pairs = 0;
-      for (const from of Object.keys(kinds)) {
+      for (const from of Object.keys(sources)) {
         for (const to of Object.keys(targets)) {
           if (from === to) continue;
           pairs++;
-          // La copie et la cible dans deux paragraphes (ou deux blocs), jamais l'une dans l'autre.
-          await seed(h, wrap(from, kinds[from]()) + wrap(to, targets[to]()));
-          const source = select(TYPE[from], 0);
-          const data = copy();
-          const target = select(TYPE[to], 0);
-          if (!source || !target) { failures.push(from + '>' + to + ':missing'); continue; }
-          const before = target.node.attrs;
-          paste(data);
+          await seed(h, wrap(from, sources[from]()) + wrap(to, targets[to]()));
+          const target = nodesOf(TYPE[to])[0];
+          const before = target && target.node.attrs;
+          const done = gesture(from, to);
+          if (!done || !target) { failures.push(from + '>' + to + ':missing'); continue; }
           await h.sleep(40);
           const after = nodesOf(TYPE[to])[0];
           const kept = after && Object.keys(before).every(key => key === 'condition' || same(after.node.attrs[key], before[key]));
@@ -191,20 +206,68 @@
       return { pass: pairs === 30 && failures.length === 0, notes: JSON.stringify({ pairs, failures }) };
     },
   });
+  cases.push(matrixCase(
+    'condpaste_every_kind_of_conditional_item_gives_its_condition_alone_to_every_other_kind',
+    'Bloc, pastille de variable, case, valeur dans la phrase, calcul et image : la condition seule du premier, copiée, se colle sur chacun des cinq autres choisis en entier, qui garde ce qu\'il est (son type, son texte ou sa colonne) - les trente couples.',
+    (from, to) => {
+      if (!pick(TYPE[from], 0)) return false;
+      const data = copy();
+      if (!select(TYPE[to], 0)) return false;
+      return paste(data);
+    }
+  ));
+  cases.push(matrixCase(
+    'condpaste_a_whole_item_copied_gives_its_condition_to_a_target_whose_condition_alone_is_chosen',
+    'L\'objet copié en entier (Ctrl+C du premier clic) se colle sur un objet dont la condition seule est choisie : la cible en prend la condition et garde le reste - les trente couples.',
+    (from, to) => {
+      if (!select(TYPE[from], 0)) return false;
+      const data = copy();
+      if (!pick(TYPE[to], 0)) return false;
+      return paste(data);
+    }
+  ));
+
+  // === Le collage d'avant : l'objet entier remplace l'objet choisi en entier ===
+  cases.push({
+    id: 'condpaste_whole_item_copied_still_replaces_a_target_chosen_whole',
+    description: 'Sans deuxième clic, rien ne change : un bloc copié en entier, collé sur un bloc choisi en entier, le remplace par sa copie (texte compris) ; une pastille copiée en entier remplace de même une pastille choisie.',
+    run: async (h) => {
+      await seed(h, html.block('<p>Texte A</p>', COND_URGENT) + html.block('<p>Texte B</p>', COND_NORMAL, 'ailleurs') + `<p>Un ${html.badge('Titre', COND_URGENT)} et ${html.badge('Responsable', COND_NORMAL)}</p>`);
+      select('conditionalText', 0);
+      const wholeBlock = copy();
+      select('conditionalText', 1);
+      paste(wholeBlock);
+      await tick(h);
+      const blocks = nodesOf('conditionalText').map(f => f.node);
+      select('varBadge', 0);
+      const wholeBubble = copy();
+      select('varBadge', 1);
+      paste(wholeBubble);
+      await tick(h);
+      const bubbles = nodesOf('varBadge').map(f => f.node);
+      const checks = {
+        block_is_replaced_by_the_copy: blocks.length === 2 && blocks[1].textContent === 'Texte A' && same(condOf(blocks[1]), COND_URGENT),
+        the_old_otherwise_is_gone: blocks.length === 2 && blocks[1].attrs.otherwise == null,
+        bubble_is_replaced_by_the_copy: bubbles.length === 2 && bubbles[1].attrs.column === 'Titre' && same(condOf(bubbles[1]), COND_URGENT),
+      };
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, texts: blocks.map(b => b.textContent), columns: bubbles.map(b => b.attrs.column) }) };
+    },
+  });
 
   // === Remplacé en entier, groupes compris ===
   cases.push({
     id: 'condpaste_the_rules_and_the_combination_of_the_target_are_replaced_not_merged',
-    description: 'La cible a deux règles « au moins une » ; la copie une règle « toutes » : la cible n\'a plus que la règle de la copie, avec sa combinaison. Une copie à groupe (« A ou (B et C) ») arrive telle quelle, groupe compris.',
+    description: 'La cible a deux règles « au moins une » ; la condition copiée une règle « toutes » : la cible n\'a plus que la règle de la copie, avec sa combinaison. Une condition à groupe (« A ou (B et C) ») arrive telle quelle, groupe compris.',
     run: async (h) => {
       await seed(h, html.block('<p>Source</p>', COND_URGENT) + html.block('<p>Cible</p>', COND_TWO) + html.block('<p>Groupe</p>', COND_GROUP) + html.block('<p>Autre</p>', COND_NORMAL));
-      select('conditionalText', 0);
+      pick('conditionalText', 0);
       const urgent = copy();
       select('conditionalText', 1);
       paste(urgent);
       await h.sleep(60);
       const afterFirst = conditions('conditionalText');
-      select('conditionalText', 2);
+      pick('conditionalText', 2);
       const groupData = copy();
       select('conditionalText', 3);
       paste(groupData);
@@ -224,10 +287,11 @@
   // === Annuler ===
   cases.push({
     id: 'condpaste_one_undo_gives_back_the_old_condition_and_redo_gives_the_new_one',
-    description: 'Un seul Annuler rend à la cible sa condition d\'avant (et son bloc choisi) ; Rétablir la lui redonne : le collage est une seule étape de l\'historique.',
+    description: 'Un seul Annuler rend à la cible sa condition d\'avant ; Rétablir la lui redonne : le collage est une seule étape de l\'historique. Choisir la condition seule n\'en ajoute aucune.',
     run: async (h) => {
       await seed(h, html.block('<p>Texte A</p>', COND_URGENT) + html.block('<p>Texte B</p>', COND_NORMAL));
-      select('conditionalText', 0);
+      ed().commands.clearHistory && ed().commands.clearHistory();
+      pick('conditionalText', 0);
       const data = copy();
       select('conditionalText', 1);
       paste(data);
@@ -245,151 +309,264 @@
     },
   });
 
+  // === Choisir la condition seule : une décoration de la vue, relâchée par tout autre geste ===
+  cases.push({
+    id: 'condpaste_picking_the_condition_is_a_view_state_released_by_any_other_gesture',
+    description: 'Un deuxième clic choisit la condition seule (classe pp-condition-picked sur l\'objet, rien dans le HTML enregistré), un troisième la relâche ; un autre choix de sélection, une frappe dans le document, Échap la relâchent aussi ; Retour arrière et une lettre tapée ne remplacent PAS l\'objet entier.',
+    run: async (h) => {
+      await seed(h, html.block('<p>Texte A</p>', COND_URGENT) + `<p>Un ${html.badge('Titre', COND_URGENT)} fin</p>`);
+      const checks = {};
+      const picked = () => document.querySelectorAll('.tiptap .pp-condition-picked').length;
+      const block = select('conditionalText', 0);
+      checks.whole_chosen_is_not_picked = pickedPos() == null && picked() === 0;
+      ConditionPick.toggle(ed().view, block.pos);
+      await tick(h);
+      checks.second_click_picks = pickedPos() === block.pos && picked() === 1 && document.querySelector('.tiptap .conditional-text').classList.contains('pp-condition-picked');
+      checks.still_a_node_selection = selectedType() === 'conditionalText';
+      checks.nothing_in_the_saved_html = Editor.getHTML().indexOf('pp-condition-picked') === -1;
+      checks.status_says_it = status() === I18n.t('varCond.pick.on');
+      ConditionPick.toggle(ed().view, block.pos);
+      await tick(h);
+      checks.third_click_releases = pickedPos() == null && picked() === 0;
+      // Un autre choix de sélection la relâche.
+      ConditionPick.toggle(ed().view, block.pos);
+      select('varBadge', 0);
+      await tick(h);
+      checks.another_selection_releases = pickedPos() == null && picked() === 0;
+      // Une frappe dans le document la relâche.
+      pick('varBadge', 0);
+      checks.bubble_picked = picked() === 1;
+      ed().commands.insertContentAt(1, 'x');
+      await tick(h);
+      checks.a_document_change_releases = pickedPos() == null && picked() === 0;
+      // Échap la relâche, sans rien prendre aux autres touches.
+      pick('varBadge', 0);
+      ed().view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await tick(h);
+      checks.escape_releases = pickedPos() == null;
+      // Retour arrière, Suppr et une lettre : l'objet entier n'est PAS effacé ni remplacé.
+      for (const key of ['Backspace', 'Delete', 'a']) {
+        pick('varBadge', 0);
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        ed().view.dom.dispatchEvent(event);
+        await tick(h);
+        checks['key_' + key + '_keeps_the_object_and_releases'] = countOf('varBadge') === 1 && pickedPos() == null && event.defaultPrevented;
+      }
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed }) };
+    },
+  });
+
+  cases.push({
+    id: 'condpaste_second_click_on_the_block_label_picks_the_condition_and_a_third_releases_it',
+    description: 'La vue du bloc : un premier appui sur l\'étiquette « Si … » choisit le bloc entier, le deuxième ne choisit que sa condition (étiquette pleine, anneau de l\'objet entier retiré), le troisième la relâche ; l\'appui sur l\'étiquette d\'un autre bloc choisit celui-là.',
+    run: async (h) => {
+      await seed(h, html.block('<p>Texte A</p>', COND_URGENT) + html.block('<p>Texte B</p>', COND_NORMAL));
+      const press = index => document.querySelectorAll('.tiptap .conditional-text-tag')[index].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      const blocks = () => Array.from(document.querySelectorAll('.tiptap .conditional-text'));
+      const log = {};
+      document.querySelector('.tiptap').focus();
+      press(0); await h.sleep(80);
+      log.first = { type: selectedType(), picked: pickedPos() };
+      press(0); await h.sleep(80);
+      log.second = { picked: pickedPos(), cls: blocks()[0].classList.contains('pp-condition-picked'), selected: blocks()[0].classList.contains('conditional-text-selected') };
+      const tag = document.querySelectorAll('.tiptap .conditional-text-tag')[0];
+      const style = getComputedStyle(tag);
+      log.fill = { background: style.backgroundColor, color: style.color };
+      press(0); await h.sleep(80);
+      log.third = { picked: pickedPos(), cls: blocks()[0].classList.contains('pp-condition-picked') };
+      press(0); await h.sleep(80);
+      press(1); await h.sleep(80);
+      log.other = { picked: pickedPos(), from: ed().state.selection.from, second: nodesOf('conditionalText')[1].pos };
+      const checks = {
+        first_chooses_the_whole_block: log.first.type === 'conditionalText' && log.first.picked == null,
+        second_picks_the_condition: log.second.picked === nodesOf('conditionalText')[0].pos && log.second.cls && log.second.selected,
+        label_is_filled_with_the_accent: log.fill.background === 'rgb(47, 111, 237)' && log.fill.color === 'rgb(255, 255, 255)',
+        third_releases: log.third.picked == null && !log.third.cls,
+        another_block_label_chooses_that_block: log.other.picked == null && log.other.from === log.other.second,
+      };
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, log }) };
+    },
+  });
+
+  // === Ctrl+C sur la condition choisie : le presse-papiers, sans rien retirer ===
+  cases.push({
+    id: 'condpaste_copy_and_cut_on_a_picked_condition_write_it_alone_and_remove_nothing',
+    description: 'Ctrl+C sur une condition choisie écrit « Statut = Urgent » en texte et un span data-pp-condition en HTML (jamais l\'objet), Ctrl+X fait de même sans rien retirer ; sans condition, rien n\'est copié et le coin d\'état le dit ; l\'objet choisi en entier se copie comme toujours (son HTML).',
+    run: async (h) => {
+      await seed(h, `<p>Un ${html.badge('Titre', COND_URGENT)} et ${html.badge('Responsable', null)}</p>`);
+      pick('varBadge', 0);
+      const copied = copy();
+      const copiedStatus = status();
+      const cut = new DataTransfer();
+      ed().view.dom.dispatchEvent(new ClipboardEvent('cut', { clipboardData: cut, bubbles: true, cancelable: true }));
+      const holder = new DOMParser().parseFromString(copied.getData('text/html'), 'text/html').querySelector('[data-pp-condition]');
+      pick('varBadge', 1);
+      const empty = copy();
+      const emptyStatus = status();
+      select('varBadge', 0);
+      const whole = copy();
+      const checks = {
+        text_is_the_summary: copied.getData('text/plain') === STATUS,
+        html_carries_the_condition: !!holder && same(JSON.parse(holder.getAttribute('data-pp-condition')), COND_URGENT),
+        html_is_not_the_object: copied.getData('text/html').indexOf('var-badge') === -1,
+        copy_status: copiedStatus === I18n.t('varCond.pick.copied', { summary: STATUS }),
+        cut_writes_the_same_and_removes_nothing: cut.getData('text/plain') === STATUS && countOf('varBadge') === 2 && same(conditions('varBadge')[0], COND_URGENT),
+        nothing_to_copy_without_condition: empty.getData('text/html') === '' && empty.getData('text/plain') === '' && emptyStatus === I18n.t('varCond.pick.none'),
+        whole_object_copies_as_always: /var-badge/.test(whole.getData('text/html')) && !/data-pp-condition/.test(whole.getData('text/html')),
+      };
+      const failed = failedOf(checks);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, copiedStatus, emptyStatus }) };
+    },
+  });
+
   // === Dit ce qui s'est passé ===
   const statusCase = {
     id: 'condpaste_status_names_the_pasted_condition_and_a_same_condition_changes_nothing',
-    description: 'Le coin d\'état dit « Condition collée : Statut = Urgent. Ctrl+Z pour revenir. » ; coller une condition que la cible a déjà ne change rien (même document, pas d\'étape d\'historique en plus) et le dit.',
+    description: 'Le coin d\'état dit « Condition collée : Statut = Urgent. Ctrl+Z pour revenir. » ; coller une condition que la cible a déjà ne change rien (même document, pas d\'étape d\'historique en plus) et le dit ; « Condition seule choisie… » et « Condition copiée : … » aussi.',
     run: async (h) => {
       await seed(h, html.block('<p>Texte A</p>', COND_URGENT) + html.block('<p>Texte B</p>', COND_NORMAL));
       const english = I18n.getLang() === 'en';
-      select('conditionalText', 0);
+      pick('conditionalText', 0);
+      const pickedSaid = status();
       const data = copy();
+      const copiedSaid = status();
       select('conditionalText', 1);
       paste(data);
       await h.sleep(60);
       const done = status();
-      const missing = ['varCond.paste.done', 'varCond.paste.same'].filter(k => I18n.t(k) === k);
-      const depthBefore = ed().state.doc.toJSON();
+      const keys = ['varCond.paste.done', 'varCond.paste.same', 'varCond.pick.on', 'varCond.pick.copied', 'varCond.pick.none'];
+      const missing = keys.filter(k => I18n.t(k) === k);
+      const before = ed().state.doc.toJSON();
       paste(data);
       await h.sleep(60);
       const sameSaid = status();
-      const unchanged = same(ed().state.doc.toJSON(), depthBefore);
+      const unchanged = same(ed().state.doc.toJSON(), before);
       // Un Annuler après le second collage rend la condition d'avant le PREMIER : le second n'a rien ajouté à l'historique.
       ed().commands.undo();
       await h.sleep(60);
       const undone = conditions('conditionalText')[1];
       const want = english
-        ? { done: 'Condition pasted: Statut = Urgent. Ctrl+Z to undo.', same: 'The condition is already the same: nothing changed.' }
-        : { done: 'Condition collée : Statut = Urgent. Ctrl+Z pour revenir.', same: 'La condition est déjà la même : rien n’a changé.' };
-      const checks = { done: done === want.done, same_said: sameSaid === want.same, unchanged, one_undo_step: same(undone, COND_NORMAL), no_missing_key: missing.length === 0 };
+        ? { done: 'Condition pasted: Statut = Urgent. Ctrl+Z to undo.', same: 'The condition is already the same: nothing changed.', picked: 'Condition only selected. Ctrl+C copies it, Ctrl+V pastes another. One more click releases it.', copied: 'Condition copied: Statut = Urgent. Ctrl+V pastes it onto another item.' }
+        : { done: 'Condition collée : Statut = Urgent. Ctrl+Z pour revenir.', same: 'La condition est déjà la même : rien n’a changé.', picked: 'Condition seule choisie. Ctrl+C la copie, Ctrl+V en colle une autre. Un clic de plus la relâche.', copied: 'Condition copiée : Statut = Urgent. Ctrl+V la colle sur une autre pastille ou un autre bloc.' };
+      const checks = {
+        done: done === want.done, same_said: sameSaid === want.same, picked_said: pickedSaid === want.picked, copied_said: copiedSaid === want.copied,
+        unchanged, one_undo_step: same(undone, COND_NORMAL), no_missing_key: missing.length === 0,
+      };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, done, sameSaid, missing }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, done, sameSaid, pickedSaid, copiedSaid, missing }) };
     },
   };
   cases.push(statusCase, Object.assign({}, statusCase, {
     id: 'condpaste_status_english_interface',
     lang: 'en',
-    description: 'Page qui démarre en anglais : les deux phrases du coin d\'état (« Condition pasted: … », « The condition is already the same… ») sont en anglais - sans clé manquante.',
+    description: 'Page qui démarre en anglais : les cinq phrases du coin d\'état (« Condition pasted: … », « Condition copied: … », « Condition only selected… », « The condition is already the same… », « This item has no condition to copy. ») sont en anglais - sans clé manquante.',
   }));
 
-  // === Le presse-papiers de Windows ===
+  // === Le presse-papiers de Windows, et un HTML venu d'ailleurs ===
   cases.push({
-    id: 'condpaste_windows_clipboard_wrapping_and_html_without_editor_marks_give_the_same_result',
-    description: 'Le HTML copié tel que Windows le rend (repères StartFragment / EndFragment et retours à la ligne autour) donne le même résultat ; un HTML venu d\'ailleurs, sans les repères de l\'éditeur, aussi - dans les deux sens (pastille vers bloc, bloc vers pastille).',
+    id: 'condpaste_windows_clipboard_wrapping_and_a_bare_condition_span_give_the_same_result',
+    description: 'La condition copiée seule, telle que Windows rend le HTML (repères StartFragment / EndFragment et retours à la ligne autour), se colle comme sur Linux ; un span data-pp-condition venu d\'un autre document, sans rien de l\'éditeur, aussi - sur une pastille et sur un bloc choisis ; aucun saut de ligne ajouté.',
     run: async (h) => {
       await seed(h, `<p>Un ${html.badge('Titre', COND_URGENT)} puis ${html.badge('Responsable', COND_NORMAL)}</p>` + html.block('<p>Texte B</p>', COND_NORMAL));
-      select('varBadge', 0);
+      pick('varBadge', 0);
       const copied = copy();
       select('varBadge', 1);
       paste(copied, true);
       await h.sleep(60);
       const viaWindows = conditions('varBadge')[1];
-      const breaksAfterWindows = countOf('hardBreak');
-      // Un bloc collé tel qu'un autre logiciel le donnerait : son HTML nu, sans `data-pm-slice`, sur une pastille choisie.
       select('varBadge', 1);
-      pasteRaw(html.block('<p>Copié ailleurs</p>', COND_GROUP), 'Copié ailleurs');
+      pasteRaw(payloadHtml(COND_GROUP), STATUS);
       await h.sleep(60);
-      const fromElsewhere = conditions('varBadge')[1];
-      // Et une pastille nue sur un bloc choisi.
+      const onBubble = conditions('varBadge')[1];
       select('conditionalText', 0);
-      pasteRaw(html.badge('Titre', COND_URGENT), '#Titre');
+      pasteRaw(WINDOWS_START + payloadHtml(COND_URGENT) + WINDOWS_END, STATUS);
       await h.sleep(60);
       const onBlock = conditions('conditionalText')[0];
       const checks = {
         windows_wrapping: same(viaWindows, COND_URGENT),
-        no_line_break_added: breaksAfterWindows === 0 && countOf('hardBreak') === 0,
-        block_html_from_elsewhere_on_a_bubble: same(fromElsewhere, COND_GROUP),
-        bare_bubble_on_a_block: same(onBlock, COND_URGENT),
+        bare_span_on_a_bubble: same(onBubble, COND_GROUP),
+        windows_span_on_a_block: same(onBlock, COND_URGENT),
+        no_line_break_added: countOf('hardBreak') === 0,
         nothing_replaced: countOf('varBadge') === 2 && countOf('conditionalText') === 1,
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, viaWindows, fromElsewhere, onBlock }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, viaWindows, onBubble, onBlock }) };
     },
   });
 
   // === Ce qui ne change pas ===
   cases.push({
-    id: 'condpaste_a_copy_without_condition_still_replaces_the_chosen_bubble',
-    description: 'Copier une pastille SANS condition puis la coller sur une pastille choisie fait ce que Ctrl+V faisait : la cible est remplacée par la copie (sa colonne), rien ne change de condition.',
+    id: 'condpaste_a_picked_target_takes_a_condition_less_object_as_before_and_keeps_being_picked_after_a_paste',
+    description: 'Sur une condition choisie, un objet copié SANS condition (ou à condition incomplète) se colle comme avant (il remplace l\'objet) ; coller une condition sur une condition choisie la laisse choisie, pour en coller une autre.',
     run: async (h) => {
-      await seed(h, `<p>Un ${html.badge('Titre', null)} et ${html.badge('Responsable', COND_NORMAL)} fin</p>`);
+      const empty = { mode: 'all', rules: [{ column: '', operator: '=', value: '' }] };
+      await seed(h, `<p>Un ${html.badge('Titre', null)} et ${html.badge('Responsable', COND_NORMAL)} puis ${html.badge('Montant', empty)} fin</p>`);
       select('varBadge', 0);
-      const data = copy();
-      select('varBadge', 1);
-      paste(data);
-      await h.sleep(80);
-      const bubbles = nodesOf('varBadge').map(f => f.node);
+      const plain = copy();
+      pick('varBadge', 1);
+      paste(plain);
+      await h.sleep(60);
+      const afterPlain = nodesOf('varBadge').map(f => f.node.attrs.column);
+      await seed(h, `<p>Un ${html.badge('Titre', COND_URGENT)} et ${html.badge('Responsable', COND_NORMAL)} et ${html.badge('Montant', COND_NORMAL)}</p>`);
+      pick('varBadge', 0);
+      const urgent = copy();
+      const second = pick('varBadge', 1);
+      paste(urgent);
+      await h.sleep(60);
+      const stillPicked = pickedPos() === second.pos && document.querySelectorAll('.tiptap .pp-condition-picked').length === 1;
+      const third = pick('varBadge', 2);
+      paste(urgent);
+      await h.sleep(60);
       const checks = {
-        two_bubbles: bubbles.length === 2,
-        target_is_replaced_by_the_copy: bubbles.length === 2 && bubbles[1].attrs.column === 'Titre',
-        the_copy_has_no_condition: bubbles.length === 2 && bubbles[1].attrs.condition == null,
+        condition_less_copy_replaces_the_picked_target: same(afterPlain, ['Titre', 'Titre', 'Montant']),
+        paste_keeps_the_target_picked: stillPicked,
+        and_the_next_one_gets_it_too: same(conditions('varBadge'), [COND_URGENT, COND_URGENT, COND_URGENT]) && !!third,
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, columns: bubbles.map(b => b.attrs.column) }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, afterPlain }) };
     },
   });
 
   cases.push({
     id: 'condpaste_a_copied_condition_is_not_taken_when_the_cursor_is_in_the_text',
-    description: 'Un curseur dans le texte (pas une pastille choisie) : coller une pastille conditionnelle l\'insère comme avant, sans toucher la condition d\'aucune autre pastille ni d\'aucun bloc.',
+    description: 'Un curseur dans le texte (pas un objet choisi) : coller une condition copiée seule insère son texte (« Statut = Urgent »), sans toucher la condition d\'aucun objet ; coller une pastille entière l\'insère comme avant.',
     run: async (h) => {
       await seed(h, `<p>Un ${html.badge('Titre', COND_URGENT)} et ${html.badge('Responsable', COND_NORMAL)}</p>` + html.block('<p>Texte B</p>', COND_NORMAL) + '<p>Fin</p>');
+      pick('varBadge', 0);
+      const conditionAlone = copy();
       select('varBadge', 0);
-      const data = copy();
-      // Curseur au bout du dernier paragraphe, puis dans le texte du bloc.
+      const whole = copy();
       ed().chain().focus('end').run();
-      paste(data);
+      paste(conditionAlone);
       await h.sleep(60);
-      const afterEnd = nodesOf('varBadge').length;
-      let inBlock = null;
-      ed().state.doc.descendants((node, pos) => { if (!inBlock && node.type.name === 'paragraph' && node.textContent === 'Texte B') inBlock = pos + 1; });
-      ed().commands.setTextSelection(inBlock + 2);
-      paste(data);
+      const textAfter = ed().state.doc.textContent.indexOf(STATUS) !== -1;
+      paste(whole);
       await h.sleep(60);
       const checks = {
-        inserted_at_the_end: afterEnd === 3,
-        inserted_in_the_block: nodesOf('varBadge').length === 4,
-        block_condition_unchanged: same(conditions('conditionalText')[0], COND_NORMAL),
-        second_bubble_unchanged: same(conditions('varBadge')[1], COND_NORMAL),
+        condition_alone_pastes_its_text: textAfter,
+        no_object_condition_changed: same(conditions('varBadge').slice(0, 2), [COND_URGENT, COND_NORMAL]) && same(conditions('conditionalText')[0], COND_NORMAL),
+        whole_bubble_is_inserted_as_before: countOf('varBadge') === 3,
       };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, afterEnd, bubbles: nodesOf('varBadge').length }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, bubbles: countOf('varBadge') }) };
     },
   });
 
   cases.push({
-    id: 'condpaste_an_incomplete_condition_is_not_carried_and_plain_text_still_replaces_the_chosen_bubble',
-    description: 'Une condition sans règle complète (colonne vide) ne se colle pas comme condition : le collage reste celui d\'avant ; du texte collé sur une pastille choisie la remplace comme avant.',
+    id: 'condpaste_plain_text_still_replaces_the_chosen_object',
+    description: 'Du texte collé sur un objet choisi en entier le remplace comme avant ; la condition seule choisie n\'y change rien (le texte ne porte pas de condition).',
     run: async (h) => {
-      const empty = { mode: 'all', rules: [{ column: '', operator: '=', value: '' }] };
-      await seed(h, `<p>Un ${html.badge('Titre', empty)} et ${html.badge('Responsable', COND_NORMAL)} fin</p>`);
-      select('varBadge', 0);
-      const data = copy();
-      select('varBadge', 1);
-      paste(data);
-      await h.sleep(60);
-      const afterEmpty = nodesOf('varBadge').map(f => f.node.attrs.column);
+      await seed(h, `<p>Un ${html.badge('Titre', COND_URGENT)} et ${html.badge('Responsable', COND_NORMAL)} fin</p>`);
       select('varBadge', 1);
       const text = new DataTransfer();
       text.setData('text/plain', 'du texte');
       paste(text);
       await h.sleep(60);
-      const checks = {
-        incomplete_condition_replaces_as_before: same(afterEmpty, ['Titre', 'Titre']),
-        text_replaces_the_chosen_bubble: countOf('varBadge') === 1 && ed().state.doc.textContent.indexOf('du texte') !== -1,
-      };
+      const checks = { replaced: countOf('varBadge') === 1 && ed().state.doc.textContent.indexOf('du texte') !== -1 };
       const failed = failedOf(checks);
-      return { pass: failed.length === 0, notes: JSON.stringify({ failed, afterEmpty }) };
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed }) };
     },
   });
 
