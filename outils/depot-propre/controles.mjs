@@ -3,7 +3,7 @@
 // Lecture seule : rien n'est modifié. Il lit l'arbre tel qu'il sera publié, pas le dépôt de développement.
 //
 // Usage : node controles.mjs <dossier de l'arbre à publier> [--version 1.0.0-beta.1] [--beta-figee]
-//   --beta-figee : l'arbre est celui du dépôt public, qui garde dans beta/ la copie figée de la bêta (publier.sh le demande) : elle doit y être, être la bêta, et porter son bandeau (consigne 070 de GFS) et son garde-fou (consigne 102).
+//   --beta-figee : l'arbre est celui du dépôt public, qui garde dans beta/ la copie figée de la bêta (publier.sh le demande) : elle doit y être, être la bêta, et porter son bandeau (consigne 070 de GFS), sa fenêtre « passez à la version X.Y » (le numéro de la version qui part, de --version ou de js/version.js) et son garde-fou (consigne 102).
 // Sortie : une ligne par constat, « ERREUR » (publier.sh refuse de committer) ou « AVERTISSEMENT » (à relire), puis le total.
 // Code de sortie : 1 s'il y a au moins une erreur, 0 sinon.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
@@ -129,34 +129,45 @@ if (betaFigee) {
     // Le bandeau « version bêta » (consigne 070 de GFS) : beta/ le porte tel que outils/depot-propre/beta/ l'écrit (beta-bandeau.mjs, que publier.sh lance) - ses deux fichiers à l'octet près, ses deux
     // lignes dans index.html (la feuille avant </head>, le script après tous les autres, chacun avec l'empreinte de son fichier) - et la page que son bouton ouvre est dans l'arbre. Le reste de beta/ est
     // celui de l'étiquette : publier.sh le vérifie avec git (beta-bandeau.mjs --ecarts), ici il n'y a pas d'historique.
-    const src = sources();
-    const lignes = balises(src);
-    const page = read('beta/index.html');
-    for (const [rel, attendu] of [[BANDEAU_JS, src.js], [BANDEAU_CSS, src.css]]) {
-      if (!has(`beta/${rel}`)) fail(`beta/${rel} : le bandeau de la bêta est absent (publier.sh le pose : beta-bandeau.mjs --poser, consigne 070 de GFS)`);
-      else if (!readFileSync(join(root, 'beta', rel)).equals(attendu)) fail(`beta/${rel} n'est pas celui de outils/depot-propre/beta/ : le bandeau se repose avec beta-bandeau.mjs --poser, il ne se retouche pas dans beta/`);
+    // Le numéro que le bandeau et la fenêtre de la bêta annoncent (« migrer vers la version X.Y ») est celui de la version qui part : --version, sinon celui que js/version.js de l'arbre déclare. Le script du bandeau
+    // du dépôt de développement porte un repère à sa place (beta-bandeau.mjs, REPERE_NUMERO) que la publication remplace : beta/js/beta-bandeau.js doit être, à l'octet près, ce script au numéro de cette version.
+    const numeroDeclare = (has('js/version.js') ? (read('js/version.js').match(/PP_VERSION\s*=\s*['"]([^'"]+)['"]/) || [])[1] : '') || '';
+    let src = null;
+    try { src = sources(version || numeroDeclare); } catch (erreur) { fail(`beta/${BANDEAU_JS} : ${erreur.message}`); }
+    if (src) {
+      const lignes = balises(src);
+      const page = read('beta/index.html');
+      for (const [rel, attendu] of [[BANDEAU_JS, src.js], [BANDEAU_CSS, src.css]]) {
+        if (!has(`beta/${rel}`)) fail(`beta/${rel} : le bandeau de la bêta est absent (publier.sh le pose : beta-bandeau.mjs --poser, consigne 070 de GFS)`);
+        else if (!readFileSync(join(root, 'beta', rel)).equals(attendu)) {
+          // Le même script avec un autre numéro : une bêta qui n'a pas été recomposée depuis la dernière version (ou qui l'a été pour une autre) annoncerait « la version X.Y » à côté d'une dernière version qui n'est plus celle-là.
+          const annonce = rel === BANDEAU_JS ? (/const LATEST = '([^']*)'/.exec(read(`beta/${rel}`)) || [])[1] : undefined;
+          if (annonce !== undefined && annonce !== src.numero) fail(`beta/${rel} annonce la version ${annonce} (bandeau et fenêtre « passez à la version ${annonce} »), la version qui part est la ${src.numero} : la bêta se repose avec beta-bandeau.mjs --poser, que publier.sh lance`);
+          else fail(`beta/${rel} n'est pas celui de outils/depot-propre/beta/${rel === BANDEAU_JS ? ` (au numéro ${src.numero})` : ''} : le bandeau se repose avec beta-bandeau.mjs --poser, il ne se retouche pas dans beta/`);
+        }
+      }
+      for (const [nom, ligne] of [['la feuille', lignes.css], ['le script', lignes.js]]) {
+        const n = page.split(ligne + '\n').length - 1;
+        if (n !== 1) fail(`beta/index.html : ${nom} du bandeau (${ligne}) devrait y être une fois, à la version de son fichier (${n} trouvée(s))`);
+      }
+      if (page.includes(lignes.css) && page.indexOf(lignes.css) > page.indexOf('</head>')) fail('beta/index.html : la feuille du bandeau doit être dans <head>');
+      if (page.includes(lignes.js) && page.indexOf(lignes.js) !== page.lastIndexOf('<script')) fail('beta/index.html : le script du bandeau doit être le dernier script de la page (il se pose après main.js)');
+      // Le garde-fou (consigne 102 de GFS : devant un document que la version 1 a déjà mis à jour, la bêta n'écrit plus rien et dit d'ouvrir la dernière version) : son fichier, à l'octet près, et UNE ligne dans
+      // index.html, à la version de son fichier, APRÈS js/grist-api.js (il enveloppe GristAPI) et AVANT js/table-consent.js (donc avant le démarrage anticipé de la bêta : la première lecture, la première question).
+      if (!has(`beta/${GARDE_JS}`)) fail(`beta/${GARDE_JS} : le garde-fou de la bêta est absent (publier.sh le pose : beta-bandeau.mjs --poser, consigne 102 de GFS)`);
+      else if (!readFileSync(join(root, 'beta', GARDE_JS)).equals(src.garde)) fail(`beta/${GARDE_JS} n'est pas celui de outils/depot-propre/beta/ : le garde-fou se repose avec beta-bandeau.mjs --poser, il ne se retouche pas dans beta/`);
+      const nGarde = page.split(lignes.garde + '\n').length - 1;
+      if (nGarde !== 1) fail(`beta/index.html : le script du garde-fou (${lignes.garde}) devrait y être une fois, à la version de son fichier (${nGarde} trouvée(s))`);
+      else {
+        const placeGarde = page.indexOf(lignes.garde);
+        const placeConsent = page.search(/<script src="js\/table-consent\.js[^"]*"><\/script>/);
+        const placeApi = page.search(/<script src="js\/grist-api\.js[^"]*"><\/script>/);
+        if (placeConsent === -1 || placeGarde > placeConsent) fail('beta/index.html : le script du garde-fou doit se charger avant js/table-consent.js (donc avant le démarrage anticipé de la bêta)');
+        if (placeApi !== -1 && placeGarde < placeApi) fail('beta/index.html : le script du garde-fou doit se charger après js/grist-api.js (il enveloppe GristAPI)');
+      }
+      const cible = (/const NEWS_PAGE = '([^']+)'/.exec(src.js.toString('utf8')) || [])[1];
+      if (!cible || !has(posix.normalize(`beta/${cible}`))) fail(`beta/${BANDEAU_JS} ouvre ${cible || 'aucune page'} depuis beta/ : cette page n'est pas dans l'arbre (la page des nouveautés de la version 1, nouveautes.html, part à la racine du site)`);
     }
-    for (const [nom, ligne] of [['la feuille', lignes.css], ['le script', lignes.js]]) {
-      const n = page.split(ligne + '\n').length - 1;
-      if (n !== 1) fail(`beta/index.html : ${nom} du bandeau (${ligne}) devrait y être une fois, à la version de son fichier (${n} trouvée(s))`);
-    }
-    if (page.includes(lignes.css) && page.indexOf(lignes.css) > page.indexOf('</head>')) fail('beta/index.html : la feuille du bandeau doit être dans <head>');
-    if (page.includes(lignes.js) && page.indexOf(lignes.js) !== page.lastIndexOf('<script')) fail('beta/index.html : le script du bandeau doit être le dernier script de la page (il se pose après main.js)');
-    // Le garde-fou (consigne 102 de GFS : devant un document que la version 1 a déjà mis à jour, la bêta n'écrit plus rien et dit d'ouvrir la dernière version) : son fichier, à l'octet près, et UNE ligne dans
-    // index.html, à la version de son fichier, APRÈS js/grist-api.js (il enveloppe GristAPI) et AVANT js/table-consent.js (donc avant le démarrage anticipé de la bêta : la première lecture, la première question).
-    if (!has(`beta/${GARDE_JS}`)) fail(`beta/${GARDE_JS} : le garde-fou de la bêta est absent (publier.sh le pose : beta-bandeau.mjs --poser, consigne 102 de GFS)`);
-    else if (!readFileSync(join(root, 'beta', GARDE_JS)).equals(src.garde)) fail(`beta/${GARDE_JS} n'est pas celui de outils/depot-propre/beta/ : le garde-fou se repose avec beta-bandeau.mjs --poser, il ne se retouche pas dans beta/`);
-    const nGarde = page.split(lignes.garde + '\n').length - 1;
-    if (nGarde !== 1) fail(`beta/index.html : le script du garde-fou (${lignes.garde}) devrait y être une fois, à la version de son fichier (${nGarde} trouvée(s))`);
-    else {
-      const placeGarde = page.indexOf(lignes.garde);
-      const placeConsent = page.search(/<script src="js\/table-consent\.js[^"]*"><\/script>/);
-      const placeApi = page.search(/<script src="js\/grist-api\.js[^"]*"><\/script>/);
-      if (placeConsent === -1 || placeGarde > placeConsent) fail('beta/index.html : le script du garde-fou doit se charger avant js/table-consent.js (donc avant le démarrage anticipé de la bêta)');
-      if (placeApi !== -1 && placeGarde < placeApi) fail('beta/index.html : le script du garde-fou doit se charger après js/grist-api.js (il enveloppe GristAPI)');
-    }
-    const cible = (/const NEWS_PAGE = '([^']+)'/.exec(src.js.toString('utf8')) || [])[1];
-    if (!cible || !has(posix.normalize(`beta/${cible}`))) fail(`beta/${BANDEAU_JS} ouvre ${cible || 'aucune page'} depuis beta/ : cette page n'est pas dans l'arbre (la page des nouveautés de la version 1, nouveautes.html, part à la racine du site)`);
   }
 }
 

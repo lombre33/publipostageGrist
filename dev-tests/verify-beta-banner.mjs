@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Le bandeau de la bêta figée (outils/depot-propre/beta/beta-bandeau.js et .css, posés dans beta/ par outils/depot-propre/beta-bandeau.mjs ; consigne 070 de GFS) à la VRAIE souris, dans le panneau de 700x400 :
-// « Attention : widget en version bêta. Nous vous conseillons de migrer vers la version 1.1. », le bouton « Découvrir les nouveautés » (nouveautes.html dans un nouvel onglet) et une croix.
+// Le bandeau de la bêta figée et sa fenêtre « Il est temps de passer à la version X.Y » (outils/depot-propre/beta/beta-bandeau.js et .css, posés dans beta/ par outils/depot-propre/beta-bandeau.mjs ; consigne 070 de GFS
+// et demande du porteur du 26/11) à la VRAIE souris et au vrai clavier, dans le panneau de 700x400 :
+// « Attention : widget en version bêta. Nous vous conseillons de migrer vers la version X.Y. » (X.Y : le numéro de js/version.js, sans son correctif, que la publication pose à la place du repère du script), le bouton
+// « Découvrir les nouveautés » (nouveautes.html dans un nouvel onglet) et une croix ; et, à chaque ouverture, la fenêtre sur son voile.
 // La bêta est COMPOSÉE comme la publication la compose (la copie figée 1.0.0-beta.1 + les deux fichiers du bandeau + le garde-fou de la consigne 102 + trois lignes d'index.html), servie avec la V1 à côté (/Publipostage-Plus/beta/ et
 // /Publipostage-Plus/, comme le site public), SOUS SA VRAIE POLITIQUE DE SÉCURITÉ (pas de `bypassCSP`), avec le faux Grist de dev-tests/grist-stub.js et le miroir hors ligne des CDN. La copie figée vient du
 // commit de développement dont elle est la copie (ddea35d1, 05/10, version 1.0.0-beta.1), lue par `git archive` ; un dépôt qui n'a pas cet historique donne le dossier d'une bêta SANS bandeau dans PP_BETA_SOURCE.
@@ -17,7 +19,12 @@
 //     la langue du widget) ; la fenêtre des nouveautés ne s'ouvre jamais toute seule dans la bêta (elle n'y existe pas, pp_news_seen n'y est jamais écrit) ; un changement de langue dans le widget change le
 //     bandeau et l'adresse du bouton sur place ; la croix le ferme et rend sa place à la barre d'outils, SANS rien retenir (le stockage et les cookies sont tels qu'ils étaient) : la bêta rechargée le remontre ;
 //  5) aucune erreur de page ou de console, aucune requête ratée ou hors du site, AUCUNE violation de la politique de sécurité de la bêta ;
-//  6) le juge sait dire non : la bêta d'avant (sans bandeau) n'a ni bandeau ni fichier du bandeau ; un bandeau posé PAR-DESSUS la barre d'outils ou un texte gris clair serait refusé par les mêmes mesures.
+//  6) le juge sait dire non : la bêta d'avant (sans bandeau) n'a ni bandeau ni fichier du bandeau ; un bandeau posé PAR-DESSUS la barre d'outils ou un texte gris clair serait refusé par les mêmes mesures ;
+//  7) la fenêtre « passez à la version X.Y » (le bandeau est fermé d'office dans les ouvertures de 1 à 6, sans quoi son voile les couvrirait) : à CHAQUE ouverture, EXACTEMENT les mots validés par le porteur le 26/11
+//     (français et anglais), le numéro de la version qui part (jamais « 1.x », et un autre numéro quand la bêta est composée pour une autre version : 2.0.3 donne 2.0), l'adresse de la dernière version, les deux
+//     boutons ; un dialogue modal qui couvre toute la page, dont plus rien n'est atteignable derrière (inert), qui se lit à 4,5:1 dans les trois thèmes ; au vrai clavier : le focus est sur la carte, Tab et Maj+Tab
+//     bouclent sans sortir, Échap la ferme ; à la vraie souris : « Continuer avec la bêta » la ferme, « Découvrir les nouveautés » et l'adresse s'ouvrent dans un NOUVEL onglet sans lien avec la bêta (la fenêtre reste
+//     ouverte), le changement de langue la change sur place ; fermée, elle ne retient RIEN (stockage et cookies tels qu'ils étaient) et la bêta rechargée la remontre.
 // Lancé par run-headless.mjs (groupe Node « betaBannerMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-beta-banner.mjs
 // BETA_BANNER_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit. BETA_BANNER_PORT : le port du petit serveur (9062 par défaut). PP_BETA_SOURCE : voir plus haut.
 import { createServer } from 'node:http';
@@ -28,6 +35,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const PORT = Number(process.env.BETA_BANNER_PORT || 9062);
@@ -48,9 +56,24 @@ function check(name, pass, notes) {
 
 // Les textes de la consigne 070, tels que le bandeau doit les dire. L'apostrophe de l'anglais est l'apostrophe typographique, comme tous les textes anglais de l'app (« What’s new in version 1.0 »).
 const TEXTS = {
-  fr: { text: 'Attention : widget en version bêta. Nous vous conseillons de migrer vers la version 1.1.', news: 'Découvrir les nouveautés', label: 'Découvrir les nouveautés (s’ouvre dans un nouvel onglet)', close: 'Fermer le bandeau', region: 'Version bêta', page: 'Nouveautés de la version 1.0' },
-  en: { text: 'Attention: this widget is a beta version. We recommend migrating to version 1.1.', news: 'Discover what’s new', label: 'Discover what’s new (opens in a new tab)', close: 'Close the banner', region: 'Beta version', page: 'What’s new in version 1.0' },
+  fr: { text: 'Attention : widget en version bêta. Nous vous conseillons de migrer vers la version {N}.', news: 'Découvrir les nouveautés', label: 'Découvrir les nouveautés (s’ouvre dans un nouvel onglet)', close: 'Fermer le bandeau', region: 'Version bêta', page: 'Nouveautés de la version 1.0' },
+  en: { text: 'Attention: this widget is a beta version. We recommend migrating to version {N}.', news: 'Discover what’s new', label: 'Discover what’s new (opens in a new tab)', close: 'Close the banner', region: 'Beta version', page: 'What’s new in version 1.0' },
 };
+
+// La fenêtre « passez à la version X.Y » : les mots que le porteur a validés le 26/11 (sa demande : il est temps de passer à la dernière version, la rétrocompatibilité est assurée pour le moment, plus on attend moins
+// elle l'est, et pour la sécurité et la maintenabilité), avec « {N} » à la place du numéro que la publication pose. L'espace avant le numéro est insécable (U+00A0) : il ne passe jamais seul à la ligne.
+const UPGRADE = {
+  fr: { title: 'Il est temps de passer à la version\u00a0{N}', compat: 'Vos documents et vos modèles s’ouvrent encore dans la version\u00a0{N} : cette compatibilité est assurée pour le moment. Plus vous attendez, moins elle le sera.',
+    care: 'La bêta est figée : elle ne reçoit plus de correctifs de sécurité et devient de plus en plus difficile à maintenir. Seule la version\u00a0{N} reste à jour.', how: 'Dans Grist, remplacez l’adresse du widget par celle de la dernière version :',
+    news: 'Découvrir les nouveautés', newsLabel: 'Découvrir les nouveautés (s’ouvre dans un nouvel onglet)', keep: 'Continuer avec la bêta' },
+  en: { title: 'Time to move to version\u00a0{N}', compat: 'Your documents and templates still open in version\u00a0{N}: this compatibility is guaranteed for now. The longer you wait, the less it will be.',
+    care: 'The beta is frozen: it no longer receives security fixes and is getting harder to maintain. Only version\u00a0{N} stays up to date.', how: 'In Grist, replace the widget address with the one of the latest version:',
+    news: 'Discover what’s new', newsLabel: 'Discover what’s new (opens in a new tab)', keep: 'Continue with the beta' },
+};
+// Les textes ci-dessus sont des modèles (« {N} ») : `numbered` les rend pour un numéro, `NUMERO` est celui que la bêta composée pour js/version.js du dépôt de développement doit annoncer (rempli au démarrage).
+const numbered = (texts, number) => Object.fromEntries(Object.entries(texts).map(([lang, t]) => [lang, Object.fromEntries(Object.entries(t).map(([key, value]) => [key, String(value).replace(/\{N\}/g, number)]))]));
+const TEMPLATES = { banner: JSON.parse(JSON.stringify(TEXTS)), upgrade: JSON.parse(JSON.stringify(UPGRADE)) };
+let NUMERO = '';
 
 const WORK = mkdtempSync(join(tmpdir(), 'pp-beta-banner-'));
 const SITE = join(WORK, 'site');
@@ -92,9 +115,10 @@ const GRIST_API_TAG = '<script src="https://docs.getgrist.com/grist-plugin-api.j
 let esmMap = {};
 let BASE = '';
 
-// Le site, comme celui du dépôt public : la V1 à la racine (dont nouveautes.html), la bêta avec son bandeau dans beta/, et la bêta SANS bandeau à côté (beta-nue/ : la mesure de ce que la barre d'outils fait sans lui).
+// Le site, comme celui du dépôt public : la V1 à la racine (dont nouveautes.html), la bêta avec son bandeau dans beta/, la bêta SANS bandeau à côté (beta-nue/ : la mesure de ce que la barre d'outils fait sans lui)
+// et la bêta composée pour une AUTRE version (beta-v2/, 2.0.3 : le numéro qu'elle annonce doit suivre).
 async function serve() {
-  const routes = [[`${SITE_PATH}/beta/`, join(SITE, 'beta')], [`${SITE_PATH}/beta-nue/`, join(SITE, 'beta-nue')], [`${SITE_PATH}/`, ROOT]];
+  const routes = [[`${SITE_PATH}/beta/`, join(SITE, 'beta')], [`${SITE_PATH}/beta-nue/`, join(SITE, 'beta-nue')], [`${SITE_PATH}/beta-v2/`, join(SITE, 'beta-v2')], [`${SITE_PATH}/`, ROOT]];
   server = createServer(async (req, res) => {
     try {
       const urlPath = decodeURIComponent(req.url.split('?')[0]);
@@ -121,7 +145,8 @@ const OWN_HOSTS = [OLD_CDN_HOST, 'docs.getgrist.com', 'fonts.googleapis.com', 'f
 
 // Une ouverture de la bêta : un contexte neuf (la taille et le thème du système demandés), la langue et, si on le dit, le thème CHOISI dans le widget (pp_theme) posés avant tout script, l'écoute des violations
 // de la politique de sécurité (window.__csp), ce que les pages ont dit (erreurs), raté ou demandé hors du site. Attend « Widget prêt. ».
-async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light', lang = 'fr', theme = null } = {}) {
+// `upgrade` : 'close' (par défaut) ferme d'office la fenêtre « passez à la version X.Y » une fois la bêta prête, sans quoi son voile couvrirait tout ce que les mesures du bandeau regardent ; 'keep' la laisse ouverte.
+async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light', lang = 'fr', theme = null, upgrade = 'close' } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, colorScheme: scheme });
   const log = { errors: [], failed: [], foreign: [] };
   const watch = (page, name) => {
@@ -155,8 +180,10 @@ async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light
   await page.goto(`${BASE}${SITE_PATH}/${dir}/`, { waitUntil: 'load' });
   await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 60000 }).catch(() => log.errors.push('bêta : « Widget prêt. » n\'est pas venu en 60 s'));
   await sleep(1200);
+  if (upgrade === 'close') await closeUpgradeIfAny(page);
   return { context, page, log };
 }
+const closeUpgradeIfAny = page => page.evaluate(() => { const keep = document.querySelector('#pp-beta-upgrade .pp-beta-upgrade-keep'); if (keep) keep.click(); });
 
 // Le bandeau tel que la page le montre : le texte, le bouton, la croix, leurs étiquettes, leurs boîtes et s'ils sont atteignables (l'élément sous le pointeur, au centre, est lui ou l'un de ses enfants).
 const bannerFacts = page => page.evaluate(() => {
@@ -364,6 +391,7 @@ async function run({ id, lang, scheme, theme = null, width = 700, height = 400, 
     await shot(page, id + '-ferme', height);
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => !!document.getElementById('pp-beta-banner'), null, { timeout: 15000 }).catch(() => {});
+    await closeUpgradeIfAny(page);
     const again = await bannerFacts(page);
     check(`${id} : la bêta rechargée remontre le bandeau, comme à chaque ouverture`, !!again && again.count === 1 && again.text === T.text, again && { count: again.count, text: again.text });
     await sleep(800);
@@ -385,6 +413,205 @@ async function run({ id, lang, scheme, theme = null, width = 700, height = 400, 
   await context.close();
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// La fenêtre « Il est temps de passer à la version X.Y » : ce qu'elle dit, couvre et rend inatteignable ; puis, si `full`, ce que le clavier et la souris en font.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+const upgradeFacts = page => page.evaluate(() => {
+  const root = document.getElementById('pp-beta-upgrade');
+  if (!root) return null;
+  const box = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
+  const card = root.querySelector('.pp-beta-upgrade-card');
+  const title = root.querySelector('.pp-beta-upgrade-title');
+  const address = root.querySelector('.pp-beta-upgrade-address');
+  const news = root.querySelector('.pp-beta-upgrade-news');
+  const keep = root.querySelector('.pp-beta-upgrade-keep');
+  const labelled = document.getElementById(root.getAttribute('aria-labelledby') || '');
+  const others = Array.from(document.body.children).filter(el => el !== root && el.tagName !== 'SCRIPT');
+  const points = [[2, 2], [innerWidth - 3, 2], [2, innerHeight - 3], [innerWidth - 3, innerHeight - 3], [innerWidth / 2, innerHeight / 2], [innerWidth / 2, 5]];
+  const bannerLink = document.querySelector('#pp-beta-banner .pp-beta-banner-link');
+  const bl = bannerLink && bannerLink.getBoundingClientRect();
+  const atBanner = bl ? document.elementFromPoint(bl.left + bl.width / 2, bl.top + bl.height / 2) : null;
+  const active = document.activeElement;
+  return {
+    count: document.querySelectorAll('#pp-beta-upgrade').length, role: root.getAttribute('role'), modal: root.getAttribute('aria-modal'), labelled: labelled ? labelled.textContent : null, labelledTag: labelled ? labelled.tagName : null,
+    title: title.textContent, texts: Array.from(root.querySelectorAll('.pp-beta-upgrade-text')).map(p => p.textContent),
+    address: address.textContent, addressHref: address.href, addressTag: address.tagName, addressTarget: address.target, addressRel: address.rel,
+    news: news.textContent, newsHref: news.getAttribute('href'), newsResolved: news.href, newsTag: news.tagName, newsTarget: news.target, newsRel: news.rel, newsLabel: news.getAttribute('aria-label'),
+    keep: keep.textContent, keepTag: keep.tagName, keepType: keep.getAttribute('type'),
+    position: getComputedStyle(root).position, rootBox: box(root), cardBox: box(card), covered: points.every(([x, y]) => { const top = document.elementFromPoint(x, y); return !!top && root.contains(top); }),
+    zIndex: parseInt(getComputedStyle(root).zIndex, 10) || 0, maxOtherZ: Math.max(0, ...Array.from(document.querySelectorAll('body *')).filter(el => !root.contains(el) && el.id !== 'pp-beta-guard').map(el => parseInt(getComputedStyle(el).zIndex, 10) || 0)),
+    inertAll: others.length > 0 && others.every(el => el.hasAttribute('inert')), notInert: others.filter(el => !el.hasAttribute('inert')).map(el => el.id || el.tagName),
+    bannerBehind: !!atBanner && root.contains(atBanner), bannerText: (document.querySelector('#pp-beta-banner .pp-beta-banner-text') || {}).textContent || null,
+    focusOnCard: active === card, focusInside: root.contains(active), focus: active ? (active.className || active.tagName) : null,
+    scrollsY: root.scrollHeight > root.clientHeight + 1, scrollsX: root.scrollWidth > root.clientWidth + 1,
+    emoji: /\p{Extended_Pictographic}/u.test(root.textContent), images: root.querySelectorAll('img').length, svgs: root.querySelectorAll('svg').length,
+    fontIsUi: ((a, b) => !!b.trim() && a === b)(...[getComputedStyle(root).fontFamily, getComputedStyle(document.documentElement).getPropertyValue('--font-ui')].map(v => v.replace(/["']/g, '').replace(/\s+/g, ' ').trim())),
+    innerW: innerWidth, innerH: innerHeight, inertLeft: Array.from(document.body.children).filter(el => el.hasAttribute('inert')).length,
+  };
+});
+// Les contrastes de la fenêtre : la couleur de chaque élément sur ce qu'il y a dessous (la carte est pleine : le voile translucide n'y entre pas). Texte >= 4,5:1 ; filet du bouton plein >= 3:1.
+const upgradeContrast = page => page.evaluate(() => {
+  const parse = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };
+  const backdrop = (el) => {
+    const layers = [];
+    for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); const alpha = c.length === 4 ? c[3] : 1; if (alpha > 0) layers.push([c.slice(0, 3), alpha]); if (alpha === 1) break; }
+    let base = [255, 255, 255];
+    for (const [rgb, alpha] of layers.reverse()) base = base.map((v, i) => rgb[i] * alpha + v * (1 - alpha));
+    return base;
+  };
+  const q = s => document.querySelector('#pp-beta-upgrade ' + s);
+  const color = (s, prop = 'color') => parse(getComputedStyle(q(s))[prop]).slice(0, 3);
+  const card = backdrop(q('.pp-beta-upgrade-card'));
+  return {
+    title: ratio(color('.pp-beta-upgrade-title'), card), text: ratio(color('.pp-beta-upgrade-text'), card), address: ratio(color('.pp-beta-upgrade-address'), card),
+    news: ratio(color('.pp-beta-upgrade-news'), backdrop(q('.pp-beta-upgrade-news'))), newsEdge: ratio(color('.pp-beta-upgrade-news', 'borderTopColor'), card),
+    keep: ratio(color('.pp-beta-upgrade-keep'), backdrop(q('.pp-beta-upgrade-keep'))),
+  };
+});
+const upgradeContrastOk = c => c.title >= 4.5 && c.text >= 4.5 && c.address >= 4.5 && c.news >= 4.5 && c.newsEdge >= 3 && c.keep >= 4.5;
+// Ce que le focus montre : le tour de l'élément qui l'a, au clavier (2 px pleins), et lequel c'est.
+const focusFacts = page => page.evaluate(() => {
+  const el = document.activeElement;
+  const cs = el ? getComputedStyle(el) : null;
+  return { which: el ? (el.className || el.tagName) : null, inside: !!el && !!el.closest('#pp-beta-upgrade'), outline: cs ? `${cs.outlineWidth} ${cs.outlineStyle}` : null };
+});
+
+async function runUpgrade({ id, lang, scheme, theme = null, width = 700, height = 400, full = false, dir = 'beta', number = NUMERO }) {
+  const U = numbered(TEMPLATES.upgrade, number)[lang];
+  const B = numbered(TEMPLATES.banner, number)[lang];
+  const other = lang === 'fr' ? 'en' : 'fr';
+  const { context, page, log } = await ouvrir({ dir, width, height, scheme, lang, theme, upgrade: 'keep' });
+  const f = await upgradeFacts(page);
+  check(`${id} : la fenêtre est là à l'ouverture, une seule fois (sans que la personne ait rien fait), au-dessus de tout ce que la bêta empile (z-index ${f ? f.zIndex : '?'} contre ${f ? f.maxOtherZ : '?'}) et sous la couche du garde-fou (2147483000)`,
+    !!f && f.count === 1 && f.zIndex > f.maxOtherZ && f.zIndex < 2147483000, f && { count: f.count, z: f.zIndex, autres: f.maxOtherZ });
+  if (!f) { await context.close(); return; }
+  check(`${id} : c'est un dialogue modal (role=dialog, aria-modal) nommé par son titre, un h2 qui dit EXACTEMENT « ${U.title} »`,
+    f.role === 'dialog' && f.modal === 'true' && f.labelledTag === 'H2' && f.labelled === U.title && f.title === U.title, { role: f.role, modal: f.modal, labelled: f.labelled, title: f.title });
+  check(`${id} : elle dit EXACTEMENT les trois phrases validées (compatibilité assurée pour le moment, sécurité et entretien, où changer l'adresse)`, JSON.stringify(f.texts) === JSON.stringify([U.compat, U.care, U.how]), f.texts);
+  const everything = [f.title, ...f.texts, f.bannerText].join(' ');
+  check(`${id} : le numéro est ${number} partout (fenêtre ET bandeau « ${B.text} »), collé à « version » par une espace insécable, et jamais « 1.x » ni l'ancien « 1.1 » écrit en dur`,
+    f.bannerText === B.text && f.title.includes(`version ${number}`) && !/\b1\.x\b/i.test(everything) && !/\{\{|\}\}|VERSION_COURANTE/.test(everything) && (number === '1.1' || !/version\s+1\.1\b/.test(everything)), { title: f.title, banner: f.bannerText });
+  check(`${id} : l'adresse de la dernière version est celle du dossier au-dessus de beta/ (${BASE}${SITE_PATH}/), un lien qui s'ouvre dans un nouvel onglet sans lien avec la bêta (noopener noreferrer)`,
+    f.addressTag === 'A' && f.address === `${BASE}${SITE_PATH}/` && f.addressHref === `${BASE}${SITE_PATH}/` && f.addressTarget === '_blank' && /\bnoopener\b/.test(f.addressRel) && /\bnoreferrer\b/.test(f.addressRel), { text: f.address, href: f.addressHref, target: f.addressTarget, rel: f.addressRel });
+  check(`${id} : « ${U.news} » est un lien vers ../nouveautes.html?lang=${lang}, dans un nouvel onglet sans lien avec la bêta, et dit l'onglet à ceux qui lisent à voix haute ; « ${U.keep} » est un vrai bouton`,
+    f.news === U.news && f.newsTag === 'A' && f.newsHref === `../nouveautes.html?lang=${lang}` && f.newsResolved === `${BASE}${SITE_PATH}/nouveautes.html?lang=${lang}` && f.newsTarget === '_blank' && /\bnoopener\b/.test(f.newsRel) && /\bnoreferrer\b/.test(f.newsRel) && f.newsLabel === U.newsLabel
+      && f.keep === U.keep && f.keepTag === 'BUTTON' && f.keepType === 'button', { news: f.news, href: f.newsHref, resolved: f.newsResolved, label: f.newsLabel, keep: f.keep, keepTag: f.keepTag });
+  check(`${id} : elle couvre toute la page (position fixed, plein cadre, six points du panneau sont à elle) et sa carte tient dans le panneau${f.scrollsY ? ' (ou le voile défile : le bas reste atteignable)' : ''}`,
+    f.position === 'fixed' && Math.abs(f.rootBox.left) < 0.5 && Math.abs(f.rootBox.top) < 0.5 && Math.abs(f.rootBox.right - f.innerW) < 0.5 && Math.abs(f.rootBox.bottom - f.innerH) < 0.5 && f.covered && !f.scrollsX
+      && f.cardBox.left >= -0.5 && f.cardBox.right <= f.innerW + 0.5 && (f.cardBox.bottom <= f.innerH + 0.5 || f.scrollsY), { root: f.rootBox, card: f.cardBox, covered: f.covered, scrollsY: f.scrollsY, scrollsX: f.scrollsX });
+  check(`${id} : derrière elle plus rien ne s'atteint : tout le reste de <body> est inerte (attribut inert), le bandeau compris, et un clic à l'emplacement du bouton du bandeau tombe sur le voile`,
+    f.inertAll && f.notInert.length === 0 && f.bannerBehind, { inertAll: f.inertAll, notInert: f.notInert, bannerBehind: f.bannerBehind });
+  check(`${id} : le focus est sur la carte à l'ouverture (un lecteur d'écran lit le dialogue d'abord)`, f.focusOnCard, { focus: f.focus });
+  check(`${id} : aucun emoji, aucune image, aucune icône : du texte et deux boutons ; la police est celle de l'interface (--font-ui)`, !f.emoji && f.images === 0 && f.svgs === 0 && f.fontIsUi, { emoji: f.emoji, images: f.images, svgs: f.svgs, fontIsUi: f.fontIsUi });
+  const c = await upgradeContrast(page);
+  check(`${id} : tout se lit : titre, phrases, adresse et textes des boutons >= 4,5:1, filet du bouton plein >= 3:1`, upgradeContrastOk(c), c);
+  await shot(page, id, height);
+
+  const verdict = async (when) => {
+    check(`${id} : ${when}aucune erreur de page ni de console, aucune requête ratée, aucune requête hors du site ou de son miroir`, log.errors.length === 0 && log.failed.length === 0 && log.foreign.length === 0, { errors: log.errors.slice(0, 3), failed: log.failed.slice(0, 3), foreign: log.foreign.slice(0, 3) });
+    const csp = await page.evaluate(() => window.__csp.slice());
+    check(`${id} : ${when}aucune violation de la politique de sécurité de la bêta (la fenêtre n'a besoin d'aucun script en ligne ni d'aucune source de plus)`, csp.length === 0, csp);
+  };
+
+  if (full) {
+    // Le clavier : Tab et Maj+Tab bouclent entre l'adresse, « Découvrir les nouveautés » et « Continuer avec la bêta » ; rien de la bêta, derrière, n'est atteint ; le focus se voit (2 px).
+    const order = [];
+    for (let n = 0; n < 7; n++) { await page.keyboard.press('Tab'); order.push(await focusFacts(page)); }
+    const ring = ['pp-beta-upgrade-address', 'pp-beta-upgrade-news', 'pp-beta-upgrade-keep'];
+    check(`${id} : au clavier, Tab fait le tour adresse, « ${U.news} », « ${U.keep} » puis revient à l'adresse (sept appuis, jamais hors de la fenêtre), et chaque arrêt montre un tour de 2 px`,
+      order.every(o => o.inside) && order.map(o => o.which).join('|') === [0, 1, 2, 0, 1, 2, 0].map(k => ring[k]).join('|') && order.every(o => /^2px (solid|auto)$/.test(o.outline)), order);
+    const back = [];
+    for (let n = 0; n < 4; n++) { await page.keyboard.press('Shift+Tab'); back.push(await focusFacts(page)); }
+    check(`${id} : et Maj+Tab le fait à l'envers (adresse, « ${U.keep} », « ${U.news} », adresse), sans sortir`, back.every(o => o.inside) && back.map(o => o.which).join('|') === [2, 1, 0, 2].map(k => ring[k]).join('|'), back);
+
+    // La langue du widget décide, y compris quand elle change : la fenêtre suit sur place, le numéro reste.
+    const T2 = numbered(TEMPLATES.upgrade, number)[other];
+    await page.evaluate((next) => I18n.setLang(next), other);
+    await sleep(200);
+    const switched = await upgradeFacts(page);
+    check(`${id} : changer la langue du widget (${lang} → ${other}) change la fenêtre sur place : titre, phrases, boutons, étiquette et adresse ?lang=${other} du lien des nouveautés ; elle reste ouverte, une seule fois`,
+      !!switched && switched.count === 1 && switched.title === T2.title && JSON.stringify(switched.texts) === JSON.stringify([T2.compat, T2.care, T2.how]) && switched.news === T2.news && switched.keep === T2.keep && switched.newsLabel === T2.newsLabel && switched.newsHref === `../nouveautes.html?lang=${other}`,
+      switched && { title: switched.title, news: switched.news, href: switched.newsHref });
+    await page.evaluate((again) => I18n.setLang(again), lang);
+    await sleep(200);
+    const restored = await upgradeFacts(page);
+    check(`${id} : et la rendre (${other} → ${lang}) la remet comme elle était`, !!restored && restored.title === U.title && JSON.stringify(restored.texts) === JSON.stringify([U.compat, U.care, U.how]) && restored.newsHref === `../nouveautes.html?lang=${lang}`, restored && { title: restored.title });
+
+    // La souris : le lien des nouveautés ouvre un NOUVEL onglet, la bêta et sa fenêtre restent où elles sont.
+    const before = page.url();
+    const logBefore = [log.errors.length, log.failed.length, log.foreign.length];
+    const [tabNews] = await Promise.all([context.waitForEvent('page', { timeout: 15000 }).catch(() => null), click(page, '#pp-beta-upgrade .pp-beta-upgrade-news')]);
+    check(`${id} : un vrai clic sur « ${U.news} » ouvre un NOUVEL onglet`, !!tabNews);
+    if (tabNews) {
+      await tabNews.waitForLoadState('load').catch(() => {});
+      await tabNews.waitForFunction(() => { const m = document.getElementById('pp-news-modal'); return !!m && getComputedStyle(m).display !== 'none'; }, null, { timeout: 15000 }).catch(() => {});
+      await sleep(400);
+      const tab = await tabNews.evaluate(() => ({ url: location.href, opener: window.opener === null ? null : 'présent', lang: document.documentElement.lang, open: !!document.getElementById('pp-news-modal') && getComputedStyle(document.getElementById('pp-news-modal')).display !== 'none', csp: (window.__csp || []).slice() }));
+      check(`${id} : cet onglet est ${SITE_PATH}/nouveautes.html?lang=${lang}, sans lien avec la bêta (pas d'opener), fenêtre des nouveautés ouverte, aucune violation de la politique de sécurité`, tab.url === `${BASE}${SITE_PATH}/nouveautes.html?lang=${lang}` && tab.opener === null && tab.open && tab.csp.length === 0, tab);
+      await tabNews.close();
+    }
+    // L'adresse de la dernière version : un NOUVEL onglet aussi, sans lien avec la bêta (ce que dit la V1, à cette adresse, ne regarde pas la bêta : ses éventuels messages ne comptent pas ici).
+    const [tabLatest] = await Promise.all([context.waitForEvent('page', { timeout: 15000 }).catch(() => null), click(page, '#pp-beta-upgrade .pp-beta-upgrade-address')]);
+    check(`${id} : un vrai clic sur l'adresse ouvre un NOUVEL onglet, à ${SITE_PATH}/, sans lien avec la bêta (pas d'opener)`, !!tabLatest);
+    if (tabLatest) {
+      await tabLatest.waitForLoadState('domcontentloaded').catch(() => {});
+      const latest = await tabLatest.evaluate(() => ({ url: location.href, opener: window.opener === null ? null : 'présent', title: document.title })).catch(() => ({ url: tabLatest.url(), opener: '?' }));
+      check(`${id} : cet onglet est l'adresse de la dernière version (${BASE}${SITE_PATH}/), sans opener`, latest.url === `${BASE}${SITE_PATH}/` && latest.opener === null, latest);
+      await tabLatest.close();
+      for (const [index, list] of [log.errors, log.failed, log.foreign].entries()) list.splice(logBefore[index], list.length - logBefore[index], ...list.slice(logBefore[index]).filter(line => !/^onglet /.test(line)));
+    }
+    const stay = await upgradeFacts(page);
+    check(`${id} : la bêta est restée où elle était, avec sa fenêtre toujours ouverte (une seule), le reste de la page toujours inerte`, page.url() === before && !!stay && stay.count === 1 && stay.inertAll, { url: page.url(), stay: !!stay });
+
+    // Échap la ferme, et rend tout : plus rien d'inerte, le bandeau atteignable ; la bêta, derrière, n'a pas vu la touche (elle ne ferme pas, de son côté, une fenêtre qu'elle aurait ouverte).
+    await page.evaluate(() => { window.__escSeen = 0; document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.__escSeen++; }); });
+    await page.keyboard.press('Escape');
+    await sleep(300);
+    const afterEsc = await page.evaluate(() => { const l = document.querySelector('#pp-beta-banner .pp-beta-banner-link'); const r = l && l.getBoundingClientRect(); const top = r && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { open: !!document.getElementById('pp-beta-upgrade'), inert: document.querySelectorAll('[inert]').length, banner: !!top && !!l && l.contains(top), escapeSeenByPage: window.__escSeen }; });
+    check(`${id} : Échap la ferme : plus de fenêtre, plus rien d'inerte, le bouton du bandeau est atteignable de nouveau, et la bêta derrière n'a pas reçu la touche`, !afterEsc.open && afterEsc.inert === 0 && afterEsc.banner && afterEsc.escapeSeenByPage === 0, afterEsc);
+    await verdict('avant de la rouvrir : ');
+
+    // À CHAQUE ouverture : rechargée, la bêta la remontre ; « Continuer avec la bêta » (vraie souris) la ferme et ne retient RIEN.
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => !!document.getElementById('pp-beta-upgrade'), null, { timeout: 15000 }).catch(() => {});
+    const again = await upgradeFacts(page);
+    check(`${id} : la bêta rechargée la remontre (à chaque ouverture, rien n'est retenu de la fermeture par Échap)`, !!again && again.count === 1 && again.title === U.title && again.inertAll, again && { count: again.count, title: again.title });
+    await sleep(900);
+    const storageBefore = await storageOf(page);
+    const keepClick = await click(page, '#pp-beta-upgrade .pp-beta-upgrade-keep');
+    await sleep(300);
+    const closed = await page.evaluate(() => ({ open: !!document.getElementById('pp-beta-upgrade'), inert: document.querySelectorAll('[inert]').length, banner: !!document.getElementById('pp-beta-banner') }));
+    const storageAfter = await storageOf(page);
+    check(`${id} : un vrai clic sur « ${U.keep} » la ferme, le bandeau reste, plus rien d'inerte`, !!keepClick && keepClick.reachable && !closed.open && closed.inert === 0 && closed.banner, { keepClick, closed });
+    check(`${id} : fermer ne retient RIEN : localStorage, sessionStorage et cookies sont tels qu'ils étaient`, JSON.stringify(storageBefore) === JSON.stringify(storageAfter), { avant: storageBefore, apres: storageAfter });
+    await shot(page, id + '-ferme', height);
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => !!document.getElementById('pp-beta-upgrade'), null, { timeout: 15000 }).catch(() => {});
+    const third = await upgradeFacts(page);
+    check(`${id} : et rechargée une troisième fois, elle revient encore (rien n'a été retenu de « ${U.keep} »)`, !!third && third.count === 1, third && { count: third.count });
+
+    // Le juge sait dire non : les mêmes mesures refusent une fenêtre qui ne couvre pas la page, une page restée atteignable et un texte gris clair.
+    await sleep(500);
+    await page.addStyleTag({ content: '#pp-beta-upgrade { width: 40% !important; height: 40% !important; bottom: auto !important; right: auto !important; }' });
+    const small = await upgradeFacts(page);
+    check(`${id} : le juge sait dire non (1/3) : un voile qui ne couvre que le coin de la page serait refusé`, !!small && !small.covered, small && { covered: small.covered });
+    await page.evaluate(() => { document.querySelectorAll('[inert]').forEach(el => el.removeAttribute('inert')); });
+    const notInert = await upgradeFacts(page);
+    check(`${id} : le juge sait dire non (2/3) : un reste de page qui n'est pas inerte serait refusé`, !!notInert && !notInert.inertAll && notInert.notInert.length > 0, notInert && { notInert: notInert.notInert });
+    await page.addStyleTag({ content: '#pp-beta-upgrade .pp-beta-upgrade-card { background: #fff !important; } #pp-beta-upgrade .pp-beta-upgrade-text, #pp-beta-upgrade .pp-beta-upgrade-title { color: #9a9a9a !important; }' });
+    const pale = await upgradeContrast(page);
+    check(`${id} : le juge sait dire non (3/3) : un texte gris clair (#9a9a9a sur blanc) serait refusé`, upgradeContrastOk(c) && !upgradeContrastOk(pale) && pale.text < 4.5, { texte: pale.text });
+    const csp = await page.evaluate(() => window.__csp.slice());
+    check(`${id} : la bêta rechargée n'a, elle non plus, aucune violation de la politique de sécurité`, csp.length === 0, csp);
+  } else {
+    await verdict('');
+  }
+  await context.close();
+}
+
 async function sansPlanter(name, manoeuvre) {
   try { await manoeuvre(); } catch (e) { check(`${name} : la manœuvre va jusqu'au bout`, false, String((e && e.message) || e).split('\n')[0]); }
 }
@@ -394,8 +621,13 @@ try {
   if (!existsSync(join(CACHE, 'esm-map.json'))) throw new Error('miroir hors ligne absent : bash dev-tests/offline-deps.sh');
   esmMap = JSON.parse(readFileSync(join(CACHE, 'esm-map.json'), 'utf8'));
   const SRC = betaSource();
+  // Le numéro que la bêta annonce est celui de la version qui part : ici celle que js/version.js du dépôt de développement porte (1.2.0-dev annonce « 1.2 »), et une AUTRE (2.0.3) sur un second site, pour voir qu'il suit.
+  const DEV_VERSION = (/PP_VERSION\s*=\s*'([^']+)'/.exec(readFileSync(join(ROOT, 'js', 'version.js'), 'utf8')) || [])[1];
+  NUMERO = tool.numeroAffiche(DEV_VERSION);
+  for (const t of Object.values(TEXTS)) t.text = t.text.replace('{N}', NUMERO);
   mkdirSync(SITE, { recursive: true });
-  tool.poserDepuisDossier(SRC, join(SITE, 'beta'));
+  tool.poserDepuisDossier(SRC, join(SITE, 'beta'), tool.sources(DEV_VERSION));
+  tool.poserDepuisDossier(SRC, join(SITE, 'beta-v2'), tool.sources('2.0.3'));
   cpSync(SRC, join(SITE, 'beta-nue'), { recursive: true });
 
   // 0. La bêta composée est la bêta figée et le bandeau, rien d'autre.
@@ -408,6 +640,20 @@ try {
   check('la bêta composée = la bêta figée + css/beta-bandeau.css + js/beta-bandeau.js + js/beta-garde.js + trois lignes d\'index.html : rien d\'autre ne change, rien ne manque',
     JSON.stringify(added) === JSON.stringify([tool.BANDEAU_CSS, tool.BANDEAU_JS, tool.GARDE_JS].sort()) && missing.length === 0 && JSON.stringify(changed) === '["index.html"]'
       && tool.sansBandeau(readFileSync(join(SITE, 'beta', 'index.html'), 'utf8')) === readFileSync(join(SRC, 'index.html'), 'utf8'), { added, missing, changed });
+
+  // Le numéro est posé à la place du repère, une fois, et seulement lui : le script posé est le modèle du dépôt de développement, au numéro près ; `?v=` est l'empreinte du fichier posé.
+  const model = readFileSync(join(ROOT, 'outils', 'depot-propre', 'beta', 'beta-bandeau.js'), 'utf8').replace(/\r\n/g, '\n');
+  const posed = readFileSync(join(SITE, 'beta', tool.BANDEAU_JS), 'utf8');
+  const posed2 = readFileSync(join(SITE, 'beta-v2', tool.BANDEAU_JS), 'utf8');
+  const pageHtml = readFileSync(join(SITE, 'beta', 'index.html'), 'utf8');
+  const hash = createHash('sha256').update(readFileSync(join(SITE, 'beta', tool.BANDEAU_JS))).digest('hex').slice(0, 8);
+  check(`le script du bandeau posé porte le numéro ${NUMERO} (celui de js/version.js, ${DEV_VERSION}) à la place du repère, une fois : le modèle du dépôt de développement, au numéro près, sans repère resté`,
+    model.includes(tool.REPERE_NUMERO) && !posed.includes(tool.REPERE_NUMERO) && posed.includes(`const LATEST = '${NUMERO}';`) && posed === model.replace(tool.REPERE_NUMERO, NUMERO) && posed2 === model.replace(tool.REPERE_NUMERO, '2.0'), { numero: NUMERO, repereResté: posed.includes(tool.REPERE_NUMERO) });
+  check(`sa ligne dans index.html porte l'empreinte du fichier POSÉ (?v=${hash}) : un autre numéro change l'empreinte, donc le cache du navigateur`,
+    pageHtml.includes(`<script src="${tool.BANDEAU_JS}?v=${hash}"></script>`) && hash !== createHash('sha256').update(readFileSync(join(SITE, 'beta-v2', tool.BANDEAU_JS))).digest('hex').slice(0, 8), { hash });
+  check('sans numéro ou avec un numéro qui n\'en est pas un, l\'outil s\'arrête (jamais un numéro au hasard) ; 1.2.0, 1.2.3, 1.2.0-rc.1 et 1.2.0-dev annoncent tous 1.2, 2.0.3 annonce 2.0',
+    ['', undefined, null, 'x', '1', '1.2.x', 'v1.2.0', '1.2.0.4', '1.2.0-'].every(v => { try { tool.sources(v); return false; } catch (e) { return /numéro|version/.test(e.message); } })
+      && ['1.2.0', '1.2.3', '1.2.0-rc.1', '1.2.0-dev', '1.2'].every(v => tool.numeroAffiche(v) === '1.2') && tool.numeroAffiche('2.0.3') === '2.0' && tool.numeroAffiche('10.11.12') === '10.11');
 
   await serve();
   browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -425,11 +671,23 @@ try {
   await sansPlanter('360 px fr', () => run({ id: 'français sombre à 360 px', lang: 'fr', scheme: 'dark', width: 360, oneLine: false }));
   await sansPlanter('360 px en', () => run({ id: 'anglais clair à 360 px', lang: 'en', scheme: 'light', width: 360, oneLine: false }));
 
+  // 7. La fenêtre « passez à la version X.Y » : les deux langues, les trois thèmes (clair, sombre CHOISI, sombre du système), le tour complet (clavier, souris) dans les deux premières ; étroit, bas ; un autre numéro.
+  await sansPlanter('fenêtre, français clair', () => runUpgrade({ id: 'fenêtre, français clair', lang: 'fr', scheme: 'light', full: true }));
+  await sansPlanter('fenêtre, anglais sombre', () => runUpgrade({ id: 'fenêtre, anglais sombre', lang: 'en', scheme: 'dark', full: true }));
+  await sansPlanter('fenêtre, français, sombre choisi', () => runUpgrade({ id: 'fenêtre, français, sombre choisi dans le widget', lang: 'fr', scheme: 'light', theme: 'dark' }));
+  await sansPlanter('fenêtre, anglais, clair choisi', () => runUpgrade({ id: 'fenêtre, anglais, clair choisi dans le widget', lang: 'en', scheme: 'dark', theme: 'light' }));
+  await sansPlanter('fenêtre, français sombre du système', () => runUpgrade({ id: 'fenêtre, français, sombre du système', lang: 'fr', scheme: 'dark' }));
+  await sansPlanter('fenêtre à 360 px', () => runUpgrade({ id: 'fenêtre, français clair à 360 x 560', lang: 'fr', scheme: 'light', width: 360, height: 560 }));
+  await sansPlanter('fenêtre à 360 x 300', () => runUpgrade({ id: 'fenêtre, anglais sombre à 360 x 300 (le voile défile)', lang: 'en', scheme: 'dark', width: 360, height: 300 }));
+  await sansPlanter('fenêtre, bêta composée pour la 2.0.3', () => runUpgrade({ id: 'fenêtre, bêta composée pour la 2.0.3', lang: 'fr', scheme: 'light', dir: 'beta-v2', number: '2.0' }));
+  await sansPlanter('fenêtre, bêta composée pour la 2.0.3, en anglais', () => runUpgrade({ id: 'fenêtre, bêta composée pour la 2.0.3, en anglais', lang: 'en', scheme: 'light', dir: 'beta-v2', number: '2.0' }));
+
   // 6. L'ancien code : la bêta d'avant n'a ni bandeau ni fichier du bandeau.
   const { context, page, log } = await ouvrir({ dir: 'beta-nue', lang: 'fr', scheme: 'light' });
   const old = await bannerFacts(page);
   const oldFiles = await page.evaluate(() => performance.getEntriesByType('resource').map(e => e.name).filter(name => /beta-bandeau/.test(name)));
-  check('la bêta d\'avant (sans bandeau) n\'a ni bandeau ni fichier du bandeau : les vérifications ci-dessus lui donneraient tort', old === null && oldFiles.length === 0 && log.errors.length === 0, { bandeau: old === null, fichiers: oldFiles, errors: log.errors.slice(0, 2) });
+  const oldWindow = await upgradeFacts(page);
+  check('la bêta d\'avant (sans bandeau) n\'a ni bandeau, ni fenêtre « passez à la version », ni fichier du bandeau : les vérifications ci-dessus lui donneraient tort', old === null && oldWindow === null && oldFiles.length === 0 && log.errors.length === 0, { bandeau: old === null, fenetre: oldWindow === null, fichiers: oldFiles, errors: log.errors.slice(0, 2) });
   await context.close();
 } catch (e) {
   check('le banc va jusqu\'au bout', false, String((e && e.message) || e).split('\n')[0]);

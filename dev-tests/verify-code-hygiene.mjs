@@ -1768,7 +1768,7 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
     for (const doc of readdirSync(documents, { withFileTypes: true })) {
       if (doc.isDirectory()) { if (doc.name === 'screenshots') cpSync(join(documents, doc.name), join(arbre, doc.name), { recursive: true }); continue; }
       writeFileSync(join(arbre, doc.name), readFileSync(join(documents, doc.name), 'utf8')
-        .replace(/\{\{VERSION\}\}/g, version).replace(/\{\{DATE_FR\}\}/g, '14 octobre 2026').replace(/\{\{DATE_EN\}\}/g, 'October 14, 2026').replace(/\{\{DATE\}\}/g, '2026-10-14'));
+        .replace(/\{\{VERSION\}\}/g, version).replace(/\{\{VERSION_COURTE\}\}/g, version.replace(/^(\d+\.\d+)\..*$/, '$1')).replace(/\{\{DATE_FR\}\}/g, '14 octobre 2026').replace(/\{\{DATE_EN\}\}/g, 'October 14, 2026').replace(/\{\{DATE\}\}/g, '2026-10-14'));
     }
     const lancer = () => {
       const run = spawnSync(process.execPath, [join(ROOT, 'outils/depot-propre/controles.mjs'), arbre, '--version', version], { encoding: 'utf8', timeout: 120000 });

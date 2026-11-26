@@ -98,3 +98,60 @@
 #pp-beta-guard .pp-beta-guard-link { color: var(--accent-ink); font-weight: 600; overflow-wrap: anywhere; }
 #pp-beta-guard .pp-beta-guard-link:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 @media print { #pp-beta-guard { display: none; } }
+
+/* La fenêtre « Il est temps de passer à la version X.Y » (demande du porteur, 26/11, js/beta-bandeau.js) : à chaque ouverture de la bêta, une carte au milieu d'un voile qui couvre la page (rien derrière
+   ne reçoit la souris). Mêmes jetons que le bandeau et le garde-fou (clair, sombre choisi et sombre du système) : le texte garde 4,5:1 au moins sur le fond de la carte dans les trois. Sous le garde-fou
+   (z-index plus haut) : s'il se déclenche, il retire la fenêtre. */
+#pp-beta-upgrade {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2147482000;
+  display: flex;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  font: 14px/1.5 var(--font-ui);
+}
+#pp-beta-upgrade .pp-beta-upgrade-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 460px;
+  margin: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  outline: none;
+}
+#pp-beta-upgrade .pp-beta-upgrade-title { margin: 0 0 10px; font-size: 16px; line-height: 1.35; font-weight: 700; }
+#pp-beta-upgrade .pp-beta-upgrade-text { margin: 0 0 8px; }
+#pp-beta-upgrade .pp-beta-upgrade-address { display: block; margin: 0 0 16px; color: var(--accent-ink); font-weight: 600; overflow-wrap: anywhere; }
+#pp-beta-upgrade .pp-beta-upgrade-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+#pp-beta-upgrade .pp-beta-upgrade-news,
+#pp-beta-upgrade .pp-beta-upgrade-keep {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+#pp-beta-upgrade .pp-beta-upgrade-news { background: var(--accent-solid); color: #fff; }
+#pp-beta-upgrade .pp-beta-upgrade-news:hover { background: var(--accent-solid-hover); }
+#pp-beta-upgrade .pp-beta-upgrade-keep { border-color: var(--border); background: transparent; color: var(--text); }
+#pp-beta-upgrade .pp-beta-upgrade-keep:hover { background: var(--accent-soft); }
+#pp-beta-upgrade .pp-beta-upgrade-address:focus-visible,
+#pp-beta-upgrade .pp-beta-upgrade-news:focus-visible,
+#pp-beta-upgrade .pp-beta-upgrade-keep:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+@media print { #pp-beta-upgrade { display: none; } }
