@@ -1785,11 +1785,49 @@ const DocxExport = (function () {
     // (`ctx.sectionStart` : la première page de la section est déjà ouverte).
     const flow = { ctx, isTopLevel, widthTwip, keepNext, headingMarkers: isTopLevel ? (ctx.headingMarkers || headingMarkersOf(container)) : null, pendingPageBreak: false, atSectionStart: isTopLevel && !!ctx.sectionStart };
     const blocks = [];
-    for (const node of Array.from(container.childNodes)) {
-      for (const block of await blocksFromNode(node, flow)) blocks.push(block);
+    const nodes = Array.from(container.childNodes);
+    for (let i = 0; i < nodes.length; i += 1) {
+      // « En bas de la page » (js/bottom-anchor.js) : les blocs calés qui se suivent s'écrivent d'un seul tenant (anchoredRunBlocks).
+      const run = isTopLevel ? BottomAnchor.runFrom(nodes, i, nodes.length) : null;
+      const written = run ? await anchoredRunBlocks(run.members, nodes.slice(i + run.members.length), flow) : await blocksFromNode(nodes[i], flow);
+      for (const block of written) blocks.push(block);
+      if (run) i += run.members.length - 1;
     }
     // Un sommaire n'a de sens qu'à la racine du document : il y prend la place de son repère (dans un document par sections, après la dernière : `ctx.deferToc`).
     return isTopLevel && !ctx.deferToc ? withToc(blocks, ctx) : blocks;
+  }
+
+  // « En bas de la page » : une suite de blocs calés devient un tableau flottant d'une case (w:tblpPr, ancré à la marge, calé au BAS de la zone de texte : Word le pose au bas de la page où tombe
+  // le paragraphe qui le suit), qui porte les blocs de la suite ; ce paragraphe d'un point de haut, juste derrière lui, le tient sur la page où le texte finit. Le bloc qui vient ensuite
+  // ouvre la page d'après (comme dans l'éditeur), sauf un saut de page posé à la main, qui la referme lui-même (un second saut ferait une page blanche) et la fin du texte. Une suite
+  // plus haute qu'une page, Word la pose comme le reste du texte : un tableau flottant plus haut que la page ne se cale pas.
+  async function anchoredRunBlocks(members, followers, flow) {
+    const written = await carryingBreak(async (node, f) => floatingRunBlocks(members, f))(members[0], flow);
+    const next = followers.find(n => !(n.nodeType === Node.TEXT_NODE && !n.nodeValue.trim()));
+    const closedByMarker = !!next && next.nodeType === Node.ELEMENT_NODE && next.classList.contains('page-break-marker');
+    if (next && !closedByMarker) flow.pendingPageBreak = true;
+    return written;
+  }
+
+  async function floatingRunBlocks(members, flow) {
+    const cellFlow = { ctx: flow.ctx, isTopLevel: false, widthTwip: CONTENT_WIDTH_TWIP, keepNext: false, headingMarkers: flow.headingMarkers, pendingPageBreak: false, atSectionStart: false };
+    let children = [];
+    for (const member of members) for (const block of await blocksFromNode(member, cellFlow)) children.push(block);
+    if (!children.length) return [];
+    // Une case ne finit pas par un tableau.
+    if (children[children.length - 1] instanceof docx.Table) children = children.concat([new docx.Paragraph('')]);
+    const cell = new docx.TableCell({ children, width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+    const table = new docx.Table({
+      rows: [new docx.TableRow({ children: [cell], cantSplit: true })],
+      width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: [CONTENT_WIDTH_TWIP], layout: docx.TableLayoutType.FIXED,
+      float: {
+        horizontalAnchor: docx.TableAnchorType.MARGIN, relativeHorizontalPosition: docx.RelativeHorizontalPosition.LEFT,
+        verticalAnchor: docx.TableAnchorType.MARGIN, relativeVerticalPosition: docx.RelativeVerticalPosition.BOTTOM,
+        topFromText: 0, bottomFromText: 0, leftFromText: 0, rightFromText: 0,
+        overlap: docx.OverlapType.NEVER,
+      },
+    });
+    return [table, new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: PAGE_BREAK_CARRIER_TWIP, lineRule: 'exact' } })];
   }
 
   const withToc = (blocks, ctx) => blocks.flatMap(b => (b && b.__tocPlaceholder ? buildTocBlocks(ctx, b.pageBreakBefore, b.options) : [b]));

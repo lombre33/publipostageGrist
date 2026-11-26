@@ -39,6 +39,7 @@
     "#v2-btn-align-right": {"class": "model", "start": "para"},
     "#v2-btn-align-justify": {"class": "model", "start": "para"},
     "#v2-btn-keep-next": {"class": "model", "start": "para"},
+    "#v2-btn-bottom-anchor": {"class": "model", "start": "para"},
     "#v2-btn-rtl": {"class": "model", "start": "para"},
     "#v2-btn-bullet": {"class": "model", "start": "para"},
     "#v2-btn-bullet-disc": {"class": "model", "start": "para"},

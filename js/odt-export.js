@@ -352,11 +352,43 @@ const OdtExport = (function () {
       if (pending.some(node => node.nodeType === 1 || /\S/.test(node.nodeValue))) out += paragraphXml(ctx, container, pending, opts);
       pending = [];
     };
-    Array.from(container.childNodes).forEach((node) => {
-      if (node.nodeType === 1 && BLOCK_TAGS.test(node.tagName)) { flush(); out += blockXml(ctx, node, opts); } else pending.push(node);
-    });
+    const nodes = Array.from(container.childNodes);
+    for (let i = 0; i < nodes.length; i += 1) {
+      const node = nodes[i];
+      if (node.nodeType === 1 && BLOCK_TAGS.test(node.tagName)) {
+        flush();
+        // « En bas de la page » (js/bottom-anchor.js) : les blocs calés du corps du document qui se suivent s'écrivent d'un seul tenant (anchoredRunXml).
+        const run = container === ctx.root ? BottomAnchor.runFrom(nodes, i, nodes.length) : null;
+        if (run) {
+          out += anchoredRunXml(ctx, run.members, nodes.slice(i + run.members.length));
+          i += run.members.length - 1;
+        } else out += blockXml(ctx, node, opts);
+      } else pending.push(node);
+    }
     flush();
     return out;
+  }
+  // « En bas de la page » : une suite de blocs calés devient un cadre de texte (draw:text-box) ancré au paragraphe d'un point de haut qui le porte, calé au BAS de la zone de texte de la page
+  // (style:vertical-pos="bottom", style:vertical-rel="page-content") et sans texte à côté (style:wrap="none" : le texte passe au-dessus ou, s'il n'y a plus de place, à la page suivante). Le
+  // bloc qui vient ensuite ouvre la page d'après (comme dans l'éditeur), sauf un saut de page posé à la main, qui la referme lui-même (un second saut ferait une page blanche) et la fin du
+  // texte. Un saut de page demandé avant la suite est porté par le paragraphe d'ancrage : un saut dans un cadre ne ferait rien.
+  function anchoredRunXml(ctx, members, followers) {
+    const breakBefore = takeBreak(ctx);
+    ctx.flow.started = true;
+    ctx.depth += 1;
+    const inner = members.map(member => blockXml(ctx, member, {})).join('');
+    ctx.depth -= 1;
+    const next = followers.find(n => !(n.nodeType === 3 && !n.nodeValue.trim()));
+    const closedByMarker = !!next && next.nodeType === 1 && next.classList.contains('page-break-marker');
+    if (next && !closedByMarker) ctx.flow.pageBreak = true;
+    if (!inner) return '';
+    ctx.frames += 1;
+    const paragraph = styleNameOf(ctx, 'P', 'bottomAnchor|' + breakBefore, name => '<style:style style:name="' + name + '" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:line-height="100%"'
+      + (breakBefore ? ' fo:break-before="page"' : '') + '/><style:text-properties fo:font-size="1pt"/></style:style>');
+    const frame = styleNameOf(ctx, 'fr', 'bottomAnchor', name => '<style:style style:name="' + name + '" style:family="graphic"><style:graphic-properties style:wrap="none" style:run-through="foreground" style:vertical-pos="bottom" style:vertical-rel="page-content"'
+      + ' style:horizontal-pos="left" style:horizontal-rel="page-content" fo:padding="0cm" fo:border="none" style:shadow="none"/></style:style>');
+    return '<text:p text:style-name="' + paragraph + '"><draw:frame draw:style-name="' + frame + '" draw:name="BottomAnchor' + ctx.frames + '" text:anchor-type="paragraph" svg:width="' + centimeters(ctx.contentWidthPt) + '" draw:z-index="' + ctx.frames + '">'
+      + '<draw:text-box fo:min-height="0.1cm">' + inner + '</draw:text-box></draw:frame></text:p>';
   }
   function blockXml(ctx, el, options) {
     const opts = options || {};
@@ -691,6 +723,7 @@ const OdtExport = (function () {
     ExportCommon.anchorFirstPageImages(root);
     await prepareImages(ctx, root);
     collectHeadings(ctx, root);
+    ctx.root = root;
     const body = blocksOf(ctx, root, {});
     const zones = await zonesXml(ctx, zoneSet);
     const zip = new JSZip();

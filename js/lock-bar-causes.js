@@ -165,6 +165,7 @@ const LockBarCauses = (function () {
   });
   const PLACE = {
     'keepNext.notHere': placeFinding('lockBubble.bar.chk.noParagraph', 'lockBubble.bar.fix.place.paragraph'),
+    'bottomAnchor.notHere': placeFinding('lockBubble.bar.chk.notTopBlock', 'lockBubble.bar.fix.place.topBlock'),
     'paragraphFormat.notHere': placeFinding('lockBubble.bar.chk.noParagraph', 'lockBubble.bar.fix.place.paragraph'),
     'textDirection.notHere': placeFinding('lockBubble.bar.chk.noText', 'lockBubble.bar.fix.place.text'),
     'bulletFormat.notHere': place => ({ checks: [no(t('lockBubble.bar.chk.notBullet'), t('lockBubble.bar.chk.cursorIn', { place: placeText(place) }))], fix: t('lockBubble.bar.fix.place.bullet') }),

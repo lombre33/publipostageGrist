@@ -109,6 +109,9 @@ const I18nTextsFormat = {
   'keepNext.row': { fr: 'Garder avec le suivant', en: 'Keep with next' },
   'keepNext.aria': { fr: 'Garder avec le suivant : le paragraphe reste sur la même page que le bloc qui le suit', en: 'Keep with next: the paragraph stays on the same page as the block that follows it' },
   'keepNext.notHere': { fr: 'Seulement pour les paragraphes du texte (ni titre, ni légende, ni tableau, liste, colonne, encadré ou citation, ni en-tête ou pied de page)', en: 'Only for text paragraphs (not headings, captions, tables, lists, columns, callouts, quotes, headers or footers)' },
+  'bottomAnchor.row': { fr: 'En bas de la page', en: 'At the bottom of the page' },
+  'bottomAnchor.aria': { fr: 'En bas de la page : le bloc se pose au bas de la page où il tombe, quelle que soit la longueur du texte au-dessus', en: 'At the bottom of the page: the block sits at the foot of the page it falls on, however long the text above it' },
+  'bottomAnchor.notHere': { fr: 'Seulement pour les blocs du texte (ni un bloc de texte conditionnel, ni un en-tête ou un pied de page, ni un cadre libre ou un sommaire)', en: 'Only for blocks of the text (not a conditional text block, a header or a footer, a free frame or a table of contents)' },
   // « Paragraphe… » (js/paragraph-format.js) : la ligne du menu Alignement, la raison de son grisage et la fenêtre de l'interligne et des espaces avant et après.
   'paragraphFormat.row': { fr: 'Paragraphe…', en: 'Paragraph…' },
   'paragraphFormat.aria': { fr: 'Paragraphe : interligne, espaces et retraits', en: 'Paragraph: line spacing, spaces and indents' },

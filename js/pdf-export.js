@@ -3813,7 +3813,16 @@ const PdfExport = (function () {
     // (ni décodage ni écriture) et la page restait prise du premier au dernier cadre (11/11 : 24 diapositives de 140 cadres = un arrêt de 31 s) - sans clic, sans coin d'état qui se peint.
     // Au premier niveau, la boucle rend donc la main entre deux nœuds quand la tranche dure plus de 40 ms (js/work-pacer.js) ; rien ailleurs (une colonne, un encadré, un cadre sont petits).
     if (isTopLevel && typeof WorkPacer !== 'undefined') st.pace = WorkPacer.create();
-    for (const child of Array.from(root.childNodes)) { await visitNode(st, child); if (st.pace) await st.pace(); }
+    for (const child of Array.from(root.childNodes)) {
+      if (isTopLevel) closeAnchorRunBefore(st, child);
+      const anchored = isTopLevel && BottomAnchor.isAnchoredElement(child);
+      if (anchored) openAnchorRun(st, child);
+      const from = st.blocks.length;
+      await visitNode(st, child);
+      if (anchored) extendAnchorRun(st, from, child);
+      if (st.pace) await st.pace();
+    }
+    if (isTopLevel) closeAnchorRun(st, null);
     closeKeepRun(st, st.keepRun);
     st.keepRun = null;
     fillTocBlocks(st.tocBlocks, st.headingBlocks);
@@ -3863,6 +3872,8 @@ const PdfExport = (function () {
       // captionKeepRule garde sur une même page (`headOnly` : seule la tête de ce bloc doit y tenir). Tout ce qui n'est pas un bloc à garder la referme
       // de même quand elle compte au moins deux paragraphes. Au-delà de 90 % d'une page, rien à garder (Caption.fitsWithCaption, même plafond).
       keepRun: null, keepHeadCount: 0,
+      // « En bas de la page » (js/bottom-anchor.js) : les suites de blocs calés du texte, dans l'ordre (`anchorRuns`, { blocks, end }) et celle qui se poursuit (`anchorRun`). Voir closeAnchorRun.
+      anchorRuns: [], anchorRun: null, anchorAfter: null,
       // Le bas, dans l'hôte de mesure, du dernier bloc posé.
       lastBlockBottomPx: null,
       // La pause du premier niveau (buildPdfContentFromRoot) : la page respire entre deux nœuds d'un gros modèle. Nulle ailleurs.
@@ -3873,6 +3884,7 @@ const PdfExport = (function () {
   const inFlow = block => !!block && !block._pendingImgNode && !block.absolutePosition;
 
   function pushBlock(st, block, node) {
+    if (st.anchorAfter && !block._anchorEnd) { st.anchorAfter.next = block; st.anchorAfter = null; }
     if (st.pendingSlotStart != null) { st.slotStarts[st.pendingSlotStart] = st.blocks.length; st.pendingSlotStart = null; }
     if (st.pendingSense && turnPage(block, st.pendingSense)) { st.pageSense = st.pendingSense; st.pendingSense = null; }
     if (st.sectionPage && block && typeof block === 'object') block._page = st.sectionPage;
@@ -3922,6 +3934,67 @@ const PdfExport = (function () {
       if (text) { if (!text.id) text.id = KEEP_HEAD_ID + st.keepHeadCount++; return text; }
     }
     return null;
+  }
+
+  // « En bas de la page » (js/bottom-anchor.js). Le HTML parcouru, les blocs de premier niveau calés qui se suivent forment une suite (`st.anchorRun`) : ses blocs posés dans le flux,
+  // puis une SENTINELLE, un texte invisible de 0,1 pt que la suite referme (closeAnchorRun) et dont la position mesurée par pdfmake dit où la suite finit. Ce qui la suit ouvre la page d'après
+  // (`pendingPageBreak`), sauf un saut de page posé à la main, qui la referme lui-même (un second saut ferait une page blanche), et la fin du texte. La place qui reste sous la suite est lue
+  // sur la mesure (settleAnchorRuns) et posée au-dessus du premier bloc (applyAnchorPlans) : une marge, rien d'autre ne bouge.
+  // Une suite s'ouvre sur une première sentinelle (même texte invisible) : sa position dit si la suite commence en haut d'une page (settleAnchorRuns).
+  function openAnchorRun(st, node) {
+    if (st.anchorRun) return;
+    const start = { text: ' ', fontSize: ANCHOR_END_PT, lineHeight: 1, margin: [0, 0, 0, 0], _anchorStart: true };
+    pushBlock(st, start, node);
+    st.anchorRun = { start, blocks: [], end: null, node: null, next: null };
+    st.anchorRuns.push(st.anchorRun);
+  }
+  function extendAnchorRun(st, from, node) {
+    const added = st.blocks.slice(from).filter(inFlow);
+    if (!added.length) return;
+    st.anchorRun.blocks.push(...added);
+    st.anchorRun.node = node;
+  }
+  // `next` : le nœud qui referme la suite (null : la fin du texte). Un texte blanc entre deux blocs calés ne la referme pas.
+  function closeAnchorRunBefore(st, next) {
+    if (!st.anchorRun || (next.nodeType === Node.TEXT_NODE && !next.nodeValue.trim()) || BottomAnchor.isAnchoredElement(next)) return;
+    closeAnchorRun(st, next);
+  }
+  function closeAnchorRun(st, next) {
+    const run = st.anchorRun;
+    st.anchorRun = null;
+    if (!run) return;
+    // Aucun bloc dans le flux (rien à caler) : la suite n'existe pas.
+    if (!run.blocks.length) { st.anchorRuns.splice(st.anchorRuns.indexOf(run), 1); return; }
+    run.end = { text: ' ', fontSize: ANCHOR_END_PT, lineHeight: 1, margin: [0, 0, 0, 0], _anchorEnd: true };
+    pushBlock(st, run.end, run.node);
+    const manualBreak = !!next && next.nodeType === Node.ELEMENT_NODE && next.classList.contains('page-break-marker');
+    if (next && !manualBreak) { st.pendingPageBreak = true; st.anchorAfter = run; }
+  }
+  const ANCHOR_END_PT = 0.1;
+  // Le bas de la suite se pose au bas de la page : le dernier bloc ne garde pas la marge du dessous (la sentinelle suit, et l'éditeur n'en laisse aucune), et la place mesurée s'ajoute
+  // au-dessus du premier (`plans` : par suite, { breakBefore, spacerPt, tall }, ce que la mesure a appris de la dernière mise en page). Une suite plus haute qu'une page (`tall`) se
+  // range comme le texte : le bloc qui la suit n'ouvre pas de page.
+  function applyAnchorPlans(content, plans) {
+    (content._anchorRuns || []).forEach((run, i) => {
+      const last = run.blocks[run.blocks.length - 1];
+      const m = last.margin;
+      if (Array.isArray(m) && m.length === 4) last.margin = [m[0], m[1], m[2], 0];
+      else if (Array.isArray(m) && m.length === 2) last.margin = [m[0], m[1], m[0], 0];
+      else if (typeof m === 'number') last.margin = [m, m, m, 0];
+      const plan = plans[i];
+      if (!plan) return;
+      if (plan.tall) { if (run.next) clearPageBreakBefore(run.next); return; }
+      if (plan.breakBefore) run.blocks[0].pageBreak = 'before';
+      if (plan.spacerPt > 0) addTopMargin(run.blocks[0], plan.spacerPt);
+    });
+  }
+  // Le saut `before` d'un bloc, posé sur lui ou sur son premier enfant (turnPage dit où).
+  function clearPageBreakBefore(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.some(child => clearPageBreakBefore(child)); return; }
+    if (node.pageBreak === 'before') { delete node.pageBreak; return; }
+    ['stack', 'columns', 'ul', 'ol'].some(key => node[key] && clearPageBreakBefore(node[key]));
+    if (node.table && Array.isArray(node.table.body)) clearPageBreakBefore(node.table.body);
   }
 
   function closeKeepRun(st, run, target, targetPt) {
@@ -4252,6 +4325,7 @@ const PdfExport = (function () {
     content._slotStarts = st.slotStarts;
     content._captionPairs = st.captionPairs;
     content._frames = st.frames;
+    content._anchorRuns = st.anchorRuns;
     content._stretchedBlocks = stretchedBlocks;
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(st.rootRect, blocks, st.sourceNodes, st.blockSlots).concat(st.nestedPendingAll); }
@@ -4856,9 +4930,12 @@ const PdfExport = (function () {
     // Images habillées qui ne tiennent pas dans ce qui reste de leur page : leur ancre (et son image) passe en haut de la page suivante (rang parmi
     // les ancres, dans l'ordre du document), cf. settleFloatBreaks.
     const floatBreaks = new Set();
+    // « En bas de la page » : ce que la mesure apprend de chaque suite de blocs calés, dans l'ordre du texte - { breakBefore, spacerPt } (settleAnchorRuns).
+    const anchorPlans = [];
     const buildContent = async () => {
       const built = await htmlToPdfContent(inlinedHtml, true);
       floatAnchorsOf(built).forEach((anchor, i) => { const target = floatMovesWith(anchor); if (target && floatBreaks.has(i)) target.pageBreak = 'before'; });
+      applyAnchorPlans(built, anchorPlans);
       return built;
     };
     stretchExtra = new Map();
@@ -4888,10 +4965,10 @@ const PdfExport = (function () {
     // de la passe de mesure.
     const hasFloatOverlays = floatAnchorsOf(content).length > 0;
     // Un contenu qui mêle des formats de page est mesuré lui aussi : le nombre de pages de chaque suite (`_runPages`) donne à l'en-tête et au pied la numérotation du document entier.
-    if (hasFootnotes || hasFloatOverlays || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0 || runsOf(content) || pageBadgesOf(content).length > 0) {
+    if (hasFootnotes || hasFloatOverlays || (content._anchorRuns || []).length > 0 || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0 || runsOf(content) || pageBadgesOf(content).length > 0) {
       // Marges de cette passe : identiques à celles de la passe réelle, pour que la pagination mesurée ici corresponde exactement au document final.
       const { topMarginPt, bottomMarginPt } = pageMarginsPt(headerFooterChunks, hasFootnotes);
-      content = await relocateMeasured(content, { buildContent, measure, floatBreaks, hasFloatOverlays, topMarginPt, bottomMarginPt });
+      content = await relocateMeasured(content, { buildContent, measure, floatBreaks, anchorPlans, hasFloatOverlays, topMarginPt, bottomMarginPt });
     }
     // Filet de sécurité résiduel : une image dont ni bracket ni container n'a pu être résolu garderait sinon son absolutePosition placeholder (0,0)
     // indéfiniment, coincée au coin de la page. Repli : aucune position absolue, rendue en flux normal - pas au pixel près, mais visible au bon
@@ -4906,6 +4983,7 @@ const PdfExport = (function () {
     const { buildContent, measure, hasFloatOverlays, topMarginPt, bottomMarginPt } = pass;
     await measure(content);
     if (hasFloatOverlays) content = await settleFloatBreaks(content, pass);
+    if ((content._anchorRuns || []).length) content = await settleAnchorRuns(content, pass);
     const measured = measuredLayoutOf(content);
     const runPages = content._runPages;
     content = await buildContent();
@@ -4913,6 +4991,55 @@ const PdfExport = (function () {
     placeMeasured(content, measured, topMarginPt, bottomMarginPt);
     return content;
   }
+
+  // « En bas de la page » : la mesure de pdfmake dit où chaque suite de blocs calés finit (la position de sa sentinelle). Une suite qui ne tient pas dans ce qui reste de sa page ouvre la
+  // page suivante (`breakBefore`) : on mesure de nouveau, jusqu'à ce que toutes tiennent, ou ouvrent déjà leur page (plus hautes qu'une page : elles se rangent comme le texte). La place
+  // qui reste au bas de la page, une fois chaque suite à sa place, devient l'espace posé au-dessus de son premier bloc (`spacerPt`), puis une dernière mesure voit la mise en page finale
+  // (la page des titres du sommaire, des notes, des images en calque). Rend le dernier contenu mesuré.
+  async function settleAnchorRuns(content, pass) {
+    const { buildContent, measure, anchorPlans, bottomMarginPt, topMarginPt } = pass;
+    const planOf = i => anchorPlans[i] || (anchorPlans[i] = { breakBefore: false, spacerPt: 0, tall: false });
+    const headOf = run => firstPosition(firstTextOf(run.blocks[0]) || run.blocks[0]);
+    for (let round = 0; round < 4; round += 1) {
+      let changed = false;
+      (content._anchorRuns || []).forEach((run, i) => {
+        const plan = planOf(i);
+        const head = headOf(run);
+        const end = firstPosition(run.end);
+        if (plan.tall || !head || !end || end.pageNumber === head.pageNumber) return;
+        // La suite déborde de sa page. En haut d'une page (déjà ouverte par un saut, ou née là), elle est plus haute qu'une page : elle se range comme le texte. Ailleurs, elle ouvre la page suivante.
+        const start = firstPosition(run.start);
+        const atTop = plan.breakBefore || (start && start.pageNumber === head.pageNumber && start.top <= topMarginPt + ANCHOR_SAFETY_PT);
+        if (atTop) { plan.tall = true; plan.breakBefore = false; } else plan.breakBefore = true;
+        changed = true;
+      });
+      if (!changed) break;
+      content = await buildContent();
+      await measure(content);
+    }
+    let spaced = false;
+    (content._anchorRuns || []).forEach((run, i) => {
+      const plan = planOf(i);
+      const head = headOf(run);
+      const end = firstPosition(run.end);
+      if (plan.tall || !head || !end || end.pageNumber !== head.pageNumber) return;
+      // Une suite que le texte repousse en haut d'une page (sa première sentinelle est restée sur la page d'avant) : la marge posée au-dessus de son premier bloc se consommerait sur la
+      // page d'avant, qui n'a plus de place ; le saut avant le bloc la fait tomber sur la bonne page, avec la même mise en page.
+      const start = firstPosition(run.start);
+      if (start && start.pageNumber !== head.pageNumber && !plan.breakBefore) { plan.breakBefore = true; spaced = true; }
+      // Le bas du corps de la page, moins une demi-pointe : la sentinelle (0,1 pt) doit tenir, sinon elle ouvre une page.
+      const slackPt = pageHeightAt(end) - bottomMarginPt - end.top - ANCHOR_SAFETY_PT + plan.spacerPt;
+      const spacerPt = slackPt > 0.5 ? roundHalfPt(slackPt) : 0;
+      if (Math.abs(spacerPt - plan.spacerPt) > 0.01) { plan.spacerPt = spacerPt; spaced = true; }
+    });
+    if (spaced) {
+      content = await buildContent();
+      await measure(content);
+    }
+    return content;
+  }
+  const ANCHOR_SAFETY_PT = 0.5;
+  const roundHalfPt = pt => Math.floor(pt * 100) / 100;
 
   // Une image habillée qui ne tient pas dans ce qui reste de sa page (elle serait coupée par le bord, ou le texte à côté d'elle passerait à la page
   // suivante sans elle) : son ancre ouvre la page suivante, avec elle. Ce qui précède reste en place, ce qui suit se range à côté d'elle comme avant.

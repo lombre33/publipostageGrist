@@ -560,7 +560,11 @@ const HeaderFooterPreview = (function () {
     let lastBlock = null;
     // Les légendes d'un bloc sont comptées avec lui : on saute leurs rangs.
     let counted = 0;
-    const cutAfterLast = () => breaks.push({ afterEl: lastBlock, forced: false, remainingPx: 0 });
+    // « En bas de la page » (js/bottom-anchor.js) : la suite de blocs calés dont la page n'est pas encore refermée (`{ first, last }`) ; la coupure qui la referme, forcée ou non, la porte (`anchor`), et la
+    // pagination la pose au bas de la page par un décalage visuel (anchorShiftOf). Une suite qu'aucune coupure ne referme est sur la dernière page : `breaks.tailAnchor`.
+    let pendingAnchor = null;
+    const takeAnchor = () => { const anchor = pendingAnchor; pendingAnchor = null; return anchor ? { anchor } : {}; };
+    const cutAfterLast = () => breaks.push(Object.assign({ afterEl: lastBlock, forced: false, remainingPx: 0 }, takeAnchor()));
     // L'écart au-dessus de `el` qui compte dans la place prise : pas en haut d'une page ouverte par une coupure (la réserve de la page qui finit absorbe cette marge ; en haut
     // de la première page, elle est dans le remplissage de la feuille et compte), ni pour le bloc qui suit une zone à deux colonnes, que la zone a déjà compté (`gapCountedFor`).
     let gapCountedFor = null;
@@ -626,6 +630,26 @@ const HeaderFooterPreview = (function () {
       lastBlock = child;
       gapCountedFor = next;
     };
+    // « En bas de la page » : la suite de blocs calés qui commence au bloc `index` tient d'un seul tenant dans la place restante de la page, ou ouvre la page suivante ; elle finit sa page (ce qui
+    // la suit repart en haut de la page d'après), sauf devant un saut de page posé à la main, qui la referme lui-même, et en fin de texte. Faux (rien n'est posé, les blocs se rangent comme
+    // les autres) quand la suite est plus haute qu'une page.
+    const placeAnchorRun = (run, index) => {
+      const { members } = run;
+      const first = members[0];
+      const last = members[members.length - 1];
+      const gap = leadGap(first);
+      const runPx = (last.getBoundingClientRect().bottom - first.getBoundingClientRect().top) / zoom;
+      if (!BottomAnchor.fits(gap + runPx, pageContentHeightPx)) return false;
+      if (consumed > 0 && gap + runPx > pageContentHeightPx - consumed) { cutAfterLast(); consumed = runPx; }
+      else { consumed += gap + runPx; }
+      lastBlock = last;
+      counted = index + members.length;
+      pendingAnchor = { first, last };
+      let next = index + members.length;
+      while (next < blankTailStart && (blankBeforeBreak.has(next) || (tiptapShown && !children[next].getClientRects().length))) next++;
+      if (next < blankTailStart && !children[next].classList.contains('page-break-marker')) { cutAfterLast(); consumed = 0; }
+      return true;
+    };
     const placeBlock = block => {
       const { child, index, height, captions, captionPx } = block;
       const gap = leadGap(child);
@@ -652,7 +676,7 @@ const HeaderFooterPreview = (function () {
       const height = heightOf(child);
       if (child.classList.contains('page-break-marker')) {
         if (index >= blankTailStart) return;
-        breaks.push({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
+        breaks.push(Object.assign({ afterEl: child, forced: true, remainingPx: Math.max(0, pageContentHeightPx - consumed) }, takeAnchor()));
         consumed = 0;
         lastBlock = child;
         const turn = capacityOf ? PageSections.senseOf(child) : null;
@@ -660,6 +684,8 @@ const HeaderFooterPreview = (function () {
         return;
       }
       if (index >= blankTailStart || blankBeforeBreak.has(index)) return;
+      const anchorRun = BottomAnchor.runFrom(children, index, blankTailStart);
+      if (anchorRun && placeAnchorRun(anchorRun, index)) return;
       keepRunTogether(index);
       const captions = Caption.captionsAfter(child, tailEl);
       const captionPx = captions.length > 0 ? heightBelow(child, captions[captions.length - 1]) : 0;
@@ -670,6 +696,7 @@ const HeaderFooterPreview = (function () {
       else if (cuttableZ) placeCutZone(block, cuttableZ);
       else placeBlock(block);
     });
+    if (pendingAnchor) breaks.tailAnchor = pendingAnchor;
     return breaks;
   }
 
@@ -1590,6 +1617,24 @@ const HeaderFooterPreview = (function () {
     seam.appendChild(cap);
   }
 
+  // « En bas de la page » (js/bottom-anchor.js) : de combien la suite de blocs calés `anchor` ({ first, last }) descend pour que son bas soit celui du corps de la page (pixels de mise en page,
+  // lu sur le DOM déjà mis en page, les réserves d'avant posées). Le décalage est VISUEL (`transform`, posé par layoutPaginationSeams une fois toutes les coupures placées) : il n'ajoute rien à la
+  // hauteur de la page, que la réserve de la coupure garde exacte, et le vide qu'il traverse est celui du bas de la page. `endEl` est le dernier bloc de la page (celui que la coupure suit) : les lignes
+  // vides ou le repère de saut de page qui séparent la suite de la coupure descendent avec elle, au lieu de la recouvrir.
+  function anchorShiftOf(pass, anchor, endEl, pageContentHeightPx) {
+    const bottomRel = (anchor.last.getBoundingClientRect().bottom - pass.tiptapRect.top) / pass.zoom;
+    return { first: anchor.first, end: endEl, px: Math.max(0, pass.bodyTopRel + pageContentHeightPx - bottomRel) };
+  }
+  // La règle de ces décalages : chaque suite descend de sa part, tous les blocs de son premier à celui qui finit sa page.
+  function anchorShiftRules(pass) {
+    const rules = [];
+    pass.anchorShifts.forEach((shift) => {
+      const lo = pass.tiptapChildren.indexOf(shift.first) + 1;
+      const hi = pass.tiptapChildren.indexOf(shift.end) + 1;
+      if (lo > 0 && hi >= lo && shift.px > 0.01) rules.push(SHEET + ' > *:nth-child(n+' + lo + '):nth-child(-n+' + hi + ') { transform: translateY(' + Math.round(shift.px * 100) / 100 + 'px); }');
+    });
+    return rules;
+  }
   // Pose la couture qui sépare la page `i + 1` de la suivante : sa bande, la réserve sous le dernier bloc de la page qui finit, la page qui
   // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
   function placePaginationSeam(pass, brk, i) {
@@ -1623,6 +1668,7 @@ const HeaderFooterPreview = (function () {
     const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove || brk.afterEl).getBoundingClientRect().bottom;
     const afterBottomRel = (afterBottomScreen - tiptapRect.top) / zoom;
     const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
+    if (brk.anchor) pass.anchorShifts.push(anchorShiftOf(pass, brk.anchor, brk.afterEl, pageContentHeightPx));
     if (zoneCut) {
       zoneCut.rules.forEach(rule => { marginRules.push(rule); paginationSteps.add(rule); });
       if (!pass.zoneStrips.has(nthChild)) pass.zoneStrips.set(nthChild, []);
@@ -1675,7 +1721,7 @@ const HeaderFooterPreview = (function () {
   // une) sont dans le document : la lecture les voit.
   function placeSimpleSeamsAtOnce(pass, breaks, start) {
     let count = 0;
-    while (start + count < breaks.length && breaks[start + count].rowIndex == null && !breaks[start + count].zone) count++;
+    while (start + count < breaks.length && breaks[start + count].rowIndex == null && !breaks[start + count].zone && !breaks[start + count].anchor) count++;
     if (count < 2) return 0;
     const { geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren, marginRules, pages } = pass;
     const { enabled, differentFirstPage, headerForPage, footerForPage } = geometry;
@@ -1763,7 +1809,7 @@ const HeaderFooterPreview = (function () {
     // style inline sur `afterEl` (même piège que paginationMarginStyleEl).
     const pass = {
       geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren: Array.from(tiptapEl.children),
-      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop, reserves: [], sections,
+      tableStrips: new Map(), zoneStrips: new Map(), marginRules, pages, pageSheet, bodyTopRel: tiptapPaddingTop, reserves: [], sections, anchorShifts: [],
       // Ce qui change d'une page à l'autre quand certaines sont tournées : la place du corps de la page `k` et la boîte (écart, largeur) de son bas et de son haut dans la feuille.
       capacityOfPage: k => (sections ? geometry.capacityOf(sections.senses[k]) : geometry.pageContentHeightPx),
       boxOfPage: k => (sections ? { gap: sections.gapOf(sections.senses[k]), width: sections.sheetOf(sections.senses[k]) } : null),
@@ -1780,6 +1826,10 @@ const HeaderFooterPreview = (function () {
     // La dernière page, jusqu'à sa hauteur réelle : `.tiptap` ne descend jamais sous le haut du corps de cette page + B + sa marge du bas (le
     // plancher ne gêne pas un contenu plus long). Ajouté à la même feuille de style que les réserves : effacé avec elles.
     marginRules[0] = floorRule(pass.bodyTopRel + pass.capacityOfPage(totalPages - 1) + mPx.bottom);
+    // « En bas de la page » : la suite de la dernière page descend elle aussi (jusqu'au dernier bloc du texte : un repère de saut de page qui finit le texte descend avec elle), puis toutes les suites
+    // se décalent d'un coup, une fois les coupures placées (le décalage ne change aucune mesure, mais celles des coupures se lisent feuille nue).
+    if (breaks.tailAnchor && pass.tiptapChildren.length) pass.anchorShifts.push(anchorShiftOf(pass, breaks.tailAnchor, pass.tiptapChildren[pass.tiptapChildren.length - 1], pass.capacityOfPage(totalPages - 1)));
+    anchorShiftRules(pass).forEach(rule => marginRules.push(rule));
     pass.tableStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ')', strips)));
     // Une zone coupée par une couture est rognée sur la bande que la couture recouvre : son liseré et les bordures de ses colonnes (au survol) s'arrêtent sous
     // le dernier bloc de la page qui finit et reprennent en haut de la page suivante, au lieu de traverser les marges blanches de la couture.

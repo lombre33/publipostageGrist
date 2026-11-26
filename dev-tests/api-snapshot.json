@@ -16,6 +16,7 @@
 "BatchScope":"linkedViewRows:f onViewChange:f pick:f viewRowIds:f viewRowsOf:f",
 "BlockAnim":"TYPES:d createExtension:f isDecor:f openForSelection:f patch:f textOf:f unitAt:f",
 "BookmarkDialog":"open:f",
+"BottomAnchor":"ATTR:d createExtension:f eligibleBlocks:f fits:f isAnchoredElement:f run:f runFrom:f status:f syncRow:f",
 "BulletFormat":"ATTR:d DEFAULT_CHAR:d PRESETS:d VAR:d apply:f colorNormalized:f createExtension:f currentChar:f currentLook:f markerOf:f markup:f normalized:f open:f sizeNormalized:f syncRow:f",
 "Callout":"COLORS:d COLOR_ORDER:d ICON_ORDER:d PRESETS:d PRESET_ORDER:d STATE_COLOR_ORDER:d STATE_PRESETS:d colorOf:f createNode:f hasColor:f iconPng:f insertSignature:f isInside:f isStateColor:f open:f styleText:f wrapSelection:f",
 "Caption":"COLOR:d SIZE_PT:d captionsAfter:f carriesCaption:f createExtension:f fitsWithCaption:f isCaptionElement:f run:f syncButton:f",

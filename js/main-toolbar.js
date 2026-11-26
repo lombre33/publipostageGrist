@@ -344,6 +344,8 @@ const MainToolbar = (function () {
     FormatSlotsMenu.sync(editor);
     // « Garder avec le suivant » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte courant.
     KeepWithNext.syncRow(byId('v2-btn-keep-next'), editor);
+    // « En bas de la page » (menu Alignement) : cochée quand les blocs visés le portent, grisée avec sa raison hors du texte courant.
+    BottomAnchor.syncRow(byId('v2-btn-bottom-anchor'), editor);
     // « Texte de droite à gauche » (menu Alignement) : cochée quand les paragraphes visés le portent, grisée avec sa raison hors du texte.
     TextDirection.syncRow(byId('v2-btn-rtl'), editor);
     // « Paragraphe… » (menu Alignement) : grisée avec sa raison hors du texte courant (titre, légende, en-tête ou pied de page).
@@ -717,6 +719,9 @@ const MainToolbar = (function () {
     // le groupe est grisé (e-mail, macro-modèle, lecture seule, Lecture) : son `tabindex` laisse y arriver au clavier.
     const keepNextRow = byId('v2-btn-keep-next');
     if (keepNextRow) wireCheckRow(keepNextRow, () => KeepWithNext.run(editor));
+    // « En bas de la page » (js/bottom-anchor.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace).
+    const bottomAnchorRow = byId('v2-btn-bottom-anchor');
+    if (bottomAnchorRow) wireCheckRow(bottomAnchorRow, () => BottomAnchor.run(editor));
     // « Texte de droite à gauche » (js/text-direction.js) : ligne à cocher du même panneau, au clic comme au clavier (Entrée, Espace).
     const rtlRow = byId('v2-btn-rtl');
     if (rtlRow) wireCheckRow(rtlRow, () => TextDirection.run(editor));

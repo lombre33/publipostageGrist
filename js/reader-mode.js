@@ -125,7 +125,11 @@ const ReaderMode = (function () {
     let consumed = 0;
     let counted = 0;
     let placedAny = false;
-    const cutBefore = (top, index) => offsets.push({ top, afterIndex: index - 1, remainingPx: 0 });
+    // « En bas de la page » (js/bottom-anchor.js) : la suite de blocs calés dont la page n'est pas encore refermée (`{ first, last }`) ; la coupure qui la referme, forcée ou non, la porte (`anchor`) et
+    // layoutSeams la pose au bas de la page (anchorShiftOf). Une suite qu'aucune coupure ne referme est sur la dernière page : `offsets.tailAnchor`.
+    let pendingAnchor = null;
+    const takeAnchor = () => { const anchor = pendingAnchor; pendingAnchor = null; return anchor ? { anchor } : {}; };
+    const cutBefore = (top, index) => offsets.push(Object.assign({ top, afterIndex: index - 1, remainingPx: 0 }, takeAnchor()));
     // L'écart qui sépare un bloc de celui d'avant (EditorCore.gapAbove : la marge de 6 px d'un tableau, de 4 px d'une citation ou d'un bloc de code, que la hauteur
     // d'aucun des deux ne porte) compte dans la place que la page prend, comme dans l'éditeur (js/header-footer-preview.js:computePageBreaks) ; pas en haut d'une page
     // ouverte par une coupure, dont la réserve de la page qui finit absorbe cette marge (en haut de la première page, elle est dans le remplissage de la feuille et
@@ -198,6 +202,29 @@ const ReaderMode = (function () {
       placedAny = true;
       gapCountedFor = next;
     };
+    // « En bas de la page » : la suite de blocs calés qui commence au bloc `index` tient d'un seul tenant dans la place restante de la page, ou ouvre la page suivante, et finit sa page (ce qui la suit repart
+    // en haut de la page d'après), sauf devant un saut de page posé à la main, qui la referme lui-même, et en fin de texte. Faux (rien n'est posé) quand la suite est plus haute qu'une page.
+    const placeAnchorRun = (run, index, top) => {
+      const { members } = run;
+      const first = members[0];
+      const last = members[members.length - 1];
+      const gap = leadGap(first);
+      const lastRect = last.getBoundingClientRect();
+      const runPx = (lastRect.bottom - first.getBoundingClientRect().top) / zoom;
+      if (!BottomAnchor.fits(gap + runPx, pageContentHeightPx)) return false;
+      placedAny = true;
+      if (consumed > 0 && gap + runPx > pageContentHeightPx - consumed) { cutBefore(top, index); consumed = runPx; }
+      else { consumed += gap + runPx; }
+      counted = index + members.length;
+      pendingAnchor = { first, last };
+      let next = counted;
+      while (next < children.length && rootShown && !children[next].getClientRects().length) next++;
+      if (next < children.length && !children[next].classList.contains('page-break-marker')) {
+        offsets.push(Object.assign({ top: (lastRect.bottom - rootRect.top) / zoom, afterIndex: counted - 1, remainingPx: 0 }, takeAnchor()));
+        consumed = 0;
+      }
+      return true;
+    };
     const placeBlock = block => {
       const { child, index, top, height, captions, captionPx } = block;
       const gap = leadGap(child);
@@ -221,11 +248,13 @@ const ReaderMode = (function () {
       const top = (rect.top - rootRect.top) / zoom;
       const height = rect.height / zoom;
       if (child.classList.contains('page-break-marker')) {
-        offsets.push({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) });
+        offsets.push(Object.assign({ top: top + height, afterIndex: index, remainingPx: Math.max(0, pageContentHeightPx - consumed) }, takeAnchor()));
         consumed = 0;
         placedAny = true;
         return;
       }
+      const anchorRun = BottomAnchor.runFrom(children, index, children.length);
+      if (anchorRun && placeAnchorRun(anchorRun, index, top)) return;
       keepRunTogether(index, top);
       const captions = Caption.captionsAfter(child);
       const captionPx = captions.length > 0 ? heightBelow(child, captions[captions.length - 1]) : 0;
@@ -236,6 +265,7 @@ const ReaderMode = (function () {
       else if (cuttableZ) placeCutZone(block, cuttableZ);
       else placeBlock(block);
     });
+    if (pendingAnchor) offsets.tailAnchor = pendingAnchor;
     return offsets;
   }
   // Ligne vide (Entrée deux fois) : Editor.getHTML() la sérialise en <p></p>. Dans l'éditeur, ProseMirror ne lui garde sa ligne que par un <br
@@ -576,6 +606,22 @@ const ReaderMode = (function () {
     }
     return { edgeTopEl, edgeBottomEl };
   }
+  // « En bas de la page » (js/bottom-anchor.js) : de combien la suite de blocs calés `anchor` ({ first, last }) descend pour que son bas soit celui du corps de la page (pixels de mise en page, lu sur le DOM déjà
+  // mis en page, les réserves d'avant posées). Le décalage est VISUEL (`transform`, posé par layoutSeams une fois toutes les coupures placées) : il n'ajoute rien à la hauteur de la page, que la réserve de la
+  // coupure garde exacte, et traverse le vide du bas de la page. `endEl` est le dernier bloc de la page : un repère de saut de page qui la finit descend avec la suite, au lieu de la recouvrir.
+  function anchorShiftOf(pass, anchor, endEl) {
+    const bottomRel = (anchor.last.getBoundingClientRect().bottom - pass.wrapperRect.top) / pass.zoom;
+    return { first: anchor.first, end: endEl || anchor.last, px: Math.max(0, pass.bodyTopRel + pass.geometry.pageContentHeightPx - bottomRel) };
+  }
+  function anchorShiftRules(pass) {
+    const rules = [];
+    pass.anchorShifts.forEach((shift) => {
+      const lo = pass.wrapperChildren.indexOf(shift.first) + 1;
+      const hi = pass.wrapperChildren.indexOf(shift.end) + 1;
+      if (lo > 0 && hi >= lo && shift.px > 0.01) rules.push(pass.sheetSel + ' > *:nth-child(n+' + lo + '):nth-child(-n+' + hi + ') { transform: translateY(' + Math.round(shift.px * 100) / 100 + 'px); }');
+    });
+    return rules;
+  }
   function placeSeam(pass, offset, i) {
     // Pose la couture qui sépare la page `i + 1` de la suivante : sa bande, la réserve sous le dernier bloc de la page qui finit, et la page qui
     // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
@@ -606,6 +652,7 @@ const ReaderMode = (function () {
     const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom));
     const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
     const remaining = Math.max(0, geometry.pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
+    if (offset.anchor) pass.anchorShifts.push(anchorShiftOf(pass, offset.anchor, el));
     if (zoneCut) {
       zoneCut.rules.forEach(rule => { marginRules.push(rule); steps.add(rule); });
     } else if (rowOpening) {
@@ -691,7 +738,7 @@ const ReaderMode = (function () {
     // document : la lecture les voit.
     const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, pages, footAreaPx, headAreaPx, sheetSel } = pass;
     let count = 0;
-    while (start + count < offsets.length && offsets[start + count].rowIndex == null && !offsets[start + count].zone && wrapperChildren[offsets[start + count].afterIndex]) count++;
+    while (start + count < offsets.length && offsets[start + count].rowIndex == null && !offsets[start + count].zone && !offsets[start + count].anchor && wrapperChildren[offsets[start + count].afterIndex]) count++;
     if (count < 2) return 0;
     const built = [];
     for (let i = 0; i < count; i++) {
@@ -806,7 +853,7 @@ const ReaderMode = (function () {
     // TablePageCut.clipRule).
     const pass = {
       zones: ctx.zones, geometry, totalPages: ctx.totalPages, pageBase: ctx.pageBase || 0, sheetSel: sheetSelector(wrapper), wrapperChildren: ctx.wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom,
-      toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop, reserves: [],
+      toLayoutY, overlay, steps, marginRules, tableStrips: new Map(), pages, footAreaPx, headAreaPx, bodyTopRel: wrapperPaddingTop, reserves: [], anchorShifts: [],
       inline: paginationInline ? createInlineMargins() : null,
     };
     // Les coupures simples d'une suite d'un coup, chaque coupure dans un tableau ou une zone une à une, puis la suite simple d'après d'un coup : un long texte coupe un tableau toutes les
@@ -828,6 +875,9 @@ const ReaderMode = (function () {
     // La dernière page, jusqu'à sa hauteur réelle : la feuille ne descend jamais sous le haut du corps de cette page, plus la hauteur utile d'une
     // page, plus sa marge du bas (le plancher ne gêne pas un contenu plus long).
     marginRules.push(sheetItself(wrapper) + ' { min-height: ' + (pass.bodyTopRel + pageContentHeightPx + mPx.bottom) + 'px; }');
+    // « En bas de la page » : la suite de la dernière page descend aussi (jusqu'au dernier bloc du texte), puis toutes les suites se décalent d'un coup, une fois les coupures placées.
+    if (offsets.tailAnchor && ctx.wrapperChildren.length) pass.anchorShifts.push(anchorShiftOf(pass, offsets.tailAnchor, ctx.wrapperChildren[ctx.wrapperChildren.length - 1]));
+    anchorShiftRules(pass).forEach(rule => marginRules.push(rule));
     pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule(pass.sheetSel + ' > *:nth-child(' + (index + 1) + ')', strips)));
     // Les marges posées en ligne le temps du calcul s'en vont, et la feuille des mêmes règles les remplace : une seule écriture de feuille, une seule relecture.
     if (pass.inline) pass.inline.restoreAll();

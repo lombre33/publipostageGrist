@@ -237,6 +237,7 @@ const I18nTextsReview = {
   'trackList.setting.spacing': { fr: 'Espacement des paragraphes', en: 'Paragraph spacing' },
   'trackList.setting.indent': { fr: 'Retrait', en: 'Indent' },
   'trackList.setting.keepNext': { fr: 'Garder avec le suivant', en: 'Keep with next' },
+  'trackList.setting.bottomAnchor': { fr: 'En bas de la page', en: 'At the bottom of the page' },
   'trackList.setting.cellBackground': { fr: 'Fond de case', en: 'Cell background' },
   'trackList.setting.cellPattern': { fr: 'Motif de fond de case', en: 'Cell background pattern' },
   'trackList.setting.columnWidth': { fr: 'Largeur de colonne', en: 'Column width' },
