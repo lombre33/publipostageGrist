@@ -1107,7 +1107,11 @@ const DocxExport = (function () {
     // Un tableau d'une colonne de zone à deux colonnes se règle sur le texte de sa colonne, plus étroit que la page.
     const columnPx = ExportCommon.zoneColumnWidthPx(tableEl);
     const availableTwip = (columnPx > 0 ? Math.min(CONTENT_WIDTH_TWIP, Math.round(columnPx * PX_TO_TWIP)) : CONTENT_WIDTH_TWIP) - indentTwip;
-    const colWidthsTwip = tableColumnWidthsTwip(tableEl, columnCount, availableTwip);
+    // Les marges des cases du tableau (js/cell-padding.js) : rien d'écrit pour « Normal », qui garde celles de Word (2 × 108 twips sur les côtés, aucune en haut ni en bas) ; « Compact » et « Large » posent les leurs sur tout le tableau
+    // (`w:tblCellMar`), et la largeur des colonnes compte leur somme à la place des 216 twips de Word : le contenu mesuré garde sa largeur.
+    const cellMargins = CellPadding.wordMargins(tableEl);
+    const marginTwip = CellPadding.wordSideTwip(tableEl);
+    const colWidthsTwip = closeSmallGap(tableColumnWidthsTwip(tableEl, columnCount, availableTwip, marginTwip), cellMargins ? availableTwip : 0);
     // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
     const headerRowCount = ExportCommon.headerRowCount(rows);
     // Où chaque case commence dans la grille du tableau : une case fusionnée sur plusieurs lignes tient sa place dans les lignes d'après, dont les
@@ -1116,7 +1120,7 @@ const DocxExport = (function () {
     // Les bords réglés avec la barre de la case (js/table-borders.js) et le quadrillage masqué : null pour un tableau que personne n'a réglé, qui garde
     // les traits de départ de Word.
     const borderSides = ExportCommon.cellBorderSides(tableEl);
-    const rowFrom = (tr, isHeader) => wordRowFrom(tr, { ctx, placement, colWidthsTwip, columnCount, keepNext: keptRows.has(tr) || joinedRows.has(tr), borderSides, isHeader });
+    const rowFrom = (tr, isHeader) => wordRowFrom(tr, { ctx, placement, colWidthsTwip, marginTwip, columnCount, keepNext: keptRows.has(tr) || joinedRows.has(tr), borderSides, isHeader });
     const tableRows = [];
     for (const tr of rows) tableRows.push(await rowFrom(tr, tableRows.length < headerRowCount));
     // columnWidths pilote le <w:tblGrid>, la déclaration des colonnes : sans lui docx.js retombe sur son défaut (100 twips par colonne), incohérent
@@ -1128,6 +1132,7 @@ const DocxExport = (function () {
         { rows: pieceRows, width: { size: tableWidthTwip(colWidthsTwip, availableTwip), type: docx.WidthType.DXA }, columnWidths: colWidthsTwip },
         indentTwip ? { indent: { size: indentTwip, type: docx.WidthType.DXA } } : {},
         borderSides ? { borders: NO_BORDERS } : {},
+        cellMargins ? { margins: { marginUnitType: docx.WidthType.DXA, top: cellMargins.top, bottom: cellMargins.bottom, left: cellMargins.left, right: cellMargins.right } } : {},
       ));
       keepContinuationCellsWithNext(pieceRows, pieceSources, joinedRows, keptRows);
       return wordTable;
@@ -1161,10 +1166,19 @@ const DocxExport = (function () {
   // Largeurs à parts égales quand le tableau n'est pas attaché au document (zone d'en-tête ou de pied, hors du périmètre de la mesure :
   // buildDocxDocument) : aucun rendu à mesurer. Un tableau plus large que la page (`availableTwip`) y est ramené, comme dans le PDF : sans cela la
   // grille et les cases gardaient les largeurs de l'éditeur (1 200 px sur une page de 719) alors que le tableau ne se déclare que de la largeur de la page.
-  function tableColumnWidthsTwip(tableEl, columnCount, availableTwip) {
+  function tableColumnWidthsTwip(tableEl, columnCount, availableTwip, marginTwip = WORD_DEFAULT_CELL_MARGIN_TWIP) {
     const measuredPx = tableEl.isConnected ? ExportCommon.measuredColumnWidthsPx(tableEl, columnCount) : null;
     if (!(measuredPx && measuredPx.every(w => w > 0))) return equalColumnWidthsTwip(columnCount, availableTwip);
-    return fitColumnsTwip(measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + WORD_DEFAULT_CELL_MARGIN_TWIP)), availableTwip);
+    return fitColumnsTwip(measuredPx.map(px => Math.max(200, Math.round(px * PX_TO_TWIP) + marginTwip)), availableTwip, marginTwip);
+  }
+
+  // Un tableau aux marges réglées (js/cell-padding.js) dont les colonnes, marges comprises, tombent à moins de 2 % sous la largeur de la page : la page entière, comme `tableWidthTwip` le déclare au tableau - le reste va à
+  // la colonne la plus large, pour que la grille et la largeur du tableau disent la même chose. Rien pour un tableau normal (`availableTwip` à 0), qui garde ses largeurs d'avant.
+  function closeSmallGap(colWidthsTwip, availableTwip) {
+    const total = colWidthsTwip.reduce((sum, w) => sum + w, 0);
+    if (!availableTwip || total >= availableTwip || total < availableTwip * NARROW_TABLE_RATIO) return colWidthsTwip;
+    const widest = colWidthsTwip.indexOf(Math.max(...colWidthsTwip));
+    return colWidthsTwip.map((w, i) => (i === widest ? w + (availableTwip - total) : w));
   }
 
   // Le plancher du contenu d'une colonne, celui du PDF (12 pt).
@@ -1172,12 +1186,12 @@ const DocxExport = (function () {
   // Les colonnes (marge de cellule de Word comprise) sur la largeur disponible : telles quelles si elles y tiennent, sinon le contenu de chacune est
   // ramené au prorata (la marge de cellule de Word est fixe) par le calcul du PDF. Le reste de l'arrondi va à la colonne la plus large : la grille
   // retombe exactement sur la largeur annoncée au tableau.
-  function fitColumnsTwip(colWidthsTwip, availableTwip) {
+  function fitColumnsTwip(colWidthsTwip, availableTwip, marginTwip = WORD_DEFAULT_CELL_MARGIN_TWIP) {
     const total = colWidthsTwip.reduce((sum, w) => sum + w, 0);
     if (total <= availableTwip) return colWidthsTwip;
-    const margins = colWidthsTwip.length * WORD_DEFAULT_CELL_MARGIN_TWIP;
+    const margins = colWidthsTwip.length * marginTwip;
     const usable = Math.max(MIN_COLUMN_CONTENT_TWIP * colWidthsTwip.length, availableTwip - margins);
-    const fitted = ExportCommon.fitColumnWidths(colWidthsTwip.map(w => w - WORD_DEFAULT_CELL_MARGIN_TWIP), usable, MIN_COLUMN_CONTENT_TWIP).map(w => Math.round(w) + WORD_DEFAULT_CELL_MARGIN_TWIP);
+    const fitted = ExportCommon.fitColumnWidths(colWidthsTwip.map(w => w - marginTwip), usable, MIN_COLUMN_CONTENT_TWIP).map(w => Math.round(w) + marginTwip);
     const drift = Math.min(total, availableTwip) - fitted.reduce((sum, w) => sum + w, 0);
     if (usable === availableTwip - margins && drift) fitted[fitted.indexOf(Math.max(...fitted))] += drift;
     return fitted;
@@ -1218,7 +1232,7 @@ const DocxExport = (function () {
   async function wordCellFrom(cell, t) {
     const { col, colspan: span, rowspan: rowSpan } = t.placement.get(cell);
     const width = t.colWidthsTwip.slice(col, col + span).reduce((a, b) => a + b, 0) || Math.floor(CONTENT_WIDTH_TWIP / t.columnCount);
-    const children = await blocksFromContainer(cell, t.ctx, false, Math.max(200, width - WORD_DEFAULT_CELL_MARGIN_TWIP), t.keepNext);
+    const children = await blocksFromContainer(cell, t.ctx, false, Math.max(200, width - (t.marginTwip || WORD_DEFAULT_CELL_MARGIN_TWIP)), t.keepNext);
     // Bords et alignement vertical réglés : seulement quand la case en porte (une case sans réglage garde ce que Word fait d'un tableau ordinaire).
     // Les deux cases d'un trait qu'elles se partagent disent la même chose (js/table-borders.js), donc Word n'a aucun conflit de bords à trancher ;
     // docx.js reporte les bords d'une case fusionnée sur ses cases de continuation.

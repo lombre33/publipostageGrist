@@ -131,13 +131,20 @@ const FloatingToolbars = (function () {
   // cocher « Quadrillage » (montré ou masqué en Lecture et dans les exports, sans refermer le menu non plus : la coche répond). La couleur du trait a trois
   // choix en plus des nuances : « Personnalisé… » et « Par défaut » (le trait fin gris) au pied, « Transparent » à droite de son titre (pas de trait : le réglage
   // suivant n'efface que le côté qu'il vise, là où « Aucune bordure » les efface tous). `onPreset(preset)`, `onPen(color | null)`, `onTransparent()` et
-  // `onGridLines()` ne touchent pas à l'éditeur eux-mêmes.
-  function createBordersDropdown(presets, { onPreset, onPen, onTransparent, onGridLines, current, afterRender }) {
+  // `onGridLines()` et `onPadding(level)` ne touchent pas à l'éditeur eux-mêmes.
+  function createBordersDropdown(presets, { onPreset, onPen, onTransparent, onGridLines, onPadding, current, afterRender }) {
     const buttons = presets.map(([preset, icon, title]) => `<button data-action="borders:${preset}" title="${title}" aria-label="${title}">${Icons.svg(icon)}</button>`).join('');
     const gridLines = '<div class="v2-borders-gridlines">'
       + `<button type="button" class="v2-hover-row v2-hover-row-check" data-action="gridlines" role="checkbox" aria-checked="true" title="${I18n.t('table.gridLinesTip')}">`
       + `<span><span class="v2-borders-gridlines-name">${I18n.t('table.gridLines')}</span><small>${I18n.t('table.gridLinesHint')}</small></span></button>`
       + '</div>';
+    // Les marges internes des cases (js/cell-padding.js) : à droite de « Quadrillage », sur la même hauteur (le menu ne grandit pas : il tient sous la bande de la barre d'une grille), trois boutons côte à côte dont celui
+    // du tableau est enfoncé ; un appui règle tout le tableau (une transaction, un Annuler) sans refermer le menu, comme la coche du quadrillage.
+    const padding = `<div class="v2-borders-padding" role="group" aria-label="${I18n.t('table.padding')}" title="${I18n.t('table.paddingTip')}">`
+      + `<span class="v2-borders-padding-name">${I18n.t('table.padding')}</span>`
+      + '<span class="v2-borders-padding-choices">'
+      + CellPadding.LEVELS.map(level => `<button type="button" data-action="padding:${level}" aria-pressed="false" title="${I18n.t(CellPadding.LEVEL_TIP_KEYS[level])}">${I18n.t(CellPadding.LEVEL_KEYS[level])}</button>`).join('')
+      + '</span></div>';
     // « Transparent » : à droite de « Couleur du trait », sur la même ligne, pour que le menu ne grandisse ni en hauteur (il tient sous la bande de la barre d'une
     // grille) ni en largeur (le pied n'a pas la place d'un troisième bouton dans la colonne de la palette).
     const transparent = `<button type="button" data-action="pen-transparent" aria-pressed="false" title="${I18n.t('table.bordersTransparentTip')}">${Icons.svg('transparent')}<span>${I18n.t('colorDropdown.transparent')}</span></button>`;
@@ -145,7 +152,7 @@ const FloatingToolbars = (function () {
       className: 'v2-color-dropdown v2-borders-dropdown',
       head: '<div class="v2-borders-presets">' + buttons + '</div>'
         + `<div class="v2-borders-pen"><span>${I18n.t('table.bordersPen')}</span>${transparent}</div>`,
-      tail: gridLines,
+      tail: '<div class="v2-borders-foot">' + gridLines + padding + '</div>',
       rows: [0, 1],
       pickAction: 'pen',
       customAction: 'pen-custom',
@@ -162,6 +169,7 @@ const FloatingToolbars = (function () {
       onAction: (action) => {
         if (action.indexOf('borders:') === 0) onPreset(action.slice('borders:'.length));
         else if (action === 'gridlines') onGridLines();
+        else if (action.indexOf('padding:') === 0) onPadding(action.slice('padding:'.length));
       },
     });
   }
@@ -367,16 +375,24 @@ const FloatingToolbars = (function () {
         const row = menu.el.querySelector('button[data-action="gridlines"]');
         if (row) row.setAttribute('aria-checked', GridEditor.gridLinesShown(editor) ? 'true' : 'false');
       };
+      const markPadding = (menu) => {
+        const level = GridEditor.cellPaddingLevel(editor);
+        menu.el.querySelectorAll('button[data-action^="padding:"]').forEach((button) => {
+          button.setAttribute('aria-pressed', button.dataset.action === 'padding:' + level ? 'true' : 'false');
+        });
+      };
       const panel = createBordersDropdown(presets, {
         current: penForPalette,
         onPreset: (preset) => { if (GridEditor.applyBorders(editor, preset, penColor)) EditorCore.closeDropdownPanel(); },
         onPen: (color) => { penColor = color; panel.mark(penForPalette()); },
         onTransparent: () => { penColor = TableBorders.NONE; panel.mark(penForPalette()); },
         onGridLines: () => { GridEditor.setGridLinesShown(editor, !GridEditor.gridLinesShown(editor)); markGridLines(panel); },
+        onPadding: (level) => { GridEditor.setCellPadding(editor, level); markPadding(panel); },
         afterRender: (menu) => {
           const inner = menu.el.querySelector('button[data-action="borders:inner"]');
           if (inner) inner.setAttribute('aria-disabled', GridEditor.canApplyBorders(editor, 'inner') ? 'false' : 'true');
           markGridLines(menu);
+          markPadding(menu);
         },
       });
       return panel;

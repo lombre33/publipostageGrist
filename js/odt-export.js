@@ -479,7 +479,8 @@ const OdtExport = (function () {
 
   // --- Les tableaux ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const borderOf = value => (value === 'none' ? 'none' : '0.75pt solid ' + (/^#[0-9a-f]{6}$/i.test(String(value || '')) ? value.toLowerCase() : DEFAULT_BORDER));
-  function cellStyleOf(ctx, cell, sides) {
+  // `level` : les marges des cases du tableau (js/cell-padding.js), « normal » sans réglage : 0,106 cm en haut et en bas, 0,159 cm sur les côtés, comme avant.
+  function cellStyleOf(ctx, cell, sides, level) {
     const css = cell.style;
     let fill = css && css.backgroundColor ? cssColorHex(css.backgroundColor) : null;
     // Un fond à motif (js/cell-pattern.js) : l'OpenDocument texte n'a pas de motif de fond de case, la case prend la teinte moyenne du motif sur son fond (à défaut blanc).
@@ -487,8 +488,10 @@ const OdtExport = (function () {
     if (pattern) fill = (CellPattern.averageTone(pattern, fill) || '').replace(/^#/, '') || fill;
     const valign = ExportCommon.cellVerticalAlign(cell);
     const spec = { fill: fill ? '#' + fill.toLowerCase() : '', valign: valign || '', sides: sides ? ['top', 'right', 'bottom', 'left'].map(side => sides[side]) : null };
+    if (level && level !== CellPadding.NORMAL) spec.pad = level;
     return styleNameOf(ctx, 'Cell', JSON.stringify(spec), (name) => {
-      const list = [['fo:padding-top', '0.106cm'], ['fo:padding-bottom', '0.106cm'], ['fo:padding-left', '0.159cm'], ['fo:padding-right', '0.159cm']];
+      const pad = CellPadding.odtMargins(spec.pad);
+      const list = [['fo:padding-top', pad.top], ['fo:padding-bottom', pad.bottom], ['fo:padding-left', pad.left], ['fo:padding-right', pad.right]];
       ['top', 'right', 'bottom', 'left'].forEach((side, index) => list.push(['fo:border-' + side, borderOf(spec.sides ? spec.sides[index] : null)]));
       if (spec.fill) list.push(['fo:background-color', spec.fill]);
       if (valign) list.push(['style:vertical-align', valign]);
@@ -524,6 +527,7 @@ const OdtExport = (function () {
     const { placed, width } = ExportCommon.placeCells(rows);
     if (!width) return '';
     const sides = ExportCommon.cellBorderSides(table);
+    const level = CellPadding.levelOf(table);
     const widths = columnWidthsOf(ctx, table, placed, width);
     const total = widths.reduce((sum, value) => sum + value, 0);
     const breakBefore = takeBreak(ctx);
@@ -549,7 +553,7 @@ const OdtExport = (function () {
         ctx.depth += 1;
         const content = blocksOf(ctx, cell.el, { inList: false }) || '<text:p text:style-name="Standard"/>';
         ctx.depth -= 1;
-        const style = cellStyleOf(ctx, cell.el, sides ? sides.get(cell.el) : null);
+        const style = cellStyleOf(ctx, cell.el, sides ? sides.get(cell.el) : null, level);
         out += '<table:table-cell table:style-name="' + style + '" office:value-type="string"' + (cell.colspan > 1 ? ' table:number-columns-spanned="' + cell.colspan + '"' : '') + (cell.rowspan > 1 ? ' table:number-rows-spanned="' + cell.rowspan + '"' : '') + '>' + content + '</table:table-cell>';
       }
       out += '</table:table-row>';

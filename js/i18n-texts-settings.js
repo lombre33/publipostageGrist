@@ -98,6 +98,17 @@ const I18nTextsSettings = {
     en: 'ZIP archive: a single file, as before. One by one: each PDF downloads on its own, under its name; the browser may ask once for permission to download several files, and beyond a few dozen PDFs the archive stays more comfortable. Ask me: a window asks the question at each export of several PDFs. This choice does not touch the single PDF, “Save to GFS” (it already saves each PDF on its own), or Word, Excel and the other formats.',
   },
   'settings.pdfMany.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
+  // Marges internes des cases des tableaux neufs (js/cell-padding.js:START_SETTING, clé pp_table_padding) : le niveau que prend un tableau quand on l'insère ; le réglage d'un tableau déjà posé est dans le menu « Bordures » de sa barre.
+  'settings.tablePadding.title': { fr: 'Tableaux', en: 'Tables' },
+  'settings.tablePadding.intro': {
+    fr: 'Les marges internes des cases d’un tableau : l’espace entre le texte et les bords de sa case. Compact tient plus de données dans la page.',
+    en: 'The inner margins of a table’s cells: the space between the text and the edges of its cell. Compact fits more data on the page.',
+  },
+  'settings.tablePadding.hint': {
+    fr: 'Ce choix est celui de chaque tableau que vous insérez ensuite ; un tableau déjà posé ne change pas. Pour en régler un, ouvrez le menu « Bordures » de sa barre : « Marges des cases ». Normal est le rendu d’avant.',
+    en: 'This is the level of each table you insert from now on; a table already in place does not change. To set one, open the “Borders” menu on its bar: “Cell padding”. Normal is the look it always had.',
+  },
+  'settings.tablePadding.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
   // Mode « Identité de l'État » (DSFR, js/state-mode.js) : une section de l'onglet Thème, puis la fenêtre où la personne déclare son droit de l'allumer. Jamais « officiel » ni « conforme au DSFR » : le mode reprend des couleurs et des styles, il ne certifie rien.
   'settings.etat.title': { fr: 'Identité de l’État (DSFR)', en: 'French State identity (DSFR)' },
   'settings.etat.intro': {

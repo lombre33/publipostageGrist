@@ -413,6 +413,7 @@ if (has('README.md')) {
     pp_variable_tip: ['info-bulle de valeur d\'une variable', 'variable value tooltip'],
     pp_french_typography: ['typographie française à la frappe', 'french typography while typing'],
     pp_word_count: ['compteur de mots', 'word counter'],
+    pp_table_padding: ['marges des cases des nouveaux tableaux', 'cell padding of new tables'],
     pp_last_mode: ['dernier mode choisi (édition ou lecture)', 'last mode chosen (edit or read)'],
     pp_trigger_char: ['touches', 'keys'],
     pp_expansion_char: ['touches', 'keys'],

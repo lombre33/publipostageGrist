@@ -114,9 +114,9 @@
 <link rel="stylesheet" href="css/roboto-fonts.css?v=0.69">
 <link rel="stylesheet" href="css/style.css?v=0.113">
 <link rel="stylesheet" href="css/reader-guide.css?v=0.6">
-<link rel="stylesheet" href="css/editor-v2.css?v=0.155">
+<link rel="stylesheet" href="css/editor-v2.css?v=0.156">
 <link rel="stylesheet" href="css/toolbar-v2.css?v=0.94">
-<link rel="stylesheet" href="css/grid.css?v=0.18">
+<link rel="stylesheet" href="css/grid.css?v=0.20">
 <link rel="stylesheet" href="css/template-tree-select.css?v=0.26">
 <link rel="stylesheet" href="css/template-organize-modal.css?v=0.11">
 <link rel="stylesheet" href="css/track-changes.css?v=0.12">
@@ -182,7 +182,7 @@
 <link rel="stylesheet" href="css/state-check.css?v=0.1">
 <link rel="stylesheet" href="css/versions-history.css?v=0.2">
 <link rel="stylesheet" href="css/external-images.css?v=0.4">
-<link rel="stylesheet" href="css/first-contact.css?v=0.4">
+<link rel="stylesheet" href="css/first-contact.css?v=0.5">
 <link rel="stylesheet" href="css/whats-new.css?v=0.5">
 <link rel="stylesheet" href="css/page-zoom.css?v=0.10">
 <link rel="stylesheet" href="css/batch-progress.css?v=0.1">
@@ -227,11 +227,11 @@
 <link rel="preload" as="script" href="js/i18n-texts-export.js?v=0.44">
 <link rel="preload" as="script" href="js/i18n-texts-format.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-blocks.js?v=0.9">
-<link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.6">
+<link rel="preload" as="script" href="js/i18n-texts-editor.js?v=0.7">
 <link rel="preload" as="script" href="js/i18n-texts-review.js?v=0.9">
 <link rel="preload" as="script" href="js/i18n-texts-slides.js?v=0.6">
 <link rel="preload" as="script" href="js/i18n-texts-motion.js?v=0.3">
-<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.31">
+<link rel="preload" as="script" href="js/i18n-texts-settings.js?v=0.32">
 <link rel="preload" as="script" href="js/i18n-texts-status.js?v=0.19">
 <link rel="preload" as="script" href="js/i18n-texts-variables.js?v=0.16">
 <link rel="preload" as="script" href="js/i18n-texts-eml.js?v=0.2">
@@ -267,9 +267,9 @@
 <link rel="preload" as="script" href="js/cell-pattern.js?v=0.3">
 <link rel="preload" as="script" href="js/header-footer-preview.js?v=1.71">
 <link rel="preload" as="script" href="js/loop-marks.js?v=0.2">
-<link rel="preload" as="script" href="js/editor-nodes.js?v=1.98">
-<link rel="preload" as="script" href="js/floating-toolbars.js?v=0.110">
-<link rel="preload" as="script" href="js/main-toolbar.js?v=1.73">
+<link rel="preload" as="script" href="js/editor-nodes.js?v=1.99">
+<link rel="preload" as="script" href="js/floating-toolbars.js?v=0.111">
+<link rel="preload" as="script" href="js/main-toolbar.js?v=1.74">
 <link rel="preload" as="script" href="js/format-painter.js?v=0.8">
 <link rel="preload" as="script" href="js/script-marks.js?v=0.1">
 <link rel="preload" as="script" href="js/emoji-paste.js?v=0.1">
@@ -288,8 +288,9 @@
 <link rel="preload" as="script" href="js/history-markers.js?v=0.10">
 <link rel="preload" as="script" href="js/action-history.js?v=0.4">
 <link rel="preload" as="script" href="js/table-borders.js?v=0.4">
+<link rel="preload" as="script" href="js/cell-padding.js?v=0.1">
 <link rel="preload" as="script" href="js/grid-table.js?v=0.11">
-<link rel="preload" as="script" href="js/grid-editor.js?v=0.37">
+<link rel="preload" as="script" href="js/grid-editor.js?v=0.38">
 <link rel="preload" as="script" href="js/grid-sheets.js?v=0.1">
 <link rel="preload" as="script" href="js/table-select.js?v=0.4">
 <link rel="preload" as="script" href="js/table-merge.js?v=0.6">
@@ -340,7 +341,7 @@
 <link rel="preload" as="script" href="js/template-gallery.js?v=0.16">
 <link rel="preload" as="script" href="js/template-pack.js?v=0.5">
 <link rel="preload" as="script" href="js/template-gallery-modal.js?v=0.14">
-<link rel="preload" as="script" href="js/settings.js?v=0.34">
+<link rel="preload" as="script" href="js/settings.js?v=0.35">
 <link rel="preload" as="script" href="js/condition-rules.js?v=0.18">
 <link rel="preload" as="script" href="js/condition-fields.js?v=0.29">
 <link rel="preload" as="script" href="js/modal-base.js?v=0.8">
@@ -1147,6 +1148,18 @@
           <label class="settings-alt-reminder" for="settings-word-count"><input type="checkbox" id="settings-word-count" aria-describedby="settings-word-count-hint"><span data-i18n="settings.wordCount.label">Compter les mots, les signes et les pages</span></label>
           <p class="settings-access-hint" id="settings-word-count-hint" data-i18n="settings.wordCount.hint">Une petite pastille en bas à gauche du document dit « 35 mots · 206 signes · 1 page » : le texte du modèle tel qu’il est écrit (une variable compte pour un mot), et les pages de l’aperçu A4. Cachée tant que la case n’est pas cochée. Ce choix est propre à ce navigateur.</p>
         </section>
+        <!-- Tableaux (js/cell-padding.js:START_SETTING, clé pp_table_padding) : les marges internes des cases d'un tableau que la personne insère ensuite ; « Normal » est le rendu d'avant. Le réglage d'un tableau déjà posé est dans le menu « Bordures » de sa barre. -->
+        <section class="settings-section settings-theme-section" aria-labelledby="settings-table-padding-title">
+          <h4 class="settings-section-title" id="settings-table-padding-title" data-i18n="settings.tablePadding.title">Tableaux</h4>
+          <p class="settings-panel-intro" data-i18n="settings.tablePadding.intro">Les marges internes des cases d’un tableau : l’espace entre le texte et les bords de sa case. Compact tient plus de données dans la page.</p>
+          <div class="settings-radio-row" role="radiogroup" aria-labelledby="settings-table-padding-title">
+            <label><input type="radio" name="settings-table-padding" value="compact"><span data-i18n="table.paddingCompact">Compact</span></label>
+            <label><input type="radio" name="settings-table-padding" value="normal"><span data-i18n="table.paddingNormal">Normal</span></label>
+            <label><input type="radio" name="settings-table-padding" value="large"><span data-i18n="table.paddingLarge">Large</span></label>
+          </div>
+          <p class="settings-access-hint" data-i18n="settings.tablePadding.hint">Ce choix est celui de chaque tableau que vous insérez ensuite ; un tableau déjà posé ne change pas. Pour en régler un, ouvrez le menu « Bordures » de sa barre : « Marges des cases ». Normal est le rendu d’avant.</p>
+          <p class="settings-access-hint" data-i18n="settings.tablePadding.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème.</p>
+        </section>
         <!-- Accessibilité (js/alt-reminder.js) : le rappel « images sans texte alternatif » à l'export, éteint au départ. Une section de cet onglet : la barre des onglets est pleine à 700 px. -->
         <section class="settings-section settings-theme-section" aria-labelledby="settings-accessibility-title">
           <h4 class="settings-section-title" id="settings-accessibility-title" data-i18n="settings.accessibility.title">Accessibilité</h4>
@@ -1458,11 +1471,11 @@
 <script src="js/i18n-texts-export.js?v=0.44"></script>
 <script src="js/i18n-texts-format.js?v=0.6"></script>
 <script src="js/i18n-texts-blocks.js?v=0.9"></script>
-<script src="js/i18n-texts-editor.js?v=0.6"></script>
+<script src="js/i18n-texts-editor.js?v=0.7"></script>
 <script src="js/i18n-texts-review.js?v=0.9"></script>
 <script src="js/i18n-texts-slides.js?v=0.6"></script>
 <script src="js/i18n-texts-motion.js?v=0.3"></script>
-<script src="js/i18n-texts-settings.js?v=0.31"></script>
+<script src="js/i18n-texts-settings.js?v=0.32"></script>
 <script src="js/i18n-texts-status.js?v=0.19"></script>
 <script src="js/i18n-texts-variables.js?v=0.16"></script>
 <script src="js/i18n-texts-eml.js?v=0.2"></script>
@@ -1498,9 +1511,9 @@
 <script src="js/cell-pattern.js?v=0.3"></script>
 <script src="js/header-footer-preview.js?v=1.71"></script>
 <script src="js/loop-marks.js?v=0.2"></script>
-<script src="js/editor-nodes.js?v=1.98"></script>
-<script src="js/floating-toolbars.js?v=0.110"></script>
-<script src="js/main-toolbar.js?v=1.73"></script>
+<script src="js/editor-nodes.js?v=1.99"></script>
+<script src="js/floating-toolbars.js?v=0.111"></script>
+<script src="js/main-toolbar.js?v=1.74"></script>
 <script src="js/format-painter.js?v=0.8"></script>
 <script src="js/script-marks.js?v=0.1"></script>
 <script src="js/emoji-paste.js?v=0.1"></script>
@@ -1519,8 +1532,9 @@
 <script src="js/history-markers.js?v=0.10"></script>
 <script src="js/action-history.js?v=0.4"></script>
 <script src="js/table-borders.js?v=0.4"></script>
+<script src="js/cell-padding.js?v=0.1"></script>
 <script src="js/grid-table.js?v=0.11"></script>
-<script src="js/grid-editor.js?v=0.37"></script>
+<script src="js/grid-editor.js?v=0.38"></script>
 <script src="js/grid-sheets.js?v=0.1"></script>
 <script src="js/table-select.js?v=0.4"></script>
 <script src="js/table-merge.js?v=0.6"></script>
@@ -1568,12 +1582,12 @@
 <script type="text/x-lazy-engine" data-engine="sheets" src="js/sheet-layout.js?v=0.3"></script>
 <script type="text/x-lazy-engine" data-engine="merge" src="js/pdf-merge.js?v=0.10"></script>
 <script type="text/x-lazy-engine" data-engine="archive" src="js/pdf-archive.js?v=0.2"></script>
-<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.110"></script>
+<script type="text/x-lazy-engine" data-engine="docx" src="js/docx-export.js?v=0.111"></script>
 <script type="text/x-lazy-engine" data-engine="xlsx" src="js/xlsx-export.js?v=0.38"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxFormat" src="js/xlsx-number-format.js?v=0.4"></script>
 <script type="text/x-lazy-engine" data-engine="xlsxPivot" src="js/xlsx-pivot.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="md" src="js/markdown-export.js?v=0.14"></script>
-<script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.25"></script>
+<script type="text/x-lazy-engine" data-engine="html" src="js/html-export.js?v=0.26"></script>
 <script type="text/x-lazy-engine" data-engine="pptx" src="js/pptx-export.js?v=0.39"></script>
 <script type="text/x-lazy-engine" data-engine="pptxImport" src="js/pptx-import.js?v=0.71"></script>
 <script type="text/x-lazy-engine" data-engine="metafile" src="js/metafile-render.js?v=0.1"></script>
@@ -1581,7 +1595,7 @@
 <script type="text/x-lazy-engine" data-engine="odtImport" src="js/odt-import.js?v=0.7"></script>
 <script type="text/x-lazy-engine" data-engine="odsImport" src="js/ods-import.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="odpImport" src="js/odp-import.js?v=0.4"></script>
-<script type="text/x-lazy-engine" data-engine="odtExport" src="js/odt-export.js?v=0.7"></script>
+<script type="text/x-lazy-engine" data-engine="odtExport" src="js/odt-export.js?v=0.8"></script>
 <script type="text/x-lazy-engine" data-engine="odsExport" src="js/ods-export.js?v=0.1"></script>
 <script type="text/x-lazy-engine" data-engine="odpExport" src="js/odp-export.js?v=0.3"></script>
 <!-- Historique des versions : le magasin (js/versions-store.js) se charge avec la page ; la fenêtre (js/versions-history.js) attend le premier clic de « Historique des versions… »
@@ -1598,7 +1612,7 @@
 <script src="js/template-gallery.js?v=0.16"></script>
 <script src="js/template-pack.js?v=0.5"></script>
 <script src="js/template-gallery-modal.js?v=0.14"></script>
-<script src="js/settings.js?v=0.34"></script>
+<script src="js/settings.js?v=0.35"></script>
 <script src="js/condition-rules.js?v=0.18"></script>
 <script src="js/condition-fields.js?v=0.29"></script>
 <script src="js/modal-base.js?v=0.8"></script>

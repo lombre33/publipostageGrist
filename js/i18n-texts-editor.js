@@ -220,6 +220,18 @@ const I18nTextsEditor = {
     fr: 'Montrer le quadrillage dans la Lecture et dans les exports. Les bordures que vous posez restent ; l’éditeur garde son quadrillage.',
     en: 'Show the gridlines in Reading and in the exports. Borders you set stay; the editor keeps its gridlines.',
   },
+  // Marges internes des cases d'un tableau (js/cell-padding.js), sous « Quadrillage » dans le même menu : trois niveaux, un seul pour tout le tableau ; « Normal » est le rendu d'avant, sans marque.
+  'table.padding': { fr: 'Marges des cases', en: 'Cell padding' },
+  'table.paddingCompact': { fr: 'Compact', en: 'Compact' },
+  'table.paddingNormal': { fr: 'Normal', en: 'Normal' },
+  'table.paddingLarge': { fr: 'Large', en: 'Large' },
+  'table.paddingTip': {
+    fr: 'L’espace entre le texte d’une case et ses bords, pour tout le tableau : Compact pour un tableau très rempli, Large pour l’aérer. Il se garde dans le tableau : la Lecture et les exports le suivent.',
+    en: 'The space between a cell’s text and its edges, for the whole table: Compact for a table with lots of data, Large to give it room. It is kept in the table: Reading and the exports follow it.',
+  },
+  'table.paddingCompactTip': { fr: 'Compact : 1 px en haut et en bas, 3 px sur les côtés', en: 'Compact: 1 px above and below, 3 px at the sides' },
+  'table.paddingNormalTip': { fr: 'Normal : 4 px en haut et en bas, 6 px sur les côtés (comme avant)', en: 'Normal: 4 px above and below, 6 px at the sides (as before)' },
+  'table.paddingLargeTip': { fr: 'Large : 8 px en haut et en bas, 12 px sur les côtés', en: 'Large: 8 px above and below, 12 px at the sides' },
   'twoColumns.resizeGrip': { fr: 'Redimensionner les colonnes', en: 'Resize columns' },
   'twoColumns.widthMmButton': { fr: 'Régler les largeurs en mm', en: 'Set widths in mm' },
   'twoColumns.widthMmLeftLabel': { fr: 'Gauche (mm)', en: 'Left (mm)' },

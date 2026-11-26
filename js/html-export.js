@@ -619,7 +619,7 @@ const HtmlExport = (function () {
     ['colspan', 'rowspan'].forEach(name => { if (ExportCommon.spanOf(el, name) > 1) out.setAttribute(name, String(ExportCommon.spanOf(el, name))); });
     const own = keptStyle(el, new Set(['vertical-align']));
     // `<th>` n'a pas de style propre dans l'éditeur (ni gras ni centrage) : écrit dans la case, un site qui style ses `<th>` ne le change pas.
-    const parts = [borderStyle(t.borders && t.borders.get(el)), 'padding: 4px 6px', 'vertical-align: ' + (ExportCommon.cellVerticalAlign(el) || 'top')];
+    const parts = [borderStyle(t.borders && t.borders.get(el)), 'padding: ' + t.padding, 'vertical-align: ' + (ExportCommon.cellVerticalAlign(el) || 'top')];
     // Le « left » de départ n'est écrit que si la case ne dit pas déjà son alignement : une case relue par l'import (js/html-import.js) le porte, et réécrite elle ne le répète pas.
     if (el.localName === 'th') parts.push('font-weight: normal', ...(own && /(?:^|;)\s*text-align\s*:/.test(own) ? [] : ['text-align: left']));
     if (own) parts.push(own);
@@ -629,7 +629,8 @@ const HtmlExport = (function () {
   }
   function tableInto(el, parent, ctx) {
     ctx.uses.add('table');
-    const t = { borders: ExportCommon.cellBorderSides(el) };
+    // `padding` : les marges des cases du tableau (js/cell-padding.js) ; « 4px 6px » pour un tableau que personne n'a réglé, comme avant.
+    const t = { borders: ExportCommon.cellBorderSides(el), padding: CellPadding.cssPadding(el) };
     const wrap = make(ctx, 'div', PREFIX + 'table');
     const table = make(ctx, 'table');
     const own = keptStyle(el);

@@ -359,7 +359,7 @@ async function runTheme(theme) {
   let menu = await menuState(page);
   check(`${label} - un clic sur « Bordures » ouvre le menu SOUS la bande de la barre, tout entier dans le panneau`, !!menu && menu.shown && menu.below && menu.inside, menu && { top: menu.top, bottom: menu.bottom, dockBottom: menu.dockBottom, right: menu.right });
   check(`${label} - le bouton « Bordures » annonce son menu ouvert : aria-expanded vaut « true » (et « false » avant le clic)`, (await expandedOf(page)) === 'true' && !!chip && chip.shown, await expandedOf(page));
-  check(`${label} - chaque bouton du menu (8 réglages, « Transparent », 20 nuances en deux rangées, « Personnalisé », « Par défaut », « Quadrillage ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 32 && menu.unreachable.length === 0, menu && menu.unreachable);
+  check(`${label} - chaque bouton du menu (8 réglages, « Transparent », 20 nuances en deux rangées, « Personnalisé », « Par défaut », « Quadrillage », les 3 niveaux de « Marges des cases ») est sous le pointeur`, !!menu && Object.keys(menu.reach).length === 35 && menu.unreachable.length === 0, menu && menu.unreachable);
   check(`${label} - les huit réglages sont des boutons d'au moins 24 px de côté, dans l'ordre Toutes, Extérieures, Intérieures, Haut, Bas, Gauche, Droite, Aucune`,
     !!menu && PRESET_IDS.every(id => menu.states['borders:' + id] && menu.states['borders:' + id].w >= 24 && menu.states['borders:' + id].h >= 24)
     && await page.evaluate(ids => JSON.stringify(Array.from(document.querySelectorAll('.v2-borders-dropdown .v2-borders-presets button')).map(b => b.dataset.action.slice(8))) === JSON.stringify(ids), PRESET_IDS));
@@ -619,7 +619,7 @@ async function runTheme(theme) {
   await realClick(page, button('borders-open'));
   const fullBorders = await openMenuInfo(page);
   check(`${label} - le menu Bordures aussi (${fullBorders && fullBorders.kept.join(' et ')} couleurs gardées) : sous la bande (haut ${fullBorders && fullBorders.top} pour une bande qui finit à ${fullBorders && fullBorders.dockBottom}), tout entier dans le panneau (${fullBorders && fullBorders.h} px de haut, au plus 207), ses ${fullBorders && fullBorders.buttons} boutons sous le pointeur, les rangées à droite de la palette et de son pied`,
-    !!fullBorders && fullBorders.below && fullBorders.inside && fullBorders.h <= 207 && fullBorders.unreachable === 0 && fullBorders.n === 1 && fullBorders.buttons === 52 && sameKept(fullBorders.kept, [10, 10]) && fullBorders.rowsRightOfPalette, fullBorders);
+    !!fullBorders && fullBorders.below && fullBorders.inside && fullBorders.h <= 207 && fullBorders.unreachable === 0 && fullBorders.n === 1 && fullBorders.buttons === 55 && sameKept(fullBorders.kept, [10, 10]) && fullBorders.rowsRightOfPalette, fullBorders);
   await page.evaluate(() => { PageLayout.setCustomColors(['#ff8800']); Templates.updateDocumentSettings({ colors: null }); });
   await realClick(page, button('fill-open'));
   await realClick(page, button('borders-open'));

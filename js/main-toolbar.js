@@ -765,7 +765,12 @@ const MainToolbar = (function () {
     bind('v2-btn-outdent', () => { if (!EditorCore.shiftListsInSelectedCells('out')) EditorCore.shiftListItem(editor, 'out'); });
     bind('v2-btn-indent', () => { if (!EditorCore.shiftListsInSelectedCells('in')) EditorCore.shiftListItem(editor, 'in'); });
     // Dans un en-tête ou un pied de page, une seule ligne : la zone a 60 px de contenu, une ligne de tableau en prend 29 et deux dépasseraient (le trait rouge de la zone).
-    bind('v2-btn-table', () => editor.chain().focus().insertTable({ rows: HeaderFooterPreview.getHfMode() ? 1 : 2, cols: 2, withHeaderRow: false }).run());
+    // Un tableau neuf prend le niveau de marges des cases que la personne a choisi dans Réglages (js/cell-padding.js:startAttrs) ; « Normal », le départ, n'écrit rien.
+    bind('v2-btn-table', () => {
+      const chain = editor.chain().focus().insertTable({ rows: HeaderFooterPreview.getHfMode() ? 1 : 2, cols: 2, withHeaderRow: false });
+      if (CellPadding.startLevel() !== CellPadding.NORMAL) chain.updateAttributes('table', CellPadding.startAttrs());
+      chain.run();
+    });
     bind('v2-btn-two-columns', () => editor.chain().focus().insertTwoColumns().run());
     // « Insérer une image » ne prend plus d'adresse (24/11 : plus aucun appel vers un autre site) : le bouton est grisé (syncLocks) et son clic dit comment faire, une image se colle (js/editor.js,
     // handlePaste) ; une pièce jointe de Grist passe par la ligne « Image depuis une variable » de son menu au survol.

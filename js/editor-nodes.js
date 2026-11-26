@@ -655,10 +655,22 @@ const EditorNodes = (function () {
     // Le tableau de Tiptap (TableView, @tiptap/extension-table) pose `min-width` sur le <col> d'une colonne sans largeur mais ne retire pas le `width` d'avant :
     // une largeur redevenue « automatique » (Refuser un glissé de bord, Annuler, sur un tableau inséré à la main) gardait à l'écran celle qu'elle venait de
     // perdre, alors que le document avait retrouvé sa mise en page d'origine.
+    // Il porte aussi la marque des marges des cases (`data-cell-padding`, js/cell-padding.js) sur le <table> qu'il dessine : la vue de la bibliothèque ne recopie pas les attributs du nœud (ceux de `renderHTML` ne servent
+    // qu'au HTML enregistré), et css/editor-v2.css lit la marque pour les marges des cases. Elle se pose à la création et à chaque mise à jour du nœud (réglage, Annuler, Rétablir) ; la bibliothèque ignore les
+    // changements d'attributs de son <table> (`ignoreMutation`), l'éditeur ne les prend pas pour une frappe.
     function createTableView(TableView) {
       return class extends TableView {
+        constructor(node, cellMinWidth) {
+          super(node, cellMinWidth);
+          this.syncCellPadding(node);
+        }
+        syncCellPadding(node) {
+          const level = CellPadding.normalize(node.attrs.cellPadding);
+          if (level) { if (this.table.getAttribute(CellPadding.ATTR) !== level) this.table.setAttribute(CellPadding.ATTR, level); } else if (this.table.hasAttribute(CellPadding.ATTR)) this.table.removeAttribute(CellPadding.ATTR);
+        }
         update(node) {
           const same = super.update(node);
+          if (same) this.syncCellPadding(node);
           if (!same || !node.firstChild) return same;
           let index = 0;
           node.firstChild.forEach(cell => {

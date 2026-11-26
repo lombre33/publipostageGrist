@@ -102,6 +102,13 @@ const GridEditor = (function () {
               parseHTML: el => (el.getAttribute('data-grid-lines') === GRID_LINES_OFF ? GRID_LINES_OFF : null),
               renderHTML: attrs => (attrs.gridLines === GRID_LINES_OFF ? { 'data-grid-lines': GRID_LINES_OFF } : {}),
             },
+            // `cellPadding` : « compact » ou « large » quand la personne a réglé les marges internes des cases de ce tableau (js/cell-padding.js), `data-cell-padding` dans le HTML ; null pour « Normal » et pour tout
+            // tableau que personne n'a réglé : aucun changement de rendu ni de HTML. Lu par css/editor-v2.css (éditeur, Lecture, zones d'en-tête et de pied) et par les exports.
+            cellPadding: {
+              default: null,
+              parseHTML: el => CellPadding.normalize(el.getAttribute(CellPadding.ATTR)),
+              renderHTML: attrs => CellPadding.markAttrs(attrs.cellPadding),
+            },
             // `sheetName` : le nom de la feuille que ce tableau est dans une grille à onglets (js/grid-sheets.js), `data-sheet-name` dans le HTML du modèle. Null pour tout tableau d'un document et pour toute
             // grille d'une seule feuille : aucun changement de rendu ni de HTML.
             sheetName: {
@@ -789,7 +796,7 @@ const GridEditor = (function () {
     return { selectedVerticalAlign, setVerticalAlign, canMerge, canSplit, selectionRect, sameAttrs, mergeSelected, mergeCells };
   })();
 
-  const { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow } = (function () {
+  const { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, cellPaddingLevel, setCellPadding, boundaryCrossed, pageBreakRow } = (function () {
     // Scinder une case, les bordures, le quadrillage et la ligne que vise le saut de page.
 
     // Scinde la case fusionnée en autant de cases qu'elle en recouvrait : la première garde le contenu, les autres naissent vides, avec le fond,
@@ -866,6 +873,22 @@ const GridEditor = (function () {
       return true;
     }
 
+    // Le niveau des marges internes des cases du tableau (js/cell-padding.js) : « compact », « normal » ou « large » ; « normal » hors d'un tableau.
+    function cellPaddingLevel(ed) {
+      const info = scopedTable(ed);
+      return info ? CellPadding.levelOf(info.node.attrs.cellPadding) : CellPadding.NORMAL;
+    }
+
+    // Règle les marges internes des cases du tableau : une seule transaction, un seul Annuler, et l'enregistrement automatique la voit passer. « Normal » retire la marque
+    // (le HTML redevient celui d'un tableau que personne n'a réglé).
+    function setCellPadding(ed, level) {
+      const info = scopedTable(ed);
+      if (!info || !CellPadding.LEVELS.includes(level)) return false;
+      if (cellPaddingLevel(ed) === level) return true;
+      ed.view.dispatch(ed.state.tr.setNodeMarkup(info.pos, undefined, Object.assign({}, info.node.attrs, { cellPadding: CellPadding.normalize(level) })));
+      return true;
+    }
+
     // Une case couvre-t-elle la limite entre la ligne `row - 1` et la ligne `row` ? (la même case dans les deux, dans l'une des colonnes)
     function boundaryCrossed(map, row) {
       for (let col = 0; col < map.width; col++) if (map.map[(row - 1) * map.width + col] === map.map[row * map.width + col]) return true;
@@ -879,7 +902,7 @@ const GridEditor = (function () {
       const rect = info && selectionRect(state, info);
       return rect ? { info, map: libs.TableMap.get(info.node), row: rect.top } : null;
     }
-    return { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, boundaryCrossed, pageBreakRow };
+    return { splitSelected, splitCell, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, cellPaddingLevel, setCellPadding, boundaryCrossed, pageBreakRow };
   })();
 
   const { canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakInTable, pageBreakBlock, pageBreakRows, trimPastedSlice } = (function () {
@@ -1956,7 +1979,7 @@ const GridEditor = (function () {
     TYPE, DEFAULT_VALIGN, isForbiddenNode,
     configure, attach, createExtension, createEnterExtension, withTableAttributes, withRowAttributes, withCellAttributes, serialize, setActive, isActive, isGridType,
     refresh, currentCellDom, colName, floatingOptions, barSlot,
-    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown,
+    canMerge, canSplit, mergeCells, splitCell, mergeSelected, splitSelected, tableSettingsBlocked, setVerticalAlign, selectedVerticalAlign, applyBorders, canApplyBorders, gridLinesShown, setGridLinesShown, cellPaddingLevel, setCellPadding,
     canTogglePageBreak, hasPageBreak, togglePageBreak, pageBreakInTable, pageBreakBlock, insertLines, canEqualize, equalizeLines, documentStripsOffset, planColumnWidths,
   };
 })();

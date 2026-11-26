@@ -271,6 +271,7 @@ const Settings = (function () {
     const wordCountBox = byId('settings-word-count');
     const mailClientRadios = all('input[name="settings-mail-client"]');
     const pdfManyRadios = all('input[name="settings-pdf-many"]');
+    const tablePaddingRadios = all('input[name="settings-table-padding"]');
     const triggerSelect = byId('settings-trigger-char');
     const reloadNotice = byId('settings-trigger-reload-notice');
     openBtn.addEventListener('click', () => {
@@ -285,6 +286,7 @@ const Settings = (function () {
       StateMode.syncSettings();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
       pdfManyRadios.forEach(r => { r.checked = (r.value === PdfDelivery.manyFiles()); });
+      tablePaddingRadios.forEach(r => { r.checked = (r.value === CellPadding.startLevel()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
       if (reloadNotice) reloadNotice.hidden = true;
       syncMarginInputs(marginInputs);
@@ -440,6 +442,11 @@ const Settings = (function () {
     if (wordCountBox) wordCountBox.addEventListener('change', () => {
       SettingsHistory.track(WORD_COUNT_SETTING, () => WordCount.setOn(wordCountBox.checked));
       wordCountBox.checked = WordCount.isOn();
+    });
+    // Les marges internes des cases des tableaux neufs (js/cell-padding.js) : défait par Ctrl + Z comme les autres choix ; stockage refusé, la case revient sur ce qui est en vigueur.
+    wireRadios('settings-table-padding', value => {
+      SettingsHistory.track(CellPadding.START_SETTING, () => CellPadding.setStartLevel(value));
+      all('input[name="settings-table-padding"]').forEach(r => { r.checked = (r.value === CellPadding.startLevel()); });
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
     // Stockage refusé (le choix ne serait pas retenu) : les cases reviennent à ce qui est en vigueur, comme celles de la langue.

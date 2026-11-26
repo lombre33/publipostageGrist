@@ -43,8 +43,12 @@
 .pp-early-sheet ul, .pp-early-sheet ol { margin: 0; padding-left: 1.4em; }
 .pp-early-sheet blockquote { margin: 4px 0; padding-left: 12px; border-left: 3px solid var(--pp-paper-rule, #d0d7de); font-style: italic; }
 .pp-early-sheet a { color: inherit; text-decoration: underline; }
+/* Les marges réglées d'un tableau (js/cell-padding.js) : l'aperçu précoce les montre déjà, pour que la page ne saute pas quand l'éditeur prend sa place. */
+.pp-early-sheet table { --pp-cell-pad-y: 4px; --pp-cell-pad-x: 6px; }
+.pp-early-sheet table[data-cell-padding="compact"] { --pp-cell-pad-y: 1px; --pp-cell-pad-x: 3px; }
+.pp-early-sheet table[data-cell-padding="large"] { --pp-cell-pad-y: 8px; --pp-cell-pad-x: 12px; }
 .pp-early-sheet table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 6px 0; }
-.pp-early-sheet td, .pp-early-sheet th { border: 1px solid var(--pp-paper-rule, #b8c0c9); padding: 4px 6px; vertical-align: top; text-align: left; font-weight: normal; }
+.pp-early-sheet td, .pp-early-sheet th { border: 1px solid var(--pp-paper-rule, #b8c0c9); padding: var(--pp-cell-pad-y, 4px) var(--pp-cell-pad-x, 6px); vertical-align: top; text-align: left; font-weight: normal; }
 .pp-early-sheet img { max-width: 100%; height: auto; vertical-align: bottom; }
 .pp-early-sheet img:not([src^="data:"]):not([src^="http"]) { visibility: hidden; }
 .pp-early-sheet hr { height: 1px; margin: 10px 0; border: none; background: var(--pp-paper-rule, #b8c0c9); }
