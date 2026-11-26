@@ -17,7 +17,7 @@
 //   ViewTemplate.wirePanel() -> branche la section de Réglages (redessinée à l'ouverture et à chaque changement de droits ; grisée en lecture seule)
 // Le MODE d'ouverture de la vue (demande du 24/11 : « comment définir qu'un modèle par défaut d'une page s'ouvre en mode lecture et pas écriture ? », choix « un réglage par page ») : une seconde option du widget, `pp_view_open_mode`
 // (`read` | `edit`, absente = « le dernier mode choisi »), même mécanique que le modèle de la vue (écho, brouillon de Grist jusqu'à « Enregistrer », Ctrl + Z, grisé en lecture seule). Elle l'emporte sur le dernier mode de la personne
-// (`pp_last_mode`, js/main.js:startMode) quand un modèle ordinaire s'ouvre de lui-même ; un modèle vierge, un import, un macro-modèle ou l'absence de modèle ouvrent l'Édition comme avant, et la personne garde le bouton Édition ou
+// (`pp_last_mode`, js/main.js:startMode) quand un modèle ordinaire s'ouvre de lui-même ; un modèle vierge, un import ou l'absence de modèle ouvrent l'Édition comme avant ; un macro-modèle suit la vue quand elle dit Lecture (consigne 110 de GFS : sa Lecture montre le document assemblé pour la ligne), sinon il ouvre son résumé comme avant ; la personne garde le bouton Édition ou
 // Lecture (sauf en lecture seule). Écran : section « Mode d'ouverture de cette vue » de Réglages > Vue, juste sous « Modèle par défaut de cette vue ».
 //   ViewTemplate.openMode() -> 'read' | 'edit' | null (null : le dernier mode choisi par la personne)
 //   ViewTemplate.setOpenMode(mode) -> choisit le mode (null ou 'last' : le dernier mode choisi) ; se défait par Ctrl + Z comme le modèle de la vue

@@ -6,7 +6,10 @@
 //   1) la vue dit Lecture : le modèle ★ s'ouvre en Lecture, même sans préférence de la personne, et rien n'est retenu à sa place (pp_last_mode reste absent) ;
 //   2) la vue dit Lecture, la personne avait quitté en Édition : Lecture ; la vue dit Édition, la personne lisait : Édition ;
 //   3) sans choix de la vue, ou avec une valeur qui n'en est pas un (`last`, texte quelconque, `null`) : la préférence de la personne, comme avant ;
-//   4) rien ne s'ouvre de lui-même (pas de ★) : l'Édition, même si la vue dit Lecture ; un macro-modèle choisi pour la vue s'ouvre en Édition, même si la vue dit Lecture ;
+//   4) rien ne s'ouvre de lui-même (pas de ★) : l'Édition, même si la vue dit Lecture ;
+//   4 bis) un macro-modèle suit la vue quand elle dit Lecture (consigne 110 de GFS, choix du porteur du 26/11 : « Lecture aussi pour les macro-modèles ») : il s'ouvre en Lecture (même si la personne avait quitté en Édition), la Lecture
+//      montre le document ASSEMBLÉ pour la ligne choisie (jamais une page blanche, jamais son résumé) et un vrai clic sur « Mode édition » rend le résumé ; quand la vue dit Édition, n'a pas de choix ou dit « last » (même si la personne
+//      lisait en dernier), il ouvre son résumé comme avant ;
 //   5) Réglages > Vue (clair/français puis sombre/anglais) : la section entière dans le panneau, sans défilement horizontal ; la liste dit « Le dernier mode choisi » au départ ;
 //      un choix écrit l'option du widget (et seulement elle : le modèle de la vue n'est pas touché), la phrase dessous le dit, Ctrl + Z le défait, Ctrl + Y le rend ; « Le dernier mode choisi » retire l'option ;
 //      l'option écrite par ce choix fait ouvrir la page suivante en Lecture ;
@@ -16,7 +19,7 @@
 //      écrit dans la vue, le rappel « Enregistrer » ne s'allume pas (il n'y a pas de brouillon), et un choix accepté ensuite efface la phrase ; un choix accepté allume le rappel comme avant ;
 //   8) aucune erreur de page (hors le refus joué, que le code écrit dans la console).
 // Lancé par run-headless.mjs (groupe Node « viewOpenMode », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-view-open-mode.mjs
-import { open, stopServer, sleep, click } from './load-lib.mjs';
+import { open, stopServer, sleep, click, fire } from './load-lib.mjs';
 
 const PORT = Number(process.env.VIEW_OPEN_MODE_PORT || 9291);
 const LAST = 'pp_last_mode';
@@ -94,14 +97,52 @@ try {
   page = await start(specWith(SPEC_NO_STAR, { [VIEW]: 'read' }));
   s = await state(page);
   check('aucun modèle ne s\'ouvre de lui-même (pas de ★) : l\'Édition, même si la vue dit Lecture', isEdit(s) && s.editor, s);
+
+  console.log('\n[4 bis] Un macro-modèle suit la vue quand elle dit Lecture (consigne 110 de GFS)');
   page = await start(SPEC_MACRO);
   const macroId = await page.evaluate(() => { const found = Templates.getCached().find(t => t.typeModele === 'macro'); return found ? String(found.id) : null; });
   check('le faux document porte bien un macro-modèle', macroId !== null, macroId);
+  const macroView = page => page.evaluate(() => {
+    const shown = id => { const el = document.getElementById(id); return !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0; };
+    const sheet = document.querySelector('#reader-container .reader-content');
+    return { id: String(Templates.getCurrentId()), summary: shown('macro-summary-container'), sheetText: sheet ? (sheet.innerText || '').trim() : null };
+  });
+  // Le résumé d'un macro-modèle (sa composition) : l'écran d'Édition d'un macro-modèle, à la place de l'éditeur.
+  const isMacroEdit = (st, m) => isEdit(st) && !st.editor && m.summary;
+  page = await start(specWith(SPEC_MACRO, { modeleDeLaVue: macroId, [VIEW]: 'read' }), { storage: lastModeIs('edit') });
+  await fire(page, 'VoClients', 1);
+  await sleep(900);
+  s = await state(page);
+  let m = await macroView(page);
+  check('un macro-modèle choisi pour la vue s\'ouvre bien', m.id === macroId, m);
+  check('la vue dit Lecture : il s\'ouvre en Lecture, même si la personne avait quitté en Édition (bouton allumé, lecteur affiché, éditeur et résumé cachés)', isRead(s) && !m.summary, { s, m });
+  check('la préférence de la personne (Édition) n\'est pas écrasée', s.stored === 'edit', s);
+  check('la Lecture montre le document ASSEMBLÉ pour la ligne choisie (le modèle de son premier emplacement, ses champs remplis), pas une page blanche', !!m.sheetText && /Paragraphe 1 du modèle 1/.test(m.sheetText) && !/\{\{|VoClients\.Nom\}/.test(m.sheetText), m);
+  await click(page, '#btn-mode-edit');
+  await sleep(900);
+  s = await state(page);
+  m = await macroView(page);
+  check('un vrai clic sur « Mode édition » rend le résumé du macro-modèle (la personne garde le bouton)', isMacroEdit(s, m), { s, m });
+  await click(page, '#btn-mode-read');
+  await sleep(900);
+  s = await state(page);
+  m = await macroView(page);
+  check('« Mode lecture » le relit : le document assemblé, toujours pour la même ligne', isRead(s) && /Paragraphe 1 du modèle 1/.test(m.sheetText || ''), { s, m });
+  for (const [label, options, storage] of [
+    ['la vue dit Édition, la personne lisait en dernier', { modeleDeLaVue: macroId, [VIEW]: 'edit' }, lastModeIs('read')],
+    ['la vue n\'a pas de choix, la personne lisait en dernier (comme avant : jamais la dernière préférence)', { modeleDeLaVue: macroId }, lastModeIs('read')],
+    ['l\'option de la vue vaut « last » (ce n\'est pas un choix), la personne lisait en dernier', { modeleDeLaVue: macroId, [VIEW]: 'last' }, lastModeIs('read')],
+    ['la vue n\'a pas de choix et la personne n\'a rien choisi', { modeleDeLaVue: macroId }, null],
+  ]) {
+    page = await start(specWith(SPEC_MACRO, options), storage ? { storage } : {});
+    s = await state(page);
+    m = await macroView(page);
+    check('le macro-modèle ouvre son résumé en Édition : ' + label, m.id === macroId && isMacroEdit(s, m), { s, m });
+  }
   page = await start(specWith(SPEC_MACRO, { modeleDeLaVue: macroId, [VIEW]: 'read' }));
   s = await state(page);
-  const macroOpen = await page.evaluate(() => ({ type: typeof currentTypeModele !== 'undefined' ? currentTypeModele : null, id: String(Templates.getCurrentId()) }));
-  check('un macro-modèle choisi pour la vue s\'ouvre bien', macroOpen.id === macroId, macroOpen);
-  check('… en Édition, même si la vue dit Lecture', s.editActive && !s.readActive && !s.reader, s);
+  m = await macroView(page);
+  check('sans ligne choisie (le faux Grist n\'en envoie pas au départ), la vue dit Lecture : la Lecture s\'ouvre quand même, sans erreur', isRead(s) && m.id === macroId, { s, m });
 
   console.log('\n[5] Réglages > Vue, au vrai clic : français clair');
   page = await start(specWith(SPEC_STAR));
@@ -135,6 +176,9 @@ try {
   check('le titre de la section est « Mode d\'ouverture de cette vue »', p.title === 'Mode d’ouverture de cette vue', p.title);
   check('la liste propose le dernier mode, la Lecture et l\'Édition, et dit « Le dernier mode choisi » au départ', p.value === 'last' && p.options.join('|') === 'last=Le dernier mode choisi|read=Lecture|edit=Édition', p);
   check('la phrase dit que chaque personne retrouve son dernier mode', /dernier/.test(p.sentence) && !p.disabled && !p.lockedShown, p);
+  const hintOf = () => page.evaluate(() => (document.querySelector('#settings-viewopen-section .settings-access-hint') || {}).textContent || '');
+  let hint = await hintOf();
+  check('le petit texte sous la liste ne dit plus qu\'un macro-modèle s\'ouvre toujours en Édition : il dit qu\'il suit ce choix, et s\'ouvre en Édition quand la vue n\'en a pas (consigne 110)', !/macro-modèle s’ouvrent toujours/.test(hint) && /Un modèle vierge et un fichier importé s’ouvrent toujours en Édition/.test(hint) && /un macro-modèle suit ce choix, et s’ouvre en Édition quand la vue n’en a pas/.test(hint), hint);
   await page.selectOption('#settings-viewopen-mode', 'read');
   await sleep(400);
   p = await panel();
@@ -201,6 +245,8 @@ try {
   await sleep(250);
   p = await panel();
   check('le titre, la liste et la phrase sont en anglais', p.title === 'Opening mode of this view' && p.options.join('|') === 'last=The last mode chosen|read=Read|edit=Edit' && p.value === 'edit' && /opens in Edit mode/.test(p.sentence), p);
+  hint = await hintOf();
+  check('le petit texte sous la liste est en anglais et dit qu\'un macro-template suit ce choix (et ne dit plus qu\'il s\'ouvre toujours en Édition)', !/macro-template always open/.test(hint) && /A blank template and an imported file always open in Edit mode; a macro-template follows this choice, and opens in Edit mode when the view has none\./.test(hint), hint);
   check('en anglais sombre, tout tient dans la fenêtre 700x400 sans défilement horizontal', inside(p.select) && !p.hScroll, p);
   const colors = await page.evaluate(() => {
     const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number); const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };

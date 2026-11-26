@@ -324,8 +324,8 @@ const I18nTextsSettings = {
   },
   'settings.viewOpen.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
   'settings.viewOpen.hint': {
-    fr: 'Le bouton Mode lecture ou Mode édition reste utilisable à tout moment (sauf en lecture seule). Un modèle vierge, un fichier importé et un macro-modèle s’ouvrent toujours en Édition.',
-    en: 'The Read mode and Edit mode buttons stay usable at any time (except when read-only). A blank template, an imported file and a macro-template always open in Edit mode.',
+    fr: 'Le bouton Mode lecture ou Mode édition reste utilisable à tout moment (sauf en lecture seule). Un modèle vierge et un fichier importé s’ouvrent toujours en Édition ; un macro-modèle suit ce choix, et s’ouvre en Édition quand la vue n’en a pas.',
+    en: 'The Read mode and Edit mode buttons stay usable at any time (except when read-only). A blank template and an imported file always open in Edit mode; a macro-template follows this choice, and opens in Edit mode when the view has none.',
   },
   'settings.viewTemplate.reason.unsaved': {
     fr: 'Ce modèle n’est pas encore enregistré : donnez-lui un nom et cliquez sur Enregistrer, il pourra alors devenir celui de cette vue.',
