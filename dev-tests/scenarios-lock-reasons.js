@@ -175,7 +175,7 @@
       await h.resetEditor();
       await goToNewMacro(h);
       const reason = I18n.t('lock.macro');
-      const ids = ['v2-btn-bold', 'v2-heading-group', 'v2-btn-table', 'v2-btn-find', 'v2-btn-track-changes', 'v2-blocks-group', 'v2-collab-group', 'v2-char-group', 'v2-btn-insert-variable', 'v2-btn-comment'];
+      const ids = ['v2-btn-bold', 'v2-heading-group', 'v2-btn-table', 'v2-btn-find', 'v2-btn-track-changes', 'v2-blocks-group', 'v2-collab-group', 'v2-char-group', 'v2-variable-group', 'v2-btn-comment'];
       const silent = ids.filter(id => titleOf(id) !== reason || !blocks(id));
       clearSaid();
       byId('v2-btn-find').click();

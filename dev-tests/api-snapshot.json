@@ -293,6 +293,7 @@
 "TypingStyle":"ATTR:d SETTING_KEYS:d commonStyle:f createExtension:f marksOf:f normalize:f remember:f styleOfMarks:f",
 "VariableCalc":"compile:f insertFromPanel:f isOpen:f openAt:f typedFormula:f",
 "VariableColumn":"ensureLinked:f isBroken:f isImageBroken:f isMissAt:f isUnlinkedAt:f openAt:f replacementAttrs:f replacementImageAttrs:f",
+"VariableConvert":"run:f scanNow:f status:f syncRow:f",
 "VariableCondition":"clearClipboard:f describe:f isOpen:f openAt:f",
 "VariableConditionClipboard":"clear:f create:f",
 "VariableConditionData":"TEXTS:d TEXT_OTHERWISE:d conditionSummary:f",

@@ -722,6 +722,7 @@ const I18nTextsSettings = {
   'palette.close': { fr: 'Fermer', en: 'Close' },
   'palette.kw.exportPdf': { fr: 'pdf word docx html markdown email imprimer télécharger', en: 'pdf word docx html markdown email print download' },
   'palette.kw.save': { fr: 'sauvegarder sauver', en: 'store keep' },
+  'palette.kw.convertVariables': { fr: 'basculer hashtag coller bulle', en: 'switch hashtag paste bubble' },
   'palette.kw.variableValue': { fr: 'info-bulle survol bulle valeur contenu variable', en: 'tooltip hover bubble value content variable' },
   'palette.kw.new': { fr: 'créer nouveau document', en: 'create new document' },
   'palette.kw.templates': { fr: 'ouvrir modèle document changer', en: 'open document switch' },

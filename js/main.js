@@ -100,6 +100,14 @@
     noteInStatus(I18n.t('image.paste.external', { n: count }));
   });
 
+  // « Convertir le texte en variables » (js/variable-convert.js) : ce qui a été converti et ce qui est resté du texte (colonne introuvable), dit dans le coin d'état.
+  document.addEventListener('pp:variablesConverted', (event) => {
+    const detail = (event && event.detail) || {};
+    const n = Number(detail.converted) || 0;
+    const left = Number(detail.left) || 0;
+    setStatus(I18n.t(left ? 'varConvert.doneLeft' : 'varConvert.done', { n, left }));
+  });
+
   function getPdfFilenameTemplate() {
     return pdfFilenameInput ? pdfFilenameInput.value.trim() : '';
   }

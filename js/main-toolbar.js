@@ -348,6 +348,8 @@ const MainToolbar = (function () {
     TextDirection.syncRow(byId('v2-btn-rtl'), editor);
     // « Paragraphe… » (menu Alignement) : grisée avec sa raison hors du texte courant (titre, légende, en-tête ou pied de page).
     ParagraphFormat.syncRow(byId('v2-btn-paragraph'), editor);
+    // « Convertir le texte en variables » (menu du bouton « Insérer une variable ») : grisée avec sa raison sans sélection, sans rien à convertir dedans et sous le suivi des modifications.
+    VariableConvert.syncRow(byId('v2-btn-convert-variables'), editor);
     // « Puce… » (menu Liste) : grisée avec sa raison hors d'une liste à puces.
     BulletFormat.syncRow(byId('v2-btn-bullet-char'), editor);
     // « Signet… » (menu du lien) : grisée avec sa raison hors d'un paragraphe ou d'un titre du texte (et dans un modèle d'e-mail), relue « Modifier le signet… » quand le bloc en porte un.
@@ -389,7 +391,7 @@ const MainToolbar = (function () {
       // Un macro-modèle grise aussi ce que l'e-mail laisse actif - le menu « Aa » en entier, donc l'exposant et l'indice que le lien écrit en caractères Unicode
       // (js/script-marks.js:toUnicode) -, et le menu « Lien et blocs de contenu » en entier. Annuler et Rétablir restent actifs : l'historique d'un macro-modèle
       // garde sa page et sa composition (js/history-markers.js, domaines « page » et « macro »).
-      [inMacroMode, ['v2-char-group', 'v2-btn-comment', 'v2-btn-insert-variable', 'v2-btn-find', 'v2-btn-track-changes', 'v2-btn-track-format',
+      [inMacroMode, ['v2-char-group', 'v2-btn-comment', 'v2-variable-group', 'v2-btn-find', 'v2-btn-track-changes', 'v2-btn-track-format',
         'v2-blocks-group', 'v2-btn-accept-all', 'v2-btn-reject-all', 'v2-btn-track-pane', 'v2-btn-comment-pane', 'v2-btn-state-check', 'v2-collab-group'], plain],
       // En-tête ou pied de page : un niveau de titre a un sens, pas la numérotation (titres du flux principal seul). Le sommaire et le saut de page y sont
       // grisés aussi, plus haut (ils ont déjà une condition pour l'e-mail et la grille).
@@ -828,6 +830,9 @@ const MainToolbar = (function () {
     // caractère inséré par le code rouvre la même autocomplétion que s'il était tapé. Un texte sélectionné n'est pas remplacé par le « # » : la liste
     // s'ouvre devant lui, sur l'onglet Chips, pour l'entourer d'un bloc « Texte conditionnel » (js/conditional-text.js:startFromSelection).
     bind('v2-btn-insert-variable', () => { if (!ConditionalText.startFromSelection(editor)) editor.chain().focus().insertContent(Variables.triggerChar()).run(); });
+    // « Convertir le texte en variables » (js/variable-convert.js) : le menu au survol du même bouton ; les « #Table.Colonne » de la sélection deviennent des bulles, en une transaction. Sans effet grisée.
+    const convertVariablesRow = byId('v2-btn-convert-variables');
+    if (convertVariablesRow) wireActionRow(convertVariablesRow, () => VariableConvert.run(editor));
     // Le pinceau de mise en forme câble lui-même son clic et son double-clic (js/format-painter.js) ; son menu au survol garde les mises en forme (js/format-slots-menu.js).
     FormatPainter.wire(editor);
     FormatSlotsMenu.wire(editor);
