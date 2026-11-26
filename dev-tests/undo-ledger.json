@@ -80,6 +80,7 @@
     "#v2-btn-code-block": {"class": "model", "start": "para"},
     "#v2-btn-signature": {"class": "model", "start": "para"},
     "#v2-btn-insert-variable": {"class": "model", "start": "para"},
+    "#v2-btn-convert-variables": {"class": "covered", "cases": ["varConvert", "varConvertMouse"], "note": "« Convertir le texte en variables » (menu du bouton Insérer une variable, js/variable-convert.js) : les « #Table.Colonne » de la zone sélectionnée deviennent des bulles en UNE transaction, UN Ctrl + Z rend le texte d'avant ; grisée sans sélection et sans rien à convertir, donc hors de portée du balayage"},
     ".v2-table-toolbar button[action=row-before]": {"class": "model", "start": "table"},
     ".v2-table-toolbar button[action=row-after]": {"class": "model", "start": "table"},
     ".v2-table-toolbar button[action=row-del]": {"class": "model", "start": "table"},

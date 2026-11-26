@@ -2,6 +2,14 @@
 // Chargé AVANT js/i18n.js, qui assemble tous les js/i18n-texts-*.js. Un texte neuf va dans le fichier de son domaine, en français et en anglais dans le même lot, et le `?v=` de ce fichier monte dans index.html ;
 // une clé n'existe que dans un seul fichier (l'essai « aucune clé déclarée deux fois » lit les fichiers ensemble).
 const I18nTextsVariables = {
+  // --- Convertir le texte en variables (js/variable-convert.js) : la ligne du menu au survol du bouton « Insérer une variable », ses raisons de grisé et la phrase du coin d'état ---
+  'varConvert.row': { fr: 'Convertir le texte en variables', en: 'Convert text to variables' },
+  'varConvert.aria': { fr: 'Convertir en variables les textes « #Table.Colonne » de la sélection (un seul Annuler les défait)', en: 'Convert the “#Table.Column” texts of the selection into variables (a single Undo reverts them)' },
+  'varConvert.noSelection': { fr: 'Sélectionnez d’abord une zone de texte : les « #Table.Colonne » qu’elle contient deviendront des variables', en: 'Select an area of text first: the “#Table.Column” texts it contains will become variables' },
+  'varConvert.nothing': { fr: 'Rien à convertir dans la sélection : aucun « #Table.Colonne » dont la table et la colonne existent', en: 'Nothing to convert in the selection: no “#Table.Column” whose table and column exist' },
+  'varConvert.tracking': { fr: 'Indisponible avec le suivi des modifications : une bulle ne se propose pas en suggestion. Désactivez le suivi', en: 'Unavailable with track changes on: a bubble can’t be proposed as a suggestion. Turn track changes off' },
+  'varConvert.done': { fr: '{n} {n|variable créée|variables créées}.', en: '{n} {n|variable|variables} created.' },
+  'varConvert.doneLeft': { fr: '{n} {n|variable créée|variables créées}, {left} {left|texte laissé tel quel|textes laissés tels quels} (colonne introuvable).', en: '{n} {n|variable|variables} created, {left} {left|text|texts} left as is (column not found).' },
   // --- Variables à revoir (js/variable-review.js) : le coin d'état et la commande de la palette ---
   'review.status.one': { fr: '1 variable à revoir', en: '1 variable to review' },
   'review.status.many': { fr: '{n} variables à revoir', en: '{n} variables to review' },

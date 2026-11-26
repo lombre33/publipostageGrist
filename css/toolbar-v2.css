@@ -279,6 +279,18 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 .macro-doc-condition .var-condition-rules { background: var(--surface); }
 .macro-doc-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--warn-ink); }
 .macro-doc-hint[hidden] { display: none; }
+/* Les modèles « à la suite » (js/macro-editor.js:followingBlock) : sous le reste de la carte, un filet les sépare du modèle du document ; chaque ligne est une liste « Modèle » avec sa croix, puis le lien « + Ajouter un modèle à la suite ». */
+.macro-following { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.macro-following-title { font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.macro-following-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.macro-following-row select.macro-following-model { flex: 1 1 90px; min-width: 0; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); font-size: 12px; padding: 0 6px; background: var(--surface); color: var(--text); font-family: var(--font-ui); }
+.macro-following-row select.macro-following-model + .ss-wrap .ss-trigger { height: 28px; padding: 0 6px; font-size: 12px; }
+.macro-following-remove { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
+.macro-following-remove:hover { background: var(--surface); border-color: var(--border-strong); color: var(--danger-ink); }
+.macro-following-remove::before { content: "✕"; font-size: 12px; }
+.macro-following-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.macro-following-add { align-self: flex-start; font-size: 11.5px; font-weight: 600; color: var(--accent-ink); background: none; border: none; padding: 4px 0; cursor: pointer; font-family: var(--font-ui); }
+.macro-following-add:hover { color: var(--accent-hover); text-decoration: underline; }
 /* Sous « Modèle : Choisi selon la ligne » : les règles de la position, sous la condition d'inclusion quand elle est ouverte. */
 .macro-by-row { margin-top: 2px; }
 .macro-doc-condition:not([hidden]) + .macro-by-row { margin-top: 8px; }
@@ -353,6 +365,8 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 /* Les étiquettes « Grille » et « Paysage » (js/macro-editor.js:modelTags), à droite du nom : un liseré et le texte atténué du panneau (`--text-muted` sur `--surface`, la ligne qui les porte : 5,4:1 en clair, 6,3:1 en
    sombre), jamais de couleur. Elles ne rétrécissent pas : c'est le nom qui se coupe par « … » quand la ligne manque de place. */
 .macro-summary-model-tag { flex: none; margin-left: 4px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 11px; font-weight: 600; line-height: 16px; white-space: nowrap; color: var(--text-muted); }
+/* « puis », entre les modèles d'un même document du résumé (js/macro-editor.js:renderParts) : le modèle suivant vient à la suite du précédent. Texte atténué du panneau (`--text-muted` sur `--surface`), pas de bordure. */
+.macro-summary-then { flex: none; font-size: 11.5px; color: var(--text-muted); }
 /* Sous les modèles d'une ligne du résumé : quand elle est incluse (« Seulement si : Statut = Urgent », ou « Le modèle est choisi selon la ligne »). Sur sa propre ligne, en texte atténué du panneau (`--text-muted`
    sur `--surface` : 5,4:1 en clair), coupé par « … » quand la condition est longue - elle se lit en entier au survol. */
 .macro-summary-condition { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-muted); }

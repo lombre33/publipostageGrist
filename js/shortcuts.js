@@ -369,7 +369,9 @@ const Shortcuts = (function () {
       { id: 'videoBlock', group: 'insert', label: 'insert.video.row', key: '', scope: 'editor', hint: tip('v2-btn-video'), run: click('v2-btn-video') },
       { id: 'chartBlock', group: 'insert', label: 'insert.chart.row', key: '', scope: 'editor', hint: tip('v2-btn-chart'), run: click('v2-btn-chart') },
       { id: 'chartMake', group: 'insert', label: 'insert.chart.make.row', key: '', scope: 'editor', hint: tip('v2-btn-chart-make'), run: click('v2-btn-chart-make') },
-      { id: 'variable', group: 'insert', label: 'insert.variable.tip', key: '', scope: 'editor', hint: tip('v2-btn-insert-variable'), run: click('v2-btn-insert-variable') },
+      { id: 'variable', group: 'insert', label: 'insert.variable.tip', key: '', scope: 'editor', hint: '#v2-variable-flyout .v2-hover-flyout-label', aria: tip('v2-btn-insert-variable'), run: click('v2-btn-insert-variable') },
+      // « Convertir le texte en variables » (js/variable-convert.js) : la ligne du menu du bouton « Insérer une variable », aussi dans la palette de commandes (Alt+/).
+      { id: 'convertVariables', group: 'insert', label: 'varConvert.row', key: '', scope: 'editor', hint: tip('v2-btn-convert-variables'), run: click('v2-btn-convert-variables') },
       { id: 'today', group: 'insert', label: 'chips.date', key: 'Alt+Shift+d', scope: 'editor', run: insertTodayChip },
       // Historique et suivi
       { id: 'undo', group: 'history', label: 'history.undo', key: 'Mod+z', native: true, anywhere: true, scope: 'editor', repeat: true, hint: tip('v2-btn-undo'), run: click('v2-btn-undo') },

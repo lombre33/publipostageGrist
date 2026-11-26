@@ -3355,6 +3355,277 @@
     },
   });
 
+  // --- Des modèles à la suite, dans la carte d'un document (26/11, demande d'Antoine : « après avoir mis des conditions sur un modèle, ajouter d'autres modèles dans le bloc à la suite », pour des conditions qui valent pour la présence de plusieurs modèles) ---
+  // `followingModeleIds` (clé facultative d'une position) : d'autres modèles qui s'assemblent après celui du document, dans l'ordre, tous sous la condition de la carte. Sans la clé, la position se lit comme avant.
+  cases.push({
+    id: 'macro_following_engine_gives_the_block_models_in_order_under_one_condition',
+    description: 'pickModeleIds / buildConcatenatedHtml : un document à modèles à la suite donne son modèle puis les suivants dans l\'ordre, un saut de page entre chacun, tous retenus ou tous sortis par la condition du document ; l\'œil d\'un modèle ne masque que lui ; une position sans la clé se lit comme avant',
+    run: async () => {
+      const problems = [];
+      const same = (name, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) problems.push(name + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(want)); };
+      const templates = [{ id: 'a', contenu: '<p>AAA</p>' }, { id: 'b', contenu: '<p>BBB</p>' }, { id: 'c', contenu: '<p>CCC</p>' }, { id: 'd', contenu: '<p>DDD</p>' }];
+      const pick = (slot, record) => MacroTemplates.pickModeleIds(slot, 'Dossiers', record || { id: 1, Statut: 'Urgent' });
+      const build = (slots, record) => MacroTemplates.buildConcatenatedHtml({ slots }, 'Dossiers', record || { id: 1, Statut: 'Urgent' }, templates);
+      const brk = rank => MacroTemplates.slotBreakHtml(rank);
+      // Le bloc d'un document.
+      const block = { type: 'fixed', modeleId: 'a', followingModeleIds: ['b', 'c'] };
+      same('modèles du bloc', await pick(block), ['a', 'b', 'c']);
+      same('modèles de la position', MacroTemplates.slotModelIds(block), ['a', 'b', 'c']);
+      same('modèles à la suite', MacroTemplates.followingModeleIds(block), ['b', 'c']);
+      same('modèles entre lesquels elle choisit', MacroTemplates.choiceModelIds(block), ['a']);
+      if (await build([block]) !== '<p>AAA</p>' + brk(1) + '<p>BBB</p>' + brk(2) + '<p>CCC</p>') problems.push('assemblage : ' + await build([block]));
+      // La même condition pour tous : remplie, le bloc entier ; non remplie, aucun de ses modèles, et le document d'après n'a pas de saut devant.
+      const only = { type: 'fixed', modeleId: 'a', followingModeleIds: ['b', 'c'], condition: whenCond(ruleOn('Statut', '=', 'Urgent')) };
+      same('condition remplie', await pick(only, { id: 1, Statut: 'Urgent' }), ['a', 'b', 'c']);
+      same('condition non remplie', await pick(only, { id: 2, Statut: 'Normal' }), []);
+      if (await build([only, { type: 'fixed', modeleId: 'd' }], { id: 2, Statut: 'Normal' }) !== '<p>DDD</p>') problems.push('bloc sorti : ' + await build([only, { type: 'fixed', modeleId: 'd' }], { id: 2, Statut: 'Normal' }));
+      if (await build([{ type: 'fixed', modeleId: 'd' }, only], { id: 1, Statut: 'Urgent' }) !== '<p>DDD</p>' + brk(1) + '<p>AAA</p>' + brk(2) + '<p>BBB</p>' + brk(3) + '<p>CCC</p>') problems.push('document puis bloc : ' + await build([{ type: 'fixed', modeleId: 'd' }, only]));
+      // L'œil d'un modèle : lui seul, les rangs des sauts suivent.
+      const eyed = Object.assign({}, block, { hiddenModeleIds: ['b'] });
+      same('œil sur un modèle à la suite', await pick(eyed), ['a', 'c']);
+      if (await build([eyed]) !== '<p>AAA</p>' + brk(1) + '<p>CCC</p>') problems.push('assemblage avec un œil : ' + await build([eyed]));
+      same('œil sur le modèle du document', await pick(Object.assign({}, block, { hiddenModeleIds: ['a'] })), ['b', 'c']);
+      // Choisi selon la ligne : le modèle choisi puis ceux qui suivent ; sans modèle choisi (ni règle ni défaut), ceux qui suivent restent là tant que la condition tient.
+      const byRow = { type: 'conditional', rules: [{ column: 'Statut', operator: '=', value: 'Urgent', modeleId: 'a' }], defaultModeleId: null, followingModeleIds: ['c'] };
+      same('selon la ligne, une règle remplie', await pick(byRow, { id: 1, Statut: 'Urgent' }), ['a', 'c']);
+      same('selon la ligne, aucune règle ne convient', await pick(byRow, { id: 2, Statut: 'Normal' }), ['c']);
+      same('selon la ligne, la position est sortie par sa condition', await pick(Object.assign({}, byRow, { condition: whenCond(ruleOn('Statut', '=', 'Normal')) }), { id: 1, Statut: 'Urgent' }), []);
+      same('modèles d\'une position selon la ligne', MacroTemplates.slotModelIds(Object.assign({}, byRow, { defaultModeleId: 'd' })), ['a', 'd', 'c']);
+      // Sans la clé, rien ne change ; la clé vide, un choix pas fait et un doublon ne produisent pas de modèle de trop.
+      same('position sans la clé', await pick({ type: 'fixed', modeleId: 'a' }), ['a']);
+      same('pickModeleId ne dit que le modèle choisi', await MacroTemplates.pickModeleId(block, 'Dossiers', { id: 1 }), 'a');
+      same('clé vide, choix pas fait', await pick({ type: 'fixed', modeleId: 'a', followingModeleIds: [null, '', 'b'] }), ['a', 'b']);
+      same('le même modèle deux fois s\'assemble deux fois', await pick({ type: 'fixed', modeleId: 'a', followingModeleIds: ['a', 'b', 'b'] }), ['a', 'a', 'b', 'b']);
+      same('et se dit une fois', MacroTemplates.slotModelIds({ type: 'fixed', modeleId: 'a', followingModeleIds: ['a', 'b', 'b'] }), ['a', 'b']);
+      same('identifiants en texte ou en nombre', await pick({ type: 'fixed', modeleId: 7, followingModeleIds: [8], hiddenModeleIds: ['8'] }), [7]);
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+    },
+  });
+
+  cases.push({
+    id: 'macro_editor_adds_models_after_a_document_and_saves_them_in_order',
+    description: 'Sous la carte d\'un document, « + Ajouter un modèle à la suite » pose une ligne « Modèle » (sans « Choisi selon la ligne ») avec sa croix ; les modèles choisis s\'enregistrent dans l\'ordre sous `followingModeleIds`, un choix pas fait n\'est pas écrit, la fenêtre rouverte les montre, retirer le dernier ôte la clé ; la condition de la carte est écrite avec eux',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro à la suite');
+        setAutosave(false);
+        await feedColumns(h, { id: 1, Nom: 'a', Statut: 'Urgent', Montant: 10 });
+        const problems = [];
+        const before = macroRow(macro.id).Contenu;
+        await openWindow(h);
+        const card = i => cardsOf()[i];
+        const rowsOf = i => Array.from(card(i).querySelectorAll('.macro-following-row'));
+        const addButton = i => card(i).querySelector('.macro-following-add');
+        // À l'ouverture : aucune ligne, le lien d'ajout sous chaque carte (document et choisi selon la ligne) ; une composition d'avant se réécrit sans la clé.
+        if (addButton(0).textContent !== '+ Ajouter un modèle à la suite' || addButton(1).textContent !== '+ Ajouter un modèle à la suite' || rowsOf(0).length || rowsOf(1).length) problems.push('ouverture : ' + JSON.stringify([addButton(0).textContent, rowsOf(0).length, rowsOf(1).length]));
+        if (card(0).querySelector('.macro-following-title')) problems.push('le titre « À la suite » s\'affiche sans aucun modèle');
+        await saveWindow(h);
+        if (/followingModeleIds/.test(macroRow(macro.id).Contenu)) problems.push('clé écrite pour rien : ' + macroRow(macro.id).Contenu);
+        const asText = slots => JSON.stringify(slots, (key, value) => (key === 'modeleId' || key === 'defaultModeleId') && value != null ? String(value) : value);
+        if (asText(savedSlots(macro.id)) !== asText(JSON.parse(before).slots)) problems.push('composition d\'avant réécrite autrement : ' + macroRow(macro.id).Contenu);
+        // Deux modèles à la suite du premier document, un troisième laissé sans choix.
+        await openWindow(h);
+        addButton(0).click(); addButton(0).click(); addButton(0).click();
+        await h.sleep(80);
+        if (rowsOf(0).length !== 3) problems.push('trois lignes attendues : ' + rowsOf(0).length);
+        const selects = () => rowsOf(0).map(row => row.querySelector('select.macro-following-model'));
+        const first = selects()[0];
+        const optionValues = Array.from(first.options).map(o => o.value);
+        if (optionValues.includes('__by-row__') || optionValues[0] !== '' || optionValues.length !== 1 + SearchableTemplatesCount()) problems.push('choix de la ligne : ' + JSON.stringify(optionValues));
+        if (card(0).querySelector('.macro-following-title').textContent !== 'À la suite, sous la même condition') problems.push('titre : ' + card(0).querySelector('.macro-following-title').textContent);
+        if (first.getAttribute('aria-label') !== 'Modèle 1 à la suite du document 1' || rowsOf(0)[1].querySelector('.macro-following-remove').getAttribute('aria-label') !== 'Retirer le modèle 2 à la suite du document 1') problems.push('noms accessibles : ' + first.getAttribute('aria-label') + ' / ' + rowsOf(0)[1].querySelector('.macro-following-remove').getAttribute('aria-label'));
+        setSelect(selects()[0], String(macro.otherId));
+        setSelect(selects()[1], String(macro.thirdId));
+        setSelect(card(0).querySelector('select.macro-doc-when'), 'if');
+        await h.sleep(100);
+        await fillRule(h, card(0).querySelector('.macro-doc-rules .macro-rule-row'), 'Statut', '=', 'Urgent');
+        await saveWindow(h);
+        const saved = savedSlots(macro.id);
+        const want = { type: 'fixed', modeleId: macro.coverId, followingModeleIds: [macro.otherId, macro.thirdId].map(String), condition: { mode: 'all', rules: [{ column: 'Statut', operator: '=', value: 'Urgent' }] } };
+        const norm = slot => JSON.stringify(Object.assign({}, slot, { modeleId: String(slot.modeleId), followingModeleIds: (slot.followingModeleIds || []).map(String) }));
+        if (norm(saved[0]) !== norm(want)) problems.push('composition : ' + JSON.stringify(saved[0]));
+        if (saved.length !== 2 || saved[1].type !== 'conditional' || 'followingModeleIds' in saved[1]) problems.push('l\'autre position a changé : ' + JSON.stringify(saved[1]));
+        // Rouverte : les deux lignes, dans l'ordre, sous la même condition ; retirer la première laisse l'autre, retirer la dernière ôte la clé.
+        await openWindow(h);
+        if (JSON.stringify(selects().map(s => s.value)) !== JSON.stringify([String(macro.otherId), String(macro.thirdId)])) problems.push('rouverte : ' + JSON.stringify(selects().map(s => s.value)));
+        rowsOf(0)[0].querySelector('.macro-following-remove').click();
+        await h.sleep(80);
+        if (JSON.stringify(selects().map(s => s.value)) !== JSON.stringify([String(macro.thirdId)])) problems.push('après retrait de la première : ' + JSON.stringify(selects().map(s => s.value)));
+        if (document.activeElement !== addButton(0)) problems.push('le focus ne revient pas sur « + Ajouter un modèle à la suite » après un retrait');
+        await saveWindow(h);
+        if (JSON.stringify((savedSlots(macro.id)[0].followingModeleIds || []).map(String)) !== JSON.stringify([String(macro.thirdId)])) problems.push('après retrait : ' + JSON.stringify(savedSlots(macro.id)[0]));
+        await openWindow(h);
+        rowsOf(0)[0].querySelector('.macro-following-remove').click();
+        await saveWindow(h);
+        if ('followingModeleIds' in savedSlots(macro.id)[0]) problems.push('la clé reste sans modèle à la suite : ' + JSON.stringify(savedSlots(macro.id)[0]));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+  // Le nombre de modèles que les listes de la fenêtre proposent (documents, grilles, présentations : availableTemplates de js/macro-editor.js).
+  function SearchableTemplatesCount() { return Templates.getCached().filter(t => ['document', 'grille', 'presentation'].indexOf(t.typeModele || 'document') !== -1).length; }
+
+  cases.push({
+    id: 'macro_editor_following_models_stay_when_a_document_changes_between_one_model_and_by_row',
+    description: 'Passer un document de « un modèle » à « Choisi selon la ligne » et retour garde ses modèles à la suite ; une position choisie selon la ligne a aussi les siens, écrits avec ses règles ; déplacer ou supprimer une carte emporte ses modèles ; un modèle masqué par l\'œil le reste à travers la fenêtre',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro à la suite bascule');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId, followingModeleIds: [macro.otherId], hiddenModeleIds: [macro.otherId] },
+          { type: 'conditional', rules: [{ column: 'Nom', operator: '=', value: 'a', modeleId: macro.otherId }], defaultModeleId: macro.thirdId, followingModeleIds: [macro.coverId] },
+        ]);
+        await openWindow(h);
+        const card = i => cardsOf()[i];
+        const followed = i => Array.from(card(i).querySelectorAll('select.macro-following-model')).map(s => s.value);
+        if (JSON.stringify(followed(0)) !== JSON.stringify([String(macro.otherId)]) || JSON.stringify(followed(1)) !== JSON.stringify([String(macro.coverId)])) problems.push('ouverture : ' + JSON.stringify([followed(0), followed(1)]));
+        // Document 1 : « Choisi selon la ligne », puis un modèle à nouveau.
+        setSelect(card(0).querySelector('select.macro-doc-model'), '__by-row__');
+        await h.sleep(100);
+        if (JSON.stringify(followed(0)) !== JSON.stringify([String(macro.otherId)])) problems.push('les modèles à la suite ne suivent pas le passage selon la ligne : ' + JSON.stringify(followed(0)));
+        setSelect(card(0).querySelector('select.macro-doc-model'), String(macro.thirdId));
+        await h.sleep(100);
+        if (JSON.stringify(followed(0)) !== JSON.stringify([String(macro.otherId)])) problems.push('les modèles à la suite ne suivent pas le retour à un modèle : ' + JSON.stringify(followed(0)));
+        // Déplacer le premier document en bas : ses modèles à la suite le suivent.
+        card(0).querySelector('.macro-slot-move-down').click();
+        await h.sleep(100);
+        if (JSON.stringify(followed(0)) !== JSON.stringify([String(macro.coverId)]) || JSON.stringify(followed(1)) !== JSON.stringify([String(macro.otherId)])) problems.push('après déplacement : ' + JSON.stringify([followed(0), followed(1)]));
+        await saveWindow(h);
+        const saved = savedSlots(macro.id).map(slot => ({ type: slot.type, follow: (slot.followingModeleIds || []).map(String), hidden: (slot.hiddenModeleIds || []).map(String) }));
+        const wanted = [{ type: 'conditional', follow: [String(macro.coverId)], hidden: [] }, { type: 'fixed', follow: [String(macro.otherId)], hidden: [String(macro.otherId)] }];
+        if (JSON.stringify(saved) !== JSON.stringify(wanted)) problems.push('composition : ' + JSON.stringify(saved));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_summary_lists_following_models_after_then_each_with_a_pencil_and_an_eye',
+    description: 'Le résumé dit un document à modèles à la suite sur une seule ligne : son modèle, puis « puis » devant chaque modèle suivant, chacun avec son stylo et son œil ; l\'œil d\'un modèle à la suite le masque de la Lecture sans toucher aux autres ; la phrase compte les documents, pas les modèles',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro résumé suite');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'fixed', modeleId: macro.otherId, followingModeleIds: [macro.thirdId, macro.coverId], condition: whenCond(ruleOn('Nom', '=', 'a')) },
+        ]);
+        const rows = summaryRows();
+        const cover = 'Macro résumé suite - garde', other = 'Macro résumé suite - autre', third = 'Macro résumé suite - défaut';
+        if (JSON.stringify(rows.map(r => [r.label, r.models])) !== JSON.stringify([['Document 1', [cover]], ['Document 2', [other, third, cover]]])) problems.push('lignes : ' + JSON.stringify(rows.map(r => [r.label, r.models])));
+        const thens = Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-part')[1].querySelectorAll('.macro-summary-then')).map(n => n.textContent);
+        if (JSON.stringify(thens) !== JSON.stringify(['puis', 'puis'])) problems.push('« puis » : ' + JSON.stringify(thens));
+        if (JSON.stringify(rows[1].pencils.map(p => p.id)) !== JSON.stringify([macro.otherId, macro.thirdId, macro.coverId].map(String))) problems.push('stylos : ' + JSON.stringify(rows[1].pencils.map(p => p.id)));
+        if (document.getElementById('macro-summary-text').textContent !== '2 documents, dont 1 sous condition.') problems.push('phrase : ' + document.getElementById('macro-summary-text').textContent);
+        const note = document.querySelectorAll('#macro-summary-parts .macro-summary-part')[1].querySelector('.macro-summary-condition');
+        if (!note || note.textContent !== 'Seulement si : Nom = a') problems.push('la condition du bloc : ' + (note && note.textContent));
+        // L'œil du modèle « défaut » (deuxième du bloc) : lui seul est masqué, écrit dans la position de ce document.
+        const eye = document.querySelector('#macro-summary-parts .macro-summary-eye[data-slot="1"][data-template-id="' + macro.thirdId + '"]');
+        if (!eye) return { pass: false, notes: 'œil introuvable' };
+        eye.click();
+        await h.sleep(900);
+        const slot = savedSlots(macro.id)[1];
+        if (JSON.stringify((slot.hiddenModeleIds || []).map(String)) !== JSON.stringify([String(macro.thirdId)]) || JSON.stringify((slot.followingModeleIds || []).map(String)) !== JSON.stringify([String(macro.thirdId), String(macro.coverId)])) problems.push('composition après l\'œil : ' + JSON.stringify(slot));
+        const hiddenNow = Array.from(document.querySelectorAll('#macro-summary-parts .is-hidden-model .macro-summary-model-name')).map(n => n.textContent);
+        if (JSON.stringify(hiddenNow) !== JSON.stringify([third])) problems.push('modèle grisé : ' + JSON.stringify(hiddenNow));
+        await feedNom(h, 'a');
+        const reading = await readingOf(h);
+        const order = ['Autrepage', 'Pagepardéfaut', 'Pagedegarde'].map(t => reading.indexOf(t));
+        if (order[0] < 0 || order[1] !== -1 || reading.lastIndexOf('Pagedegarde') <= order[0]) problems.push('Lecture avec l\'œil : ' + JSON.stringify(order));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_reading_follows_the_block_condition_and_keeps_its_models_in_order',
+    description: 'En Lecture, les modèles à la suite d\'un document paraissent tous avec lui, dans l\'ordre, pour la ligne qui remplit la condition, et aucun pour les autres ; le document sans condition est toujours là',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro lecture suite');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'fixed', modeleId: macro.otherId, followingModeleIds: [macro.thirdId], condition: whenCond(ruleOn('Nom', '=', 'a')) },
+        ]);
+        const seen = text => ['cover', 'other', 'third'].map(key => [key, text.indexOf(COND_TEXTS[key])]).filter(pair => pair[1] >= 0).sort((a, b) => a[1] - b[1]).map(pair => pair[0]).join('+');
+        await feedNom(h, 'a');
+        const forA = seen(await readingOf(h));
+        await feedNom(h, 'z');
+        const forZ = seen(await readingOf(h));
+        if (forA !== 'cover+other+third') problems.push('ligne a : ' + forA);
+        if (forZ !== 'cover') problems.push('ligne z : ' + forZ);
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_batch_zip_follows_the_block_condition_row_by_row',
+    description: 'ZIP de PDF, une ligne après l\'autre : le bloc (un modèle et ceux à sa suite) arrive en entier dans le PDF des lignes qui remplissent sa condition, un modèle par page, et manque entièrement aux autres',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro lot suite');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [
+          { type: 'fixed', modeleId: macro.coverId },
+          { type: 'fixed', modeleId: macro.otherId, followingModeleIds: [macro.thirdId], condition: whenCond(ruleOn('Nom', '=', 'a')) },
+        ]);
+        const stub = window.__gristStub;
+        const rows = [{ id: 1, Nom: 'a' }, { id: 2, Nom: 'b' }];
+        stub.setVariables(PAGE_DATA, { Nom: 'Text' });
+        stub.setRows(PAGE_DATA, rows);
+        await GristAPI.refreshSchema();
+        stub.fireRecord(rows[0], PAGE_DATA);
+        await h.sleep(100);
+        const file = await fileDownloaded(h, 'v2-btn-export-pdf-batch');
+        if (!file || !file.blob) return { pass: false, notes: 'aucun ZIP téléchargé' };
+        await ExportCommon.ensureJsZipLoaded();
+        const zip = await JSZip.loadAsync(await file.blob.arrayBuffer());
+        const texts = {};
+        for (const name of Object.keys(zip.files)) texts[name] = (await pdfPages(h, await zip.file(name).async('blob'))).map(p => squashed(p.text));
+        const names = ['Macro lot suite - a.pdf', 'Macro lot suite - b.pdf'];
+        if (Object.keys(texts).length !== 2 || !names.every(n => texts[n])) return { pass: false, notes: 'fichiers : ' + JSON.stringify(Object.keys(texts)) };
+        const pages = n => texts[n].map(t => ['cover', 'other', 'third'].filter(key => t.includes(COND_TEXTS[key])).join('+'));
+        if (JSON.stringify(pages(names[0])) !== JSON.stringify(['cover', 'other', 'third'])) problems.push('ligne a : ' + JSON.stringify(pages(names[0])));
+        if (JSON.stringify(pages(names[1])) !== JSON.stringify(['cover'])) problems.push('ligne b : ' + JSON.stringify(pages(names[1])));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
+  cases.push({
+    id: 'macro_following_models_speak_english_on_a_page_that_starts_in_english',
+    lang: 'en',
+    description: 'Page qui démarre en anglais : « + Add a template after it », le titre « Then, under the same condition », les noms accessibles de la ligne et de sa croix, et « then » dans le résumé',
+    run: async (h) => {
+      try {
+        const macro = await composedMacro(h, 'Macro following english');
+        setAutosave(false);
+        const problems = [];
+        await recomposed(h, macro, [{ type: 'fixed', modeleId: macro.coverId, followingModeleIds: [macro.otherId] }]);
+        const thens = Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-then')).map(n => n.textContent);
+        if (JSON.stringify(thens) !== JSON.stringify(['then'])) problems.push('résumé : ' + JSON.stringify(thens));
+        await openWindow(h);
+        const card = cardsOf()[0];
+        const texts = {
+          add: card.querySelector('.macro-following-add').textContent,
+          title: card.querySelector('.macro-following-title').textContent,
+          row: card.querySelector('select.macro-following-model').getAttribute('aria-label'),
+          remove: card.querySelector('.macro-following-remove').getAttribute('aria-label'),
+        };
+        const want = { add: '+ Add a template after it', title: 'Then, under the same condition', row: 'Template 1 after document 1', remove: 'Remove template 1 after document 1' };
+        if (JSON.stringify(texts) !== JSON.stringify(want)) problems.push('fenêtre : ' + JSON.stringify(texts));
+        return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
+      } finally { await leaveMacro(h); }
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.macroModeles = cases;
 })();
