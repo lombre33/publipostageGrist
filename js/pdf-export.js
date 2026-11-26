@@ -4373,6 +4373,9 @@ const PdfExport = (function () {
       const containerLeftPx = (container && hostNode && hostNode.getBoundingClientRect) ? (hostNode.getBoundingClientRect().left - rootRect.left) : null;
       let above = null, aboveTopPx = -Infinity, aboveLeftPx = null;
       let below = null, belowTopPx = Infinity, belowLeftPx = null;
+      // Les blocs que l'image RECOUVRE (ni au-dessus ni au-dessous : une zone, un tableau, un long paragraphe sous un logo plus haut que l'écart qui l'en sépare), dans l'ordre du document. Quand l'un
+      // d'eux déborde de sa page, le voisin « en dessous » est celui d'après, parfois à la dernière page du document : l'image s'ancre alors à ce bloc (anchorToOverflowingBlock).
+      const overlaps = [];
       measurable.forEach(({ block: other, node, slot }) => {
         if (!node || !node.getBoundingClientRect) return;
         // Macro-modèle : un bloc d'un autre slot n'est jamais une ancre (le haut du slot d'une image n'a pas de bloc « au-dessus » : celui du slot
@@ -4387,12 +4390,13 @@ const PdfExport = (function () {
         // (rawImgTopPx, rawImgBottomPx) des deux côtés, jamais un côté ajusté contre un côté brut.
         if (bottom <= rawImgTopPx + BOUNDARY_EPS_PX && top > aboveTopPx) { aboveTopPx = top; aboveLeftPx = left; above = other; }
         if (top >= rawImgBottomPx - BOUNDARY_EPS_PX && top < belowTopPx) { belowTopPx = top; belowLeftPx = left; below = other; }
+        if (top < rawImgBottomPx - BOUNDARY_EPS_PX && bottom > rawImgTopPx + BOUNDARY_EPS_PX) overlaps.push({ block: other, topPx: top, leftPx: left });
       });
       // parentArray : tableau dans lequel l'image et son ancre vivent toutes les deux, utilisé par resolveNativePdfContent pour relocaliser l'image à
       // côté de son ancre sans dépendre d'un tableau top-level codé en dur.
       pending.push({
         image: block, above, below, imgTopPx, imgLeftPx, imgHeightPx: imgBottomPx - imgTopPx,
-        aboveTopPx, belowTopPx, aboveLeftPx, belowLeftPx, container, containerTopPx, containerLeftPx, parentArray: blocks,
+        aboveTopPx, belowTopPx, aboveLeftPx, belowLeftPx, overlaps, container, containerTopPx, containerLeftPx, parentArray: blocks,
       });
     });
     return pending;
@@ -5159,7 +5163,13 @@ const PdfExport = (function () {
     const aboveResolved = firstPosition(p.above);
     const belowResolved = firstPosition(p.below);
     const containerResolved = firstPosition(p.container);
+    // Le premier bloc recouvert qui commence sur une page et finit sur une autre : il devient l'ancre de l'image (anchorToOverflowingBlock).
+    // Rendu par RANG : cette mesure est celle d'une construction du contenu, la pose se fait sur une autre construction (mêmes blocs, objets différents).
+    const overflowingIndex = (p.overlaps || []).findIndex(({ block }) => { const first = firstPosition(block); const last = lastPageOf(block); return !!first && last != null && last > first.pageNumber; });
+    const overflowingResolved = overflowingIndex !== -1 ? firstPosition(p.overlaps[overflowingIndex].block) : null;
     return {
+      overlapIndex: overflowingIndex,
+      overlapTop: overflowingResolved ? overflowingResolved.top : null, overlapPage: overflowingResolved ? overflowingResolved.pageNumber : null, overlapLeft: overflowingResolved ? overflowingResolved.left : null,
       aboveTop: aboveResolved ? aboveResolved.top : null, abovePage: aboveResolved ? aboveResolved.pageNumber : null,
       belowTop: belowResolved ? belowResolved.top : null, belowPage: belowResolved ? belowResolved.pageNumber : null,
       // aboveLeft et belowLeft (comme aboveTop et belowTop) donnent à resolveImageAbsolutePosition un X pour une image ancrée « au-dessus » ou
@@ -5401,10 +5411,11 @@ const PdfExport = (function () {
   // l'inverse (ancré au-dessus, inséré avant).
   function placeByAnchors(ctx, p, a, layer) {
     const { content, behindByPage } = ctx;
+    const arr = p.parentArray || content;
+    anchorToOverflowingBlock(ctx, p, a, arr);
     p.image.absolutePosition = resolveImageAbsolutePosition(a, ctx.topMarginPt, ctx.bottomMarginPt, layer);
     const anchorBlock = anchorBlockFor(p, a, layer);
     if (!anchorBlock) return;
-    const arr = p.parentArray || content;
     const imgIdx = arr.indexOf(p.image);
     if (imgIdx === -1) return;
     // « Derrière », au niveau racine, ancrée à un bloc de la 2e page ou d'une suivante : insérée avant ce bloc, elle tombe sur la page précédente quand
@@ -5416,10 +5427,36 @@ const PdfExport = (function () {
     // anchorBlock peut vivre hors de `arr` (ancre de zone) : vérifier sa présence avant de retirer l'image, sinon elle est perdue sans bruit.
     const anchorIdx = arr.indexOf(anchorBlock);
     if (anchorIdx === -1) return;
+    // « Devant » après un bloc qui COMMENCE sur sa page mais FINIT plus loin (une zone, un tableau, un long paragraphe) : l'image se peindrait sur la page où il finit. Elle passe au pied de la page
+    // où il commence, peint après le contenu, donc devant lui (même remède que pour une image à position de page, placeOnGridPage).
+    if (layer === 'front' && arr === content) {
+      const anchorPage = anchorBlock === p.below ? a.belowPage : anchorBlock === p.above ? a.abovePage : null;
+      const originalIdx = ctx.originalBlocks.indexOf(anchorBlock);
+      if (anchorPage && originalIdx !== -1 && ctx.blockEndPages[originalIdx] > anchorPage) {
+        arr.splice(imgIdx, 1);
+        pushByPage(ctx.frontByPage, anchorPage, p.image);
+        return;
+      }
+    }
     arr.splice(imgIdx, 1);
     const shiftedAnchorIdx = anchorIdx > imgIdx ? anchorIdx - 1 : anchorIdx;
     arr.splice(layer === 'front' ? shiftedAnchorIdx + 1 : shiftedAnchorIdx, 0, p.image);
     if (layer === 'front' && arr === content) ctx.frontImages.push({ image: p.image, page: anchorBlock === p.below ? a.belowPage : anchorBlock === p.above ? a.abovePage : null });
+  }
+
+  // Une image sans grille de page (un document d'avant la grille, ou posé Aperçu A4 éteint) qui recouvre un bloc débordant de sa page - la zone d'une lettre, un tableau, un long paragraphe -
+  // n'a plus ce bloc pour voisin : « au-dessus » est ce qui finit avant elle, « en dessous » ce qui commence après son bas, parfois sur la dernière page du document, et l'image s'y peignait
+  // (« devant » après le bloc d'après, « derrière » avant lui). Le bloc recouvert devient son ancre unique : la page où il commence est la sienne, sa place se compte depuis son début.
+  // Seules les images du premier niveau (celles d'une cellule ou d'une colonne ont leur ancre dans la cellule).
+  function anchorToOverflowingBlock(ctx, p, a, arr) {
+    const overlapped = a.overlapIndex >= 0 && p.overlaps ? p.overlaps[a.overlapIndex] : null;
+    if (!overlapped || arr !== ctx.content || a.overlapPage == null || a.overlapTop == null) return;
+    p.above = overlapped.block;
+    p.below = null;
+    Object.assign(a, {
+      aboveTop: a.overlapTop, abovePage: a.overlapPage, aboveLeft: a.overlapLeft, aboveTopPx: overlapped.topPx, aboveLeftPx: overlapped.leftPx,
+      belowTop: null, belowPage: null, belowLeft: null, belowTopPx: Infinity, belowLeftPx: null, hadAbove: true, hadBelow: false,
+    });
   }
 
   // Le bloc d'ancrage : celui du dessous pour « devant », celui du dessus pour le reste, l'autre à défaut ; à défaut encore le « container » (paragraphe

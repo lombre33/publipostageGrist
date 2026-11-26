@@ -721,6 +721,9 @@ const OdtExport = (function () {
     ReaderMode.trimTrailingBlankBlocks(root);
     // Une image en calque est posée à la page de son paragraphe : celles de la page 1 vont au premier paragraphe (ExportCommon.anchorFirstPageImages).
     ExportCommon.anchorFirstPageImages(root);
+    // Celles des pages 2 et suivantes : au paragraphe de leur page (ExportCommon.anchorLaterPageImages), la pagination étant celle de l'éditeur.
+    const bandsPx = (zoneSet.has('header') ? PageLayout.HEADER_FOOTER_BAND_PX : 0) + (zoneSet.has('footer') ? PageLayout.HEADER_FOOTER_BAND_PX : 0);
+    ExportCommon.anchorLaterPageImages(root, { widthPx: Math.round(ctx.contentWidthPt / PT_PER_PX), pageContentHeightPx: Math.max(50, (size.height - (margins.top || 0) - (margins.bottom || 0)) * PageLayout.MM_TO_PT / PT_PER_PX - bandsPx) });
     await prepareImages(ctx, root);
     collectHeadings(ctx, root);
     ctx.root = root;

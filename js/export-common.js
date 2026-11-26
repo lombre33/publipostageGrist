@@ -153,6 +153,7 @@ const ExportCommon = (function () {
   // les images des pages suivantes non plus (la pagination de Word n'est pas celle de l'éditeur : aucun paragraphe n'y ouvre sûrement la page 2).
   const LAYERED_IMAGES = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
   const PARAGRAPHS = 'p, h1, h2, h3, h4, h5, h6';
+  const isBottomAnchored = el => typeof BottomAnchor !== 'undefined' && BottomAnchor.isAnchoredElement(el);
   function anchorFirstPageImages(root) {
     const gridNumber = (img, name) => (img.hasAttribute(name) ? parseFloat(img.getAttribute(name)) : NaN);
     const onFirstPage = img => gridNumber(img, 'data-page-index') === 0 && Number.isFinite(gridNumber(img, 'data-page-left-pt')) && Number.isFinite(gridNumber(img, 'data-page-top-pt'))
@@ -160,13 +161,16 @@ const ExportCommon = (function () {
     const images = Array.from(root.querySelectorAll(LAYERED_IMAGES)).filter(onFirstPage);
     if (!images.length) return;
     // Le premier paragraphe de chaque bloc de premier niveau : celui du premier bloc de son modèle qui en porte un (le bloc lui-même, ou son premier paragraphe : une zone, une
-    // case de tableau, une liste).
+    // case de tableau, une liste), hors un bloc calé « En bas de la page » (js/bottom-anchor.js : Word le pose dans un tableau flottant au bas de la page).
     const targetOf = new Map();
-    let slotTarget = null;
+    const groups = [[]];
     Array.from(root.children).forEach((child) => {
-      if (child.matches('.page-break-marker[data-macro-slot]')) { slotTarget = null; return; }
-      if (!slotTarget) slotTarget = child.matches(PARAGRAPHS) ? child : child.querySelector(PARAGRAPHS);
-      targetOf.set(child, slotTarget);
+      if (child.matches('.page-break-marker[data-macro-slot]')) groups.push([]); else groups[groups.length - 1].push(child);
+    });
+    groups.forEach((group) => {
+      const carrier = group.find(child => !isBottomAnchored(child) && (child.matches(PARAGRAPHS) || child.querySelector(PARAGRAPHS)));
+      const target = carrier ? (carrier.matches(PARAGRAPHS) ? carrier : carrier.querySelector(PARAGRAPHS)) : null;
+      group.forEach(child => targetOf.set(child, target));
     });
     images.forEach((img) => {
       let top = img;
@@ -178,6 +182,51 @@ const ExportCommon = (function () {
       // le document (l'ordre de peinture de Word et de LibreOffice).
       target.appendChild(img);
     });
+  }
+
+  // Les images en calque des pages SUIVANTES (`data-page-index` ≥ 1), ancrées à un paragraphe de leur page. Word et OpenDocument n'ont pas la page de l'image : ils la posent à la page de son
+  // paragraphe porteur. Une image glissée de la page 1 vers la page 2 (ou insérée en page 1 puis posée en page 3) y serait restée, à la place de la page qu'elle vise. La pagination d'un
+  // fichier Word ou OpenDocument n'est pas connue ici : on prend celle de l'éditeur, de la Lecture et du PDF (ReaderMode.computePageBreakOffsets), la plus proche qu'il y ait, et le paragraphe
+  // du MILIEU de la page visée plutôt que son premier - une page qui ne tombe pas tout à fait pareil dans Word garde l'image sur la bonne page, tant que l'écart est de moins d'une demi-page.
+  // Les paragraphes sont ceux du premier niveau (une zone ou un tableau se coupent par ligne ou par colonne, pas par bloc) ; une page qu'aucun d'eux ne porte (un tableau ou une zone la
+  // remplit) laisse l'image où elle est. Une page au-delà de la fin du modèle (ou du courrier, dans un macro-modèle) va à la dernière. `geometry` : la largeur du contenu et la hauteur utile
+  // d'une page, en pixels. Le calcul mesure le document : il n'a lieu que s'il y a une image à déplacer.
+  function anchorLaterPageImages(root, geometry) {
+    const gridNumber = (img, name) => (img.hasAttribute(name) ? parseFloat(img.getAttribute(name)) : NaN);
+    const onLaterPage = img => gridNumber(img, 'data-page-index') >= 1 && Number.isFinite(gridNumber(img, 'data-page-left-pt')) && Number.isFinite(gridNumber(img, 'data-page-top-pt'))
+      && !(typeof PageLayer !== 'undefined' && PageLayer.isRepeatedEl(img));
+    const images = Array.from(root.querySelectorAll(LAYERED_IMAGES)).filter(onLaterPage);
+    if (!images.length) return;
+    const detach = attachMeasureHost(root, geometry.widthPx);
+    try {
+      const offsets = ReaderMode.computePageBreakOffsets(root, geometry.pageContentHeightPx);
+      const children = Array.from(root.children);
+      // La page (à partir de 0) de chaque bloc du premier niveau : les coupures qui tombent avant lui. Un bloc coupé en son milieu (zone, tableau) commence sur la page qu'on lui donne ici.
+      const pageOf = children.map((child, index) => offsets.reduce((n, cut) => n + (cut.afterIndex < index ? 1 : 0), 0));
+      // Un modèle de macro-modèle par `slot` : ses pages se comptent depuis la sienne, ses blocs vont de son saut au suivant.
+      const slotOf = [];
+      let slot = 0;
+      children.forEach((child) => { if (child.matches('.page-break-marker[data-macro-slot]')) slot++; slotOf.push(slot); });
+      const slotFirstPage = [], slotLastPage = [];
+      children.forEach((child, index) => {
+        if (child.matches('.page-break-marker[data-macro-slot]')) return;
+        const s = slotOf[index];
+        if (slotFirstPage[s] === undefined) slotFirstPage[s] = pageOf[index];
+        slotLastPage[s] = Math.max(slotLastPage[s] === undefined ? 0 : slotLastPage[s], pageOf[index]);
+      });
+      images.forEach((img) => {
+        let top = img;
+        while (top.parentElement && top.parentElement !== root) top = top.parentElement;
+        const at = children.indexOf(top);
+        if (at === -1 || slotFirstPage[slotOf[at]] === undefined) return;
+        const s = slotOf[at];
+        const page = Math.min(slotFirstPage[s] + gridNumber(img, 'data-page-index'), slotLastPage[s]);
+        const candidates = children.filter((child, index) => slotOf[index] === s && pageOf[index] === page && child.matches(PARAGRAPHS) && !isBottomAnchored(child));
+        if (!candidates.length) return;
+        const target = candidates[Math.floor(candidates.length / 2)];
+        if (img.closest(PARAGRAPHS) !== target) target.appendChild(img);
+      });
+    } finally { detach(); }
   }
 
   // Un bloc vide (`<p></p>`, une case sans texte) n'a aucune hauteur dans un hôte de mesure, alors que l'éditeur lui laisse sa ligne (le <br> de fin que ProseMirror
@@ -951,6 +1000,6 @@ const ExportCommon = (function () {
     return { NAMESPACES, XML_HEAD, namespaceAttrs, escText, escAttr, fixed, attrsOf, textXml };
   })();
 
-  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, anchorFirstPageImages, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, anchorFirstPageImages, anchorLaterPageImages, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, outsideImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();
