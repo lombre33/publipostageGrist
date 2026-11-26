@@ -538,6 +538,8 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 /* La liste « Heure » (colonne « Date et heure » seulement, cachée par l'attribut `hidden`) : « Sans heure » est son texte le plus long. */
 .v2-varfmt-toolbar select[data-role="date-time"], .v2-mention-toolbar select[data-role="date-time"] { width: 96px; }
 .v2-varfmt-toolbar select[data-role="date-time"][hidden], .v2-mention-toolbar select[data-role="date-time"][hidden] { display: none; }
+/* La liste « Région » d'une bulle de date ou de nombre : le pays de la région, ou « Document » ; assez étroite pour que la barre d'un nombre reste sur une ligne dans un panneau de 700 px. */
+.v2-varfmt-toolbar select[data-role="var-region"] { width: 108px; padding: 0 2px 0 6px; }
 /* Barre flottante d'une puce : le chrome de `.v2-floating-toolbar`, la liste « Heure » d'une bulle pour la puce « Heure actuelle » seule, les boutons J / M / A, la liste des écritures et « Lettres » d'une bulle sur
    une colonne Date pour la puce « Date du jour » seule (mêmes mesures que celles de `.v2-varfmt-toolbar`) et le bouton de mise en forme conditionnelle. Dans un panneau étroit les réglages passent à la ligne, comme ceux d'une bulle. */
 .v2-timechip-toolbar, .v2-mention-toolbar { align-items: center; width: max-content; max-width: calc(100vw - 16px); }

@@ -147,7 +147,7 @@ const VariableConvert = (function () {
     if (image) return type.create(Variables.attachmentImageNode(item).attrs);
     const after = $from.nodeAfter;
     const marks = after && after.isText ? $from.parent.type.allowedMarks(after.marks.filter(mark => SKIPPED_MARKS.indexOf(mark.type.name) === -1)) : [];
-    return type.create(Object.assign({ table: match.table, column: match.column, key: match.key }, Variables.regionStamp(editor, item)), null, marks);
+    return type.create(Object.assign({ table: match.table, column: match.column, key: match.key }, Variables.bubbleStamp(editor, item)), null, marks);
   }
 
   // Convertit la sélection, en une transaction. Rend { converted, left } (`left` : les textes de forme « #Table.Colonne » restés tels quels, colonne introuvable, plus ceux que leur endroit refuse), ou null sans

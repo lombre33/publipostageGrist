@@ -18,6 +18,10 @@ const FloatingToolbars = (function () {
   const datePresetOptionsHtml = () => VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
   const timeOptionsHtml = withNone => (withNone ? `<option value="">${I18n.t('varFmt.timeNone')}</option>` : '')
     + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+  // La liste « Région » de la barre d'une bulle : « Document » (la bulle suit le réglage du document), puis chaque région par son pays (« Belgique », « Royaume-Uni ») : la barre d'un nombre tient sur une ligne
+  // à 700 px, il n'y a pas la place d'un nom entier ; le nom entier et ce que la région écrit sont dans l'info-bulle de la liste (syncRegion).
+  const regionOptionsHtml = () => `<option value="">${I18n.t('varFmt.region.document')}</option>`
+    + VariableFormat.REGIONS.map(region => `<option value="${region.locale}">${I18n.t('varFmt.region.country.' + region.locale.slice(3))}</option>`).join('');
   const chipDateOptionsHtml = () => VariableFormat.chipDateChoices().map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
   function refreshWritingLists(panel) {
     const locale = VariableFormat.formatLocale();
@@ -56,6 +60,7 @@ const FloatingToolbars = (function () {
         if (disabled && reasonKey) btn.setAttribute('data-pp-bar-reason', reasonKey);
         else btn.removeAttribute('data-pp-bar-reason');
       },
+      field: selector => panel.el.querySelector(selector),
       // Un champ qu'on est en train de saisir garde sa valeur.
       setField(selector, value) {
         const field = panel.el.querySelector(selector);
@@ -1321,6 +1326,12 @@ const FloatingToolbars = (function () {
         `<button data-action="bool-style:text" title="${I18n.t(boolTitles.text)}" aria-label="${I18n.t(boolTitles.text)}">${I18n.t('varFmt.boolTextButton')}</button>`,
         '</span>',
         '</div>',
+        // « Région » : la région dans laquelle CETTE variable écrit sa date ou son nombre (attribut `locale`, posé à son ajout) ; pour une bulle de colonne nombre ou date seulement, jamais dans une pastille « @ »,
+        // un calcul ni un champ texte (showFormatPanels). « Document » retire le choix : la bulle suit de nouveau le réglage du document.
+        '<div data-var-panel="region" hidden>',
+        '<span class="v2-floating-sep"></span>',
+        `<select data-role="var-region" aria-label="${I18n.t('varFmt.region.title')}">${regionOptionsHtml()}</select>`,
+        '</div>',
       ].join('');
     }
 
@@ -1472,6 +1483,11 @@ const FloatingToolbars = (function () {
       else if (role === 'num-currency') patchVariableFormat(t, value.trim() ? { type: 'number', currency: value.trim(), percent: undefined } : { type: 'number', currency: '' });
       else if (role === 'date-preset') patchVariableFormat(t, { type: 'date', preset: value });
       else if (role === 'date-time') patchVariableFormat(t, { type: 'date', time: value || undefined });
+      // La région de CETTE variable (« Document » : sans région propre, elle suit de nouveau le document) : un seul pas d'historique, la valeur s'écrit aussitôt dans la nouvelle région.
+      else if (role === 'var-region' && t.node.type.name === 'varBadge' && !inField) {
+        const locale = VariableFormat.isRegion(value) ? value : null;
+        if (locale !== (VariableFormat.isRegion(t.node.attrs.locale) ? t.node.attrs.locale : null)) EditorCore.patchNodeAndReselect(editor, t.pos, Object.assign({}, t.node.attrs, { locale }));
+      }
     }
 
     return { onVariableAction, onVariableInput };
@@ -1588,6 +1604,16 @@ const FloatingToolbars = (function () {
     function syncVariableState(ui, node, pos) {
       syncVariableActions(ui, node, pos);
       syncFormatControls(ui, node, node.attrs.format || {});
+      syncRegion(ui, node);
+    }
+    // La liste « Région » : la région que la bulle a gardée (ou « Document »), et en info-bulle ce qu'elle écrit - une date et un nombre d'exemple - et comment en changer.
+    function syncRegion(ui, node) {
+      const select = ui.field('select[data-role="var-region"]');
+      if (!select || node.type.name !== 'varBadge') return;
+      const own = VariableFormat.isRegion(node.attrs.locale) ? node.attrs.locale : '';
+      const region = own || VariableFormat.formatLocale();
+      select.title = I18n.t(own ? 'varFmt.region.tipOwn' : 'varFmt.region.tipDocument', { name: FormatLocale.nameOf(region), sample: FormatLocale.sampleOf(region) });
+      ui.setField('select[data-role="var-region"]', own);
     }
     // Les réglages de format, ceux d'une bulle comme ceux d'une pastille « @ » (createMentionToolbar) : « Comme dans Grist », le nombre, la date et le Oui / Non.
     // Une bulle qui a gardé son format régional (attribut `locale`, posé à l'ajout) montre ses listes, son aperçu et ses réglages par défaut dans CETTE région, pas dans celle du document.
@@ -1689,7 +1715,7 @@ const FloatingToolbars = (function () {
 
   // Les sous-panneaux de format que montre une barre selon le type de la colonne Grist (`type`) : celle d'une bulle et celle d'une pastille « @ ». `rawText` : un champ texte, où un Oui / Non s'écrit
   // « true » / « false » quel que soit le réglage (pas de cases) ; `checkbox` : la case conditionnelle, dont la barre n'a pas « vrai / faux ».
-  function showFormatPanels(ui, panel, type, { rawText, checkbox }) {
+  function showFormatPanels(ui, panel, type, { rawText, checkbox, region }) {
     const isNumber = type === 'Numeric' || type === 'Int';
     // Le type d'une colonne « Date et heure » est « DateTime:<fuseau> » (VariableFormat.isDateType) ; elle seule a la liste « Heure ».
     const isDate = VariableFormat.isDateType(type);
@@ -1702,6 +1728,8 @@ const FloatingToolbars = (function () {
     const timeSelect = panel.el.querySelector('select[data-role="date-time"]');
     if (timeSelect) timeSelect.hidden = !VariableFormat.isDateTimeType(type);
     ui.section('bool').hidden = !isBool;
+    // La région d'une variable : une bulle de colonne nombre ou date du document ; ni pastille « @ », ni calcul, ni champ texte (qui écrivent comme le document).
+    ui.section('region').hidden = !region || rawText || (!isNumber && !isDate);
     const textButton = ui.button('bool-style:text');
     if (textButton) textButton.hidden = !!checkbox;
     panel.el.querySelector('[data-var-sep]').hidden = !isNumber && !isDate && !isBool;
@@ -1711,7 +1739,7 @@ const FloatingToolbars = (function () {
     // Barre flottante d'une bulle #Variable : ce qu'elle montre selon la sélection, où elle se pose, et son câblage
 
     function showVariableFormatPanels(ui, panel, kind, node) {
-      showFormatPanels(ui, panel, isFormatKind(kind) ? variableColumnType(node) : null, { rawText, checkbox: kind === 'checkbox' });
+      showFormatPanels(ui, panel, isFormatKind(kind) ? variableColumnType(node) : null, { rawText, checkbox: kind === 'checkbox', region: kind === 'badge' });
     }
 
     function variableToolbarCheck(panel, ui) {

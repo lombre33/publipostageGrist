@@ -16,6 +16,7 @@
 // Un réglage de la variable (`style` « FR » / « US » d'un nombre) l'emporte toujours, comme avant. L'interface (textes, infobulles, messages) garde sa langue : seul ce que le document ÉCRIT change.
 //   FormatLocale.choice() -> 'auto' | une locale de REGIONS : le choix écrit dans le document ('auto' : aucun)
 //   FormatLocale.effective() -> une locale de REGIONS, ou null quand c'est celle de l'interface (la source de VariableFormat.formatLocale)
+//   FormatLocale.nameOf(locale) / sampleOf(locale) -> le nom d'une région (« Français (Belgique) ») et ce qu'elle écrit pour le 12 septembre 2026 et le nombre 1234,5 (la liste « Région » de la barre d'une bulle)
 //   FormatLocale.wirePanel() -> branche la section de Réglages > Langue (grisée en lecture seule), défaisable par Ctrl + Z (js/settings-history.js)
 const FormatLocale = (function () {
   const KEY = 'formatLocale';
@@ -132,5 +133,5 @@ const FormatLocale = (function () {
 
   if (typeof VariableFormat !== 'undefined') VariableFormat.setFormatLocaleSource(effective);
 
-  return { KEY, choice, effective, wirePanel, render };
+  return { KEY, choice, effective, wirePanel, render, nameOf, sampleOf };
 })();

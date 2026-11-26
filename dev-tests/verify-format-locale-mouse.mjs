@@ -5,6 +5,9 @@
 // dans le panneau, entière, sans défilement horizontal, et sa liste (« Automatique », puis dix régions avec ce qu'elles écrivent) assez étroite pour tenir ; un vrai clic et le clavier pour choisir
 // « English (United Kingdom) » (la phrase qui dit pourquoi, le réglage écrit dans le document, ce que la Lecture écrit ensuite) ; Ctrl + Z au vrai clavier qui le défait ; un compte Lecteur (la liste
 // reste là, grisée et inerte, la phrase de verrou lisible). Les contrastes de la phrase et du verrou sont mesurés (≥ 4,5:1).
+// Puis la liste « Région » de la barre d'UNE variable (réponse du 26/11 à la carte « Les deux ») : un vrai clic sur la bulle d'une date l'ouvre, la liste est entière et au premier plan dans la fenêtre,
+// sans défilement de côté, et la barre d'un nombre ou d'une date reste sur UNE ligne ; un vrai clic et le clavier choisissent « États-Unis » (la région de la bulle change, la voisine ne bouge pas, la barre dit « 09/12/2026 ») ; Ctrl + Z au vrai
+// clavier la remet ; une colonne Texte n'a pas la liste ; le contraste de la liste est mesuré (≥ 4,5:1).
 // Lancé par run-headless.mjs (groupe Node "formatLocaleMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-format-locale-mouse.mjs
 // (FORMAT_LOCALE_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend).
 import { createServer } from 'node:http';
@@ -317,9 +320,84 @@ async function pass(colorScheme, lang) {
   await context.close();
 }
 
+// --- La liste « Région » de la barre d'une variable ---
+const badgeBox = (page, column) => hitTest(page, `.tiptap .var-badge[data-column="${column}"]`);
+const bubbleLocales = page => page.evaluate(() => { const out = []; EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge') out.push({ column: n.attrs.column, locale: n.attrs.locale || null }); }); return out; });
+const regionState = page => page.evaluate(() => {
+  const bar = document.querySelector('.v2-varfmt-toolbar.visible');
+  if (!bar) return { bar: false };
+  const panel = bar.querySelector('[data-var-panel="region"]');
+  const select = bar.querySelector('select[data-role="var-region"]');
+  const r = select.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const preset = bar.querySelector('select[data-role="date-preset"]');
+  return {
+    bar: true, shown: !panel.hidden && select.getClientRects().length > 0, value: select.value, title: select.title,
+    inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, onTop: !!top && (top === select || select.contains(top)),
+    barHeight: bar.getBoundingClientRect().height, barRight: bar.getBoundingClientRect().right, barLeft: bar.getBoundingClientRect().left, firstDate: preset && !preset.closest('[hidden]') && preset.options[0] ? preset.options[0].textContent : null,
+    overflowX: document.documentElement.scrollWidth - innerWidth,
+  };
+});
+async function bubblePass(colorScheme, lang) {
+  const tag = `${colorScheme} ${lang} : barre d'une variable`;
+  const { context, page } = await openWidget(colorScheme, lang);
+  // Le document est réglé sur la France ; les bulles du modèle d'avant n'ont pas gardé de région (elles suivent le document).
+  await page.evaluate(() => Templates.updateDocumentSettings({ formatLocale: 'fr-FR' }));
+  await page.waitForTimeout(300);
+  const date = await badgeBox(page, 'Jour');
+  await page.mouse.click(date.x, date.y);
+  await page.waitForTimeout(350);
+  const open = await regionState(page);
+  check(`${tag} : un vrai clic sur la bulle d'une date ouvre la barre avec la liste « Région », entière, au premier plan, sans défilement de côté`,
+    open.bar && open.shown && open.inViewport && open.onTop && open.overflowX <= 1 && open.barLeft >= 0 && open.barRight <= 700.5 && open.barHeight < 50, open);
+  check(`${tag} : une bulle d'avant (sans région gardée) montre « Document » et l'info-bulle dit qu'elle suit le document`, open.value === '' && /document/i.test(open.title), { value: open.value, title: open.title });
+  const ratio = await ratioOf(page, '.v2-varfmt-toolbar.visible select[data-role="var-region"]');
+  check(`${tag} : le texte de la liste est lisible (contraste ${ratio} ≥ 4,5:1)`, ratio >= 4.5, ratio);
+  await shot(page, `${colorScheme}-${lang}-4-region-liste`);
+
+  // Un vrai clic ouvre la liste, les flèches et Entrée choisissent : « Document », fr-FR, fr-BE, fr-CH, en-US.
+  const list = await hitTest(page, '.v2-varfmt-toolbar.visible select[data-role="var-region"]');
+  await page.mouse.click(list.x, list.y);
+  await page.waitForTimeout(200);
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(450);
+  const chosen = await regionState(page);
+  const locales = await bubbleLocales(page);
+  const jour = locales.filter(b => b.column === 'Jour').map(b => b.locale);
+  check(`${tag} : choisir « English (United States) » (clic puis clavier) ne change que cette bulle ; la barre le garde et dit « 09/12/2026 » en tête de ses dates`,
+    chosen.value === 'en-US' && jour.length === 1 && jour[0] === 'en-US' && locales.filter(b => b.locale).length === 1 && chosen.firstDate === '09/12/2026', { chosen, locales });
+  await shot(page, `${colorScheme}-${lang}-5-region-choisie`);
+  // Ctrl + Z au vrai clavier, depuis la liste : la région d'avant revient d'un pas, Ctrl + Y la rechoisit.
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(400);
+  const undone = await bubbleLocales(page);
+  check(`${tag} : Ctrl + Z (vrai clavier) rend la bulle sans région propre, d'un seul pas`, undone.every(b => !b.locale), undone);
+  await page.keyboard.press('Control+y');
+  await page.waitForTimeout(400);
+  const redone = await bubbleLocales(page);
+  check(`${tag} : Ctrl + Y la rechoisit`, redone.filter(b => b.column === 'Jour')[0].locale === 'en-US', redone);
+
+  // Une colonne Texte (« Nom ») : pas de liste ; le nombre (« Montant ») l'a.
+  const name = await badgeBox(page, 'Nom');
+  await page.mouse.click(name.x, name.y);
+  await page.waitForTimeout(350);
+  const text = await regionState(page);
+  check(`${tag} : la barre d'une colonne Texte n'a pas la liste « Région »`, text.bar && !text.shown, text);
+  const amount = await badgeBox(page, 'Montant');
+  await page.mouse.click(amount.x, amount.y);
+  await page.waitForTimeout(350);
+  const number = await regionState(page);
+  check(`${tag} : la barre d'un nombre a la liste, entière et au premier plan, et reste sur une seule ligne`, number.bar && number.shown && number.inViewport && number.onTop && number.barHeight < 50, number);
+  await context.close();
+}
+
 await pass('light', 'fr');
 await pass('dark', 'fr');
 await pass('light', 'en');
+await bubblePass('light', 'fr');
+await bubblePass('dark', 'fr');
+await bubblePass('light', 'en');
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 await browser.close();

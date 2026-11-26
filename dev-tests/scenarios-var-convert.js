@@ -117,6 +117,26 @@
   });
 
   cases.push({
+    id: 'varconvert_a_number_bubble_takes_the_style_grist_gives_its_column',
+    description: 'Une colonne Nombre que Grist règle en euros à deux décimales, convertie, prend ce style comme premier format (comme la liste « # ») ; une colonne sans réglage, aucun format',
+    run: async (h) => {
+      await setDoc(h, '<p>A #Projets.Total_Fonctionnement_2026 B #Projets.Total_Fonctionnement_2026_bis C</p>');
+      const stub = window.__gristStub;
+      try {
+        stub.setColumnFormats(PAGE, { Total_Fonctionnement_2026_bis: { numMode: 'currency', currency: 'EUR', decimals: 2 } });
+        await GristAPI.refreshColumnTypes();
+        ed().commands.selectAll();
+        await sleep(150);
+        await press();
+        const kept = [];
+        ed().state.doc.descendants((node) => { if (node.type.name === 'varBadge') kept.push({ key: node.attrs.key, format: node.attrs.format }); });
+        const pass = kept.length === 2 && kept[0].format === null && JSON.stringify(kept[1].format) === JSON.stringify({ type: 'number', currency: '€', decimals: 2 });
+        return { pass, notes: JSON.stringify(kept) };
+      } finally { stub.setColumnFormats(PAGE, { Total_Fonctionnement_2026_bis: null }); await GristAPI.refreshColumnTypes(); }
+    },
+  });
+
+  cases.push({
     id: 'varconvert_real_hashtags_and_unknown_columns_stay_text_and_the_left_ones_are_counted',
     description: '« #Budget2026 », « #Inconnue.Nom » (table inconnue) et « #Projets.Colonne_inventée » (colonne introuvable) restent du texte ; seul le dernier a la forme d\'une clé d\'une table qui existe : il est compté « laissé tel quel » dans le coin d\'état',
     run: async (h) => {

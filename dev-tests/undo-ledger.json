@@ -128,6 +128,7 @@
     ".v2-varfmt-toolbar input[role=num-currency]": {"class": "model", "start": "varNum", "set": {"text": "USD"}, "keyOnFocus": "field", "note": "un champ de saisie : Ctrl + Z y défait la frappe, comme dans tout champ (choix du lot de la page) ; une fois le focus parti, Ctrl + Z rend l'état d'avant"},
     ".v2-varfmt-toolbar select[role=date-preset]": {"class": "model", "start": "varDate", "set": {"option": 1}},
     ".v2-varfmt-toolbar select[role=date-time]": {"class": "model", "start": "varDateTime", "set": {"option": 1}},
+    ".v2-varfmt-toolbar select[role=var-region]": {"class": "model", "start": "varDate", "set": {"option": 1}, "note": "la région de CETTE variable (attribut `locale`) : un seul pas, comme le format de date"},
     ".v2-timechip-toolbar select[role=chip-time]": {"class": "model", "start": "timeChip", "set": {"option": 1}},
     ".v2-timechip-toolbar select[role=chip-date]": {"class": "model", "start": "dateChip", "set": {"option": 1}},
     ".v2-timechip-toolbar button[action=chip-date-part:*]": {"class": "model", "start": "dateChip"},

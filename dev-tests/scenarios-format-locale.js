@@ -599,6 +599,141 @@
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, seen }) };
     });
 
+  // --- 12) La liste « Région » de la barre d'une variable, et le style de la colonne dans Grist comme premier style (réponse d'Antoine du 26/11 à la carte « Les deux ») ---
+  const quoted = value => JSON.stringify(value).replace(/"/g, '&quot;');
+  const bubble = (column, locale, format) => `<span class="var-badge" data-table="${TABLE}" data-column="${column}" data-key="${TABLE}.${column}"${locale ? ` data-locale="${locale}"` : ''}${format ? ` data-format="${quoted(format)}"` : ''}></span>`;
+  async function selectBubble(h, nth) {
+    document.querySelector('.tiptap').focus();
+    EditorCore.getEditor().commands.setNodeSelection(badgeNodes()[nth || 0].pos);
+    await h.sleep(200);
+  }
+  const regionSelect = () => bar().querySelector('select[data-role="var-region"]');
+  const regionShown = () => !bar().querySelector('[data-var-panel="region"]').hidden;
+  const chooseRegion = async (h, value) => { const select = regionSelect(); select.value = value; select.dispatchEvent(new Event('input', { bubbles: true })); await h.sleep(120); };
+  const localesOf = () => badgeNodes().map(n => n.node.attrs.locale);
+
+  scenario('fl_a_date_or_number_variable_has_a_region_list_in_its_bar_and_a_text_one_has_none',
+    'La barre d\'une variable sur une colonne Date, Date et heure ou Nombre montre la liste « Région » : « Document » puis les neuf régions par leur pays, celle que la bulle a gardée choisie (« Document » pour une ancienne), l\'info-bulle disant son nom entier et ce qu\'elle écrit ; sur une colonne Texte, la liste n\'y est pas',
+    async (h) => {
+      await seed(h);
+      await setDocument('de-DE');
+      const bad = [];
+      const seen = {};
+      for (const [key, column, locale] of [['date', 'Jour', 'fr-FR'], ['dateTime', 'Rdv', 'en-GB'], ['number', 'Montant', 'it-IT'], ['legacy', 'Jour', null], ['text', 'Nom', null]]) {
+        Editor.setHTML('<p>' + bubble(column, locale) + '</p>'); await h.sleep(150);
+        await selectBubble(h);
+        seen[key] = { shown: regionShown(), value: regionShown() ? regionSelect().value : null, title: regionShown() ? regionSelect().title : null };
+        if (key === 'date') seen.options = Array.from(regionSelect().options).map(o => o.value + '=' + o.textContent);
+      }
+      if (!same(seen.options, ['=Document', 'fr-FR=France', 'fr-BE=Belgique', 'fr-CH=Suisse', 'en-US=États-Unis', 'en-GB=Royaume-Uni', 'it-IT=Italie', 'de-DE=Allemagne', 'es-ES=Espagne', 'nl-NL=Pays-Bas'])) bad.push({ options: seen.options });
+      for (const [key, value] of [['date', 'fr-FR'], ['dateTime', 'en-GB'], ['number', 'it-IT'], ['legacy', '']]) if (!seen[key].shown || seen[key].value !== value) bad.push({ key, got: seen[key] });
+      if (!/« Français \(France\) » \(12\/09\/2026 · 1 234,50\)/.test(seen.date.title.replace(/[  ]/g, ' '))) bad.push({ title: seen.date.title });
+      if (!/suit le format du document : « Deutsch \(Deutschland\) » \(12\.09\.2026 · 1\.234,50\)/.test(seen.legacy.title.replace(/[  ]/g, ' '))) bad.push({ legacyTitle: seen.legacy.title });
+      if (seen.text.shown) bad.push({ text: seen.text });
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, seen }) };
+    });
+
+  scenario('fl_choosing_a_region_changes_only_this_variable_in_one_undo_step',
+    'Choisir une région dans la liste d\'UNE variable ne change que celle-là (la voisine garde la sienne) : la Lecture l\'écrit aussitôt dans la nouvelle région, la barre aussi, un seul Ctrl + Z la remet, Ctrl + Y la rechoisit ; « Document » retire sa région et la bulle suit de nouveau le document ; choisir la région déjà là ne change rien',
+    async (h) => {
+      await seed(h);
+      await setDocument('de-DE');
+      const bad = [];
+      Editor.setHTML('<p>' + bubble('Jour', 'fr-FR') + ' ; ' + bubble('Jour', 'fr-FR') + '</p>'); await h.sleep(150);
+      const record = asOnRecord(ROW);
+      const written = async () => readText(bubble('Jour', localesOf()[0]) + ' ; ' + bubble('Jour', localesOf()[1]), record);
+      const ed = EditorCore.getEditor();
+      await selectBubble(h, 0);
+      await chooseRegion(h, 'en-US');
+      if (!same(localesOf(), ['en-US', 'fr-FR'])) bad.push({ afterChoice: localesOf() });
+      const afterChoice = await written();
+      if (!same(afterChoice, ['09/12/2026', '12/09/2026'])) bad.push({ afterChoice });
+      // La barre dit la région choisie : « 09/12/2026 » en tête de sa liste de dates, la liste choisie sur « English (United States) ».
+      const barDates = optionTexts('select[data-role="date-preset"]')[0];
+      if (barDates !== 'dmy_slash_full=09/12/2026' || regionSelect().value !== 'en-US') bad.push({ barDates, value: regionSelect().value });
+      // Un Ctrl + Z, un seul pas.
+      ed.commands.undo(); await h.sleep(150);
+      if (!same(localesOf(), ['fr-FR', 'fr-FR'])) bad.push({ afterUndo: localesOf() });
+      ed.commands.redo(); await h.sleep(150);
+      if (!same(localesOf(), ['en-US', 'fr-FR'])) bad.push({ afterRedo: localesOf() });
+      // La même région : rien ne change, aucun pas d'historique de plus.
+      await selectBubble(h, 0);
+      const depthBefore = ed.state.doc.eq(EditorCore.getEditor().state.doc);
+      await chooseRegion(h, 'en-US');
+      if (!depthBefore || !same(localesOf(), ['en-US', 'fr-FR'])) bad.push({ same: localesOf() });
+      // « Document » : plus de région propre, la bulle écrit comme le document (de-DE).
+      await chooseRegion(h, '');
+      if (!same(localesOf(), [null, 'fr-FR'])) bad.push({ asDocument: localesOf() });
+      const html2 = Editor.getHTML();
+      if ((html2.match(/data-locale=/g) || []).length !== 1) bad.push({ html2 });
+      const follow = await written();
+      if (!same(follow, ['12.09.2026', '12/09/2026'])) bad.push({ follow });
+      // Le document change, la bulle sans région propre le suit ; celle qui a la sienne, non.
+      await setDocument('en-US');
+      const usFollow = await written();
+      if (!same(usFollow, ['09/12/2026', '12/09/2026'])) bad.push({ usFollow });
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    });
+
+  scenario('fl_a_variable_added_takes_the_style_grist_gives_its_column_as_its_first_style',
+    'Une variable ajoutée par la liste « # » sur une colonne dont Grist règle l\'affichage reprend ce style comme premier format (une devise à deux décimales, une date « DD/MM/YYYY », une heure à 24 heures) : la Lecture l\'écrit comme Grist, le bouton « Comme dans Grist » est grisé (« déjà écrite ainsi ») ; une colonne sans réglage, un format que le widget ne sait pas écrire ou dont l\'ordre du jour et du mois n\'est pas celui de la région, une colonne Texte : aucun format, la bulle écrit comme le document',
+    async (h) => {
+      await seed(h);
+      stub().setColumnFormats(TABLE, { Montant: { numMode: 'currency', currency: 'EUR', decimals: 2 }, Jour: { dateFormat: 'DD/MM/YYYY' }, Rdv: { dateFormat: 'YYYY-MM-DD', timeFormat: 'HH:mm' }, Premier: { dateFormat: 'MM/DD/YYYY' } });
+      await GristAPI.refreshColumnTypes();
+      await setDocument('fr-FR');
+      const bad = [];
+      const kept = {};
+      for (const column of ['Montant', 'Jour', 'Rdv', 'Premier', 'Nom']) {
+        const nodes = await addByList(h, TABLE + '.' + column);
+        kept[column] = nodes.length === 1 ? { locale: nodes[0].node.attrs.locale, format: nodes[0].node.attrs.format } : nodes.length;
+      }
+      const expected = {
+        Montant: { locale: 'fr-FR', format: { type: 'number', currency: '€', decimals: 2 } },
+        Jour: { locale: 'fr-FR', format: { type: 'date', preset: 'dmy_slash_full' } },
+        Rdv: { locale: 'fr-FR', format: { type: 'date', preset: 'iso', time: 'colon' } },
+        // « MM/DD/YYYY » dans un document en France : le jour et le mois se liraient à l'envers, le widget ne pose pas de format.
+        Premier: { locale: 'fr-FR', format: null },
+        Nom: { locale: null, format: null },
+      };
+      for (const column of Object.keys(expected)) if (!same(kept[column], expected[column])) bad.push({ column, got: kept[column], expected: expected[column] });
+      // Ce que la Lecture écrit : comme Grist.
+      const record = asOnRecord(ROW);
+      const written = await readText(['Montant', 'Jour', 'Rdv'].map(c => bubble(c, 'fr-FR', expected[c].format)).join(' ; '), record);
+      if (!same(written.map(t => t.replace(/[  ]/g, ' ')), ['1 234,50 €', '12/09/2026', '2026-09-12 23:30'])) bad.push({ written });
+      // La barre : « Comme dans Grist » dit que la variable s'écrit déjà ainsi (grisé) ; sur « Premier », il dit pourquoi il ne sait pas.
+      Editor.setHTML('<p>' + bubble('Montant', 'fr-FR', expected.Montant.format) + ' ' + bubble('Premier', 'fr-FR') + '</p>'); await h.sleep(150);
+      await selectBubble(h, 0);
+      const same1 = bar().querySelector('button[data-action="grist-format"]');
+      if (!same1.classList.contains('is-disabled') || same1.title !== I18n.t('varFmt.gristSame')) bad.push({ montantBar: same1.title });
+      await selectBubble(h, 1);
+      const refused = bar().querySelector('button[data-action="grist-format"]');
+      if (!refused.classList.contains('is-disabled') || refused.title.indexOf('MM/DD/YYYY') === -1) bad.push({ premierBar: refused.title });
+      // Une variable posée avant (sans format) n'est pas touchée : ajouter ne change rien aux autres.
+      Editor.setHTML('<p>' + bubble('Montant', 'fr-FR') + '</p>'); await h.sleep(150);
+      if (badgeNodes()[0].node.attrs.format) bad.push({ legacyChanged: badgeNodes()[0].node.attrs.format });
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, kept }) };
+    });
+
+  scenario('fl_the_style_of_the_column_is_read_in_the_region_the_variable_keeps',
+    'Une colonne Date réglée « DD/MM/YYYY » dans Grist : ajoutée dans un document en France elle reprend ce format ; dans un document aux États-Unis, où ce jour et ce mois se liraient à l\'envers, elle n\'en reprend aucun ; dans un document en Italie (jour d\'abord), elle le reprend',
+    async (h) => {
+      await seed(h);
+      stub().setColumnFormats(TABLE, { Jour: { dateFormat: 'DD/MM/YYYY' } });
+      await GristAPI.refreshColumnTypes();
+      const bad = [];
+      const seen = {};
+      for (const region of ['fr-FR', 'en-US', 'it-IT']) {
+        await setDocument(region);
+        const nodes = await addByList(h, TABLE + '.Jour');
+        seen[region] = nodes.length === 1 ? { locale: nodes[0].node.attrs.locale, format: nodes[0].node.attrs.format } : nodes.length;
+      }
+      if (!same(seen['fr-FR'], { locale: 'fr-FR', format: { type: 'date', preset: 'dmy_slash_full' } })) bad.push({ fr: seen['fr-FR'] });
+      if (!same(seen['en-US'], { locale: 'en-US', format: null })) bad.push({ us: seen['en-US'] });
+      if (!same(seen['it-IT'], { locale: 'it-IT', format: { type: 'date', preset: 'dmy_slash_full' } })) bad.push({ it: seen['it-IT'] });
+      return { pass: bad.length === 0, notes: JSON.stringify(bad) };
+    });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.formatLocale = cases;
 })();
