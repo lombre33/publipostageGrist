@@ -16,6 +16,8 @@
 //  3) un document aux DEUX séries de tables : même chose (la bêta pouvait écrire dans ses tables d'avant, elle ne le fait pas) ;
 //  4) un document que la version 1 met à jour PENDANT que la bêta est ouverte : la création d'une table du widget relit d'abord la liste, se refuse et déclenche la couche ;
 //  5) aucune erreur de page ou de console, aucune requête ratée ou hors du site, AUCUNE violation de la politique de sécurité de la bêta ;
+//  5 bis) la fenêtre « Il est temps de passer à la version X.Y » du même script (dev-tests/verify-beta-banner.mjs la mesure) passe APRÈS le garde-fou : devant un document aux noms anglais elle ne s'ouvre pas ; ouverte devant un
+//     document d'avant, puis le document mis à jour pendant qu'elle est ouverte, c'est la couche du garde-fou qui la retire (plus de voile, plus de touche avalée, le focus reste à la couche) ; elle est fermée d'office dans les autres ouvertures ;
 //  6) le juge sait dire non : la bêta d'avant (sans garde-fou) recrée les tables d'avant devant un document aux noms anglais - SANS poser de question quand le document porte Publipostage_UserProbe (le seul nom
 //     commun aux deux séries : pour la bêta, c'est un accord déjà donné), après « Créer les tables » sinon ; un garde-fou sans refus d'écrire, ou sans « non » d'avance à la question, ne passe pas les mêmes mesures.
 // Lancé par run-headless.mjs (groupe Node « betaGuardMouse », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-beta-guard.mjs
@@ -139,7 +141,8 @@ const OWN_HOSTS = [OLD_CDN_HOST, 'docs.getgrist.com', 'fonts.googleapis.com', 'f
 // (`names` : 'legacy' = ceux d'avant, 'english' = ceux de la version 1 ; `seed` : du code joué sur le faux Grist avant la première lecture), l'écoute des violations de la politique de sécurité (window.__csp), ce que les
 // pages ont dit (erreurs), raté ou demandé hors du site. `wait` : 'ready' (« Widget prêt. »), 'guard' (la couche), 'dialog' (la question de création des tables) ; puis une courte pause, pour que tout ce qui part
 // à l'ouverture ait eu lieu.
-async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light', lang = 'fr', theme = null, names = 'legacy', seed = '', wait = 'ready' } = {}) {
+// `upgrade` : 'close' (par défaut) ferme d'office la fenêtre « passez à la version X.Y » (le voile de dev-tests/verify-beta-banner.mjs couvrirait les clics de l'essai), après avoir noté si elle était là (`upgradeSeen`) ; 'keep' la laisse ouverte.
+async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light', lang = 'fr', theme = null, names = 'legacy', seed = '', wait = 'ready', upgrade = 'close' } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, colorScheme: scheme });
   const log = { errors: [], failed: [], foreign: [] };
   const watch = (page, name) => {
@@ -189,7 +192,9 @@ async function ouvrir({ dir = 'beta', width = 700, height = 400, scheme = 'light
   }[wait];
   await waiting().catch(() => log.errors.push(`bêta : « ${wait} » n'est pas venu en 60 s`));
   await sleep(1500);
-  return { context, page, log };
+  const upgradeSeen = await page.evaluate(() => !!document.getElementById('pp-beta-upgrade'));
+  if (upgrade === 'close' && upgradeSeen) await page.evaluate(() => { const keep = document.querySelector('#pp-beta-upgrade .pp-beta-upgrade-keep'); if (keep) keep.click(); });
+  return { context, page, log, upgradeSeen };
 }
 
 // Ce que le faux Grist a reçu et garde : les actions appliquées, les tables du document, les lignes de la table des modèles d'avant et la liste que `listTables` rend à la page.
@@ -260,10 +265,11 @@ async function measureGuarded(page) {
 }
 async function runGuarded({ id, lang, scheme, theme = null, width = 700, height = 400, names = 'english', seed = '', full = false }) {
   const T = TEXTS[lang];
-  const { context, page, log } = await ouvrir({ dir: 'beta', width, height, scheme, lang, theme, names, seed, wait: 'guard' });
+  const { context, page, log, upgradeSeen } = await ouvrir({ dir: 'beta', width, height, scheme, lang, theme, names, seed, wait: 'guard' });
   const f = await guardFacts(page);
   check(`${id} : la couche est là, une seule fois`, !!f && f.count === 1, f && { count: f.count });
   if (!f) { await context.close(); return; }
+  check(`${id} : le garde-fou passe avant la fenêtre « passez à la version X.Y » : elle n'est pas là, ni ouverte ni restée sous la couche (la couche dit déjà d'ouvrir la dernière version)`, upgradeSeen === false && (await page.evaluate(() => document.querySelectorAll('#pp-beta-upgrade').length)) === 0, { upgradeSeen });
   check(`${id} : c'est une boîte de dialogue modale nommée « ${T.region} », dont le titre est la phrase de la consigne`, f.role === 'alertdialog' && f.modal === 'true' && f.region === T.region && f.labelled === T.lead && f.leadTag === 'H1', { role: f.role, modal: f.modal, region: f.region, labelled: f.labelled, tag: f.leadTag });
   check(`${id} : elle dit EXACTEMENT « ${T.lead} », puis pourquoi et comment, dans la langue du widget`, f.lead === T.lead && JSON.stringify(f.texts) === JSON.stringify([T.why, T.how]), { lead: f.lead, texts: f.texts });
   check(`${id} : elle donne l'adresse de la dernière version (le dossier au-dessus de beta/ : ${SITE_PATH}/) en lien, dans un nouvel onglet sans lien avec la bêta (noopener noreferrer)`,
@@ -318,11 +324,13 @@ try {
   if (!existsSync(join(CACHE, 'esm-map.json'))) throw new Error('miroir hors ligne absent : bash dev-tests/offline-deps.sh');
   esmMap = JSON.parse(readFileSync(join(CACHE, 'esm-map.json'), 'utf8'));
   const SRC = betaSource();
+  // Le numéro que le bandeau annonce est celui de js/version.js (1.2.0-dev annonce « 1.2 ») : la publication le pose à la place du repère du script ; ici il ne sert qu'à composer, le garde-fou n'en porte aucun.
+  const DEV_VERSION = (/PP_VERSION\s*=\s*'([^']+)'/.exec(readFileSync(join(ROOT, 'js', 'version.js'), 'utf8')) || [])[1];
   mkdirSync(SITE, { recursive: true });
-  tool.poserDepuisDossier(SRC, join(SITE, 'beta'));
+  tool.poserDepuisDossier(SRC, join(SITE, 'beta'), tool.sources(DEV_VERSION));
   cpSync(SRC, join(SITE, 'beta-nue'), { recursive: true });
   // Le garde-fou amputé : l'enveloppe de la question et le refus d'écrire retirés (la couche, elle, reste). Si la mesure le laissait passer, elle ne vaudrait rien.
-  tool.poserDepuisDossier(SRC, join(SITE, 'beta-mutant'));
+  tool.poserDepuisDossier(SRC, join(SITE, 'beta-mutant'), tool.sources(DEV_VERSION));
   {
     const file = join(SITE, 'beta-mutant', tool.GARDE_JS);
     const original = readFileSync(file, 'utf8');
@@ -345,7 +353,7 @@ try {
       && tool.sansBandeau(page.join('\n')) === readFileSync(join(SRC, 'index.html'), 'utf8'), { added, missing, changed });
   check('la ligne du garde-fou est JUSTE AVANT js/table-consent.js (donc avant le démarrage anticipé) et après js/grist-api.js (il enveloppe GristAPI)',
     guardLine > 0 && /<script src="js\/table-consent\.js[^"]*"><\/script>/.test(page[guardLine + 1]) && guardLine > at(/<script src="js\/grist-api\.js[^"]*"><\/script>/) && at(/<script src="js\/grist-api\.js/) > 0, { guardLine, next: page[guardLine + 1] });
-  check('une page de bêta sans la ligne de table-consent.js n\'est pas modifiée au hasard : l\'outil le dit', (() => { try { tool.avecBandeau(readFileSync(join(SRC, 'index.html'), 'utf8').replace(/<script src="js\/table-consent\.js[^"]*"><\/script>\n/, '')); return false; } catch (e) { return /table-consent/.test(e.message); } })());
+  check('une page de bêta sans la ligne de table-consent.js n\'est pas modifiée au hasard : l\'outil le dit', (() => { try { tool.avecBandeau(readFileSync(join(SRC, 'index.html'), 'utf8').replace(/<script src="js\/table-consent\.js[^"]*"><\/script>\n/, ''), tool.sources(DEV_VERSION)); return false; } catch (e) { return /table-consent/.test(e.message); } })());
 
   await serve();
   browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
@@ -354,7 +362,8 @@ try {
   // 1. Un document aux noms d'avant : la bêta est la bêta.
   await sansPlanter('document d\'avant', async () => {
     const id = 'document aux noms d\'avant';
-    const { context, page, log } = await ouvrir({ dir: 'beta', lang: 'fr', scheme: 'light', names: 'legacy', wait: 'ready' });
+    const { context, page, log, upgradeSeen } = await ouvrir({ dir: 'beta', lang: 'fr', scheme: 'light', names: 'legacy', wait: 'ready' });
+    check(`${id} : la fenêtre « passez à la version X.Y » s'est ouverte (devant un document d'avant, comme à chaque ouverture) ; l'essai l'a fermée, la suite regarde la bêta seule`, upgradeSeen === true, { upgradeSeen });
     const f = await guardFacts(page);
     const inert = await page.evaluate(() => document.querySelectorAll('[inert]').length);
     const before = await stubFacts(page);
@@ -419,6 +428,29 @@ try {
     check(`${id} : aucune table n'a été créée depuis (ni Publipostage_Abreviations ni une autre), aucune action de plus dans le faux Grist`, after.actions === before && !after.tables.includes('Publipostage_Abreviations') && after.addTables.length === beforeFacts.addTables.length, { avant: before, apres: after.actions, addTables: after.addTables });
     const later = await page.evaluate(async () => { try { await grist.docApi.applyUserActions([['AddRecord', 'Publipostage_Modeles', null, { Nom: 'Devis' }]]); return { ok: true }; } catch (e) { return { ok: false, tablesDeclined: e && e.tablesDeclined === true }; } });
     check(`${id} : et plus rien ne s'écrit ensuite : même dans la table d'avant qui existe encore`, later.ok === false && later.tablesDeclined && (await stubFacts(page)).modeles.length === 0, later);
+    await verdict(id, page, log);
+    await context.close();
+  });
+
+  // 4 bis. La fenêtre « passez à la version X.Y » est ouverte quand le document est mis à jour : la couche du garde-fou la retire, sans rien laisser (voile, inert, touche avalée).
+  await sansPlanter('document mis à jour fenêtre ouverte', async () => {
+    const id = 'document mis à jour pendant que la fenêtre « passez à la version » est ouverte';
+    const { context, page, log, upgradeSeen } = await ouvrir({ dir: 'beta', lang: 'fr', scheme: 'light', names: 'legacy', wait: 'ready', upgrade: 'keep' });
+    const open = await page.evaluate(() => ({ count: document.querySelectorAll('#pp-beta-upgrade').length, inert: document.querySelectorAll('[inert]').length, focusCard: document.activeElement && document.activeElement.className === 'pp-beta-upgrade-card' }));
+    check(`${id} : avant, la fenêtre est ouverte (une seule, le reste de la page inerte, le focus sur sa carte) et il n'y a pas de couche`, upgradeSeen && open.count === 1 && open.inert > 0 && open.focusCard && (await guardFacts(page)) === null, open);
+    await page.evaluate(() => { window.__gristStub.state.tables.push('Publipostage_Templates'); window.__gristStub.state.rows.Publipostage_Templates = { id: [], Name: [], Content: [] }; window.__escSeen = 0; window.__tabDefault = []; document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.__escSeen++; if (event.key === 'Tab') window.__tabDefault.push(event.defaultPrevented); }); });
+    const refused = await page.evaluate(async () => { try { await grist.docApi.applyUserActions([['AddTable', 'Publipostage_Abreviations', [{ id: 'Utilisateur', type: 'Text' }]]]); return { ok: true }; } catch (e) { return { ok: false, tablesDeclined: e && e.tablesDeclined === true }; } });
+    await page.waitForSelector('#pp-beta-guard', { timeout: 5000 }).catch(() => {});
+    await sleep(300);
+    const f = await guardFacts(page);
+    const left = await page.evaluate(() => ({ upgrade: document.querySelectorAll('#pp-beta-upgrade').length, focusInGuard: !!document.activeElement && !!document.activeElement.closest('#pp-beta-guard'), banner: !!document.getElementById('pp-beta-banner') }));
+    check(`${id} : la création est refusée (tablesDeclined), la couche du garde-fou apparaît, la fenêtre « passez à la version » a disparu, le focus est à la couche, le reste de la page est inerte (le garde-fou le garde : la fenêtre ne rend rien)`,
+      refused.ok === false && refused.tablesDeclined && !!f && f.count === 1 && f.inertAll && f.notInert.length === 0 && left.upgrade === 0 && left.focusInGuard, { refused, left, couche: !!f && { inertAll: f.inertAll, notInert: f.notInert } });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Tab');
+    await sleep(200);
+    const keys = await page.evaluate(() => ({ esc: window.__escSeen, tabPrevented: window.__tabDefault.slice(), inGuard: !!document.activeElement && !!document.activeElement.closest('#pp-beta-guard') }));
+    check(`${id} : plus aucune touche avalée par la fenêtre disparue (Échap arrive à la page, Tab n'est pas détourné) et le focus reste dans la couche`, keys.esc === 1 && keys.tabPrevented.every(v => v === false) && keys.inGuard, keys);
     await verdict(id, page, log);
     await context.close();
   });

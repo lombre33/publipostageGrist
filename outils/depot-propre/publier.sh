@@ -17,12 +17,12 @@
 #   2. refuse toute entrée de la racine du dépôt de développement qu'il ne connaît pas (PUBLIES ou EXCLUS ci-dessous) : un nouveau dossier ne part jamais par oubli ;
 #   3. refuse d'écraser des changements faits dans le dépôt public depuis la dernière étiquette vX.Y.Z (contribution acceptée là-bas et pas reportée ici) ;
 #   4. remplace dans le clone public les entrées PUBLIEES par celles du dépôt de développement (fichiers suivis seulement, les fichiers retirés disparaissent), puis recompose beta/ :
-#      les fichiers de l'étiquette de la bêta, sans correctif, le bandeau « version bêta » et le garde-fou « document mis à jour par une version plus récente » (outils/depot-propre/beta/, posés par beta-bandeau.mjs) :
-#      un seul envoi porte la version 1, le bandeau et le garde-fou ;
+#      les fichiers de l'étiquette de la bêta, sans correctif, le bandeau « version bêta » et sa fenêtre « passez à la version X.Y » (X.Y : la version qui part, posée à la place du repère du script) et le garde-fou
+#      « document mis à jour par une version plus récente » (outils/depot-propre/beta/, posés par beta-bandeau.mjs) : un seul envoi porte la version 1, le bandeau, sa fenêtre et le garde-fou ;
 #      le kit de Grist Factory (kit/, un sous-module du dépôt de développement) part en fichiers, ceux du commit que le dépôt de développement épingle (css, js et la licence),
 #      sans .gitmodules : le dépôt public n'a pas de sous-module ; les entrées que seul le dépôt public porte (.github/…) ne sont pas touchées ;
 #   5. pose par-dessus les documents publics de outils/depot-propre/public/ (README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, PATCH_NOTES, NOTICE, CARTE_DU_CODE),
-#      où {{VERSION}}, {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés, et les captures du README
+#      où {{VERSION}}, {{VERSION_COURTE}} (1.2 pour la 1.2.0 : le numéro que la bêta annonce), {{DATE}} (2026-10-04), {{DATE_FR}} (4 octobre 2026) et {{DATE_EN}} (October 4, 2026) sont remplacés, et les captures du README
 #      de outils/depot-propre/public/screenshots/ (des .png) dans screenshots/ du clone public : une capture du même nom est remplacée, les autres sont gardées ;
 #   6. lance controles.mjs sur l'arbre obtenu : une ERREUR empêche le commit ;
 #   7. committe sous l'identité donnée (jamais d'identité par défaut : sans PP_AUTEUR_NOM et PP_AUTEUR_EMAIL, il s'arrête ; l'adresse doit être l'adresse noreply de GitHub du compte grist-factory), pose l'étiquette vX.Y.Z,
@@ -138,6 +138,8 @@ case "$VERSION" in
 esac
 echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   || die "la version « $VERSION » n'est pas de la forme 1.0.0 ou 1.0.0-beta.1 (versionnement sémantique)"
+# Le numéro que la bêta annonce (« migrer vers la version 1.2 ») : la version qui part sans son correctif ni son suffixe, 1.2.0 donne 1.2 ; {{VERSION_COURTE}} dans les documents publics.
+VERSION_COURTE="$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\..*$/\1/')"
 git -C "$PROPRE" rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && die "l'étiquette v$VERSION existe déjà dans le dépôt public : choisis une autre version"
 
 DATE_PUB="${PP_DATE:-$(date +%F)}"
@@ -213,13 +215,13 @@ git -C "$DEV" archive --format=tar HEAD "${PUBLIES[@]}" | tar -x -C "$PROPRE"
 sed -E "s/(PP_VERSION *= *['\"])[^'\"]*(['\"])/\1$VERSION\2/" "$PROPRE/js/version.js" > "$PROPRE/js/version.js.nouveau" && mv "$PROPRE/js/version.js.nouveau" "$PROPRE/js/version.js"
 # La bêta figée est recomposée à chaque publication : les fichiers de l'étiquette de la bêta, le bandeau et le garde-fou de outils/depot-propre/beta/ (un bandeau ou un garde-fou modifié dans le dépôt de développement
 # se pose à la publication suivante ; rien d'autre de beta/ ne change jamais). nouveautes.html, que le bouton du bandeau ouvre, part dans la même publication : un seul envoi, aucune adresse qui répond 404.
-node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" >/dev/null || die "le bandeau et le garde-fou n'ont pas pu être posés dans beta/ (beta-bandeau.mjs --poser, voir le message au-dessus)"
+node "$ICI/beta-bandeau.mjs" --poser "$PROPRE" --etiquette "$BETA_ETIQUETTE" --version "$VERSION" >/dev/null || die "le bandeau et le garde-fou n'ont pas pu être posés dans beta/ (beta-bandeau.mjs --poser, voir le message au-dessus)"
 # `git archive` ne descend pas dans un sous-module (il laisse un dossier vide) : le kit vient de son propre commit épinglé.
 mkdir -p "$PROPRE/kit"
 git -C "$DEV/kit" archive --format=tar "$KIT_COMMIT" "${KIT_PARTIES[@]}" | tar -x -C "$PROPRE/kit"
 for x in "${KIT_RETIRES[@]}"; do rm -rf "${PROPRE:?}/kit/${x:?}"; done
 for nom in "${DOCS[@]}"; do
-  sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{DATE_FR}}/$DATE_FR/g" -e "s/{{DATE_EN}}/$DATE_EN/g" -e "s/{{DATE}}/$DATE_PUB/g" \
+  sed -e "s/{{VERSION}}/$VERSION/g" -e "s/{{VERSION_COURTE}}/$VERSION_COURTE/g" -e "s/{{DATE_FR}}/$DATE_FR/g" -e "s/{{DATE_EN}}/$DATE_EN/g" -e "s/{{DATE}}/$DATE_PUB/g" \
     "$ICI/public/$nom" > "$PROPRE/$nom"
 done
 # Les captures du README : posées telles quelles (des images, aucun gabarit). Celles que seul le dépôt public porte restent.
