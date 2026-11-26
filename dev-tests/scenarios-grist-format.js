@@ -139,6 +139,9 @@
         ed.commands.undo();
         await h.sleep(80);
       }
+      // Un document américain (« en-US », la locale de tout document neuf) : c'est lui, et non la langue de l'interface, qui donne l'ordre du jour et du mois.
+      window.__gristStub.setDocumentSettings({ locale: 'en-US', currency: 'EUR' });
+      await GristAPI.refreshColumnTypes();
       const en = await inLang('en', async () => {
         const out = {};
         for (const column of ['RdvDouzeUs', 'RdvMinusculesIso']) {
@@ -188,8 +191,10 @@
       press('grist-format');
       await h.sleep(150);
       if (json(formatOf(ed)) !== json({ type: 'number', currency: '€', decimals: 2 })) bad.push({ cliqueGrisé: formatOf(ed) });
+      window.__gristStub.setDocumentSettings({ locale: 'en-US', currency: 'EUR' });
+      await GristAPI.refreshColumnTypes();
       const en = await inLang('en', async () => { await select(h, 'Jour'); return state().title; });
-      if (en !== 'Date format “DD/MM/YYYY”: day and month are not in the order of the interface language, the date would read the wrong way round') bad.push({ en });
+      if (en !== 'Date format “DD/MM/YYYY”: day and month are not in the order of the document format (Settings > Language), the date would read the wrong way round') bad.push({ en });
       return { pass: bad.length === 0, notes: json(bad) };
     },
   });
@@ -202,7 +207,7 @@
       await seed(h, null);
       const rows = [
         ['Sci', 'Écriture scientifique (1,2E3) : une variable ne sait pas l’écrire'],
-        ['JourUs', 'Format de date « MM/DD/YYYY » : le jour et le mois n’y sont pas dans l’ordre de la langue de l’interface, la date se lirait à l’envers'],
+        ['JourUs', 'Format de date « MM/DD/YYYY » : le jour et le mois n’y sont pas dans l’ordre du format du document (Réglages > Langue), la date se lirait à l’envers'],
         ['JourInconnu', 'Format de date « dddd [le] D » : une variable ne sait pas l’écrire'],
         ['RdvInconnu', 'Format d’heure « LT » : une variable ne sait pas l’écrire'],
         ['SansDevise', 'La devise du document n’est pas lisible : saisissez-la dans la case Devise'],

@@ -5,7 +5,7 @@
 //  - Ce qui est reconnu est ce que reconnaît déjà le reste du widget pour un champ texte (Variables.findTextVariables) : la plus longue clé « Table.Colonne » qui existe, prolongée par les colonnes de la ligne
 //    qu'une Référence désigne (« #Projets.Accompagnateur.Email »), un point de fin de phrase qui reste du texte. Une table ou une colonne qui n'existe pas : le texte reste tel quel et se compte (« colonne introuvable »).
 //  - Seuls les textes ENTIÈREMENT dans la sélection sont convertis ; une sélection de cases (CellSelection) se lit case par case. Le texte d'un bloc de code, sous la marque « code » ou en suppression suivie, n'est jamais lu.
-//  - La bulle posée est celle que pose la liste « # » (varBadge, sans autre réglage), avec la mise en forme du texte remplacé (gras, couleur, lien...) ; une colonne Pièces jointes devient l'image liée
+//  - La bulle posée est celle que pose la liste « # » (varBadge, avec la région du document pour une date ou un nombre, sans autre réglage), avec la mise en forme du texte remplacé (gras, couleur, lien...) ; une colonne Pièces jointes devient l'image liée
 //    que la liste « # » pose pour elle (Variables.becomesImage). Une table sans lien avec la page n'ouvre aucune fenêtre : sa bulle est orange (Editor.markBadgeValidity), à lier ensuite par « Tables liées ».
 //  - Une seule transaction : un Annuler défait tout. Le suivi des modifications allumé : la ligne est grisée (une bulle ne se propose pas en suppression et insertion, comme pour « Remplacer »).
 //  - La ligne est grisée, avec sa raison, sans sélection ou sans rien à convertir dedans (`syncRow`) : rien ne disparaît. Une fois faite, `pp:variablesConverted` porte { converted, left } et js/main.js le dit dans le coin d'état.
@@ -147,7 +147,7 @@ const VariableConvert = (function () {
     if (image) return type.create(Variables.attachmentImageNode(item).attrs);
     const after = $from.nodeAfter;
     const marks = after && after.isText ? $from.parent.type.allowedMarks(after.marks.filter(mark => SKIPPED_MARKS.indexOf(mark.type.name) === -1)) : [];
-    return type.create({ table: match.table, column: match.column, key: match.key }, null, marks);
+    return type.create(Object.assign({ table: match.table, column: match.column, key: match.key }, Variables.regionStamp(editor, item)), null, marks);
   }
 
   // Convertit la sélection, en une transaction. Rend { converted, left } (`left` : les textes de forme « #Table.Colonne » restés tels quels, colonne introuvable, plus ceux que leur endroit refuse), ou null sans

@@ -413,6 +413,65 @@
     },
   });
 
+  // Le format régional du DOCUMENT (js/format-locale.js), pas la langue de l'interface de qui exporte : l'ordre du jour et du mois, la devise devant ou derrière, le « % » collé ou non. Excel met lui-même ses
+  // séparateurs (« / », « , » et « . » d'un code de format sont ceux de SON réglage régional) : le fichier ne code que ce qu'Excel ne devine pas.
+  cases.push({
+    id: 'xlsx_number_and_date_formats_follow_the_format_of_the_document_not_the_interface',
+    description: 'Un document réglé sur la France exporte « dd/mm/yyyy » et la devise après, un document réglé sur le Royaume-Uni « dd/mm/yyyy », « d mmm yyyy », la devise devant et « % » collé, un document réglé sur les États-Unis « mm/dd/yyyy », que l\'interface de qui exporte soit en français ou en anglais',
+    run: async (h) => {
+      await seed(h);
+      const html = [[badge('Date'), badge('Date', withFormat({ type: 'date', preset: 'd_mmm_yyyy' })), badge('Montant', withFormat({ type: 'number', decimals: 2, currency: '€' })), badge('Montant', withFormat({ type: 'number', percent: true, decimals: 1 }))]];
+      const want = {
+        'fr-FR': ['dd/mm/yyyy', 'd mmm yyyy', '#,##0.00 "€"', '#,##0.0 %'],
+        'en-GB': ['dd/mm/yyyy', 'd mmm yyyy', '"€"#,##0.00', '#,##0.0%'],
+        'en-US': ['mm/dd/yyyy', 'mmm d, yyyy', '"€"#,##0.00', '#,##0.0%'],
+      };
+      const got = {};
+      const bad = [];
+      try {
+        for (const [locale, expected] of Object.entries(want)) {
+          await Templates.updateDocumentSettings({ formatLocale: locale });
+          for (const lang of ['fr', 'en']) {
+            const x = await inLang(lang, () => exportGrid([100, 100, 100, 100], [30], html));
+            const seen = ['A1', 'B1', 'C1', 'D1'].map(ref => x.sheet.cell(ref).style.numFmt);
+            got[locale + '/' + lang] = seen;
+            if (JSON.stringify(seen) !== JSON.stringify(expected)) bad.push({ locale, lang, seen, expected });
+          }
+        }
+      } finally { await Templates.updateDocumentSettings({ formatLocale: null }); }
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, got }) };
+    },
+  });
+
+  // Une bulle qui a gardé son format régional à son ajout (data-locale, js/variables.js:insertVariable) écrit SES codes de format dans Excel, quel que soit le réglage du document.
+  cases.push({
+    id: 'xlsx_a_bubble_keeps_its_own_region_in_the_excel_formats',
+    description: 'Dans un document réglé sur la France, une bulle gardée « en-GB » écrit « dd/mm/yyyy », la devise devant et « % » collé, une bulle gardée « en-US » « mm/dd/yyyy » et « mmm d, yyyy », une bulle sans région gardée suit le document (« #,##0.00 "€" ») ; le réglage du document ne les change pas',
+    run: async (h) => {
+      await seed(h);
+      const kept = (locale, column, format) => badge(column, withFormat(format)).replace('data-key=', `data-locale="${locale}" data-key=`);
+      const money = { type: 'number', decimals: 2, currency: '€' };
+      const html = [[
+        kept('en-GB', 'Date'), kept('en-GB', 'Montant', money), kept('en-GB', 'Montant', { type: 'number', percent: true, decimals: 1 }),
+        kept('en-US', 'Date', { type: 'date', preset: 'd_mmm_yyyy' }), badge('Montant', withFormat(money)),
+      ]];
+      const got = {};
+      const bad = [];
+      try {
+        for (const locale of ['fr-FR', 'en-US', 'de-DE']) {
+          await Templates.updateDocumentSettings({ formatLocale: locale });
+          const x = await exportGrid([100, 100, 100, 100, 100], [30], html);
+          const seen = ['A1', 'B1', 'C1', 'D1', 'E1'].map(ref => x.sheet.cell(ref).style.numFmt);
+          got[locale] = seen;
+          const document = { 'fr-FR': '#,##0.00 "€"', 'en-US': '"€"#,##0.00', 'de-DE': '#,##0.00 "€"' }[locale];
+          const expected = ['dd/mm/yyyy', '"€"#,##0.00', '#,##0.0%', 'mmm d, yyyy', document];
+          if (JSON.stringify(seen) !== JSON.stringify(expected)) bad.push({ locale, seen, expected });
+        }
+      } finally { await Templates.updateDocumentSettings({ formatLocale: null }); }
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, got }) };
+    },
+  });
+
   cases.push({
     id: 'xlsx_english_currency_in_letters_keeps_the_space_the_reader_writes',
     description: 'Une devise en lettres s\'écrit en anglais avec la même espace dans la case Excel que dans la Lecture (« CHF 1,234.57 ») : « "CHF "#,##0.00 », « "kr "#,##0 » ; une devise qui finit par un symbole reste collée (« "$"#,##0.00 », « "R$"#,##0 ») et le français garde « #,##0.00 "CHF" » (la devise après le nombre)',

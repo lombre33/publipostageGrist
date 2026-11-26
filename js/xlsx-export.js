@@ -58,7 +58,8 @@ const XlsxExport = (function () {
     return GENERIC_FONTS.test(first) ? BASE_FONT.name : first;
   }
 
-  function numberFormatCode(format, value) {
+  function numberFormatCode(format, value) { return VariableFormat.withRegion(format && format.locale, () => numberFormatCodeIn(format, value)); }
+  function numberFormatCodeIn(format, value) {
     // Format d'affichage des vrais nombres et des vraies dates Code de format d'Excel, écrit dans sa convention (virgule des milliers, point des
     // décimales) : Excel l'affiche selon la langue de la personne qui ouvre le fichier ; seuls le groupement, le nombre de décimales, la devise et le
     // pourcentage viennent de la bulle. La devise passe devant le nombre en anglais, avec l'espace de VariableFormat.currencyGap (« "CHF "#,##0.00 »).
@@ -70,14 +71,15 @@ const XlsxExport = (function () {
     let code = f.style === 'none' ? '0' : '#,##0';
     if (!digits) { if (!Number.isInteger(shown)) code += '.###'; }
     else if (digits.max > 0 && (digits.min > 0 || !Number.isInteger(shown))) code += '.' + '0'.repeat(digits.min) + '#'.repeat(digits.max - digits.min);
-    if (f.percent) return VariableFormat.numberLang(f.style) === 'fr' ? code + ' %' : code + '%';
+    const region = VariableFormat.numberProfile(f.style); // la région du nombre : « % » après une espace, la devise devant ou derrière
+    if (f.percent) return region.percentSpaced ? code + ' %' : code + '%';
     if (f.currency) {
       const literal = String(f.currency).replace(/"/g, '');
-      code = VariableFormat.numberLang(f.style) === 'fr' ? code + ' "' + literal + '"' : '"' + literal + (VariableFormat.currencyGap(literal) ? ' ' : '') + '"' + code;
+      code = region.currencyAfter ? code + ' "' + literal + '"' : '"' + literal + (VariableFormat.currencyGap(literal) ? ' ' : '') + '"' + code;
     }
     return code;
   }
-  // Préréglages de date de VariableFormat.DATE_PRESETS : le français écrit jour avant mois, l'anglais l'inverse.
+  // Préréglages de date de VariableFormat.DATE_PRESETS : le français écrit jour avant mois, l'anglais l'inverse - le format régional du document (VariableFormat.formatLocale), pas la langue de l'interface.
   const DATE_CODES = {
     dmy_slash_full: { fr: 'dd/mm/yyyy', en: 'mm/dd/yyyy' },
     dmy_slash_short: { fr: 'd/m/yy', en: 'm/d/yy' },
@@ -94,14 +96,17 @@ const XlsxExport = (function () {
     // am / pm en minuscules, collés aux minutes : Excel écrit la casse du code (« am/pm » donne « pm »).
     ampmlower: { fr: 'h:mmam/pm', en: 'h:mmam/pm' },
   };
-  function dateFormatCode(format, withTime) {
+  function dateFormatCode(format, withTime) { return VariableFormat.withRegion(format && format.locale, () => dateFormatCodeIn(format, withTime)); }
+  function dateFormatCodeIn(format, withTime) {
     const key = (format && format.preset) || VariableFormat.DATE_PRESETS[0].key;
     const codes = DATE_CODES[key] || DATE_CODES[VariableFormat.DATE_PRESETS[0].key];
-    const lang = (typeof I18n !== 'undefined' && I18n.getLang() === 'en') ? 'en' : 'fr';
+    // « fr » : le jour avant le mois, « en » : le mois avant le jour - l'ordre du format régional du document, pas la langue qu'il parle (l'anglais britannique écrit le jour d'abord).
+    const lang = VariableFormat.regionProfile(VariableFormat.formatLocale()).dayFirst ? 'fr' : 'en';
     if (!withTime) return codes[lang];
-    const spelledMonth = /mmm/.test(codes.fr);
-    const joiner = spelledMonth ? (lang === 'en' ? ' "at" ' : ' "à" ') : (lang === 'en' && key !== 'iso' ? ', ' : ' ');
-    return codes[lang] + joiner + TIME_CODES[format.time][lang];
+    // Ce qui lie la date à l'heure s'écrit comme la bulle l'écrit (« à », « at », « um »...), entre guillemets pour Excel quand ce sont des lettres.
+    const joined = VariableFormat.dateTimeJoiner(VariableFormat.DATE_PRESETS.find(p => p.key === key) || VariableFormat.DATE_PRESETS[0]);
+    const joiner = /\p{L}/u.test(joined) ? ' "' + joined.trim() + '" ' : joined;
+    return codes[lang] + joiner + TIME_CODES[VariableFormat.writtenTimeStyle(format.time)].fr;
   }
 
   const BUBBLES = '.var-badge, .calc-badge';
@@ -118,7 +123,11 @@ const XlsxExport = (function () {
   }
   function badgeFormat(badge) {
     // Le réglage de format d'une bulle (data-format) ; null s'il manque ou n'est pas lisible.
-    try { return JSON.parse(badge.getAttribute('data-format') || 'null'); } catch (e) { return null; }
+    let format = null;
+    try { format = JSON.parse(badge.getAttribute('data-format') || 'null'); } catch (e) { format = null; }
+    // Le format régional que la bulle a gardé à son ajout (data-locale) : les codes de format s'écrivent dans SA région.
+    const locale = badge.getAttribute('data-locale');
+    return VariableFormat.isRegion(locale) ? Object.assign({}, format, { locale }) : format;
   }
   function typedNumber(value, format, colType) {
     // Un nombre que la bulle écrit : { kind: 'number', value, numFmt } ; null = du texte (nombre en toutes lettres, zéro que la bulle masque - la

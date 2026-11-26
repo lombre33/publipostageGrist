@@ -577,7 +577,7 @@ const VariableLinkedAttrs = (function () {
       // photos sans cadre ni outils. Elle reprend la condition d'affichage de la bulle d'origine quand la case le demande (l'image en a une, comme une bulle).
       if (Variables.becomesImage(state.editor, attrs)) return [{ type: 'text', text: ' ' }, imageNodeFor(attrs, inherits ? node : null)];
       if (inherits) attrs.condition = ConditionRules.plainCondition(node.attrs.condition);
-      return [{ type: 'text', text: ' ' }, { type: 'varBadge', attrs }];
+      return [{ type: 'text', text: ' ' }, { type: 'varBadge', attrs: Object.assign(attrs, Variables.regionStamp(state.editor, attrs)) }];
     });
   }
 

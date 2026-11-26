@@ -465,7 +465,7 @@ const Variables = (function () {
     return { updateItems, hide, dismiss, suggestionRender };
   })();
 
-  const { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage } = (function () {
+  const { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, regionStamp, attachmentImageNode, insertAttachmentImage } = (function () {
     // Les insertions (puces, note de bas de page, variable, image d'une colonne Pièces jointes) et l'extension TipTap
 
     // Les puces qui ouvrent leur propre insertion. Appelées à l'usage : ces modules sont chargés après celui-ci.
@@ -528,7 +528,16 @@ const Variables = (function () {
       // n'a pas de nœud image) ni dans un modèle d'e-mail (texte brut, menu Image grisé) : la bulle d'avant, qui n'y écrit rien.
       if (becomesImage(editor, item)) { await insertAttachmentImage(editor, item, range); return; }
       if (!(await ensureLinkedAt(editor, range.from, item))) return;
-      editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: { table: item.table, column: item.column, key: item.key } }).run();
+      editor.chain().focus().insertContentAt(range, { type: 'varBadge', attrs: Object.assign({ table: item.table, column: item.column, key: item.key }, regionStamp(editor, item)) }).run();
+    }
+    // Le format régional que la bulle garde (attribut `locale`, VariableFormat.withRegion) : celui du document à l'instant où la variable s'ajoute, pour une colonne Date, Date et heure, Numérique ou Entier - les seules
+    // dont l'écriture dépend de la région (ordre du jour et du mois, séparateurs, devise). La date ou le nombre ne change plus ensuite, ni par le réglage du document, ni par la langue ou la locale de qui lit, ni
+    // par Grist ; seul un choix de la barre de la bulle le change. Rien dans un champ texte à bulles (Objet, À, nom du PDF...), qui garde l'écriture du document, ni pour les autres colonnes.
+    function regionStamp(editor, item) {
+      const kind = VariableFormat.columnKind(GristAPI.getColumnType(item.table, item.column));
+      if (kind !== 'date' && kind !== 'number') return {};
+      if (editor && editor.view && editor.view.dom && editor.view.dom.closest('.pp-field-editor')) return {};
+      return { locale: VariableFormat.formatLocale() };
     }
 
     // Le choix d'une ligne de la liste, dans l'éditeur du document comme dans un champ texte à bulles : une puce ou une bulle de variable.
@@ -594,7 +603,7 @@ const Variables = (function () {
         },
       });
     }
-    return { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage };
+    return { createExtension, createFieldExtension, isAttachmentColumn, becomesImage, regionStamp, attachmentImageNode, insertAttachmentImage };
   })();
 
   const { checkForFilenameTrigger, pathItems } = (function () {
@@ -1922,7 +1931,7 @@ const Variables = (function () {
   // (le coin d'état d'Annuler, js/link-rule-history.js, nomme un lien comme « Tables liées ») ; linkMissText, linkMissesStale, forgetLinkMisses et scanLinkMisses (l'orange d'un
   // lien qui ne trouve aucune ligne, js/editor.js et js/variable-column.js).
   return {
-    createExtension, createFieldExtension, isAttachmentColumn, becomesImage, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
+    createExtension, createFieldExtension, isAttachmentColumn, becomesImage, regionStamp, attachmentImageNode, insertAttachmentImage, resolveVariable, resolveVariableResult, resolveRawValue, resolveTextVariables, replaceTextVariables, findTextVariables, resolveAttachmentIds, refreshLinkRulesPanel, initFilenameInput, triggerChar,
     preferChipsTab, ensureLinkConfigured, editLinkRule, describeLinkVia, linkRuleLabel, resolveLinkedRows, resolveRows, stepNeighbor, formatValue, listTexts, resolveListTexts, rowTexts, resolveRowTexts, zeroHidden, listItems, decodeShown, cellValue, currentTables, prioritizeTables, columnSearchText, referencedTable, crossedListTable, writesList, rowListOf, columnsBelow, attachmentReference, attachmentColumnsBelow,
     calcOperand, resolveCalcResult, resolveCalc, badgeProblem, pageReferencesTo, isUnlinked, calcProblem, formulaErrorText,
     linkMissText, linkMissesStale, forgetLinkMisses, scanLinkMisses,

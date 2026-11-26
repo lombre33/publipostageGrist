@@ -12,11 +12,34 @@ const FloatingToolbars = (function () {
     return (node && node.type && node.type.name === typeName) ? node : null;
   }
 
+  // Les listes « Date » et « Heure » d'une barre montrent ce que le document écrira : « 12/09/2026 » ou « 09/12/2026 », « 23 h 30 » ou « 11:30 PM » (VariableFormat.presetLabel, timeLabel). Elles suivent le format
+  // régional du document (js/format-locale.js), pas celle de l'interface : le document peut dire la sienne une fois la barre construite (ses réglages arrivent de Grist après le départ, ou la personne change son
+  // choix dans Réglages). Une barre construite pour une langue qui n'est plus la bonne refait donc ses listes avant de s'afficher (refreshWritingLists), sans toucher à ce qui est choisi.
+  const datePresetOptionsHtml = () => VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+  const timeOptionsHtml = withNone => (withNone ? `<option value="">${I18n.t('varFmt.timeNone')}</option>` : '')
+    + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+  const chipDateOptionsHtml = () => VariableFormat.chipDateChoices().map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+  function refreshWritingLists(panel) {
+    const locale = VariableFormat.formatLocale();
+    if (!panel || !panel.el || panel.el.dataset.formatLocale === locale) return;
+    panel.el.dataset.formatLocale = locale;
+    const lists = [['select[data-role="date-preset"]', datePresetOptionsHtml], ['select[data-role="date-time"]', () => timeOptionsHtml(true)],
+      ['select[data-role="chip-time"]', () => timeOptionsHtml(false)], ['select[data-role="chip-date"]', chipDateOptionsHtml]];
+    lists.forEach(([selector, html]) => {
+      const select = panel.el.querySelector(selector);
+      if (!select) return;
+      const kept = select.value;
+      Dom.setMarkup(select, html());
+      select.value = kept;
+    });
+  }
+
   // Les contrôles d'une barre, retrouvés par leur data-action ou leur sélecteur.
   function controlsOf(panel) {
     const button = action => panel.el.querySelector(`button[data-action="${action}"]`);
     return {
       button,
+      refreshWritingLists() { refreshWritingLists(panel); },
       setActive(action, active) {
         const btn = button(action);
         if (btn) btn.classList.toggle('is-active', !!active);
@@ -1256,8 +1279,8 @@ const FloatingToolbars = (function () {
     // Les sous-panneaux de format d'une bulle (Comme dans Grist, nombre, date, Oui / Non), précédés de leur séparateur : ceux de la barre d'une bulle et ceux de la barre d'une pastille « @ »
     // (createMentionToolbar), écrits une seule fois. Ce que la barre en montre suit le type de la colonne (showVariableFormatPanels).
     function variableFormatHtml() {
-      const dateOptions = VariableFormat.DATE_PRESETS.map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
-      const timeOptions = `<option value="">${I18n.t('varFmt.timeNone')}</option>` + VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
+      const dateOptions = datePresetOptionsHtml();
+      const timeOptions = timeOptionsHtml(true);
       const boolTitles = { accentStrike: 'varFmt.boolAccentStrike', classic: 'list.checklistClassic.tip', accentPlain: 'list.checklistAccentPlain.tip', text: 'varFmt.boolTextTitle' };
       return [
         '<span class="v2-floating-sep" data-var-sep></span>',
@@ -1350,8 +1373,8 @@ const FloatingToolbars = (function () {
     function gristFormatOf(node) {
       if (node.type.name === 'calcBadge') return { refusal: 'calc' };
       const { table, column } = node.attrs;
-      return VariableFormat.gristColumnFormat(GristAPI.getColumnType(table, column), GristAPI.getColumnFormatOptions(table, column),
-        VariableFormat.documentCurrency(GristAPI.getDocumentSettings()), I18n.getLang());
+      return VariableFormat.withRegion(node.attrs.locale, () => VariableFormat.gristColumnFormat(GristAPI.getColumnType(table, column), GristAPI.getColumnFormatOptions(table, column),
+        VariableFormat.documentCurrency(GristAPI.getDocumentSettings()), VariableFormat.formatLocale()));
     }
     // Pose le format de la colonne Grist en une seule opération (un seul « Annuler »). Les réglages de la colonne sont relus d'abord : ils ont pu changer dans Grist depuis la
     // dernière lecture du schéma, et le bouton écrit ce que Grist montre maintenant. Si la sélection a bougé pendant la lecture, ou si la colonne n'a plus de format que le
@@ -1567,12 +1590,15 @@ const FloatingToolbars = (function () {
       syncFormatControls(ui, node, node.attrs.format || {});
     }
     // Les réglages de format, ceux d'une bulle comme ceux d'une pastille « @ » (createMentionToolbar) : « Comme dans Grist », le nombre, la date et le Oui / Non.
+    // Une bulle qui a gardé son format régional (attribut `locale`, posé à l'ajout) montre ses listes, son aperçu et ses réglages par défaut dans CETTE région, pas dans celle du document.
     function syncFormatControls(ui, node, format) {
-      syncGristButton(ui, node, format);
-      syncNumberFormat(ui, node, format);
-      syncDateFormat(ui, format);
-      // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit).
-      syncBoolButtons(ui, VariableFormat.boolStyle(format));
+      VariableFormat.withRegion(node.attrs.locale, () => {
+        syncGristButton(ui, node, format);
+        syncNumberFormat(ui, node, format);
+        syncDateFormat(ui, format);
+        // Oui / Non : le style en cours est allumé, « vrai / faux » tant que rien n'est réglé (c'est ce que la bulle écrit).
+        syncBoolButtons(ui, VariableFormat.boolStyle(format));
+      });
     }
 
     function syncVariableActions(ui, node, pos) {
@@ -1617,8 +1643,8 @@ const FloatingToolbars = (function () {
 
     function syncNumberFormat(ui, node, format) {
       const isNumber = format.type === 'number';
-      // Repli aligné sur la langue de l'interface, sauf si un style explicite est déjà posé.
-      const defaultStyle = I18n.getLang() === 'en' ? 'us' : 'fr';
+      // Repli aligné sur le format régional du document, sauf si un style explicite est déjà posé.
+      const defaultStyle = VariableFormat.defaultNumberStyle();
       const style = isNumber ? (format.style || defaultStyle) : defaultStyle;
       ['fr', 'us', 'none'].forEach(name => ui.setActive('num-style:' + name, style === name));
       ui.setActive('num-words', isNumber && format.words);
@@ -1650,6 +1676,7 @@ const FloatingToolbars = (function () {
     }
 
     function syncDateFormat(ui, format) {
+      ui.refreshWritingLists();
       const isDate = format.type === 'date';
       ui.setField('select[data-role="date-preset"]', isDate && format.preset ? format.preset : VariableFormat.DATE_PRESETS[0].key);
       ui.setField('select[data-role="date-time"]', isDate ? VariableFormat.timeChoiceOf(format.time) : '');
@@ -1771,8 +1798,8 @@ const FloatingToolbars = (function () {
       return node && node.type.name === 'smartChip' && node.attrs.kind !== EmojiChip.KIND && (!inField || node.attrs.kind === 'time' || node.attrs.kind === 'date') ? { node, pos: editor.state.selection.from } : null;
     }
     function chipToolbarHtml() {
-      const items = VariableFormat.timeChoices().map(t => `<option value="${t.key}">${VariableFormat.timeLabel(t)}</option>`).join('');
-      const dateItems = VariableFormat.chipDateChoices().map(p => `<option value="${p.key}">${VariableFormat.presetLabel(p)}</option>`).join('');
+      const items = timeOptionsHtml(false);
+      const dateItems = chipDateOptionsHtml();
       const parts = dateSegmentButtons('chip-date-part', true);
       const title = I18n.t('varToolbar.style');
       return `<select data-role="chip-time" title="${I18n.t('varFmt.time')}" aria-label="${I18n.t('varFmt.time')}">${items}</select>`
@@ -1830,6 +1857,7 @@ const FloatingToolbars = (function () {
         if (!dom || !dom.getClientRects().length) { panel.hide(); return; }
         const isTime = chip.node.attrs.kind === 'time';
         const isDate = chip.node.attrs.kind === 'date';
+        ui.refreshWritingLists();
         select.hidden = !isTime;
         datePanel.hidden = !isDate;
         if (isTime) select.value = VariableFormat.timeChoiceOf(chip.node.attrs.time) || DEFAULT_STYLE;

@@ -165,6 +165,8 @@ const EditorNodes = (function () {
         'data-table': nodeAttrs.table, 'data-column': nodeAttrs.column, 'data-key': nodeAttrs.key,
       };
       if (nodeAttrs.format) attrs['data-format'] = JSON.stringify(nodeAttrs.format);
+      // Le format régional de la bulle, gardé à son ajout (VariableFormat.REGIONS) : un attribut à part, sans le point « format choisi » (css/editor-v2.css), écrit seulement quand il existe.
+      if (VariableFormat.isRegion(nodeAttrs.locale)) attrs['data-locale'] = nodeAttrs.locale;
       if (nodeAttrs.condition) attrs['data-condition'] = JSON.stringify(nodeAttrs.condition);
       // La mise en forme selon la ligne (js/conditional-style.js) : un seul attribut JSON, écrit seulement quand elle existe.
       if (nodeAttrs.condStyle) attrs['data-cond-style'] = JSON.stringify(nodeAttrs.condStyle);
@@ -186,7 +188,8 @@ const EditorNodes = (function () {
     function varBadgeAttrsOf(el) {
       return {
         table: el.getAttribute('data-table'), column: el.getAttribute('data-column'), key: el.getAttribute('data-key'),
-        format: jsonAttr(el, 'data-format'), condition: jsonAttr(el, 'data-condition'), condStyle: ConditionalStyle.parse(el.getAttribute('data-cond-style')), loop: jsonAttr(el, 'data-loop'),
+        format: jsonAttr(el, 'data-format'), locale: VariableFormat.isRegion(el.getAttribute('data-locale')) ? el.getAttribute('data-locale') : null,
+        condition: jsonAttr(el, 'data-condition'), condStyle: ConditionalStyle.parse(el.getAttribute('data-cond-style')), loop: jsonAttr(el, 'data-loop'),
         before: VariableFormat.affix(el.getAttribute('data-before')), after: VariableFormat.affix(el.getAttribute('data-after')),
         otherwise: VariableOtherwise.fromElement(el), otherwiseText: VariableOtherwise.typedFromElement(el),
       };
@@ -213,6 +216,8 @@ const EditorNodes = (function () {
         addAttributes() {
           // `format` : { type:'number', style, decimals, currency, words } ou { type:'date', preset }, choisi par la barre flottante (cf.
           // wireVariableFloatingToolbar) ; `null` tant que rien n'est réglé (valeur brute, String(val)).
+          // `locale` : le format régional de la bulle (une région de VariableFormat.REGIONS : « fr-FR », « en-GB »...), posé à l'ajout d'une variable Date ou Nombre (js/variables.js:insertVariable) : la
+          // valeur s'écrit toujours dans cette région, quel que soit le réglage du document ou la langue de qui lit - elle ne bouge que par un choix de sa barre ; `null` = celle du document.
           // `condition` : { mode:'all'|'any', rules:[{ column, operator, value }] } - condition d'affichage (js/variable-condition.js), évaluée en
           // lecture et à l'export par js/reader-mode.js ; `null` = toujours affichée.
           // `loop` : { table, via, repeat, filter, sort, empty, … } - boucle sur les lignes liées (js/variable-loop.js), déroulée en lecture et à
@@ -225,7 +230,7 @@ const EditorNodes = (function () {
           // (js/variable-otherwise.js, ligne « Sinon afficher » de js/variable-condition.js) ; `null` = pas de sinon. `otherwiseText` : le sinon quand il est autre
           // chose que cette seule variable - du texte et des variables, tel que le champ de la fenêtre l'enregistre (js/field-codec.js) ; jamais avec `otherwise`.
           return {
-            table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null),
+            table: internalAttr(null), column: internalAttr(null), key: internalAttr(null), format: internalAttr(null), locale: internalAttr(null), condition: internalAttr(null), loop: internalAttr(null),
             condStyle: internalAttr(null), before: internalAttr(null), after: internalAttr(null), otherwise: internalAttr(null), otherwiseText: internalAttr(null),
           };
         },

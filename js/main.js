@@ -1277,6 +1277,7 @@
     ViewTemplate.wirePanel();
     EmailLinkPanel.wire({ setStatus });
     ExportDate.wirePanel();
+    FormatLocale.wirePanel();
     RowAttachment.wirePanel();
     wirePageModals();
     wireSaveShortcut();

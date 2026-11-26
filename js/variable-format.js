@@ -1,8 +1,8 @@
 // Formatage d'une bulle #Variable : nombre, date, Oui / Non et liste. Sans dépendance externe : Intl couvre tout sauf l'écriture d'un nombre en
 // toutes lettres, écrite ici à la main (orthographe classique « vingt et un », pas la réforme de 1990, forme attendue en contrat).
 const VariableFormat = (function () {
-  // `labelEn` n'est pas la traduction du libellé français mais ce que ce préréglage produit une fois dateLocale() basculée sur 'en-US' : l'ordre jour
-  // / mois change avec la locale.
+  // `labelEn` n'est pas la traduction du libellé français mais ce que ce préréglage produit en anglais américain (« en-US ») : l'ordre jour / mois change avec le format régional ;
+  // les autres régions montrent ce que le préréglage écrit pour elles (presetLabel).
   const DATE_PRESETS = [
     { key: 'dmy_slash_full', label: '12/09/2026', labelEn: '09/12/2026', options: { day: '2-digit', month: '2-digit', year: 'numeric' } },
     { key: 'dmy_slash_short', label: '12/9/26', labelEn: '9/12/26', shortNoPad: true },
@@ -14,7 +14,7 @@ const VariableFormat = (function () {
   ];
   // L'heure d'une colonne « Date et heure » (format.time) : `colon` s'écrit comme sur une horloge numérique à 24 heures (23:30), `ampm` à 12 heures avec AM / PM
   // (11:30 PM), `ampmlower` à 12 heures avec am / pm en minuscules collés aux minutes (11:30pm, l'écriture de départ de Grist), toutes les trois dans toutes les
-  // langues ; `natural` comme on l'écrit dans la langue de l'interface - « 23 h 30 » en français, « 11:30 PM » en anglais, qui n'écrit pas « 23 h 30 » : c'est alors
+  // langues ; `natural` comme on l'écrit dans la langue d'écriture du document - « 23 h 30 » en français, « 11:30 PM » en anglais, qui n'écrit pas « 23 h 30 » : c'est alors
   // `ampm`. Absente, la valeur n'a pas d'heure - c'est l'écriture par défaut, celle des documents d'avant ce réglage. `labelEn` : comme pour DATE_PRESETS.
   const TIME_STYLES = [
     { key: 'colon', label: '23:30', labelEn: '23:30' },
@@ -23,21 +23,89 @@ const VariableFormat = (function () {
     { key: 'ampmlower', label: '11:30pm', labelEn: '11:30pm' },
   ];
   // La date que la puce « Date du jour » écrit tant qu'aucun préréglage n'est choisi : jour, mois, année en chiffres, « 12/09/2026 », dans TOUTES les langues - l'écriture qu'elle avait avant d'avoir un
-  // réglage de date, que les documents déjà faits gardent. Dans une interface française c'est le premier préréglage de DATE_PRESETS ; en anglais, où celui-ci écrit « 09/12/2026 », elle s'y ajoute en
+  // réglage de date, que les documents déjà faits gardent. Dans un document qui écrit en français c'est le premier préréglage de DATE_PRESETS ; en anglais, où celui-ci écrit « 09/12/2026 », elle s'y ajoute en
   // tête de la liste de la puce (chipDateChoices). Hors de DATE_PRESETS : la liste d'une bulle sur une colonne Date, le format de Grist et l'export Excel ne la connaissent pas.
   const CHIP_DATE_START = { key: 'dmy_chip', label: '12/09/2026', labelEn: '12/09/2026', dayFirst: true };
+  // Le FORMAT RÉGIONAL dans lequel une date ou un nombre s'ÉCRIT, une locale (« fr-FR », « en-GB », « it-IT »...) : l'ordre du jour et du mois, les séparateurs, le nom des mois, la place de la devise. Ce n'est PAS la
+  // langue de l'interface : l'anglais n'est pas forcément américain, et la personne dont le navigateur est en anglais ne choisit pas le format des dates d'un document qu'elle n'a pas écrit. Le document dit le sien
+  // (la source que js/format-locale.js donne : son réglage, ou la locale de Grist quand elle n'est pas celle d'un document neuf) ; sans réglage, la locale de l'interface comme avant (« fr-FR » pour le français,
+  // « en-US » pour l'anglais) - ce qui écrivait « 12/09/2026 » chez une personne au navigateur en français et « 09/12/2026 » chez une autre au navigateur en anglais, dans le même document.
   // I18n est absent des tests qui chargent ce fichier seul : le français est alors la langue.
-  const interfaceIsEnglish = () => typeof I18n !== 'undefined' && I18n.getLang() === 'en';
-  function presetLabel(preset) {
-    // Suit la langue de l'interface, jamais le style fr / us éventuellement choisi sur cette variable : un libellé anglais dans une interface française
-    // prêterait à confusion.
-    return interfaceIsEnglish() ? (preset.labelEn || preset.label) : preset.label;
+  const REGIONS = [
+    { locale: 'fr-FR', name: 'Français (France)' }, { locale: 'fr-BE', name: 'Français (Belgique)' }, { locale: 'fr-CH', name: 'Français (Suisse)' },
+    { locale: 'en-US', name: 'English (United States)' }, { locale: 'en-GB', name: 'English (United Kingdom)' },
+    { locale: 'it-IT', name: 'Italiano (Italia)' }, { locale: 'de-DE', name: 'Deutsch (Deutschland)' }, { locale: 'es-ES', name: 'Español (España)' }, { locale: 'nl-NL', name: 'Nederlands (Nederland)' },
+  ];
+  const isRegion = locale => typeof locale === 'string' && REGIONS.some(region => region.locale === locale);
+  let formatLocaleSource = null;
+  function setFormatLocaleSource(source) { formatLocaleSource = typeof source === 'function' ? source : null; }
+  const interfaceLocale = () => (typeof I18n !== 'undefined' && I18n.getLang() === 'en' ? 'en-US' : 'fr-FR');
+  // Le format régional d'UNE bulle (`format.locale`, posé quand la bulle a été ajoutée - js/variables.js:insertVariable) : pendant `fn`, formatLocale() rend le sien, et tout ce que le format régional
+  // règle (ordre du jour et du mois, séparateurs, devise, « à » / « at ») s'écrit dans cette région, quel que soit le réglage du document ou la langue de la personne qui lit.
+  let regionOverride = null;
+  const regionOf = format => (format && typeof format === 'object' && isRegion(format.locale) ? format.locale : null);
+  function withRegion(locale, fn) {
+    if (!isRegion(locale)) return fn();
+    const saved = regionOverride;
+    regionOverride = locale;
+    try { return fn(); } finally { regionOverride = saved; }
   }
-  // Une date n'a pas de réglage de langue par variable, contrairement au nombre (opts.style) : elle suit la langue de l'interface.
-  const dateLocale = () => (interfaceIsEnglish() ? 'en-US' : 'fr-FR');
-  // Ce que la liste « Date » de la puce « Date du jour » propose dans la langue de l'interface, chaque écriture une fois : l'écriture de départ de la puce (CHIP_DATE_START), puis les préréglages d'une
-  // bulle - sans « 12/09/2026 » en français, où c'est déjà le départ.
-  const chipDateChoices = () => [CHIP_DATE_START].concat(DATE_PRESETS.filter(preset => interfaceIsEnglish() || preset.key !== DATE_PRESETS[0].key));
+  function formatLocale() {
+    if (regionOverride) return regionOverride;
+    let chosen = null;
+    if (formatLocaleSource) {
+      try { chosen = formatLocaleSource(); } catch (e) { chosen = null; }
+    }
+    return isRegion(chosen) ? chosen : interfaceLocale();
+  }
+  // Ce que le format régional règle, lu une fois par locale dans Intl : l'ordre jour / mois / année des dates en chiffres et ce qui les sépare, l'horloge (12 ou 24 heures), la place de la devise et de « % » d'un nombre.
+  const profiles = new Map();
+  function profileOf(locale) {
+    if (!profiles.has(locale)) {
+      const day = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }).formatToParts(new Date(Date.UTC(2026, 8, 12)));
+      const order = day.filter(part => part.type !== 'literal').map(part => part.type);
+      const currency = new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).formatToParts(1234.5).map(part => part.type);
+      const percent = new Intl.NumberFormat(locale, { style: 'percent' }).format(0.25);
+      profiles.set(locale, {
+        locale,
+        language: locale.slice(0, 2),
+        order,
+        dayFirst: order[0] === 'day',
+        separator: (day.find(part => part.type === 'literal') || { value: '/' }).value,
+        hour12: new Intl.DateTimeFormat(locale, { hour: 'numeric', timeZone: 'UTC' }).resolvedOptions().hourCycle === 'h12',
+        currencyAfter: currency.indexOf('currency') > currency.indexOf('integer'),
+        percentSpaced: /\s/.test(percent),
+      });
+    }
+    return profiles.get(locale);
+  }
+  const profile = () => profileOf(formatLocale());
+  // La langue du format régional (« fr », « en », « it »...), et celle des mots qu'on écrit en toutes lettres : seuls le français et l'anglais savent écrire un nombre, une autre région l'écrit en anglais.
+  const formatLanguage = () => profile().language;
+  const writesFrench = () => formatLanguage() === 'fr';
+  const wordsLangOf = locale => (profileOf(locale).language === 'fr' ? 'fr' : 'en');
+  // Le préréglage, tel que la région l'écrit : un exemple (samedi 12 septembre 2026).
+  const SAMPLE_DAY = Date.UTC(2026, 8, 12) / 1000;
+  function presetLabel(preset) {
+    // Suit le format régional du document (ce que le préréglage écrira), jamais le style fr / us éventuellement choisi sur cette variable : un libellé anglais dans un document qui écrit en français
+    // prêterait à confusion. Le français et l'anglais américain gardent leurs libellés écrits à la main ; les autres régions montrent ce que le préréglage écrit pour le 12/09/2026.
+    const locale = formatLocale();
+    if (locale === 'fr-FR') return preset.label;
+    if (locale === 'en-US') return preset.labelEn || preset.label;
+    return formatDate(SAMPLE_DAY, { type: 'date', preset: preset.key }, 'Date');
+  }
+  const dateLocale = () => formatLocale();
+  // Ce que la liste « Date » de la puce « Date du jour » propose dans le format régional du document, chaque écriture une fois : l'écriture de départ de la puce (CHIP_DATE_START), puis les préréglages d'une
+  // bulle - sans celui qui écrit déjà « 12/09/2026 » (le jour avant le mois, avec des barres : le français, l'italien, l'anglais britannique...), qui est le départ.
+  const chipChoices = new Map();
+  function chipDateChoices() {
+    const locale = formatLocale();
+    if (!chipChoices.has(locale)) {
+      const start = formatDate(SAMPLE_DAY, { type: 'date', preset: CHIP_DATE_START.key }, 'Date');
+      chipChoices.set(locale, [CHIP_DATE_START].concat(DATE_PRESETS.filter(preset => formatDate(SAMPLE_DAY, { type: 'date', preset: preset.key }, 'Date') !== start)));
+    }
+    return chipChoices.get(locale);
+  }
   // L'option de cette liste qui écrit comme ce préréglage ; l'écriture de départ pour une puce sans réglage, ou dont le réglage n'est pas un préréglage connu (un modèle abîmé).
   const chipDateChoiceOf = key => (chipDateChoices().some(preset => preset.key === key) ? key : CHIP_DATE_START.key);
 
@@ -76,12 +144,13 @@ const VariableFormat = (function () {
   }
   const twoDigits = n => String(n).padStart(2, '0');
   function timeLabel(style) {
-    return interfaceIsEnglish() ? (style.labelEn || style.label) : style.label;
+    return formatLocale() === 'en-US' ? (style.labelEn || style.label) : style.label;
   }
-  // Le réglage tel que la langue de l'interface l'écrit : `natural` est « 23 h 30 » en français et, en anglais, le même texte que `ampm`.
-  const writtenTimeStyle = key => (key === 'natural' && interfaceIsEnglish() ? 'ampm' : key);
-  // Ce que la liste « Heure » propose dans la langue de l'interface, une fois chaque écriture : `natural` et `ampm` écrivent pareil en anglais, la liste garde `ampm`, qui
-  // ne change pas avec la langue. Un modèle réglé en `natural` n'y perd rien : timeChoiceOf lui donne l'option qui écrit comme lui.
+  // Le réglage tel que le format régional du document l'écrit : `natural` est « 23 h 30 » en français et, ailleurs, l'écriture de l'horloge du pays - « 11:30 PM » à 12 heures (l'anglais américain), « 23:30 » à 24
+  // heures (l'anglais britannique, l'italien, l'allemand...), le même texte que `ampm` ou `colon`.
+  const writtenTimeStyle = key => (key === 'natural' && !writesFrench() ? (profile().hour12 ? 'ampm' : 'colon') : key);
+  // Ce que la liste « Heure » propose dans le format régional du document, une fois chaque écriture : `natural` écrit comme `ampm` ou `colon` hors du français, la liste garde celui-là, qui
+  // ne change pas avec la région. Un modèle réglé en `natural` n'y perd rien : timeChoiceOf lui donne l'option qui écrit comme lui.
   const timeChoices = () => TIME_STYLES.filter(style => writtenTimeStyle(style.key) === style.key);
   // L'option de la liste qui écrit comme ce réglage ; '' pour ce qui n'est pas l'un des TIME_STYLES (pas de réglage : « Sans heure »).
   const timeChoiceOf = key => (TIME_STYLES.some(style => style.key === key) ? writtenTimeStyle(key) : '');
@@ -96,11 +165,22 @@ const VariableFormat = (function () {
       default: return '';
     }
   }
-  // Ce qui lie la date à l'heure : une espace derrière une date en chiffres, « à » (« at ») derrière un mois écrit en lettres. `english` : la langue demandée, celle de l'interface
-  // sinon.
-  function dateTimeJoiner(preset, english = interfaceIsEnglish()) {
-    if (preset.options && (preset.options.month === 'short' || preset.options.month === 'long')) return english ? ' at ' : ' à ';
-    return english && !preset.iso ? ', ' : ' ';
+  // Ce qui lie la date à l'heure : une espace derrière une date en chiffres (une virgule hors du français), « à » (« at ») derrière un mois écrit en lettres - ce que la région écrit dans une autre langue que le
+  // français et l'anglais (« um », « alle ore », « a las »...) est lu dans Intl. `locale` : le format demandé, celui du document sinon.
+  const joiners = new Map();
+  function intlJoiner(locale) {
+    if (!joiners.has(locale)) {
+      const parts = new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).formatToParts(new Date(Date.UTC(2026, 8, 12, 21, 30)));
+      const at = parts.findIndex(part => part.type === 'hour');
+      const literal = at > 0 && parts[at - 1].type === 'literal' ? parts[at - 1].value : ' ';
+      joiners.set(locale, literal.replace(/[\u202f\u00a0]/g, ' '));
+    }
+    return joiners.get(locale);
+  }
+  function dateTimeJoiner(preset, locale = formatLocale()) {
+    const language = profileOf(locale).language;
+    if (preset.options && (preset.options.month === 'short' || preset.options.month === 'long')) return language === 'fr' ? ' à ' : (language === 'en' ? ' at ' : intlJoiner(locale));
+    return language !== 'fr' && !preset.iso ? ', ' : ' ';
   }
   // Vrai quand la bulle écrit l'heure de cette valeur : une colonne « Date et heure » en a une, et une colonne « Any » qui calcule un instant (la valeur
   // `val` porte alors son fuseau) ; le réglage doit être l'un des TIME_STYLES.
@@ -167,21 +247,22 @@ const VariableFormat = (function () {
   function wordifyDateParts(parts) {
     // Écrit en toutes lettres chaque composant encore purement numérique après filtrage : un mois déjà écrit en lettres reste tel quel, seuls le jour,
     // l'année (et un mois numérique) sont convertis.
-    const lang = numberLang();
+    const lang = wordsLangOf(formatLocale());
     return parts.map(part => (/^\d+$/.test(part.value) ? Object.assign({}, part, { value: numberToWords(parseInt(part.value, 10), 0, lang) }) : part));
   }
   function isFirstDayBeforeMonthName(day, parts, keep) {
     // En français le premier du mois s'écrit « 1er » (« 1er décembre 2026 ») et, en toutes lettres, « premier » ; les autres jours gardent leur nombre.
     // Seul un jour suivi de son mois écrit en lettres est concerné : « 01/12/2026 » (mois en chiffres) et un jour gardé seul (bouton M relâché) restent
-    // « 1 ». L'anglais n'est pas touché. `day` : le jour du mur du fuseau (wallClock).
-    return dateLocale() === 'fr-FR' && day === 1 && keep.day && keep.month
+    // « 1 ». Les autres langues ne sont pas touchées. `day` : le jour du mur du fuseau (wallClock).
+    return writesFrench() && day === 1 && keep.day && keep.month
       && parts.some(part => part.type === 'month' && !/^\d+$/.test(part.value));
   }
   function withDayText(parts, text) {
     return parts.map(part => (part.type === 'day' ? Object.assign({}, part, { value: text }) : part));
   }
 
-  function formatDate(val, format, columnType) {
+  function formatDate(val, format, columnType) { return withRegion(format && format.locale, () => formatDateIn(val, format, columnType)); }
+  function formatDateIn(val, format, columnType) {
     // Le texte d'une date. `columnType` : le type Grist de la colonne lue, quand on le connaît - une colonne « Date et heure » (DateTime:Europe/Paris) se
     // lit dans SON fuseau, le jour d'un instant n'étant pas le même à Paris et en UTC, et seule elle peut écrire une heure (format.time), avec la colonne
     // « Any » qui calcule un instant. Sans lui, ou pour une colonne Date (ancrée à minuit UTC pour son jour civil), tout se lit en UTC et sans heure. Une date
@@ -213,9 +294,10 @@ const VariableFormat = (function () {
       const day = String(clock.day);
       const month = String(clock.month);
       const year = String(clock.year).slice(-2);
-      const first = dateLocale() === 'en-US' ? { type: 'month', value: month } : { type: 'day', value: day };
-      const second = dateLocale() === 'en-US' ? { type: 'day', value: day } : { type: 'month', value: month };
-      parts = [first, { type: 'literal', value: '/' }, second, { type: 'literal', value: '/' }, { type: 'year', value: year }];
+      // L'ordre et le séparateur sont ceux de la région : « 12/9/26 » en France, « 9/12/26 » aux États-Unis, « 12.9.26 » en Allemagne.
+      const known = { day: { type: 'day', value: day }, month: { type: 'month', value: month }, year: { type: 'year', value: year } };
+      const { order, separator } = profile();
+      parts = [known[order[0]], { type: 'literal', value: separator }, known[order[1]], { type: 'literal', value: separator }, known[order[2]]];
     } else {
       parts = new Intl.DateTimeFormat(dateLocale(), Object.assign({ timeZone: zone }, preset.options)).formatToParts(date);
     }
@@ -430,12 +512,16 @@ const VariableFormat = (function () {
     return (n < 0 && (intPart > 0 || cents > 0) ? w.minus : '') + parts.join(w.and);
   }
 
-  function numberLang(style) {
-    // La langue d'écriture en lettres et la locale Intl d'un nombre : un réglage de la variable (opts.style 'fr' ou 'us') l'emporte sur la langue de
-    // l'interface ; 'none' (qui ne touche pas à la langue) et l'absence de réglage la suivent.
-    if (style === 'us') return 'en';
-    if (style === 'fr') return 'fr';
-    return interfaceIsEnglish() ? 'en' : 'fr';
+  // La locale Intl d'un nombre : un réglage de la variable (opts.style 'fr' ou 'us') l'emporte sur le format régional du document ; 'none' (qui ne touche pas aux séparateurs) et l'absence de réglage le suivent.
+  const numberLocale = style => (style === 'us' ? 'en-US' : (style === 'fr' ? 'fr-FR' : formatLocale()));
+  // La langue d'écriture en lettres d'un nombre, « fr » ou « en » : seuls le français et l'anglais savent écrire un nombre en toutes lettres, une autre région l'écrit en anglais.
+  const numberLang = style => wordsLangOf(numberLocale(style));
+  // Ce que la région d'un nombre règle (profileOf) : où s'écrit la devise, si « % » s'écrit après une espace.
+  const numberProfile = style => profileOf(numberLocale(style));
+  // Le style FR / US que la barre allume quand la bulle n'en a pas choisi : celui de la région du document quand c'est le français ou l'anglais, aucun pour une autre région.
+  function defaultNumberStyle() {
+    const language = formatLanguage();
+    return language === 'fr' ? 'fr' : (language === 'en' ? 'us' : null);
   }
 
   function isZero(val) {
@@ -489,7 +575,8 @@ const VariableFormat = (function () {
     const sign = formatted.charAt(0) === '-' ? '-' : '';
     return `${sign}${currency}${currencyGap(currency)}${formatted.slice(sign.length)}`;
   }
-  function formatNumber(val, opts) {
+  function formatNumber(val, opts) { return withRegion(opts && opts.locale, () => formatNumberIn(val, opts)); }
+  function formatNumberIn(val, opts) {
     // opts = { style: 'fr' | 'us' | 'none', decimals: 0-3 | null, maxDecimals, currency: '' | '€' | '$' | texte, percent: bool, words: bool } ; l'option `zero` est
     // traitée avant cet appel, par Variables.formatValue. `percent` écrit la valeur fois cent suivie de « % » (0,256 : « 25,6 % ») et l'emporte sur la devise ;
     // « Lettres » (`words`) l'emporte sur les deux.
@@ -504,7 +591,7 @@ const VariableFormat = (function () {
       const words = numberToWords(n, opts.decimals, lang);
       return opts.currency ? `${words} ${currencyWords(opts.currency, Math.round(n), lang)}` : words;
     }
-    const locale = lang === 'en' ? 'en-US' : 'fr-FR';
+    const locale = numberLocale(opts.style);
     const intlOpts = {};
     const digits = decimalDigits(opts);
     if (digits) { intlOpts.minimumFractionDigits = digits.min; intlOpts.maximumFractionDigits = digits.max; }
@@ -513,7 +600,7 @@ const VariableFormat = (function () {
     // L'espace fine insécable (U+202F) qu'Intl met entre les milliers en français manque à la police des PDF (pdfmake, Roboto) : elle s'y peignait en
     // case vide et décalait la suite de la ligne. L'espace insécable (U+00A0) y est, et se lit pareil partout ailleurs (Lecture, Word, email).
     let formatted = new Intl.NumberFormat(locale, intlOpts).format(n).replace(/\u202f/g, '\u00a0');
-    if (opts.currency && !opts.percent) formatted = locale === 'fr-FR' ? `${formatted} ${opts.currency}` : currencyFirst(opts.currency, formatted);
+    if (opts.currency && !opts.percent) formatted = profileOf(locale).currencyAfter ? `${formatted} ${opts.currency}` : currencyFirst(opts.currency, formatted);
     return formatted;
   }
 
@@ -522,7 +609,7 @@ const VariableFormat = (function () {
   // absent : nombre brut, sans séparateur de milliers), numSign (« parens » : les négatifs entre parenthèses), decimals (au moins), maxDecimals (au plus) et currency ; pour
   // une date (Date, Date et heure) dateFormat et, pour la seconde, timeFormat, écrits comme moment.js. `gristColumnFormat` en tire le `format` de bulle qui s'écrit pareil -
   // ou, avec `exact` faux, le plus proche - ou dit pourquoi le widget ne sait pas l'écrire ({ refusal, detail }). Un réglage de bulle ne change pas de langue pour autant :
-  // FR ou US reste celui de la bulle (ou de la langue de l'interface), seule la facon d'écrire le nombre ou la date est reprise.
+  // FR ou US reste celui de la bulle (ou de la langue d'écriture du document), seule la facon d'écrire le nombre ou la date est reprise.
   const MAX_DIGITS = 20;
   function gristDigits(options, currency, isInt) {
     // Les décimales que Grist écrit, lues comme lui sur Intl (buildNumberFormat, app/common/NumberFormat.ts de grist-core) : { min, max }. Sans réglage, une devise a
@@ -606,7 +693,7 @@ const VariableFormat = (function () {
     ddd_d_mmm_yyyy: { fr: 'ddd D MMM YYYY', en: 'ddd, MMM D, YYYY' },
     dddd_d_mmmm_yyyy: { fr: 'dddd D MMMM YYYY', en: 'dddd, MMMM D, YYYY' },
   };
-  // L'ordre jour / mois / année des préréglages en chiffres : celui de la langue de l'interface (le numérique) ou année d'abord (ISO).
+  // L'ordre jour / mois / année des préréglages en chiffres : celui de la langue d'écriture du document (le numérique) ou année d'abord (ISO).
   const NUMERIC_ORDER = { fr: ['day', 'month', 'year'], en: ['month', 'day', 'year'], iso: ['year', 'month', 'day'] };
   // Comment ces préréglages en chiffres écrivent chaque composant (voir DATE_TOKENS) et ce qui les sépare : un format de Grist qui en diffère s'écrit « approché ».
   const NUMERIC_FORMS = {
@@ -614,9 +701,9 @@ const VariableFormat = (function () {
     dmy_slash_short: { year: 'short', month: 'num1', day: 'num1', separator: '/' },
     iso: { year: 'full', month: 'num2', day: 'num2', separator: '-' },
   };
-  function gristDateFormat(dateFormat, lang) {
+  function gristDateFormat(dateFormat, locale) {
     // Le préréglage de date (et les boutons J / M / A) qui écrit le dateFormat de Grist : { format: { type: 'date', preset, day?, month?, year? }, exact }, ou { refusal, detail }.
-    // Un mois en lettres s'écrit dans la langue de l'interface et un jour sans zéro de tête (« approché » : exact faux) ; un ordre jour / mois / année que la langue de l'interface
+    // Un mois en lettres s'écrit dans le format régional du document et un jour sans zéro de tête (« approché » : exact faux) ; un ordre jour / mois / année que ce format
     // n'écrit pas (« MM/DD/YYYY » en français : « 09/12 » se lirait 9 décembre) est refusé plutôt que changé en silence. `exact` : le texte est le même que celui de Grist -
     // chiffres du même nombre de chiffres, mêmes séparateurs, pas de jour de semaine perdu.
     const text = dateFormat || 'YYYY-MM-DD';
@@ -637,14 +724,15 @@ const VariableFormat = (function () {
       const long = found.month === 'long';
       preset = found.weekday ? (long ? 'dddd_d_mmmm_yyyy' : 'ddd_d_mmm_yyyy') : (long ? 'd_mmmm_yyyy' : 'd_mmm_yyyy');
     } else {
-      const family = order[0] === 'year' ? 'iso' : lang;
-      if (order.join() !== NUMERIC_ORDER[family].filter(part => found[part]).join()) return { refusal: 'dateOrder', detail: text };
+      const family = order[0] === 'year' ? 'iso' : 'region';
+      const wanted = family === 'iso' ? NUMERIC_ORDER.iso : profileOf(locale).order;
+      if (order.join() !== wanted.filter(part => found[part]).join()) return { refusal: 'dateOrder', detail: text };
       preset = family === 'iso' ? 'iso' : (found.year === 'short' ? 'dmy_slash_short' : 'dmy_slash_full');
     }
     const format = { type: 'date', preset };
     ['day', 'month', 'year'].forEach(part => { if (!found[part]) format[part] = false; });
     let exact;
-    if (textual) exact = lang === 'en' && text === PRESET_MOMENT[preset].en;
+    if (textual) exact = locale === 'en-US' && text === PRESET_MOMENT[preset].en;
     else {
       const wanted = NUMERIC_FORMS[preset];
       exact = !found.weekday && ['year', 'month', 'day'].every(part => !found[part] || found[part] === wanted[part]) && separators.every(sep => sep === wanted.separator);
@@ -668,29 +756,32 @@ const VariableFormat = (function () {
     return { refusal: 'timeFormat', detail: text };
   }
 
+  // Le format régional que reçoit gristColumnFormat : une locale de REGIONS, ou « fr » / « en » (la langue d'avant : « fr-FR » ou « en-US »).
+  const localeOfArg = lang => (isRegion(lang) ? lang : (lang === 'en' ? 'en-US' : 'fr-FR'));
   function gristColumnFormat(columnType, options, docCurrency, lang) {
     // Le `format` de bulle qui écrit une valeur de cette colonne comme Grist (voir plus haut). `columnType` : le type de la colonne (« Numeric », « Int », « Date » ou
-    // « DateTime:<fuseau> »), `options` : son widgetOptions lu (null : illisible), `docCurrency` : la devise du document (documentCurrency), `lang` : la langue de l'interface
-    // ('fr' ou 'en', celle qui écrit les dates). { format, exact } ou { refusal: 'unknown' | 'scientific' | 'currency' | 'dateOrder' | 'dateFormat' | 'timeFormat', detail }.
+    // « DateTime:<fuseau> »), `options` : son widgetOptions lu (null : illisible), `docCurrency` : la devise du document (documentCurrency), `lang` : le format régional du document (formatLocale, une locale de REGIONS ;
+    // « fr » ou « en » pour « fr-FR » ou « en-US »). { format, exact } ou { refusal: 'unknown' | 'scientific' | 'currency' | 'dateOrder' | 'dateFormat' | 'timeFormat', detail }.
     if (!options || typeof options !== 'object') return { refusal: 'unknown' };
     if (columnType === 'Numeric' || columnType === 'Int') return gristNumberFormat(columnType, options, docCurrency);
     if (!isDateType(columnType)) return { refusal: 'unknown' };
-    const date = gristDateFormat(options.dateFormat, lang === 'en' ? 'en' : 'fr');
+    const locale = localeOfArg(lang);
+    const date = gristDateFormat(options.dateFormat, locale);
     if (date.refusal || !isDateTimeType(columnType)) return date;
     const time = gristTimeFormat(options.timeFormat);
     if (time.refusal) return time;
     if (time.time) date.format.time = time.time;
     // Grist lie la date à l'heure par une espace ; la bulle écrit une virgule derrière une date en chiffres en anglais et « à » / « at » derrière un mois en lettres (dateTimeJoiner) :
     // avec une heure, ce texte-là n'est pas celui de Grist.
-    const sameJoiner = !time.time || dateTimeJoiner(DATE_PRESETS.find(p => p.key === date.format.preset), lang === 'en') === ' ';
+    const sameJoiner = !time.time || dateTimeJoiner(DATE_PRESETS.find(p => p.key === date.format.preset), locale) === ' ';
     return { format: date.format, exact: date.exact && time.exact && sameJoiner };
   }
   // Les réglages de nombre et de date que « Comme dans Grist » pose ensemble : ils se remplacent tous (rien d'un ancien réglage de date ne reste sur un nombre), le reste du format - le zéro
   // masqué, la liste - n'est pas un réglage de Grist et reste.
   const GRIST_KEYS = ['type', 'style', 'decimals', 'maxDecimals', 'currency', 'percent', 'words', 'preset', 'day', 'month', 'year', 'time'];
   function applyGristFormat(current, gristFormat) {
-    // Le format d'une bulle une fois « Comme dans Grist » posé : le sien, sans les réglages d'avant. Un nombre à milliers garde le FR ou US choisi sur la bulle ; sans choix, la langue de
-    // l'interface décide, comme pour une bulle neuve.
+    // Le format d'une bulle une fois « Comme dans Grist » posé : le sien, sans les réglages d'avant. Un nombre à milliers garde le FR ou US choisi sur la bulle ; sans choix, la langue
+    // d'écriture du document décide, comme pour une bulle neuve.
     const before = current || {};
     const next = {};
     Object.keys(before).forEach(key => { if (GRIST_KEYS.indexOf(key) === -1) next[key] = before[key]; });
@@ -820,7 +911,7 @@ const VariableFormat = (function () {
   }
 
   return {
-    DATE_PRESETS, TIME_STYLES, CHIP_DATE_START, presetLabel, timeLabel, timeChoices, timeChoiceOf, timeText, chipDateChoices, chipDateChoiceOf, chipDateFormat, chipDateText, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
+    DATE_PRESETS, TIME_STYLES, CHIP_DATE_START, REGIONS, isRegion, formatLocale, withRegion, regionOf, setFormatLocaleSource, formatLanguage, regionProfile: profileOf, numberProfile, defaultNumberStyle, writtenTimeStyle, dateTimeJoiner, presetLabel, timeLabel, timeChoices, timeChoiceOf, timeText, chipDateChoices, chipDateChoiceOf, chipDateFormat, chipDateText, formatDate, gristDateToJsDate, cellError, isCellError, wallClock, writesTime, isDateTimeType, isDateType, dateTimeZone, formatNumber, numberLang, isZero,
     currencyGap, decimalDigits, localeCurrency, documentCurrency, gristColumnFormat, applyGristFormat, sameFormat, gristPreview,
     BOOL_CHECKBOX_STYLES, CHECKED_BOX, UNCHECKED_BOX, isCheckboxStyle, boolStyle, checkboxColor, formatBool,
     LIST_INDEX_MAX, isListType, columnKind, formatKindOf, normalizeList, isDefaultList, storedList, listStyle, flattenList, listText,

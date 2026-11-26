@@ -11,6 +11,7 @@ const Templates = (function () {
   // Les mises à jour du cache que les écritures de CE widget font (cf. settleWritten) : un compteur, et pour chaque ligne sa valeur à la dernière mise à jour. loadAll s'en sert pour ne pas
   // remettre dans le cache l'état d'avant d'une ligne que ce widget a écrite pendant sa lecture (cf. keepWrittenSince).
   let cacheWrites = 0;
+  let createdSinceLoad = false; // un modèle a été créé ici depuis la dernière lecture du document : la liste en cache peut ne pas encore le montrer (settleCreated ne le range que dans la liste légère)
   const cacheWrittenAt = new Map();
   // Quand le cache a été lu dans Grist (le début de la dernière lecture de loadAll) et quand ce widget a écrit chacune de ses lignes pour la dernière fois : saveRow s'en sert pour savoir si l'état qu'il
   // va remplacer est celui que Grist garde encore (cf. storedStateFor), sans relire la table quand il vient d'être lu. `cacheArrivedAt` : le moment où cette lecture est arrivée (une table lourde
@@ -592,6 +593,7 @@ const Templates = (function () {
   // La lecture de la table entière. Tant que le cache est partiel, une seule se fait à la fois (celle du démarrage, celle de l'enregistrement automatique, celle d'un geste qui attend la liste : la même) ; une lecture qui
   // échoue laisse le cache partiel, et la demande suivante relit.
   function loadAll() {
+    createdSinceLoad = false;
     if (!partial) return readAll();
     if (!fullRead) {
       const run = readAll();
@@ -1462,6 +1464,9 @@ const Templates = (function () {
       return { id, dateModif };
     } else {
       const seqAtStart = currentIdSeq;
+      // Le tout premier modèle d'un document neuf : le format régional du document y est fixé (cf. pinFormatLocale), avant que quelqu'un d'autre l'ouvre.
+      const firstOfTheDocument = templatesCache.length === 0 && !createdSinceLoad;
+      createdSinceLoad = true;
       const result = await SchemaColumns.docApi.applyUserActions([
         ['AddRecord', TABLE_NAME, null, columns],
         ...otherActions
@@ -1477,11 +1482,22 @@ const Templates = (function () {
       writes.remember(newId, dateModif);
       settleOthers(dates);
       settleCreated(newId, columns, dateModif);
+      if (firstOfTheDocument) pinFormatLocale();
       if (createdHook) {
         try { await createdHook(newId); } catch (e) { console.warn('[Templates] suite de la création impossible', e); }
       }
       return { id: newId, dateModif };
     }
+  }
+
+  // Un document NEUF garde le format régional de celle ou celui qui y écrit le premier modèle (demande du 26/11 : « par défaut, le format de la personne qui met la variable »). Sans cela,
+  // « Automatique » suivrait la langue de l'interface de chaque personne qui ouvre le document : le même modèle s'écrirait « 12/09/2026 » pour l'une et « 09/12/2026 » pour l'autre. Seulement au tout
+  // premier modèle (aucun autre dans le document) et seulement quand personne n'a encore réglé le format : un document déjà fait, ou réglé dans Réglages, n'est jamais touché. Sans attendre : un refus
+  // de Grist (droit d'écriture absent) laisse « Automatique », ce qui est l'état d'avant.
+  function pinFormatLocale() {
+    if (typeof VariableFormat === 'undefined' || typeof VariableFormat.formatLocale !== 'function') return;
+    if (documentSettings.formatLocale !== undefined) return;
+    updateDocumentSettings({ formatLocale: VariableFormat.formatLocale() }).catch(() => false);
   }
 
   // Écrit le seul contenu d'un modèle (et sa date de modification), jamais ses autres colonnes : son nom, son nom de fichier PDF, son en-tête, ses marges, son type

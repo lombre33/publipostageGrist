@@ -442,6 +442,27 @@ const I18nTextsSettings = {
   'settings.language.en': { fr: 'English', en: 'English' },
   // Hébergée par GFS, la langue est celle de GFS : les deux cases sont grisées avec cette raison (consigne 019, textes de GFS).
   'settings.language.gfsNote': { fr: 'La langue se choisit dans Grist Factory Suite (bouton Réglages de l’explorateur, ligne Langue).', en: 'The language is chosen in Grist Factory Suite (Settings button in the explorer, Language row).' },
+  // Réglages > Langue > Format des dates et des nombres du document (js/format-locale.js) : le format régional dans lequel le DOCUMENT écrit ses dates et ses nombres, le même pour tout le monde.
+  'settings.formatLocale.title': { fr: 'Format des dates et des nombres du document', en: 'Date and number format of the document' },
+  'settings.formatLocale.intro': {
+    fr: 'Format dans lequel les dates et les nombres s’écrivent dans le document, la Lecture, les PDF et les emails : ordre du jour et du mois, séparateurs, noms des mois. Ce choix est gardé dans le document : tout le monde obtient le même texte, quelle que soit la langue de son interface. Une variable de date ou de nombre garde le format que le document avait quand elle a été ajoutée : le choix ne touche que les anciennes variables, qui n’en avaient pas, et celles à venir. L’écriture en toutes lettres (« Lettres ») n’existe qu’en français et en anglais.',
+    en: 'Format in which dates and numbers are written in the document, Read mode, PDFs and emails: order of day and month, separators, month names. This choice is kept in the document: everyone gets the same text, whatever the language of their interface. A date or number variable keeps the format the document had when it was added: the choice only affects older variables, which had none, and future ones. Writing out in full (“Words”) only exists in French and English.',
+  },
+  'settings.formatLocale.auto': { fr: 'Automatique', en: 'Automatic' },
+  'settings.formatLocale.hintChosen': {
+    fr: 'Ce document écrit ses dates et ses nombres au format « {name} », pour tout le monde.',
+    en: 'This document writes its dates and numbers in the “{name}” format, for everyone.',
+  },
+  'settings.formatLocale.hintGrist': {
+    fr: 'Automatique : ce document est réglé dans Grist (Paramètres du document, Locale) : ses dates et ses nombres s’écrivent au format « {name} » pour tout le monde.',
+    en: 'Automatic: this document is set up in Grist (Document settings, Locale): its dates and numbers are written in the “{name}” format for everyone.',
+  },
+  'settings.formatLocale.hintInterface': {
+    fr: 'Automatique : chaque personne voit les dates et les nombres au format de la langue de son interface (ici : « {name} »). Choisissez un format pour que le document écrive pareil chez tout le monde.',
+    en: 'Automatic: each person sees dates and numbers in the format of their own interface language (here: “{name}”). Choose a format so the document is written the same for everyone.',
+  },
+  'settings.formatLocale.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
+  'settings.formatLocale.failed': { fr: 'Ce choix n’a pas pu être enregistré dans le document : Grist l’a refusé.', en: 'This choice could not be saved in the document: Grist refused it.' },
   'settings.mailClient.intro': { fr: 'Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.', en: 'Mail program that opens the Email mode link. Keep Standard unless your emails open in Zimbra.' },
   'settings.mailClient.standard': { fr: 'Standard', en: 'Standard' },
   'settings.mailClient.zimbra': { fr: 'Zimbra', en: 'Zimbra' },

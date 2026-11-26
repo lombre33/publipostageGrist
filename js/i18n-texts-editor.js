@@ -277,7 +277,7 @@ const I18nTextsEditor = {
   'varFmt.gristRefuse.unknown': { fr: 'Le format de cette colonne n’est pas lisible dans Grist', en: 'This column’s format can’t be read from Grist' },
   'varFmt.gristRefuse.scientific': { fr: 'Écriture scientifique (1,2E3) : une variable ne sait pas l’écrire', en: 'Scientific notation (1.2E3): a variable can’t write it' },
   'varFmt.gristRefuse.currency': { fr: 'La devise du document n’est pas lisible : saisissez-la dans la case Devise', en: 'The document’s currency can’t be read: type it in the Currency box' },
-  'varFmt.gristRefuse.dateOrder': { fr: 'Format de date « {format} » : le jour et le mois n’y sont pas dans l’ordre de la langue de l’interface, la date se lirait à l’envers', en: 'Date format “{format}”: day and month are not in the order of the interface language, the date would read the wrong way round' },
+  'varFmt.gristRefuse.dateOrder': { fr: 'Format de date « {format} » : le jour et le mois n’y sont pas dans l’ordre du format du document (Réglages > Langue), la date se lirait à l’envers', en: 'Date format “{format}”: day and month are not in the order of the document format (Settings > Language), the date would read the wrong way round' },
   'varFmt.gristRefuse.dateFormat': { fr: 'Format de date « {format} » : une variable ne sait pas l’écrire', en: 'Date format “{format}”: a variable can’t write it' },
   'varFmt.gristRefuse.timeFormat': { fr: 'Format d’heure « {format} » : une variable ne sait pas l’écrire', en: 'Time format “{format}”: a variable can’t write it' },
   'varFmt.percentTitle': { fr: 'Pourcentage : 0,256 s’écrit 25,6 %', en: 'Percentage: 0.256 is written 25.6%' },

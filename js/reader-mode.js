@@ -5,9 +5,12 @@ const ReaderMode = (function () {
   function parseBadgeFormat(badge) {
     // Format nombre/date choisi via la barre flottante d'une bulle #Variable, sérialisé en JSON dans data-format ; transmis à
     // Variables.resolveVariable.
+    // Le format régional que la bulle a gardé à son ajout (data-locale, VariableFormat.withRegion) s'y joint : la valeur s'écrit dans SA région, quel que soit le réglage du document.
     const raw = badge.getAttribute('data-format');
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch (e) { return null; }
+    let format = null;
+    if (raw) { try { format = JSON.parse(raw); } catch (e) { format = null; } }
+    const locale = badge.getAttribute('data-locale');
+    return VariableFormat.isRegion(locale) ? Object.assign({}, format, { locale }) : format;
   }
   // Options de résolution d'un élément copié par une zone répétée (js/loop-rules.js) : sa valeur est lue dans la ligne du tour.
   function loopOpts(binding) { return binding ? { loop: binding } : undefined; }
