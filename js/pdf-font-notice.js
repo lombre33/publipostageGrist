@@ -15,6 +15,12 @@
 //    PdfFontNotice.scanNow() -> list       : refait le relevé tout de suite ; list : [{ name, key, family, to }] (name : le nom écrit dans le texte ; family : la police du PDF ; to : la police de l'éditeur qui lui répond)
 //    PdfFontNotice.replaceFont(key, to)    : remplace la police `key` (en minuscules) par `to` partout, en un pas d'historique ; rend le nombre de passages changés (0 : rien, ou geste refusé : blockedReason())
 //    PdfFontNotice.blockedReason()         : la clé du texte qui dit pourquoi le remplacement est grisé (lecture seule, en-tête ou pied en cours d'écriture, suivi des modifications actif), ou null
+// Un macro-modèle (26/11, « je travaille depuis des semaines et je n'ai jamais eu d'avertissement ») : son éditeur est vide (js/main.js:loadMacroIntoEditor, `Editor.setHTML('')`) et son résumé prend la place du texte, donc le bandeau
+// y est caché (css/pdf-fonts.css) et le relevé du document ne lit que son en-tête et son pied. Or le PDF écrit les modèles qu'il assemble, et la fenêtre d'export les lit. Le résumé (js/macro-editor.js) dit donc les polices de ces modèles,
+// avec le même relevé et les mêmes mots, et le modèle qui les contient (son stylo l'ouvre : le bandeau et « Remplacer… » y sont) :
+//    PdfFontNotice.scanModels(models)      : [{ name, key, family, to, models }] pour des modèles { id, nom, contenu } (`models` : leurs noms, dans l'ordre) ; rien n'est lu deux fois (mémorisé par modèle tant que son texte ne change pas)
+//    PdfFontNotice.describeFonts(list)     : la phrase du bandeau (« Dans le PDF, 2 polices seront remplacées : … ») pour une liste de polices
+//    PdfFontNotice.describeModels(list)    : la même, avec le nom du modèle de chaque police (« …, dans « Lettre » »), pour le résumé d'un macro-modèle
 const PdfFontNotice = (function () {
   const el = Dom.el;
   const DELAY_MS = 450;
@@ -75,8 +81,8 @@ const PdfFontNotice = (function () {
     return texts;
   }
 
-  function scanDocument() {
-    const found = PdfFontPlan.scan(textsOfDocument());
+  // Ce que le PDF remplace parmi les polices relevées par `PdfFontPlan.scan` (`found`), dans la forme du bandeau : [{ name, family, key, to }].
+  function entriesOf(found) {
     const entries = found.replaced.map(({ name, family }) => ({ name, family }));
     // Sans l'extension « polices », le PDF remplace aussi Marianne (par Roboto) et les polices libres (par la plus proche) : rien à choisir à l'export, c'est dit ici. Avec elle, c'est la personne qui choisit, à l'export.
     if (!Extensions.isActive(PdfFontPlan.EXTENSION)) {
@@ -84,6 +90,41 @@ const PdfFontNotice = (function () {
       if (found.marianne) entries.push({ name: 'Marianne', family: 'Roboto' });
     }
     return entries.map(entry => Object.assign(entry, { key: lowerOf(entry.name), to: PdfFontPlan.likeOf(entry.family) }));
+  }
+
+  function scanDocument() {
+    return entriesOf(PdfFontPlan.scan(textsOfDocument()));
+  }
+
+  // === Les modèles d'un macro-modèle ===
+
+  // Le relevé d'un modèle (`PdfFontPlan.scan` de son texte) tant que son texte ne change pas : le résumé se redessine pour un œil, un crayon, une extension, et un texte de plusieurs mégaoctets ne se relit pas pour autant. Un
+  // texte sans « font-family » n'a rien à relever (le relevé le dit sans le parcourir).
+  const modelScans = new Map();
+  function scanOfModel(id, text) {
+    if (!text || text.indexOf('font-family') === -1) return null;
+    const known = modelScans.get(id);
+    if (known && known.text === text) return known.found;
+    const found = PdfFontPlan.scan([text]);
+    modelScans.set(id, { text, found });
+    return found;
+  }
+
+  // Les polices que le PDF remplace dans ces modèles, dans l'ordre où elles paraissent (les modèles dans l'ordre donné), chacune avec les noms des modèles qui l'écrivent. Le même relevé que le document de l'éditeur (`entriesOf`),
+  // sur le texte enregistré de chaque modèle : ce que la fenêtre d'export lit du macro-modèle assemblé.
+  function scanModels(models) {
+    const merged = new Map();
+    (models || []).forEach((model) => {
+      if (!model) return;
+      const found = scanOfModel(String(model.id), typeof model.contenu === 'string' ? model.contenu : '');
+      if (!found) return;
+      entriesOf(found).forEach((entry) => {
+        const known = merged.get(entry.key);
+        if (!known) merged.set(entry.key, Object.assign(entry, { models: [model.nom] }));
+        else if (!known.models.includes(model.nom)) known.models.push(model.nom);
+      });
+    });
+    return Array.from(merged.values());
   }
 
   // Le brouillon de l'en-tête et du pied n'est le document que hors de l'édition de ses zones : pendant elle, l'éditeur montre une zone et la liste d'avant reste dite.
@@ -128,6 +169,12 @@ const PdfFontNotice = (function () {
   // === Ce que l'écran en dit ===
 
   const describe = font => font.name + ' → ' + PdfFontPlan.describe(font.family);
+  // La phrase du bandeau pour une liste de polices (« Dans le PDF, 2 polices seront remplacées : Cambria → Tinos (proche de Times New Roman) · … »), et la même avec, pour chaque police, le modèle qui l'écrit.
+  const describeFonts = fonts => I18n.t('pdfFonts.bar.text', { n: fonts.length, list: fonts.map(describe).join(SEPARATOR) });
+  const describeModels = fonts => I18n.t('pdfFonts.bar.text', {
+    n: fonts.length,
+    list: fonts.map(font => I18n.t('pdfFonts.macro.item', { font: describe(font), models: (font.models || []).map(name => I18n.t('pdfFonts.macro.model', { name })).join(', ') })).join(SEPARATOR),
+  });
 
   function paintChip() {
     const n = list.length;
@@ -142,7 +189,7 @@ const PdfFontNotice = (function () {
     refs.bar.hidden = !shown;
     if (!shown) return;
     // Hors de la barre d'outils, le [data-tip] ne joue pas (css/toolbar-v2.css) : la ligne coupée par « … » se lit en entier au survol par un title natif, comme la languette du panneau du haut (css/bar-fold.css).
-    const text = I18n.t('pdfFonts.bar.text', { n: list.length, list: list.map(describe).join(SEPARATOR) });
+    const text = describeFonts(list);
     setText(refs.text, text);
     refs.text.title = text;
   }
@@ -334,5 +381,5 @@ const PdfFontNotice = (function () {
     scanNow();
   }
 
-  return { wire, documentLoaded, scanNow, replaceFont, openSwap, blockedReason, fonts: () => list.slice(), isBarShown: () => !!refs && !refs.bar.hidden };
+  return { wire, documentLoaded, scanNow, replaceFont, openSwap, blockedReason, scanModels, describeFonts, describeModels, fonts: () => list.slice(), isBarShown: () => !!refs && !refs.bar.hidden };
 })();

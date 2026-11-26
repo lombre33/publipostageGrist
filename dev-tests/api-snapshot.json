@@ -187,7 +187,7 @@
 "PdfDelivery":"DESTINATIONS:d KEY:d MANY_CHOICES:d MANY_KEY:d MANY_SETTING:d available:f choose:f chooseMany:f chosen:f deliver:f describe:f destination:f keep:f lotFor:f manyFiles:f nameFor:f onAttachProgress:f onProgress:f plan:f sync:f takeReport:f wire:f",
 "PdfEngine":"hasPdfHeader:f openFile:f",
 "PdfExport":"ensurePdfLibsLoaded:f exportCurrentRecord:f getNativePdfBlobForRecord:f hasEmbeddedFamily:f pdfFontFor:f",
-"PdfFontNotice":"blockedReason:f documentLoaded:f fonts:f isBarShown:f openSwap:f replaceFont:f scanNow:f wire:f",
+"PdfFontNotice":"blockedReason:f describeFonts:f describeModels:f documentLoaded:f fonts:f isBarShown:f openSwap:f replaceFont:f scanModels:f scanNow:f wire:f",
 "PdfFontPlan":"EXTENSION:d RULES:d WRITTEN_AS_IS:d current:f describe:f familiesIn:f firstFamilyOf:f likeOf:f reset:f review:f scan:f substituteFor:f writtenAsIs:f",
 "PdfGlyphFallback":"covers:f runsFor:f split:f",
 "PdfMerge":"create:f createSheets:f ensureLibLoaded:f joinParts:f",

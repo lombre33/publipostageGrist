@@ -58,6 +58,11 @@ const I18nTextsExport = {
   'pdfFonts.bar.aria': { fr: 'Polices du PDF', en: 'PDF fonts' },
   'pdfFonts.bar.text': { fr: 'Dans le PDF, {n} {n|police sera remplacée|polices seront remplacées} : {list}', en: 'In the PDF, {n} {n|font will be|fonts will be} replaced: {list}' },
   'pdfFonts.bar.replace': { fr: 'Remplacer…', en: 'Replace…' },
+  // Un macro-modèle (js/macro-editor.js) : son éditeur est vide, son résumé dit les polices des modèles qu'il assemble, avec le même relevé et la phrase du bandeau.
+  'pdfFonts.macro.model': { fr: '« {name} »', en: '“{name}”' },
+  'pdfFonts.macro.item': { fr: '{font}, dans {models}', en: '{font}, in {models}' },
+  'pdfFonts.macro.open': { fr: 'Pour {n|la|les} remplacer, ouvrez le modèle concerné avec son crayon.', en: 'To replace {n|it|them}, open the template concerned with its pencil.' },
+  'pdfFonts.macro.tag': { fr: '{n} {n|police|polices}', en: '{n} {n|font|fonts}' },
   'pdfFonts.swap.title': { fr: 'Remplacer des polices', en: 'Replace fonts' },
   'pdfFonts.swap.intro': { fr: 'Pour chaque police que le PDF ne peut pas écrire, choisissez celle qui la remplace partout dans le document, en-tête et pied compris. Un seul Annuler défait le remplacement.', en: 'For each font the PDF cannot write, choose the one that replaces it everywhere in the document, header and footer included. One Undo reverses the replacement.' },
   'pdfFonts.swap.suggest': { fr: '{font} (comme le PDF)', en: '{font} (as in the PDF)' },

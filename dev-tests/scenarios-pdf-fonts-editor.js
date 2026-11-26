@@ -552,6 +552,263 @@
     },
   });
 
+  // --- Un macro-modèle (26/11 : « je travaille depuis des semaines sur mes modèles et je n'ai jamais eu de warning dans l'éditeur ») ---
+  // L'éditeur d'un macro-modèle est vide (`Editor.setHTML('')`) et son résumé prend la place du texte : le bandeau y est caché et rien ne lisait les modèles assemblés, alors que la fenêtre d'export les lit. Le résumé
+  // dit donc les polices de ces modèles (js/macro-editor.js : paintFonts ; js/pdf-font-notice.js : scanModels), avec le modèle qui les écrit.
+  const MACRO_TABLE = 'Publipostage_Modeles';
+  const MAC = para('TimesNewRomanPS-BoldItalicMT', 'Titre') + para('MS Gothic', '☐');
+  const summaryNote = () => byId('macro-summary-fonts');
+  const noteText = () => summaryNote().textContent.replace(/\s+/g, ' ').trim();
+  const fontTags = () => Array.from(document.querySelectorAll('#macro-summary-parts .macro-summary-model-tag[data-tag="fonts"]'));
+  const rowOfModel = (id) => { const edit = document.querySelector('#macro-summary-parts .macro-summary-edit[data-template-id="' + id + '"]'); return edit ? edit.closest('.macro-summary-model') : null; };
+  const tagOfModel = (id) => { const row = rowOfModel(id); return row ? row.querySelector('.macro-summary-model-tag[data-tag="fonts"]') : null; };
+  const summaryShown = () => { const box = byId('macro-summary-container'); return !!box && getComputedStyle(box).display !== 'none'; };
+  const noteShown = () => !summaryNote().hidden && summaryNote().offsetHeight > 0;
+  const setAutosaveOn = () => { try { localStorage.removeItem('pp_autosave_enabled'); } catch (e) { /* stockage indisponible */ } };
+
+  // Un macro-modèle réel : un modèle par entrée de `models` ([{ label, html }]), une position « document » chacun, par la vraie fenêtre de composition puis la composition écrite dans sa ligne et relue par la liste.
+  async function macroOf(h, name, models) {
+    setAutosaveOn();
+    await h.clickButton('btn-new');
+    await h.sleep(300);
+    const saved = [];
+    for (const model of models) saved.push(await Templates.save(null, name + ' - ' + model.label, model.html, '', null, null, 'document', null));
+    await Templates.loadAll();
+    MacroEditor.openModal(null);
+    byId('macro-editor-name').value = name;
+    const select = document.querySelector('#macro-editor-slots .macro-doc-model');
+    select.value = String(saved[0].id);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    byId('macro-editor-save').click();
+    await h.sleep(700);
+    const id = Templates.getCurrentId();
+    window.__gristStub.remoteWrite(MACRO_TABLE, id, { Contenu: JSON.stringify({ slots: saved.map(model => ({ type: 'fixed', modeleId: model.id })) }) });
+    await Templates.loadAll();
+    const list = byId('template-select');
+    list.value = String(id);
+    list.dispatchEvent(new Event('change', { bubbles: true }));
+    await h.sleep(800);
+    await waitFor(summaryShown, 100);
+    return { id, ids: saved.map(model => model.id), names: models.map(model => name + ' - ' + model.label) };
+  }
+  async function leaveMacro(h) {
+    setAutosaveOn();
+    await h.clickButton('btn-new');
+    await h.sleep(300);
+  }
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_says_the_fonts_of_its_models_and_which_model',
+    description: 'Un macro-modèle dont un modèle est écrit en TimesNewRomanPS-BoldItalicMT et en MS Gothic (le retour du 26/11) le dit dans son résumé : une ligne avec les mots du bandeau (« Dans le PDF, 2 polices seront remplacées : … → Tinos (proche de Times New Roman) … ») et le modèle qui les écrit, et une étiquette « 2 polices » sur ce modèle seul ; l’autre modèle (Arial) n’en a pas',
+    run: async (h) => {
+      const bad = [];
+      try {
+        const macro = await macroOf(h, 'Macro polices A', [{ label: 'garde', html: MAC }, { label: 'annexe', html: para('Arial', 'Texte') }]);
+        if (!summaryShown()) return result(['le résumé n’est pas à l’écran']);
+        if (!noteShown()) bad.push('la ligne des polices n’est pas montrée');
+        const text = noteText();
+        if (text.indexOf('Dans le PDF, 2 polices seront remplacées :') !== 0) bad.push('début=' + text);
+        if (text.indexOf('TimesNewRomanPS-BoldItalicMT → Tinos (proche de Times New Roman), dans « ' + macro.names[0] + ' »') === -1) bad.push('Times manque : ' + text);
+        if (text.indexOf('MS Gothic → Roboto, dans « ' + macro.names[0] + ' »') === -1) bad.push('MS Gothic manque : ' + text);
+        if (text.indexOf(macro.names[1]) !== -1) bad.push('l’annexe en Arial est nommée : ' + text);
+        if (text.indexOf('Pour les remplacer, ouvrez le modèle concerné avec son crayon.') === -1) bad.push('la phrase du crayon manque : ' + text);
+        const tag = tagOfModel(macro.ids[0]);
+        if (!tag) bad.push('pas d’étiquette sur le modèle concerné');
+        else {
+          if (tag.textContent !== '2 polices') bad.push('étiquette=' + tag.textContent);
+          if (tag.title.indexOf('Dans le PDF, 2 polices seront remplacées : TimesNewRomanPS-BoldItalicMT → Tinos') !== 0) bad.push('infobulle=' + tag.title);
+          if (tag.nextElementSibling !== rowOfModel(macro.ids[0]).querySelector('.macro-summary-edit')) bad.push('l’étiquette n’est pas juste avant le crayon');
+        }
+        if (tagOfModel(macro.ids[1])) bad.push('une étiquette sur le modèle en Arial');
+        if (fontTags().length !== 1) bad.push(fontTags().length + ' étiquettes');
+        // L'éditeur, lui, reste vide : c'est le résumé qui parle.
+        if (PdfFontNotice.fonts().length) bad.push('le relevé de l’éditeur n’est pas vide : ' + PdfFontNotice.fonts().map(font => font.name));
+        if (summaryNote().getAttribute('role') !== 'status') bad.push('la ligne n’est pas annoncée (role=status)');
+      } finally { await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_a_hidden_model_is_not_counted',
+    description: 'Le modèle que l’œil masque n’est pas écrit dans le PDF : sa police n’est plus dite et son étiquette part ; l’œil rouvert, ils reviennent (un seul geste, la ligne se redessine sur place)',
+    run: async (h) => {
+      const bad = [];
+      try {
+        const macro = await macroOf(h, 'Macro polices B', [{ label: 'garde', html: MAC }, { label: 'annexe', html: para('Arial', 'Texte') }]);
+        const eye = document.querySelector('#macro-summary-parts .macro-summary-eye[data-template-id="' + macro.ids[0] + '"]');
+        if (!eye || !noteShown()) return result(['départ : œil ' + !!eye + ', ligne ' + noteShown()]);
+        eye.click();
+        await sleep(200);
+        if (noteShown() || summaryNote().textContent !== '') bad.push('masqué : la ligne dit encore « ' + noteText() + ' »');
+        if (fontTags().length) bad.push('masqué : une étiquette reste');
+        eye.click();
+        await sleep(200);
+        if (!noteShown() || noteText().indexOf('Dans le PDF, 2 polices seront remplacées :') !== 0) bad.push('rouvert : ' + noteText());
+        if (!tagOfModel(macro.ids[0])) bad.push('rouvert : l’étiquette ne revient pas');
+      } finally { await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_says_nothing_when_every_model_can_be_written',
+    description: 'Un macro-modèle dont les modèles sont en Arial, en Roboto ou sans police ne dit rien : la ligne est cachée et vide, aucune étiquette',
+    run: async (h) => {
+      const bad = [];
+      try {
+        await macroOf(h, 'Macro polices C', [{ label: 'un', html: para('Arial', 'a') + para('Roboto, sans-serif', 'b') }, { label: 'deux', html: '<p>Sans police</p>' }]);
+        if (noteShown() || summaryNote().textContent !== '') bad.push('la ligne dit « ' + noteText() + ' »');
+        if (fontTags().length) bad.push(fontTags().length + ' étiquettes');
+      } finally { await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_follows_the_polices_extension_like_the_editor',
+    description: 'Une police libre (Open Sans) n’est dite qu’SANS l’extension « polices » (le PDF la remplace alors par la plus proche) ; avec elle, la personne choisit à l’export et le résumé ne dit que Cambria ; la ligne se redessine dès que l’extension change',
+    run: async (h) => {
+      const bad = [];
+      try {
+        await macroOf(h, 'Macro polices D', [{ label: 'libre', html: para('Cambria', 'a') + para('Open Sans', 'b') }]);
+        await withExtensions([], async () => {
+          await sleep(120);
+          if (noteText().indexOf('Dans le PDF, 2 polices seront remplacées :') !== 0 || noteText().indexOf('Open Sans → Roboto') === -1) bad.push('sans l’extension : ' + noteText());
+        });
+        await withExtensions(['polices'], async () => {
+          await sleep(120);
+          const text = noteText();
+          if (text.indexOf('Dans le PDF, 1 police sera remplacée :') !== 0 || text.indexOf('Open Sans') !== -1 || text.indexOf('Cambria → Tinos') === -1) bad.push('avec l’extension : ' + text);
+        });
+      } finally { await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_pencil_opens_the_model_where_the_bar_names_the_same_fonts',
+    description: 'Le crayon du modèle concerné l’ouvre dans l’éditeur : le bandeau y nomme les mêmes polices (avec « Remplacer… »), et « Revenir au macro-modèle » ramène le résumé avec sa ligne',
+    run: async (h) => {
+      const bad = [];
+      try {
+        const macro = await macroOf(h, 'Macro polices E', [{ label: 'garde', html: MAC }]);
+        const pencil = document.querySelector('#macro-summary-parts .macro-summary-edit[data-template-id="' + macro.ids[0] + '"]');
+        if (!pencil) return result(['pas de crayon']);
+        pencil.click();
+        const shown = await waitFor(() => !bar().hidden && PdfFontNotice.fonts().length === 2, 150);
+        if (!shown) bad.push('le bandeau ne s’est pas montré dans le modèle : ' + state());
+        else {
+          const text = barText();
+          if (text.indexOf('TimesNewRomanPS-BoldItalicMT → Tinos (proche de Times New Roman)') === -1 || text.indexOf('MS Gothic → Roboto') === -1) bad.push('bandeau=' + text);
+          if (!dotOn()) bad.push('la pastille de « Police » est éteinte');
+          if (summaryShown()) bad.push('le résumé reste à l’écran');
+        }
+        const back = byId('btn-macro-return');
+        if (!back || back.offsetWidth === 0) bad.push('pas de bouton « Revenir au macro-modèle »');
+        else {
+          back.click();
+          await waitFor(summaryShown, 100);
+          await sleep(150);
+          if (!noteShown() || noteText().indexOf('Dans le PDF, 2 polices seront remplacées :') !== 0) bad.push('au retour : ' + noteText());
+        }
+      } finally { await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  function state() { return JSON.stringify({ list: PdfFontNotice.fonts().map(font => font.name), dot: dotOn(), bar: !bar().hidden }); }
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_reads_a_model_not_read_yet_once',
+    description: 'Un modèle dont la page n’est pas encore lue (lecture légère) est lu une seule fois pour le relevé, et la ligne vient à son arrivée ; une lecture qui échoue ne se redemande pas en boucle',
+    run: async (h) => {
+      const bad = [];
+      const realEnsure = Templates.ensureLoaded;
+      try {
+        const macro = await macroOf(h, 'Macro polices F', [{ label: 'lourd', html: MAC }]);
+        const entry = Templates.byId(macro.ids[0]);
+        const text = entry.contenu;
+        const calls = [];
+        // Le modèle redevient « pas lu » (son texte vide) ; la lecture, ici, le rend.
+        entry.chargee = false;
+        entry.contenu = '';
+        Templates.ensureLoaded = async (ids) => { calls.push(ids.map(String).join()); if (calls.length === 1) { entry.contenu = text; entry.chargee = true; } return calls.length === 1; };
+        MacroEditor.showSummary(Templates.byId(macro.id));
+        const came = await waitFor(noteShown, 100);
+        if (!came) bad.push('la ligne n’est pas venue après la lecture : ' + noteText());
+        await sleep(200);
+        if (calls.join('|') !== String(macro.ids[0])) bad.push('lectures demandées : ' + calls.join('|'));
+        // Une lecture qui échoue : demandée une fois, jamais en boucle, et la ligne reste vide.
+        entry.chargee = false;
+        entry.contenu = '';
+        calls.length = 0;
+        Templates.ensureLoaded = async (ids) => { calls.push(ids.map(String).join()); return false; };
+        MacroEditor.showSummary(Templates.byId(macro.id));
+        await sleep(500);
+        if (calls.length !== 1) bad.push('lecture qui échoue : ' + calls.length + ' demandes');
+        if (noteShown()) bad.push('la ligne dit des polices d’un texte non lu : ' + noteText());
+      } finally { Templates.ensureLoaded = realEnsure; await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontseditor_macro_summary_texts_in_french_and_english_without_raw_keys',
+    description: 'La ligne du résumé, son étiquette et son infobulle sont écrites en français et en anglais (guillemets de la langue), sans clé brute',
+    run: async (h) => {
+      const bad = [];
+      const before = I18n.getLang ? I18n.getLang() : 'fr';
+      try {
+        const macro = await macroOf(h, 'Macro polices G', [{ label: 'garde', html: MAC }]);
+        I18n.setLang('en');
+        MacroEditor.showSummary(Templates.byId(macro.id));
+        await sleep(150);
+        const text = noteText();
+        if (text.indexOf('In the PDF, 2 fonts will be replaced:') !== 0) bad.push('en : début=' + text);
+        if (text.indexOf('TimesNewRomanPS-BoldItalicMT → Tinos (close to Times New Roman), in “' + macro.names[0] + '”') === -1) bad.push('en : Times=' + text);
+        if (text.indexOf('To replace them, open the template concerned with its pencil.') === -1) bad.push('en : phrase=' + text);
+        const tag = tagOfModel(macro.ids[0]);
+        if (!tag || tag.textContent !== '2 fonts' || tag.title.indexOf('In the PDF, 2 fonts will be replaced:') !== 0) bad.push('en : étiquette=' + (tag && (tag.textContent + ' / ' + tag.title)));
+        if (/pdfFonts\./.test(text + (tag ? tag.textContent + tag.title : ''))) bad.push('en : clé brute');
+        I18n.setLang('fr');
+        MacroEditor.showSummary(Templates.byId(macro.id));
+        await sleep(150);
+        if (noteText().indexOf('Dans le PDF, 2 polices seront remplacées :') !== 0 || /pdfFonts\./.test(noteText())) bad.push('fr : ' + noteText());
+      } finally { I18n.setLang(before); await leaveMacro(h); }
+      return result(bad);
+    },
+  });
+
+  cases.push({
+    id: 'pdffontseditor_scan_models_reads_each_text_once_and_nothing_without_a_font',
+    description: 'Le relevé d’un modèle est mémorisé tant que son texte ne change pas (un œil, un crayon ou une extension ne relisent pas un texte de plusieurs mégaoctets) ; un texte sans « font-family » n’est pas parcouru ; un texte qui change est relu ; chaque police dit tous les modèles qui l’écrivent, dans l’ordre',
+    run: async () => {
+      const bad = [];
+      const real = PdfFontPlan.scan;
+      let reads = 0;
+      PdfFontPlan.scan = (texts) => { reads += 1; return real(texts); };
+      try {
+        const a = { id: 'zz-a', nom: 'Modèle A', contenu: para('Cambria', 'x') + para('Consolas', 'y') };
+        const b = { id: 'zz-b', nom: 'Modèle B', contenu: para('Cambria', 'z') };
+        const plain = { id: 'zz-c', nom: 'Modèle C', contenu: '<p>' + 'mot '.repeat(5000) + '</p>' };
+        const first = PdfFontNotice.scanModels([a, b, plain]);
+        const names = first.map(font => font.name + '@' + font.models.join('+')).join();
+        if (names !== 'Cambria@Modèle A+Modèle B,Consolas@Modèle A') bad.push('liste=' + names);
+        const readsAfterFirst = reads;
+        if (readsAfterFirst !== 2) bad.push('première passe : ' + readsAfterFirst + ' lectures (2 attendues : A et B, pas C)');
+        PdfFontNotice.scanModels([a, b, plain]);
+        if (reads !== readsAfterFirst) bad.push('deuxième passe : ' + (reads - readsAfterFirst) + ' relectures');
+        PdfFontNotice.scanModels([Object.assign({}, a, { contenu: para('Verdana', 'x') })]);
+        if (reads !== readsAfterFirst + 1) bad.push('texte changé : ' + (reads - readsAfterFirst) + ' lectures au lieu d’une');
+        const after = PdfFontNotice.scanModels([Object.assign({}, a, { contenu: para('Verdana', 'x') })]).map(font => font.name).join();
+        if (after !== 'Verdana') bad.push('après le changement : ' + after);
+        if (PdfFontNotice.scanModels([]).length || PdfFontNotice.scanModels([null, { id: 'q', nom: 'Q' }]).length) bad.push('rien à lire : une liste non vide');
+      } finally { PdfFontPlan.scan = real; }
+      return result(bad);
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.pdfFontsEditor = cases;
 })();

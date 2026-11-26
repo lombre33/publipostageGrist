@@ -481,6 +481,8 @@ const MacroEditor = (function () {
     onVisibilityChange = typeof onModelVisibility === 'function' ? onModelVisibility : null;
     // Le menu Page du macro-modèle à l'écran (« Selon chaque modèle », Portrait, Paysage) change ce que « Paysage » dit de ses modèles (modelTags) : le résumé suit, sans attendre l'enregistrement.
     document.addEventListener('pp:pageLayoutChanged', () => { if (summaryTpl && Templates.isCurrent(summaryTpl.id)) renderSummary(summaryTpl); });
+    // L'extension « polices » (Grist Factory Suite) allumée ou éteinte change ce que le PDF remplace (les polices libres et Marianne) : la ligne des polices suit (js/pdf-font-notice.js).
+    if (typeof Extensions !== 'undefined') Extensions.onChange(paintFonts);
     const addDocumentBtn = document.getElementById('macro-editor-add-document');
     if (addDocumentBtn) addDocumentBtn.addEventListener('click', () => addSlot(blankDocument()));
     const addSlotBtn = document.getElementById('macro-editor-add-slot');
@@ -711,6 +713,7 @@ const MacroEditor = (function () {
     HistoryMarkers.track('macro', () => {
       setComposition(tpl, next);
       paintEye(entry, eye, hidden, name);
+      paintFonts();
       queueComposition(tpl, next, { name, hidden });
     });
   }
@@ -760,6 +763,40 @@ const MacroEditor = (function () {
     return true;
   }
 
+  // Les polices que le PDF ne peut pas écrire dans les modèles que le macro-modèle assemble (26/11 : l'éditeur d'un macro-modèle est vide, le bandeau et la pastille de « Police » n'y disent rien ; la fenêtre d'export, elle, lit
+  // le document assemblé). Le même relevé et les mêmes mots que l'éditeur (js/pdf-font-notice.js : scanModels) : une ligne sous le résumé qui nomme les polices, ce que le PDF écrit à leur place et le modèle qui les écrit, et sur chaque
+  // modèle concerné une étiquette orange « 2 polices ». Un modèle masqué par son œil n'est pas écrit : ni compté ni étiqueté. Le stylo ouvre le modèle, où le bandeau et « Remplacer… » les changent. Un modèle dont la page
+  // n'est pas encore lue (lecture légère, js/templates.js) est lu ici, une seule fois, et la ligne vient à son arrivée. Redessinée sur place (pas de redessin du résumé) : le dessin, l'œil et l'extension « polices » l'appellent.
+  const fontReads = new Set();   // les modèles dont la lecture a été demandée pour cette ligne : un échec ne la redemande pas en boucle (le résumé suivant, `showSummary`, repart de zéro)
+  function paintFonts() {
+    const note = document.getElementById('macro-summary-fonts');
+    const parts = document.getElementById('macro-summary-parts');
+    if (!note || !parts || typeof PdfFontNotice === 'undefined') return;
+    const shown = new Map();
+    const unread = [];
+    parts.querySelectorAll('.macro-summary-model').forEach((entry) => {
+      entry.querySelectorAll('.macro-summary-model-tag[data-tag="fonts"]').forEach(tag => tag.remove());
+      const edit = entry.querySelector('.macro-summary-edit');
+      const found = edit && edit.dataset.templateId ? Templates.byId(edit.dataset.templateId) : null;
+      if (!found || entry.classList.contains('is-hidden-model')) return;
+      if (found.chargee === false) { if (!fontReads.has(String(found.id)) && unread.indexOf(found.id) === -1) unread.push(found.id); return; }
+      shown.set(String(found.id), found);
+      const fonts = PdfFontNotice.scanModels([found]);
+      if (!fonts.length) return;
+      const tag = node('span', 'macro-summary-model-tag macro-summary-fonts-tag', I18n.t('pdfFonts.macro.tag', { n: fonts.length }));
+      tag.dataset.tag = 'fonts';
+      tag.title = PdfFontNotice.describeFonts(fonts);
+      entry.insertBefore(tag, edit);
+    });
+    const all = PdfFontNotice.scanModels(Array.from(shown.values()));
+    note.hidden = !all.length;
+    note.textContent = all.length ? PdfFontNotice.describeModels(all) + '. ' + I18n.t('pdfFonts.macro.open', { n: all.length }) : '';
+    if (unread.length) {
+      unread.forEach(id => fontReads.add(String(id)));
+      Templates.ensureLoaded(unread).then((ok) => { if (ok && document.getElementById('macro-summary-parts') === parts) paintFonts(); });
+    }
+  }
+
   function renderParts(tpl) {
     const list = document.getElementById('macro-summary-parts');
     if (!list) return;
@@ -784,7 +821,10 @@ const MacroEditor = (function () {
       if (again && !again.disabled) again.focus();
     }
     // Un modèle dont la page n'est pas encore lue (la table est lourde : la liste vient sans les longs textes, js/templates.js) : son étiquette « Paysage » vient à son arrivée, une seule fois (un échec de lecture ne redessine pas).
+    // Cette lecture-là redessine tout le résumé (polices comprises) à son arrivée : la ligne des polices ne la demande pas une seconde fois.
+    waiting.forEach(id => fontReads.add(String(id)));
     if (waiting.length) Templates.ensureLoaded(waiting).then((ok) => { if (ok && summaryTpl && document.getElementById('macro-summary-parts') === list) renderParts(currentTemplate(summaryTpl)); });
+    paintFonts();
   }
 
   function renderSummary(tpl) {
@@ -796,6 +836,7 @@ const MacroEditor = (function () {
 
   function showSummary(tpl) {
     summaryTpl = tpl;
+    fontReads.clear();
     renderSummary(tpl);
     const editBtn = document.getElementById('btn-edit-macro');
     if (editBtn) editBtn.onclick = () => openModal(currentTemplate(tpl));

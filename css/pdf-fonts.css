@@ -52,3 +52,11 @@ body.pp-editor-hidden #pdf-fonts-bar, body.pp-clean-reading #pdf-fonts-bar { dis
 .pp-fontswap-apply[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 .pp-fontswap-apply[aria-disabled="true"]:hover { background: var(--fill, var(--accent-solid)); }
 .pp-fontswap-status { color: var(--text); }
+
+/* Le résumé d'un macro-modèle (js/macro-editor.js : paintFonts) : l'éditeur y est vide, le bandeau et la pastille de « Police » n'y disent rien. La ligne sous le résumé dit les polices que le PDF ne peut pas écrire dans les
+   modèles assemblés, avec le point orange de la pastille (jeton `--warn-dot`, aplat de 8 px devant le texte, décoratif : le texte dit tout) ; chaque modèle concerné porte une étiquette « 2 polices » avec le même point devant. Jetons seulement. */
+.macro-summary-fonts { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.macro-summary-fonts[hidden] { display: none; }
+.macro-summary-fonts::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--warn-dot); vertical-align: 0.04em; }
+.macro-summary-fonts-tag { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.macro-summary-fonts-tag::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--warn-dot); }
