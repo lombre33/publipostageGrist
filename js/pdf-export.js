@@ -4959,6 +4959,15 @@ const PdfExport = (function () {
 
   const pageNumberOf = block => (block.positions && block.positions[0] && block.positions[0].pageNumber) || null;
 
+  // La dernière page où pdfmake a posé quelque chose de ce bloc : celui d'un bloc composite (zone à deux colonnes, tableau, pile) porte les positions de toutes ses lignes,
+  // sur toutes ses pages. Les mêmes entrées que firstPosition retient (hors l'entrée de remesure à {0, 0}). Null quand pdfmake n'a rien posé.
+  function lastPageOf(block) {
+    if (!block || !block.positions || !block.positions.length) return null;
+    const real = block.positions.filter(p => !(p.left === 0 && p.top === 0));
+    const pages = (real.length ? real : block.positions).map(p => p.pageNumber).filter(Number.isFinite);
+    return pages.length ? Math.max(...pages) : null;
+  }
+
   // Ce que la mesure apprend du contenu : la page de chaque titre et de chaque note (le numéro de chaque note est déjà définitif dès la 1ère passe -
   // numérotation continue - seule sa page avait besoin d'être mesurée), la page de chaque bloc de premier niveau, la position des images habillées et
   // les ancres des images en attente. À lire avant de reconstruire : `positions` devient obsolète dès que htmlToPdfContent recrée des objets neufs.
@@ -4969,11 +4978,15 @@ const PdfExport = (function () {
     // pourrait être choisie comme sa propre ancre, retirée de `content` puis jamais réinsérée (indexOf introuvable), et disparaître du PDF.
     const pendingImageObjs = new Set((content._pendingImages || []).map(p => p.image));
     const blockPageNumbers = content.map(b => { if (pendingImageObjs.has(b)) return null; const pos = firstPosition(b); return pos ? pos.pageNumber : null; });
+    // `blockEndPages` : la page où chaque bloc de premier niveau FINIT (une zone à deux colonnes, un tableau, un long paragraphe commencent sur une page et finissent sur
+    // la suivante) : une image « devant le texte » posée après un bloc qui déborde se peindrait sur la page suivante (placeOnGridPage).
+    const blockEndPages = content.map(b => (pendingImageObjs.has(b) ? null : lastPageOf(b)));
     return {
       headingPageNumbers: (content._headingBlocks || []).map(b => pageNumberOf(b._headingLeaf || b)),
       footnotePageNumbers: (content._footnoteBlocks || []).map(fb => pageNumberOf(fb.block)),
       resolvedAnchors: (content._pendingImages || []).map(resolvedAnchorOf),
       blockPageNumbers,
+      blockEndPages,
       floatPositions: floatAnchorsOf(content).map(firstPosition),
       framePageNumbers: (content._frames || []).map(frame => pageNumberOf(frame.marker)),
       badgePageNumbers: pageBadgesOf(content).map(badge => pageNumberOf(badge.block)),
@@ -5043,7 +5056,7 @@ const PdfExport = (function () {
   // Place dans le contenu reconstruit ce que la mesure a appris : numéros de page du sommaire, notes au pied de leur page, images habillées et images
   // en calque à leur place.
   function placeMeasured(content, measured, topMarginPt, bottomMarginPt) {
-    const { headingPageNumbers, footnotePageNumbers, resolvedAnchors, blockPageNumbers, floatPositions, framePageNumbers } = measured;
+    const { headingPageNumbers, footnotePageNumbers, resolvedAnchors, blockPageNumbers, blockEndPages, floatPositions, framePageNumbers } = measured;
     // Les blocs d'origine, dans l'ordre de `blockPageNumbers` : chaque image insérée plus bas décale les indices de `content`, et un indice relu après
     // coup désignerait un autre bloc (une image de la page 2 serait ancrée en page 1).
     const originalBlocks = content.slice();
@@ -5058,10 +5071,20 @@ const PdfExport = (function () {
     // peint en fond de chacune.
     const repeatedLayer = [];
     content._repeatedLayer = repeatedLayer;
-    const ctx = { content, originalBlocks, blockPageNumbers, slotStartPages, slotPageRange: slotPageRangeFn(slotStartPages), behindByPage, repeatedLayer, topMarginPt, bottomMarginPt, frontImages: [] };
+    const ctx = { content, originalBlocks, blockPageNumbers, blockEndPages, pageCount: measured.pageCount, slotStartPages, slotPageRange: slotPageRangeFn(slotStartPages), behindByPage, repeatedLayer, topMarginPt, bottomMarginPt, frontImages: [], frontByPage: {} };
     (content._pendingImages || []).forEach((p, i) => placePendingImage(ctx, p, resolvedAnchors[i]));
     placeFrames(content, framePageNumbers, behindByPage);
     liftFrontImages(content, ctx.frontImages);
+    footFrontImages(content, ctx.frontByPage);
+  }
+
+  // Les images « devant le texte » à position de page qu'aucun bloc ne peut porter (placeOnGridPage) : au pied de leur page, avec les cadres devant le texte, que pdfmake peint
+  // APRÈS le contenu de la page - donc par-dessus son texte - et à la page que la mesure leur a donnée, quel que soit le bloc qui déborde de l'une à l'autre.
+  function footFrontImages(content, byPage) {
+    const pages = Object.keys(byPage);
+    if (!pages.length) return;
+    const frames = content._frontFramesByPage || (content._frontFramesByPage = {});
+    pages.forEach((page) => { frames[page] = (frames[page] || []).concat(byPage[page]); });
   }
 
   // Les cadres de texte libres (visitFrame), posés sur la page que la mesure a donnée à leur marque, dans l'ordre du texte (le dernier est au premier plan). pdfmake ne coupe rien d'un cadre : un
@@ -5209,35 +5232,41 @@ const PdfExport = (function () {
 
   const indexesWhere = (list, test) => list.reduce((acc, item, j) => { if (test(item)) acc.push(j); return acc; }, []);
 
-  // Une image à position de page, posée sur la page que ce document donne aujourd'hui à son contenu.
+  // Une image à position de page, posée sur la page que ce document donne aujourd'hui à son contenu. Sa page est celle de sa grille (`pageIndex`), pas celle d'un bloc voisin :
+  // pdfmake peint une image à position absolue sur la page où il en est de son contenu, donc une image insérée après un bloc qui COMMENCE sur sa page mais FINIT sur la
+  // suivante (la zone à deux colonnes d'une lettre, un tableau, un long paragraphe) se peignait sur la page suivante - le logo de la page 1 passait en page 2 (bug du 26/11).
   function placeOnGridPage(ctx, p, layer, pageGrid) {
-    const { content, originalBlocks, blockPageNumbers, behindByPage } = ctx;
+    const { content, originalBlocks, blockPageNumbers, blockEndPages, behindByPage } = ctx;
     const targetPage = pageGrid.pageIndex + 1 + (ctx.slotStartPages[pageGrid.macroSlot] || 0);
-    const candidateIdxs = indexesWhere(blockPageNumbers, pn => pn === targetPage);
-    // Page introuvable (document raccourci depuis le dernier positionnement de l'image, par exemple) : repli sur la dernière page connue plutôt que de
-    // laisser l'image sur son tableau ou sa colonne d'origine, qui peut ne plus exister au même endroit après une réédition.
-    const fallbackIdxs = candidateIdxs.length ? candidateIdxs : indexesWhere(blockPageNumbers, pn => pn != null);
-    if (!fallbackIdxs.length) return;
-    // « Devant » se peint après tout le reste de sa page (il recouvre), « derrière » avant (il est recouvert) : même intention que l'ancrage aux blocs
-    // voisins, réduite à « en dernier » ou « en premier sur la page » faute de bloc-ancre précis.
-    const anchorBlock = originalBlocks[layer === 'front' ? fallbackIdxs[fallbackIdxs.length - 1] : fallbackIdxs[0]];
+    if (!blockPageNumbers.some(pn => pn != null)) return;
+    // Page introuvable (document raccourci depuis le dernier positionnement de l'image, par exemple) : repli sur la dernière page plutôt que de laisser l'image sur son
+    // tableau ou sa colonne d'origine, qui peut ne plus exister au même endroit après une réédition. Une page où aucun bloc ne COMMENCE (un bloc la traverse de part en
+    // part) existe pourtant : l'image y va.
+    const lastPage = Math.max(ctx.pageCount || 0, ...blockEndPages.filter(n => n != null));
+    const placedPage = Math.max(1, Math.min(targetPage, lastPage));
     // Toujours au niveau racine (jamais p.parentArray) : une image à position de page est indépendante de son tableau ou de sa colonne d'origine, elle
     // s'en évade vers le contenu de premier niveau sans changement visuel (absolutePosition ignore la profondeur d'imbrication). Retirée de son
     // tableau d'origine (souvent imbriqué) avant d'être insérée dans `content`, jamais les deux à la fois (elle serait dupliquée dans le PDF).
     const sourceArr = p.parentArray || content;
     const sourceIdx = sourceArr.indexOf(p.image);
     if (sourceIdx !== -1) sourceArr.splice(sourceIdx, 1);
-    // Page réellement retenue : la page visée, ou la dernière connue quand elle n'existe plus.
-    const placedPage = candidateIdxs.length ? targetPage : blockPageNumbers[fallbackIdxs[fallbackIdxs.length - 1]];
-    // pdfmake pose une image à position absolue sur la page où il en est de son contenu : « derrière » est insérée avant le premier bloc de sa page, ce
-    // qui, dès la 2e page, la fait tomber sur la page précédente (le saut de page n'a lieu qu'avec ce bloc). Le fond de page (`background`, appelé page
-    // par page et peint avant le texte, ce que « derrière » veut dire) la met sur la bonne page : buildNativeDocDefinition le lit dans
-    // _backgroundByPage.
-    if (layer !== 'front' && placedPage > 1) { pushByPage(behindByPage, placedPage, p.image); return; }
-    const anchorIdx = content.indexOf(anchorBlock);
-    if (anchorIdx === -1) return;
-    content.splice(layer === 'front' ? anchorIdx + 1 : anchorIdx, 0, p.image);
-    if (layer === 'front') ctx.frontImages.push({ image: p.image, page: placedPage });
+    const startedHere = indexesWhere(blockPageNumbers, pn => pn === placedPage);
+    // « Derrière » se peint avant le reste de sa page (il est recouvert). Dès la 2e page, insérée avant le premier bloc de sa page, elle tomberait sur la page
+    // précédente (le saut de page n'a lieu qu'avec ce bloc) : le fond de page (`background`, appelé page par page et peint avant le texte, ce que « derrière »
+    // veut dire) la met sur la bonne page ; buildNativeDocDefinition le lit dans _backgroundByPage. Sur la 1re page, elle ouvre le contenu.
+    if (layer !== 'front') {
+      if (placedPage > 1) { pushByPage(behindByPage, placedPage, p.image); return; }
+      const first = startedHere.length ? content.indexOf(originalBlocks[startedHere[0]]) : 0;
+      content.splice(Math.max(0, first), 0, p.image);
+      return;
+    }
+    // « Devant » se peint après tout le reste de sa page (il recouvre) : après le dernier bloc qui y commence, quand ce bloc y finit aussi. Un bloc qui passe à la page
+    // suivante entraînerait l'image avec lui (elle se peindrait en page 2) : elle va alors au pied de sa page (footFrontImages).
+    const last = startedHere.length ? startedHere[startedHere.length - 1] : -1;
+    const anchorIdx = last === -1 ? -1 : content.indexOf(originalBlocks[last]);
+    if (anchorIdx === -1 || blockEndPages[last] !== placedPage) { pushByPage(ctx.frontByPage, placedPage, p.image); return; }
+    content.splice(anchorIdx + 1, 0, p.image);
+    ctx.frontImages.push({ image: p.image, page: placedPage });
   }
 
   // Une image en calque ancrée aux blocs mesurés qui l'encadrent. pdfmake peint content[] dans l'ordre (une entrée plus tardive recouvre les

@@ -145,6 +145,41 @@ const ExportCommon = (function () {
     return () => { if (root.parentNode) root.parentNode.removeChild(root); };
   }
 
+  // Les images en calque de la 1re page (`data-page-index="0"`), ancrées au premier paragraphe de leur page. Word et OpenDocument posent une image en calque à une place de la PAGE
+  // du paragraphe qui la porte (ancre `wp:anchor`, cadre `text:anchor-type="paragraph"`) : une image que la personne a insérée dans un paragraphe tardif (la formule de politesse, en
+  // page 2) puis glissée en haut de la page 1 sortait en page 2, à la même place. L'éditeur, la Lecture et le PDF la mettent à la page de sa grille, jamais à celle de son paragraphe
+  // porteur : l'image est donc rangée dans le premier paragraphe de sa page - celle du document, ou celle de son modèle dans un macro-modèle (après le saut `data-macro-slot` qui
+  // l'ouvre) - dont la page est sûre. Une image déjà portée par ce paragraphe, une image répétée (« Sur toutes les pages » : l'en-tête) et une image hors paragraphe ne bougent pas ;
+  // les images des pages suivantes non plus (la pagination de Word n'est pas celle de l'éditeur : aucun paragraphe n'y ouvre sûrement la page 2).
+  const LAYERED_IMAGES = 'img.editor-image[data-layer="front"], img.editor-image[data-layer="behind"]';
+  const PARAGRAPHS = 'p, h1, h2, h3, h4, h5, h6';
+  function anchorFirstPageImages(root) {
+    const gridNumber = (img, name) => (img.hasAttribute(name) ? parseFloat(img.getAttribute(name)) : NaN);
+    const onFirstPage = img => gridNumber(img, 'data-page-index') === 0 && Number.isFinite(gridNumber(img, 'data-page-left-pt')) && Number.isFinite(gridNumber(img, 'data-page-top-pt'))
+      && !(typeof PageLayer !== 'undefined' && PageLayer.isRepeatedEl(img));
+    const images = Array.from(root.querySelectorAll(LAYERED_IMAGES)).filter(onFirstPage);
+    if (!images.length) return;
+    // Le premier paragraphe de chaque bloc de premier niveau : celui du premier bloc de son modèle qui en porte un (le bloc lui-même, ou son premier paragraphe : une zone, une
+    // case de tableau, une liste).
+    const targetOf = new Map();
+    let slotTarget = null;
+    Array.from(root.children).forEach((child) => {
+      if (child.matches('.page-break-marker[data-macro-slot]')) { slotTarget = null; return; }
+      if (!slotTarget) slotTarget = child.matches(PARAGRAPHS) ? child : child.querySelector(PARAGRAPHS);
+      targetOf.set(child, slotTarget);
+    });
+    images.forEach((img) => {
+      let top = img;
+      while (top.parentElement && top.parentElement !== root) top = top.parentElement;
+      const target = targetOf.get(top);
+      const host = img.closest(PARAGRAPHS);
+      if (!target || !host || host === target) return;
+      // À la fin du paragraphe : l'image vient d'un paragraphe plus tardif, elle passe donc après celles que le paragraphe porte déjà, et les images rangées là gardent leur ordre dans
+      // le document (l'ordre de peinture de Word et de LibreOffice).
+      target.appendChild(img);
+    });
+  }
+
   // Un bloc vide (`<p></p>`, une case sans texte) n'a aucune hauteur dans un hôte de mesure, alors que l'éditeur lui laisse sa ligne (le <br> de fin que ProseMirror
   // pose) et que Word et le PDF l'écrivent comme une ligne vide : sans un <br>, une zone aux lignes vides se mesurerait trop basse, et Word, qui les écrit toutes,
   // descendrait le corps de la page (js/docx-export.js:measureZoneHeightTwip).
@@ -916,6 +951,6 @@ const ExportCommon = (function () {
     return { NAMESPACES, XML_HEAD, namespaceAttrs, escText, escAttr, fixed, attrsOf, textXml };
   })();
 
-  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, anchorFirstPageImages, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, outsideImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();

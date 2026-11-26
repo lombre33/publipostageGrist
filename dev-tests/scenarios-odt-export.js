@@ -329,10 +329,15 @@
     expect('quatre cadres, tous ancrés au paragraphe', frames.length === 4 && anchors.every(kind => kind === 'paragraph'), anchors);
     const styleOf = frame => { const name = frame.getAttributeNS(NS.draw, 'style-name'); const style = Array.from(doc.getElementsByTagNameNS(NS.style, 'style')).find(el => el.getAttributeNS(NS.style, 'name') === name); return style ? style.firstElementChild : null; };
     const prop = (frame, name) => (styleOf(frame) || { getAttributeNS: () => null }).getAttributeNS(NS.style, name);
-    expect('à gauche et à droite : le texte entoure l\'image, du côté choisi', prop(frames[0], 'wrap') === 'parallel' && prop(frames[0], 'horizontal-pos') === 'left' && prop(frames[1], 'wrap') === 'parallel' && prop(frames[1], 'horizontal-pos') === 'right', [prop(frames[0], 'horizontal-pos'), prop(frames[1], 'horizontal-pos')]);
-    expect('devant et derrière : traversé par le texte, devant ou derrière, relatif à la page', prop(frames[2], 'run-through') === 'foreground' && prop(frames[3], 'run-through') === 'background' && prop(frames[2], 'horizontal-rel') === 'page' && prop(frames[2], 'vertical-rel') === 'page', [prop(frames[2], 'run-through'), prop(frames[3], 'run-through')]);
-    const x = parseFloat(frames[2].getAttributeNS(NS.svg, 'x'));
-    const y = parseFloat(frames[2].getAttributeNS(NS.svg, 'y'));
+    // Les calques de la page 1 sont ancrés au premier paragraphe (ExportCommon.anchorFirstPageImages) : l'ordre des cadres d'un paragraphe à l'autre n'est pas un contrat, chacun se reconnaît à son style.
+    const sideLeft = frames.find(frame => prop(frame, 'horizontal-pos') === 'left' && prop(frame, 'wrap') === 'parallel');
+    const sideRight = frames.find(frame => prop(frame, 'horizontal-pos') === 'right' && prop(frame, 'wrap') === 'parallel');
+    const front = frames.find(frame => prop(frame, 'run-through') === 'foreground');
+    const behind = frames.find(frame => prop(frame, 'run-through') === 'background');
+    expect('à gauche et à droite : le texte entoure l\'image, du côté choisi', !!sideLeft && !!sideRight, frames.map(frame => [prop(frame, 'wrap'), prop(frame, 'horizontal-pos')]));
+    expect('devant et derrière : traversé par le texte, devant ou derrière, relatif à la page', !!front && !!behind && prop(front, 'horizontal-rel') === 'page' && prop(front, 'vertical-rel') === 'page', [prop(frames[2], 'run-through'), prop(frames[3], 'run-through')]);
+    const x = parseFloat(front.getAttributeNS(NS.svg, 'x'));
+    const y = parseFloat(front.getAttributeNS(NS.svg, 'y'));
     expect('la place : marge gauche (20 mm) + 30 pt, marge haute (20 mm) + 10 pt', Math.abs(x - (20 * 72 / 25.4 + 30) * 2.54 / 72) < 0.02 && Math.abs(y - (20 * 72 / 25.4 + 10) * 2.54 / 72) < 0.02, { x, y });
     expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
     const withHeader = await packageOf('<p>Devant' + layer('front') + '</p>', { headerFooterData: { enabled: true, header: { default: '<p>En-tête</p>' }, footer: {} } });

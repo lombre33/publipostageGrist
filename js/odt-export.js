@@ -687,6 +687,8 @@ const OdtExport = (function () {
     const root = document.createElement('div');
     Dom.setMarkup(root, HtmlSanitize.clean(html || ''));
     ReaderMode.trimTrailingBlankBlocks(root);
+    // Une image en calque est posée à la page de son paragraphe : celles de la page 1 vont au premier paragraphe (ExportCommon.anchorFirstPageImages).
+    ExportCommon.anchorFirstPageImages(root);
     await prepareImages(ctx, root);
     collectHeadings(ctx, root);
     const body = blocksOf(ctx, root, {});

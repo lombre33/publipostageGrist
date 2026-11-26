@@ -2231,6 +2231,8 @@ const DocxExport = (function () {
     const root = document.createElement('div'); Dom.setMarkup(root, HtmlSanitize.clean(resolvedHtml || ''));
     // Ni ligne vide ni saut de page orphelin en fin de document : quand le texte arrive à la marge du bas, ils ouvrent une page blanche.
     ReaderMode.trimTrailingBlankBlocks(root);
+    // Word ancre une image en calque à la page de son paragraphe : celles de la page 1 vont au premier paragraphe (ExportCommon.anchorFirstPageImages).
+    ExportCommon.anchorFirstPageImages(root);
     const ctx = { footnotes: {}, footnoteCounter: 0, headingBlocks: [], numberingConfigs: [], numberingCounter: 0, imageIdCounter: 0, measureRoot: root, waterfalls: [] };
     // Un macro-modèle (ses sauts de page `data-macro-slot`) garde les images répétées de chaque modèle dans les sections de ce modèle ; un document ordinaire dont des pages tournent
     // les répète sur toutes ses pages, donc dans l'en-tête de chacune de ses sections.
