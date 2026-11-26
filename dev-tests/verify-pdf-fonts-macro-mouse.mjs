@@ -7,7 +7,9 @@
 //      l'œil restent au premier plan et d'au moins 24 px ; le modèle en Arial n'a ni étiquette ni mot dans la ligne ;
 //   2) un vrai clic sur l'œil du modèle concerné : la ligne et l'étiquette partent ; un second clic les rend ;
 //   3) un vrai clic sur son stylo : le modèle s'ouvre, le bandeau nomme les mêmes polices (au premier plan, dans la largeur), « Revenir au macro-modèle » ramène le résumé et sa ligne ;
-//   4) clair, sombre (texte de la ligne 4,5:1, point orange 3:1 sur le fond) et anglais (ligne, étiquette, infobulle sans clé brute).
+//   4) clair, sombre (texte de la ligne 4,5:1, point orange 3:1 sur le fond) et anglais (ligne, étiquette, infobulle sans clé brute) ;
+//   5) le collage (carte du 26/11, « Rouvrir le bandeau ») : dans un modèle ordinaire dont le bandeau a été fermé au vrai clic, un collage (l'événement `paste` du presse-papiers, au curseur) d'une police non exportable
+//      rouvre le bandeau - au premier plan, dans la largeur - et il la nomme ; coller de nouveau la même police ne le rouvre pas.
 // Lancé par run-headless.mjs (groupe Node "pdfFontsMacroMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-pdf-fonts-macro-mouse.mjs
 // PDF_FONTS_MACRO_SHOTS=<dossier> : enregistre aussi des captures (à relire à l'œil) ; sans elle, rien n'est écrit.
 import { createServer } from 'node:http';
@@ -317,6 +319,34 @@ check('4 en anglais : la ligne, l\u2019étiquette et l\u2019infobulle, sans clé
   && !!enTag && !!enTag.tag && enTag.tag.text === '2 fonts' && enTag.tag.title.indexOf('In the PDF, 2 fonts will be replaced:') === 0, [en && en.text, enTag && enTag.tag]);
 await shot('4-anglais');
 await page.evaluate(() => I18n.setLang('fr'));
+
+// --- 5) Le collage, dans un modèle ordinaire (ouvert par un vrai clic sur sa ligne de la liste) ---
+const ordinaryId = await makeTemplate('Texte ordinaire', para('Cambria', 'Texte en Cambria'));
+check('5 la liste ouvre le modèle ordinaire', await pickTemplate('Texte ordinaire', ordinaryId), ordinaryId);
+await page.waitForFunction(() => !document.getElementById('pdf-fonts-bar').hidden && document.getElementById('pdf-fonts-bar').textContent.indexOf('Cambria') !== -1, null, { timeout: 6000 }).catch(() => {});
+const before = await barState();
+check('5 le modèle ordinaire en Cambria montre le bandeau à l\u2019ouverture', before.shown && before.text.indexOf('Cambria → Tinos') !== -1, before);
+await realClick('.pp-fonts-bar-close', 500);
+const closed = await barState();
+check('5 un vrai clic sur « Fermer » retire le bandeau', !closed.shown, closed);
+const pasteFont = font => page.evaluate(async (f) => {
+  const view = EditorCore.getEditor().view;
+  view.focus();
+  const data = new DataTransfer();
+  data.setData('text/html', '<span style="font-family: ' + f + '">collé</span>');
+  data.setData('text/plain', 'collé');
+  view.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  await new Promise(r => setTimeout(r, 900));
+}, font);
+await pasteFont('Verdana');
+const reopened = await barState();
+await shot('5-collage');
+check('5 un collage en Verdana rouvre le bandeau, au premier plan et dans la largeur, et le nomme', reopened.shown && reopened.onTop && reopened.l >= 0 && reopened.r <= reopened.w + 0.5
+  && reopened.text.indexOf('2 polices seront remplacées') !== -1 && reopened.text.indexOf('Verdana → Roboto') !== -1, reopened);
+await realClick('.pp-fonts-bar-close', 500);
+await pasteFont('Verdana');
+const again = await barState();
+check('5 coller de nouveau la même police ne le rouvre pas', !again.shown, again);
 
 check('aucune erreur de page, aucune boîte native', pageErrors.length === 0 && nativeDialogs.length === 0, { pageErrors, nativeDialogs });
 await browser.close();

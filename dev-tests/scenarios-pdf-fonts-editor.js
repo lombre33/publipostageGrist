@@ -177,7 +177,7 @@
 
   cases.push({
     id: 'pdffontseditor_closing_the_bar_keeps_the_dot_and_reopening_brings_the_bar_back',
-    description: '« Fermer » retire le bandeau et laisse la pastille ; rouvrir le document (Editor.setHTML) remontre le bandeau ; une police qui arrive après l’ouverture (un collage) n’allume que la pastille',
+    description: '« Fermer » retire le bandeau et laisse la pastille ; rouvrir le document (Editor.setHTML) remontre le bandeau ; un document sans police ne montre rien',
     run: async (h) => {
       const bad = [];
       await open(h, para('Cambria', 'a'));
@@ -190,10 +190,50 @@
       if (bar().hidden) bad.push('le bandeau ne revient pas à la réouverture');
       await open(h, para('Arial', 'a'));
       if (!bar().hidden || dotOn()) bad.push('un document sans police montre quelque chose');
-      editor().chain().focus('end').insertContent('<span style="font-family: Cambria">collé</span>').run();
+      return result(bad);
+    },
+  });
+
+  // Carte du 26/11 (« Rouvrir le bandeau ») : avertir dès qu'une police non exportable est utilisée, pas seulement à l'ouverture. Une police qui n'était pas dans le document au relevé d'avant (un collage) rouvre le bandeau, même
+  // fermé ; la même police encore, une frappe, ou une police qui s'en va ne le rouvrent jamais.
+  cases.push({
+    id: 'pdffontseditor_a_new_font_arriving_after_the_opening_brings_the_bar_back_even_closed',
+    description: 'Une police non exportable qui arrive après l’ouverture (un collage) rouvre le bandeau et allume la pastille, même si la personne l’avait fermé, et le bandeau la nomme ; le même passage de police de nouveau, une lettre tapée ou une police qui s’en va (Annuler) ne le rouvrent pas ; une police qui revient (Rétablir) le rouvre ; dans un document sans police, la première le montre',
+    run: async (h) => {
+      const bad = [];
+      const paste = font => { editor().chain().focus('end').insertContent('<span style="font-family: ' + font + '">collé</span>').run(); PdfFontNotice.scanNow(); };
+      const close = async () => { bar().querySelector('.pp-fonts-bar-close').click(); await sleep(40); };
+      await open(h, para('Cambria', 'a'));
+      await close();
+      if (!bar().hidden) return result(['« Fermer » n’a pas retiré le bandeau']);
+      paste('Verdana');
+      if (bar().hidden) bad.push('Verdana collée : le bandeau ne revient pas');
+      else if (barText().indexOf('Verdana → Roboto') === -1 || barText().indexOf('Cambria → Tinos') === -1 || barText().indexOf('2 polices seront remplacées') === -1) bad.push('le bandeau ne dit pas les deux : ' + barText());
+      if (!dotOn()) bad.push('Verdana collée : pastille éteinte');
+      await close();
+      paste('Verdana');
+      paste('Cambria');
+      if (!bar().hidden) bad.push('une police déjà là, collée de nouveau, rouvre le bandeau');
+      editor().chain().focus('end').insertContent('lettre').run();
       PdfFontNotice.scanNow();
-      if (!dotOn()) bad.push('une police collée n’allume pas la pastille');
-      if (!bar().hidden) bad.push('une police collée rouvre le bandeau');
+      if (!bar().hidden) bad.push('une lettre tapée rouvre le bandeau');
+      // Annuler retire les deux collages d'un coup : une police qui s'en va ne rouvre rien.
+      await open(h, para('Cambria', 'a'));
+      await close();
+      paste('Verdana');
+      await close();
+      editor().commands.undo();
+      PdfFontNotice.scanNow();
+      if (PdfFontNotice.fonts().map(font => font.name).join() !== 'Cambria') bad.push('Annuler n’a pas retiré Verdana : ' + PdfFontNotice.fonts().map(font => font.name));
+      if (!bar().hidden) bad.push('une police qui s’en va rouvre le bandeau');
+      editor().commands.redo();
+      PdfFontNotice.scanNow();
+      if (bar().hidden) bad.push('une police qui revient (Rétablir) ne rouvre pas le bandeau');
+      // Un document sans police : la première police non exportable collée montre le bandeau.
+      await open(h, para('Arial', 'a'));
+      if (!bar().hidden) return result(bad.concat('le document en Arial montre un bandeau'));
+      paste('Consolas');
+      if (bar().hidden || barText().indexOf('Consolas → Cousine (proche de Courier New)') === -1) bad.push('la première police collée ne montre pas le bandeau : ' + barText());
       return result(bad);
     },
   });

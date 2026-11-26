@@ -1,7 +1,7 @@
 // Les polices que le PDF ne peut pas écrire, dites dans l'éditeur (consigne 090 de GFS, demande du porteur du 19/11 : « pour les polices présentes à l'import qui ne peuvent pas être exportées, le message n'est qu'à l'export :
 // cela crée un décalage entre la vue éditeur et le reste »). La fenêtre « Polices du document » (js/pdf-font-plan.js : `review`) garde son rôle à l'export, sans rien changer ; ce module dit la même chose AVANT, trois fois :
 //  1. un bandeau fin entre la barre d'outils et le texte (#pdf-fonts-bar), qui nomme les polices et ce que le PDF écrira à leur place (les mots `pdfFonts.like` de la fenêtre d'export) ; il paraît à l'ouverture d'un document
-//     (import compris : Editor.setHTML le signale par `documentLoaded`) et se ferme ; « Remplacer… » ouvre la fenêtre de remplacement ;
+//     (import compris : Editor.setHTML le signale par `documentLoaded`) et se ferme ; il revient dès qu'une police que le document n'avait pas arrive (un collage : carte du 26/11) ; « Remplacer… » ouvre la fenêtre de remplacement ;
 //  2. un moyen de les changer : pour chaque police, une liste (celle que le PDF écrit en premier - « Times New Roman » pour Tinos -, puis les six polices du menu de l'éditeur) et un bouton « Remplacer » qui change cette
 //     police PARTOUT d'un coup - le texte, les tableaux, les listes, les cadres, l'en-tête et le pied - en UN seul pas de l'historique Annuler (HistoryMarkers : le geste de l'en-tête et du pied se range dans l'événement du
 //     texte). Rien n'est remplacé sans ce geste ;
@@ -34,8 +34,8 @@ const PdfFontNotice = (function () {
   let timer = 0;
   let list = [];            // ce que le PDF remplace dans le document : [{ name, key, family, to }]
   let seen = null;          // la clé de la liste d'avant : le dessin n'est refait que si elle change
-  let armed = false;        // un document vient de se charger : le premier relevé qui le lit décide si le bandeau paraît ; une police qui arrive ensuite (un collage) n'allume que la pastille
-  let barOpen = false;      // le bandeau est ouvert pour ce document : il se ferme quand la personne le ferme, ou quand il n'y a plus de police à dire ; il ne revient qu'à l'ouverture suivante
+  let armed = false;        // un document vient de se charger : le premier relevé qui le lit décide si le bandeau paraît ; une police qui arrive ensuite (un collage) le rouvre aussi (voir `arrived`)
+  let barOpen = false;      // le bandeau est ouvert pour ce document : il se ferme quand la personne le ferme, ou quand il n'y a plus de police à dire ; il revient à l'ouverture suivante et quand une police qui n'y était pas arrive
   let refs = null;          // le bandeau, le bouton « Police » et sa pastille
   let base = null;          // l'infobulle et le nom accessible du bouton « Police » quand rien n'est à dire
   let win = null;           // la fenêtre de remplacement
@@ -140,10 +140,15 @@ const PdfFontNotice = (function () {
     const key = next.map(font => font.key + '>' + font.to).join('|');
     const changed = key !== seen;
     const wasOpen = barOpen;
+    // Une police que le document n'avait pas au relevé d'avant (un collage, un texte qui revient par Annuler, l'extension « polices » éteinte) : le bandeau la dit, même fermé (carte du 26/11, « Rouvrir le bandeau » :
+    // avertir dès qu'une police non exportable est utilisée, pas seulement à l'ouverture). Une police qui s'en va, ou le même relevé, ne le rouvre jamais.
+    const known = new Set(list.map(font => font.key));
+    const arrived = next.some(font => !known.has(font.key));
     list = next;
     seen = key;
     if (!list.length) barOpen = false;
     if (armed) { armed = false; if (list.length) barOpen = true; }
+    else if (arrived) barOpen = true;
     if (changed || barOpen !== wasOpen) render();
     return list;
   }
