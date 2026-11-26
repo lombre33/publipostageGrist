@@ -1088,7 +1088,10 @@ const EditorNodes = (function () {
       tag.addEventListener('mousedown', event => {
         event.preventDefault(); event.stopPropagation();
         const live = liveNode(nodeEditor, getPos);
-        if (live) nodeEditor.chain().focus().setNodeSelection(live.pos).run();
+        if (!live) return;
+        // Un bloc déjà choisi en entier : ce deuxième clic sur son étiquette ne choisit que sa condition (js/condition-pick.js), un troisième la relâche.
+        if (dom.classList.contains('conditional-text-selected')) ConditionPick.toggle(nodeEditor.view, live.pos);
+        else nodeEditor.chain().focus().setNodeSelection(live.pos).run();
       });
       // Un clic dans le texte d'un bloc resté sélectionné (la fenêtre de condition se referme sur lui) doit poser le curseur : le bloc
       // sélectionné est déplaçable à la souris, et Chrome ne pose pas le curseur dans ce qui peut être glissé (ProseMirror ne le rattrape qu'à

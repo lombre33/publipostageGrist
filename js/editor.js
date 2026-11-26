@@ -469,9 +469,11 @@ const Editor = (function () {
         return EmailPlainText.isActive() ? cleaned : webImagesAsEditorImages(cleaned);
       },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
-      handlePaste(view, event) {
+      handlePaste(view, event, slice) {
         // Un email est du texte brut : pas d'image, le collage suit alors le traitement natif (le texte du presse-papiers, s'il y en a un).
         if (EmailPlainText.isActive()) return false;
+        // Une pastille ou un bloc à condition est choisi et le presse-papiers porte une condition (copiée seule) : la cible la prend et garde son contenu (js/condition-pick.js:pasteOver).
+        if (ConditionPick.pasteOver(view, slice, event)) return true;
         const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
         const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
         if (!imageItem) return false;
@@ -613,6 +615,8 @@ const Editor = (function () {
       HeadingStyles.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Signets (js/anchors.js) : l'adresse et le nom d'un paragraphe ou d'un titre, plus le drapeau de l'éditeur et la correction des doublons.
       Anchors.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
+      // La condition seule d'un objet à condition (js/condition-pick.js) : un deuxième clic sur sa bulle bleue la choisit, Ctrl+C la copie, Ctrl+V la colle ; un seul plugin, sans touche propre.
+      ConditionPick.createExtension(Extension, { Plugin, PluginKey, Decoration, DecorationSet }),
       // Renvois (js/cross-refs.js) : leur texte remis à jour dans la transaction qui change le titre visé, `broken` quand il n'existe plus.
       CrossRefs.createExtension(Extension, { Plugin, PluginKey }),
       EditorNodes.createEditorImageNode(Node),

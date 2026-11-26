@@ -1404,6 +1404,7 @@
     ActionHistory.wire({ status: setStatus });
     FormatSlots.wire({ status: setStatus });
     FormatPainter.setHost({ status: setStatus });
+    ConditionPick.setHost({ status: setStatus });
     HeadingStyles.wire({ status: setStatus });
     StateStyle.wire({ status: setStatus });
     StateCheckPane.wire({ status: setStatus });
