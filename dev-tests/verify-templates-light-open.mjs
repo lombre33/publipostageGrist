@@ -11,6 +11,9 @@
 //  5. Grist refuse le SQL (403 : règles d'accès, instance sans cette interface) : la page s'ouvre par la lecture entière, comme avant, et le dit au rapport de fluidité ;
 //  6. Grist interrompt le calcul des longueurs (une seconde, le délai d'une requête SQL) : la liste vient sans longueurs, la table est tenue pour lourde, chaque texte se lit à la demande ;
 //  7. l'interface REST est refusée (la liste vient, pas les lignes) : le texte demandé vient alors de la lecture entière, une fois, et le document s'ouvre.
+//  8. (26/11, choix d'Antoine : « comme GFS ») un document à règles d'accès, la personne en est propriétaire : Grist refuse le SQL au jeton de lecture seule et le rend au jeton qui peut écrire ; la liste se lit par SQL avec lui, demandé
+//     seulement après le refus, la table jamais lue en entier, et chaque document s'ouvre par son numéro de ligne (REST, jeton de lecture seule) ;
+//  9. le même document, la personne y est éditeur : refusé aux deux jetons, la page s'ouvre par la lecture entière comme avant.
 // Lancé par run-headless.mjs (groupe Node « templatesLightOpen », cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-templates-light-open.mjs
 import { start, seedModels } from './gfs-page.mjs';
 import { createLightServer, tablesFromStubState } from './light-server.mjs';
@@ -138,6 +141,32 @@ const cacheOf = app => app.evaluate(() => Templates.getCached().map(entry => ({ 
   await pick(app, 2);
   await waitText(app, 'RAPPORT-B paragraphe 39');
   check('...et cette lecture a rempli tous les textes : le document suivant s\'ouvre sans rien demander de plus (ni ligne, ni table)', byKind(server, 'records').length === asked && (await wholeReads(app)) === before + 1, { asked, now: byKind(server, 'records').length, reads: await wholeReads(app) });
+  await app.context().close();
+}
+
+// --- 8. Un document à règles d'accès, propriétaire : le SQL au jeton qui peut écrire, après le refus du jeton de lecture seule ---
+{
+  const { app, server } = await open({ server: (s) => { s.state.rules = 'owner'; } });
+  await sleep(1500);
+  const sql = byKind(server, 'sql');
+  const trail = sql.map(entry => entry.status + ':' + entry.access).join(' ');
+  const state = await app.evaluate(() => ({ light: Templates.getLightState(), access: GristAPI.getSqlAccess() }));
+  // Un seul refus, le tout premier (le jeton de lecture seule) ; ensuite chaque lecture SQL de l'ouverture (la liste, relue quand une migration a ajouté une colonne) part tout de suite au jeton qui peut écrire.
+  check('règles d\'accès, propriétaire : la liste se lit par SQL (refusée une fois au jeton de lecture seule, puis passée au jeton qui peut écrire), la table jamais lue en entier', state.light === 'light' && state.access === 'write' && sql.length >= 2 && sql[0].status === 403 && sql[0].access === 'read' && sql.slice(1).every(entry => entry.status === 200 && entry.access === 'write') && (await wholeReads(app)) === 0, { state, trail, reads: await wholeReads(app) });
+  check('...le document par défaut (court) vient avec la liste, aucune ligne relue pour l\'ouvrir', (await text(app)).includes('Contenu A') && idsAsked(server).length === 0, { asked: idsAsked(server) });
+  await pick(app, 3);
+  await waitText(app, 'DOSSIER-C paragraphe 39');
+  check('...un gros document s\'ouvre par son numéro de ligne (REST, qui n\'a pas ce contrôle : jeton de lecture seule), la table toujours jamais lue en entier', idsAsked(server).includes('3') && byKind(server, 'records').every(entry => entry.access === 'read') && (await wholeReads(app)) === 0, { asked: idsAsked(server), access: byKind(server, 'records').map(entry => entry.access), reads: await wholeReads(app) });
+  await app.context().close();
+}
+
+// --- 9. Le même document, éditeur : refusé aux deux jetons, la lecture entière comme avant ---
+{
+  const { app, server } = await open({ server: (s) => { s.state.rules = 'editor'; } });
+  await sleep(1500);
+  const trail = byKind(server, 'sql').map(entry => entry.status + ':' + entry.access).join(' ');
+  const state = await app.evaluate(() => ({ light: Templates.getLightState(), access: GristAPI.getSqlAccess() }));
+  check('règles d\'accès, éditeur : refusé aux deux jetons, la page s\'ouvre par la lecture entière, l\'état est « refusée », rien n\'est appris', state.light === 'refused' && state.access === 'read' && trail === '403:read 403:write' && (await wholeReads(app)) >= 1 && (await text(app)).includes('Contenu A'), { state, trail, reads: await wholeReads(app) });
   await app.context().close();
 }
 

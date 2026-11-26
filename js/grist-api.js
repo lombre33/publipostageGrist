@@ -1350,12 +1350,14 @@ const GristAPI = (function () {
   // est un GET simple (ni corps ni en-tête particulier : pas de pré-requête CORS) ; elle ne peut rien écrire. Rend les lignes, des objets { colonne: valeur } aux valeurs brutes de SQLite (un booléen y est 0 ou 1,
   // une date des secondes). Lève une erreur dont `reason` dit pourquoi : 'jeton' (Grist n'en donne pas), 'réseau' (hors ligne, CORS, politique de GFS), 'http' (avec `status` : droits, instance sans cette
   // interface), 'délai', 'forme' (réponse sans `records`). Rien ne dépend d'elle : celui qui l'appelle sait toujours lire autrement.
-  async function lightGet(path, timeoutMs, kind) {
+  // `access` 'write' : avec le jeton qui peut ÉCRIRE (getWriteAccess, jamais gardé) au lieu de celui de lecture seule ; le seul appelant est lightQuery, au refus du premier (voir plus bas), pour le SQL d'un document à règles d'accès.
+  // La demande reste un GET de lecture : le jeton qui peut écrire ne sert ici qu'à passer le contrôle « peut tout copier » de Grist, rien ne s'écrit.
+  async function lightGet(path, timeoutMs, kind, access) {
     const fail = (reason, extra) => Object.assign(new Error('lightGet : ' + reason), { reason }, extra);
     // Le rapport de fluidité (js/perf-trace.js, temporaire) compte chaque lecture au moment où elle part, dans la phase du moment (ouverture, repos, enregistrement, gestes) : `kind` dit laquelle.
     if (typeof PerfTrace !== 'undefined' && typeof PerfTrace.noteRead === 'function') PerfTrace.noteRead(kind);
     let info;
-    try { info = await getAccessTokenCached(); } catch (e) { throw fail('jeton'); }
+    try { info = access === 'write' ? await getWriteAccess() : await getAccessTokenCached(); } catch (e) { throw fail('jeton'); }
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), timeoutMs || 8000) : 0;
     try {
@@ -1377,8 +1379,36 @@ const GristAPI = (function () {
       return { body, bytes: text.length, parseMs: Math.round(performance.now() - parseStart) };
     } finally { clearTimeout(timer); }
   }
+  // LE SQL D'UN DOCUMENT À RÈGLES D'ACCÈS (consigne 103 de GFS, faits vérifiés 43 et 173 ; choix du porteur le 26/11 : « Oui, comme GFS »). Grist ne rend le SQL qu'à qui « peut tout copier » : un document qui a des règles d'accès le refuse (403) au
+  // jeton de lecture seule, même à son propriétaire ; il le laisse au jeton qui peut écrire, entre les mains d'un propriétaire (un éditeur ou un lecteur n'a ce droit avec aucun jeton : 403 aux deux). Sans cela la liste des modèles se lit
+  // en entier (mesuré par GFS sur un document de 120 Mo : 7,5 s par la lecture entière, 1,9 s par le SQL). Comme GFS (js/broker/sql-gate.js) : le jeton de lecture seule d'abord ; refusé (403), UNE seconde demande avec le jeton qui peut écrire. Passé : ce document est appris
+  // 'write' (getSqlAccess) et les demandes suivantes partent tout de suite avec lui, un jeton neuf à chaque fois et jamais gardé (getWriteAccess) ; refusé à son tour : rien n'est appris, l'erreur est celle de ce second essai (403 ou 'jeton', un
+  // refus que l'appelant tient pour définitif, comme le premier). Jamais dans GFS : son courtier ne donne à l'app qu'un jeton de lecture seule (manifeste, `jeton.lectureSeule`), le jeton demandé y serait refusé comme l'autre ; et jamais pour un
+  // document ouvert en lecture seule (compte Lecteur : refusé aux deux, la demande serait pour rien). Les lectures REST (lightRecords) n'ont pas ce contrôle : elles gardent le jeton de lecture seule.
+  let _sqlAccess = 'read';
+  function sqlWriteAllowed() {
+    if (typeof GfsLink !== 'undefined' && GfsLink && GfsLink.hosted) return false;
+    return !isDocumentReadOnly();
+  }
+  // 'read' (le jeton de lecture seule suffit, ou rien d'autre n'est appris) ou 'write' (ce document ne rend le SQL qu'au jeton qui peut écrire) : pour le rapport de fluidité et les essais.
+  function getSqlAccess() { return _sqlAccess; }
   async function lightQuery(sql, timeoutMs) {
-    const { body } = await lightGet('/sql?q=' + encodeURIComponent(sql), timeoutMs, 'sql');
+    const path = '/sql?q=' + encodeURIComponent(sql);
+    let answer;
+    if (_sqlAccess === 'write' && sqlWriteAllowed()) {
+      try { answer = await lightGet(path, timeoutMs, 'sql', 'write'); } catch (error) {
+        // Les droits ont changé (le jeton n'est plus donné, ou le SQL refusé à celui-là) : la prochaine demande repart du jeton de lecture seule.
+        if (error && (error.reason === 'jeton' || (error.reason === 'http' && error.status === 403))) _sqlAccess = 'read';
+        throw error;
+      }
+    } else {
+      try { answer = await lightGet(path, timeoutMs, 'sql'); } catch (error) {
+        if (!error || error.reason !== 'http' || error.status !== 403 || !sqlWriteAllowed()) throw error;
+        answer = await lightGet(path, timeoutMs, 'sql', 'write');
+        _sqlAccess = 'write';
+      }
+    }
+    const body = answer.body;
     if (!body || !Array.isArray(body.records)) throw Object.assign(new Error('lightQuery : forme'), { reason: 'forme' });
     return body.records.map(record => (record && record.fields) || {});
   }
@@ -1602,5 +1632,5 @@ const GristAPI = (function () {
     return { tableId: _currentTableId, record: _currentRecord, mappings: _currentMappings };
   }
 
-  return { rowsOf, init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, stepOf, stepAt, stepToken, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
+  return { rowsOf, init, refreshSchema, refreshColumnTypes, refreshColumnMeta, withReadPass, withSharedReadPass, getTables, getColumns, getVisibleColumns, isHelperColumn, referenceOf, getColumnType, getColumnConditionalRules, getColumnChoices, getColumnLabel, isFormulaColumn, isEmptyColumn, getColumnFormatOptions, getDocumentSettings, getAllVariables, onRecord, getCurrentRecord, getCurrentTableId, getWidgetOptions, onWidgetOptionsChange, createEchoGuard, onWidgetOptionWrite, setWidgetOption, detectTableId, findReferenceColumns, fetchRowById, fetchTableRows, detectCurrentContext, getAttachmentDownloadUrl, getAttachmentInfos, getWriteAccess, getInstanceHost, getServerOrigin, lightQuery, getSqlAccess, lightRecords, prefetchAccessToken, getCurrentUserEmail, getCurrentUserName, peekCurrentUser, hydrateAttachmentImages, getLinkRule, findLinkRule, getAllLinkRules, saveLinkRule, deleteLinkRule, getDisplayColumn, getReferenceColumn, getReferenceValues, isRawRow, resolveColumnPath, tableAtEndOf, stepOf, stepAt, stepToken, getLinkState, onLinkStateChange, getAccessLevel, onAccessLevelChange, ensureTable, setTableConsent, isTablesDeclined, isAccessRefusal, noteRefusal, refusalPhrase, refusalKind, lastRefusal, isDocumentReadOnly, isReadOnlyAddress, createWriteQueue, createUserEmailCache, createMemoizedLoad };
 })();

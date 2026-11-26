@@ -732,6 +732,8 @@ const Templates = (function () {
     if (!map) return null;
     let listing;
     try { listing = await listRows(map); } catch (e) { refuseLight(e); return null; }
+    // Un document à règles d'accès ne rend le SQL qu'au jeton qui peut écrire (GristAPI.lightQuery : seulement hors GFS, au refus du jeton de lecture seule) : le rapport de fluidité le dit.
+    if (typeof GristAPI.getSqlAccess === 'function' && GristAPI.getSqlAccess() === 'write') traceStep('modèles : SQL lu avec le jeton qui peut écrire (règles d’accès)');
     if (lightSwitch() !== 'force' && listing.weighed && listedBytes(listing) < LIGHT_MIN_CHARS) { lightState = 'whole'; return null; }
     lightState = 'light';
     // Les colonnes que disent les métadonnées : les migrations ne lisent jamais la table (cf. readColumnsFromMetadata).

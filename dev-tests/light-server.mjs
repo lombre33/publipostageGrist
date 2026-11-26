@@ -5,9 +5,12 @@
 //   createLightServer(readTables, { token })  -> { handle(url), log, state }
 //     readTables() -> { tableId: { types: { colId: type }, rows: [{ id, colId: valeur, ... }] } } (ou une promesse de cela : l'état du faux Grist d'une page se lit dans la page)
 //     handle(url)  -> { status, body, noCors } (body : le texte JSON de la réponse ; `noCors` vrai : la réponse n'a PAS d'en-tête CORS, comme celle du pare-feu de la DINUM : le navigateur dit « réseau » et le code d'état ne se lit pas)
-//     log          -> toutes les demandes reçues : { kind: 'sql' | 'records', sql | table + ids, status, at }
+//     log          -> toutes les demandes reçues : { kind: 'sql' | 'records', sql | table + ids, status, at, access: 'read' | 'write' + token (le jeton qui l'accompagnait) }
 //     state        -> { refuse: code HTTP rendu à TOUTES les demandes (403 : règles d'accès), refuseSql, refuseRecords, failWeights: les requêtes qui pèsent (length(CAST…)) sont interrompues comme le fait Grist au-delà d'une seconde,
-//                      delayMs: temps de réponse, delayRecordsMs: temps de réponse des seules lectures par numéros (REST), en plus, auth: le jeton attendu }
+//                      delayMs: temps de réponse, delayRecordsMs: temps de réponse des seules lectures par numéros (REST), en plus, auth: le jeton de lecture seule attendu ('stub-token'), writePrefix: le début des jetons qui
+//                      peuvent écrire ('stub-write-token', ce que le faux Grist de dev-tests/grist-stub.js donne à getAccessToken({ readOnly: false })), rules: le document a des règles d'accès : le SQL refuse (403) le jeton de lecture
+//                      seule, même à un propriétaire ; 'owner' le rend au jeton qui peut écrire, 'editor' le refuse aussi (un éditeur ou un lecteur ne « peut tout copier » avec aucun jeton : faits vérifiés 43 et 173 de GFS) ; la lecture
+//                      REST (/records) n'a pas ce contrôle }
 //   firewallRefuses(texte)                    -> vrai quand un pare-feu comme celui de la DINUM refuserait cette demande (`state.firewall`, vrai par défaut : le faux serveur la refuse, en 403 sans en-tête CORS ; `state.refuseSql = 'firewall'`
 //                                                refuse tout SQL de cette façon)
 //   tablesFromStartupDoc(doc)                 -> readTables d'un StartupDoc (dev-tests/unit-startup-reads.mjs)
@@ -54,7 +57,7 @@ function buildDatabase(tables) {
 
 export function createLightServer(readTables, options = {}) {
   const log = [];
-  const state = { refuse: null, refuseSql: null, refuseRecords: null, failWeights: false, firewall: true, delayMs: 0, delayRecordsMs: 0, auth: options.token || 'stub-token' };
+  const state = { refuse: null, refuseSql: null, refuseRecords: null, failWeights: false, firewall: true, delayMs: 0, delayRecordsMs: 0, auth: options.token || 'stub-token', writePrefix: 'stub-write-token', rules: null };
   const reply = (status, body, noCors) => Object.assign({ status, body: typeof body === 'string' ? body : JSON.stringify(body) }, noCors ? { noCors: true } : {});
 
   async function handle(rawUrl) {
@@ -71,13 +74,19 @@ export function createLightServer(readTables, options = {}) {
       if (path === '/sql') entry.sql = url.searchParams.get('q') || '';
       return answer(403, FIREWALL_PAGE, true);
     }
-    if (url.searchParams.get('auth') !== state.auth) { entry.kind = 'auth'; return answer(401, { error: 'jeton refusé' }); }
+    const given = url.searchParams.get('auth') || '';
+    const access = given === state.auth ? 'read' : (state.writePrefix && given.indexOf(state.writePrefix) === 0 ? 'write' : null);
+    if (!access) { entry.kind = 'auth'; return answer(401, { error: 'jeton refusé' }); }
+    entry.access = access;
+    entry.token = given;   // un faux jeton : les essais comptent les jetons distincts (un jeton qui peut écrire n'est jamais gardé d'une demande à l'autre)
     const tables = await readTables();
     if (path === '/sql') {
       entry.kind = 'sql';
       const sql = url.searchParams.get('q') || '';
       entry.sql = sql;
       if (state.refuseSql === 'firewall') return answer(403, FIREWALL_PAGE, true);
+      // Un document à règles d'accès : seul un propriétaire au jeton qui peut écrire « peut tout copier » (le message est celui que Grist rend à un refus de ce contrôle).
+      if (state.rules && (access !== 'write' || state.rules !== 'owner')) return answer(403, { error: 'insufficient document access' });
       if (state.refuse || state.refuseSql) return answer(state.refuse || state.refuseSql, { error: 'accès refusé' });
       if (state.failWeights && /CAST\(/.test(sql)) return answer(500, { error: 'interrupted' });
       if (!/^\s*(SELECT|WITH)\b/i.test(sql)) return answer(400, { error: 'seules les lectures sont permises' });

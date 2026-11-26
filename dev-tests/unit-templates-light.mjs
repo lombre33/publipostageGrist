@@ -16,6 +16,9 @@
 //  9. une ligne que ce widget écrit pendant qu'on la lit garde le texte écrit (la réponse est d'avant l'écriture), et la lecture finie la laisse chargée.
 // 10. (lot 3) rien après l'ouverture ne relit la table : Templates.refreshRows (le modèle ouvert et ceux qu'il désigne, par leurs numéros), la date que Grist garde après un enregistrement, le jeton d'une ligne, les jetons
 //     des versions, le mot de passe des PDF, la ligne qu'on supprime (REST) et qu'Annuler rend (numéro, nom, type, ★ et jeton, sans un texte) ; les mêmes gestes lisent la table quand la lecture légère est coupée ou refusée.
+// 11. (26/11, après la consigne 103 ; choix d'Antoine : « comme GFS ») un document à règles d'accès : Grist refuse le SQL (403) au jeton de lecture seule, même à son propriétaire, et le rend au jeton qui peut écrire ; la liste se lit
+//     alors par SQL avec ce second jeton, demandé SEULEMENT après le refus du premier, neuf à chaque demande et jamais gardé. Jamais dans GFS (son courtier ne donne que la lecture seule), jamais pour un compte Lecteur ; un éditeur est refusé
+//     aux deux jetons et lit la table en entier comme avant ; un document sans règles n'en demande aucun ; les droits qui changent en route ramènent au jeton de lecture seule.
 // Lancer : node dev-tests/unit-templates-light.mjs
 import { createContext, loadScript, evalIn, check, summarizeAndExit } from './unit-harness.mjs';
 import { StartupDoc } from './startup-doc.mjs';
@@ -50,20 +53,33 @@ function makeDoc({ legacy = false, without = [], big = BIG, extra = [] } = {}) {
 }
 
 // Un contexte par scénario (GristAPI et Templates gardent un état de module). `light` : 'force' | 'off' | null (la production : le poids décide).
-function fresh(doc, server, { legacy = false, light = 'force', small, scripts } = {}) {
+function fresh(doc, server, { legacy = false, light = 'force', small, scripts, hosted = false, readonly = false } = {}) {
   const clock = { now: 1700000000000 };
   class FakeDate extends Date { static now() { return clock.now; } }
   const warnings = [];
   const errors = [];
-  doc.getAccessToken = async () => ({ token: 'stub-token', baseUrl: 'http://grist.test/api/docs/D1', ttlMsecs: 600000 });
+  // Le faux Grist donne le jeton de lecture seule, ou, quand on le demande (`readOnly: false`), un jeton qui peut écrire, NEUF à chaque demande (comme celui du faux Grist des pages, dev-tests/grist-stub.js) ;
+  // chaque demande est notée (doc.tokenRequests : 'read' | 'write') et `doc.refuseWriteToken` refuse d'en donner un qui peut écrire.
+  let writeTokens = 0;
+  doc.tokenRequests = [];
+  doc.refuseWriteToken = false;
+  doc.getAccessToken = async (options) => {
+    const write = !!options && options.readOnly === false;
+    doc.tokenRequests.push(write ? 'write' : 'read');
+    if (write && doc.refuseWriteToken) throw new Error('jeton refusé');
+    return { token: write ? 'stub-write-token' + (++writeTokens) : 'stub-token', baseUrl: 'http://grist.test/api/docs/D1', ttlMsecs: 600000 };
+  };
   const globals = {
     __schemaNames: legacy ? 'legacy' : 'english',
     grist: { docApi: doc, ready() {}, onRecord() {}, onOptions() {}, async getOptions() { return null; } },
     console: { log() {}, warn(...a) { warnings.push(a.join(' ')); }, error(...a) { errors.push(a.join(' ')); warnings.push(a.join(' ')); } },
-    crypto: globalThis.crypto, Date: FakeDate, setTimeout: () => 0, clearTimeout() {}, performance: { now: () => 0 }, AbortController, URL, HtmlSanitize: { clean: html => html },
+    crypto: globalThis.crypto, Date: FakeDate, setTimeout: () => 0, clearTimeout() {}, performance: { now: () => 0 }, AbortController, URL, URLSearchParams, HtmlSanitize: { clean: html => html },
     fetch: async (url) => { const answer = await server.handle(String(url)); if (answer.noCors) throw new TypeError('Failed to fetch'); return { ok: answer.status >= 200 && answer.status < 300, status: answer.status, text: async () => answer.body }; },
   };
   if (light) globals.__templatesLight = light;
+  // Dans GFS (`GfsLink.hosted`), ou dans un document que Grist ouvre en lecture seule (`?readonly=true` à l'adresse du cadre) : le jeton qui peut écrire n'est pas demandé pour le SQL.
+  if (hosted) globals.GfsLink = { hosted: true };
+  if (readonly) globals.location = { search: '?readonly=true' };
   if (typeof small === 'number') globals.__templatesLightSmall = small;
   const ctx = createContext(globals);
   (scripts || ['js/schema-columns.js', 'js/grist-api.js', 'js/templates-light.js', 'js/templates.js']).forEach(script => loadScript(ctx, script));
@@ -202,20 +218,20 @@ async function main() {
 
   // === 5. Les replis ===
   {
-    // SQL refusé par les règles d'accès : lecture entière, comme avant, sans réessayer tout de suite
+    // SQL refusé par les règles d'accès, à tous les jetons (un éditeur, un lecteur) : lecture entière, comme avant, sans réessayer tout de suite
     const { doc, table } = makeDoc();
     const server = createLightServer(() => tablesFromStartupDoc(doc));
     server.state.refuseSql = 403;
     const { run, clock } = fresh(doc, server);
     const templates = await run('Templates.loadAll()');
     check('SQL refusé (403) : la table se lit en entier, tous les modèles sont chargés', templates.length === 5 && templates.every(template => template.chargee === true) && doc.readsOf(table) === 1 && byName(templates, 'Gros').contenu === BIG, doc.readsOf(table));
-    check('SQL refusé : l\'état est « refused », une seule requête essayée', run('Templates.getLightState()') === 'refused' && sqlCalls(server).length === 1);
+    check('SQL refusé : l\'état est « refused », deux requêtes essayées (le jeton de lecture seule, puis celui qui peut écrire : refusés tous deux)', run('Templates.getLightState()') === 'refused' && sqlCalls(server).length === 2 && sqlCalls(server).map(entry => entry.access).join() === 'read,write', sqlCalls(server).map(entry => entry.status + entry.access).join());
     await run('Templates.loadAll()');
-    check('SQL refusé : la lecture suivante ne retente pas (dix minutes)', sqlCalls(server).length === 1 && doc.readsOf(table) === 2);
+    check('SQL refusé : la lecture suivante ne retente pas (dix minutes)', sqlCalls(server).length === 2 && doc.readsOf(table) === 2);
     clock.now += 11 * 60 * 1000;
     server.state.refuseSql = null;
     await run('Templates.loadAll()');
-    check('SQL refusé : après dix minutes, la liste légère est essayée de nouveau', sqlCalls(server).length === 2 && run('Templates.getLightState()') === 'light');
+    check('SQL refusé : après dix minutes, la liste légère est essayée de nouveau (et passe au jeton de lecture seule : rien d\'autre n\'est demandé)', sqlCalls(server).length === 3 && sqlCalls(server)[2].access === 'read' && run('Templates.getLightState()') === 'light' && run('GristAPI.getSqlAccess()') === 'read');
   }
   {
     // Le pare-feu de la DINUM refuse le SQL (403 sans en-tête CORS : le navigateur ne dit que « réseau ») : la lecture entière, comme pour un refus des droits, sans second essai sans longueurs
@@ -483,6 +499,109 @@ async function main() {
     check('SQL refusé en route : refreshRows lit la table en entier comme avant, l\'état devient « refused »', rows.length === 5 && rows.every(template => template.chargee === true) && doc.readsOf(table) === 1 && run('Templates.getLightState()') === 'refused', JSON.stringify([doc.readsOf(table), run('Templates.getLightState()')]));
     const tokens = await run('Templates.readTokens()');
     check('SQL refusé : readTokens rend null, la fenêtre des versions lit la table', tokens === null);
+  }
+
+  // === 11. Un document à règles d'accès : le SQL au jeton qui peut écrire, seulement après le refus du jeton de lecture seule (choix d'Antoine le 26/11, « comme GFS ») ===
+  const countTokens = (doc, kind) => doc.tokenRequests.filter(request => request === kind).length;
+  const sqlTrail = server => sqlCalls(server).map(entry => entry.status + ':' + entry.access).join(' ');
+  {
+    // Le propriétaire : refusé au jeton de lecture seule, passé au jeton qui peut écrire ; la table n'est jamais lue en entier
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'owner';
+    const { run, warnings } = fresh(doc, server);
+    const templates = await run('Templates.loadAll()');
+    check('règles d\'accès, propriétaire : la liste se lit par SQL, refusée au jeton de lecture seule puis passée au jeton qui peut écrire, la table jamais lue en entier', templates.length === 5 && doc.readsOf(table) === 0 && sqlTrail(server) === '403:read 200:write' && run('Templates.getLightState()') === 'light', sqlTrail(server) + ' lectures=' + doc.readsOf(table));
+    check('règles d\'accès, propriétaire : ce document est appris « write », le texte long reste à lire, le court vient avec la liste', run('GristAPI.getSqlAccess()') === 'write' && byName(templates, 'Gros').chargee === false && byName(templates, 'Petit').contenu === '<p>petit</p>');
+    check('règles d\'accès, propriétaire : un seul jeton qui peut écrire demandé, après celui de lecture seule', doc.tokenRequests.join() === 'read,write', doc.tokenRequests.join());
+    await run('Templates.ensureLoaded([2])');
+    check('règles d\'accès, propriétaire : un texte lu par son numéro (REST, sans ce contrôle) garde le jeton de lecture seule, aucun jeton qui peut écrire de plus', byName(run('Templates.getCached()'), 'Gros').contenu === BIG && recordCalls(server).length === 1 && recordCalls(server)[0].access === 'read' && countTokens(doc, 'write') === 1, JSON.stringify(recordCalls(server).map(entry => entry.access)));
+    const before = sqlCalls(server).length;
+    await run('Templates.refreshRows([1])');
+    const later = sqlCalls(server).slice(before);
+    check('règles d\'accès, propriétaire : les demandes suivantes partent tout de suite au jeton qui peut écrire, sans refus de plus', later.length === 1 && later[0].status === 200 && later[0].access === 'write' && doc.readsOf(table) === 0, sqlTrail(server));
+    check('règles d\'accès, propriétaire : un jeton qui peut écrire NEUF à chaque demande, jamais gardé d\'une demande à l\'autre', countTokens(doc, 'write') === 2 && new Set(sqlCalls(server).filter(entry => entry.access === 'write').map(entry => entry.token)).size === 2, doc.tokenRequests.join());
+    check('règles d\'accès : aucun jeton dans ce que le widget écrit à la console', !warnings.some(line => /stub-(write-)?token/.test(line)), warnings.join(' | '));
+  }
+  {
+    // Un éditeur (ou un lecteur) : refusé aux deux jetons ; la lecture entière comme avant, et la seconde demande ne se refait pas à chaque geste
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'editor';
+    const { run, clock } = fresh(doc, server);
+    const templates = await run('Templates.loadAll()');
+    check('règles d\'accès, éditeur : refusé aux deux jetons (403 puis 403), la table se lit en entier, tous les modèles sont chargés', sqlTrail(server) === '403:read 403:write' && templates.length === 5 && templates.every(template => template.chargee === true) && doc.readsOf(table) === 1, sqlTrail(server));
+    check('règles d\'accès, éditeur : l\'état est « refused », rien n\'est appris, un seul jeton qui peut écrire demandé', run('Templates.getLightState()') === 'refused' && run('GristAPI.getSqlAccess()') === 'read' && countTokens(doc, 'write') === 1, doc.tokenRequests.join());
+    await run('Templates.loadAll()');
+    await run('Templates.refreshRows([1])');
+    check('règles d\'accès, éditeur : les gestes qui suivent ne retentent ni le SQL ni le jeton qui peut écrire (dix minutes)', sqlCalls(server).length === 2 && countTokens(doc, 'write') === 1, sqlTrail(server));
+    clock.now += 11 * 60 * 1000;
+    server.state.rules = 'owner';   // la personne est devenue propriétaire du document
+    await run('Templates.loadAll()');
+    check('règles d\'accès, éditeur : après dix minutes la liste légère est essayée de nouveau, et passe au jeton qui peut écrire', sqlTrail(server) === '403:read 403:write 403:read 200:write' && run('GristAPI.getSqlAccess()') === 'write' && run('Templates.getLightState()') === 'light', sqlTrail(server));
+  }
+  {
+    // Un document sans règles d'accès : le jeton de lecture seule suffit, celui qui peut écrire n'est JAMAIS demandé
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    const { run } = fresh(doc, server);
+    await run('Templates.loadAll()');
+    await run('Templates.refreshRows([1])');
+    check('sans règles d\'accès : le SQL passe au jeton de lecture seule, le jeton qui peut écrire n\'est jamais demandé', sqlTrail(server) === '200:read 200:read' && countTokens(doc, 'write') === 0 && run('GristAPI.getSqlAccess()') === 'read' && doc.readsOf(table) === 0, sqlTrail(server) + ' ' + doc.tokenRequests.join());
+  }
+  {
+    // Dans GFS : son courtier ne donne à l'app qu'un jeton de lecture seule (manifeste, `jeton.lectureSeule`) : on ne le demande pas, la lecture entière sert
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'owner';
+    const { run } = fresh(doc, server, { hosted: true });
+    const templates = await run('Templates.loadAll()');
+    check('règles d\'accès dans GFS : une seule demande (refusée), aucun jeton qui peut écrire demandé, la table se lit en entier', sqlTrail(server) === '403:read' && countTokens(doc, 'write') === 0 && templates.every(template => template.chargee === true) && doc.readsOf(table) === 1 && run('Templates.getLightState()') === 'refused' && run('GristAPI.getSqlAccess()') === 'read', sqlTrail(server) + ' ' + doc.tokenRequests.join());
+  }
+  {
+    // Un document que Grist ouvre en lecture seule (compte Lecteur : `readonly=true` à l'adresse du cadre) : refusé aux deux jetons, la demande ne se fait pas pour rien
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'owner';
+    const { run } = fresh(doc, server, { readonly: true });
+    const templates = await run('Templates.loadAll()');
+    check('règles d\'accès, document en lecture seule : une seule demande (refusée), aucun jeton qui peut écrire demandé, la table se lit en entier', sqlTrail(server) === '403:read' && countTokens(doc, 'write') === 0 && templates.every(template => template.chargee === true) && doc.readsOf(table) === 1, sqlTrail(server) + ' ' + doc.tokenRequests.join());
+  }
+  {
+    // Grist ne donne pas le jeton qui peut écrire : une seule demande SQL (refusée), la lecture entière, rien d'appris
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'owner';
+    const { run } = fresh(doc, server);
+    doc.refuseWriteToken = true;
+    const templates = await run('Templates.loadAll()');
+    check('jeton qui peut écrire refusé par Grist : une seule demande SQL (refusée), lecture entière, rien d\'appris', sqlTrail(server) === '403:read' && countTokens(doc, 'write') === 1 && templates.every(template => template.chargee === true) && doc.readsOf(table) === 1 && run('GristAPI.getSqlAccess()') === 'read' && run('Templates.getLightState()') === 'refused', sqlTrail(server) + ' ' + doc.tokenRequests.join());
+  }
+  {
+    // Les droits changent en route : le jeton qui peut écrire est refusé à son tour, le point de départ redevient le jeton de lecture seule
+    const { doc, table } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'owner';
+    const { run, clock } = fresh(doc, server);
+    await run('Templates.loadAll()');
+    check('droits qui changent : le document est d\'abord appris « write »', run('GristAPI.getSqlAccess()') === 'write' && sqlTrail(server) === '403:read 200:write', sqlTrail(server));
+    server.state.rules = 'editor';
+    doc.resetLog();
+    const rows = await run('Templates.refreshRows([1])');
+    check('droits retirés en route : refusé au jeton qui peut écrire, la table se lit en entier, l\'état est « refused » et le point de départ redevient le jeton de lecture seule', rows.length === 5 && rows.every(template => template.chargee === true) && doc.readsOf(table) === 1 && run('Templates.getLightState()') === 'refused' && run('GristAPI.getSqlAccess()') === 'read' && sqlTrail(server) === '403:read 200:write 403:write', sqlTrail(server));
+    server.state.rules = 'owner';
+    clock.now += 11 * 60 * 1000;
+    await run('Templates.loadAll()');
+    check('droits rendus : après dix minutes la liste repart du jeton de lecture seule (refusé) puis passe au jeton qui peut écrire', run('GristAPI.getSqlAccess()') === 'write' && run('Templates.getLightState()') === 'light' && sqlTrail(server) === '403:read 200:write 403:write 403:read 200:write', sqlTrail(server));
+  }
+  {
+    // L'erreur d'un SQL refusé aux deux jetons est celle du second essai, et ne porte aucun jeton
+    const { doc } = makeDoc();
+    const server = createLightServer(() => tablesFromStartupDoc(doc));
+    server.state.rules = 'editor';
+    const { run } = fresh(doc, server);
+    const failure = await run("GristAPI.lightQuery('SELECT id FROM \"Publipostage_Templates\"', 1000).then(() => null, error => ({ reason: error.reason, status: error.status, text: JSON.stringify(error, Object.getOwnPropertyNames(error)) }))");
+    check('SQL refusé aux deux jetons : l\'erreur dit 403 (le second essai) et ne porte aucun jeton', !!failure && failure.reason === 'http' && failure.status === 403 && !/stub-(write-)?token/.test(failure.text), JSON.stringify(failure));
   }
 
   summarizeAndExit();
