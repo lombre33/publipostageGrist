@@ -202,6 +202,13 @@ const I18nTextsVariables = {
   'varCond.unwrapBlock': { fr: 'Défaire le bloc', en: 'Unwrap block' },
   'varCond.unwrapBlockTitle': { fr: 'Retire le cadre et la condition : le texte du bloc reste à sa place.', en: 'Removes the frame and the condition: the block’s text stays where it is.' },
   'varCond.unwrapLostBlock': { fr: 'Le bloc de texte a été déplacé ou supprimé pendant l’édition : il n’a pas été défait.', en: 'The text block was moved or deleted while editing: it was not unwrapped.' },
+  // « Mettre dans la phrase » (fenêtre de condition d'un bloc, js/variable-condition.js, js/conditional-text.js:toValue) : le texte du bloc devient une valeur conditionnelle au bout de la ligne qui le précède ; ses raisons quand le bloc n'y tient pas (bouton grisé).
+  'varCond.toValue': { fr: 'Mettre dans la phrase', en: 'Put in the sentence' },
+  'varCond.toValueTitle': { fr: 'Le texte du bloc continue la ligne qui le précède, comme une valeur conditionnelle : un texte justifié reste justifié d’un bout à l’autre. La condition et le sinon sont gardés.', en: 'The block’s text continues the line before it, like a conditional value: justified text stays justified from one end to the other. The condition and the otherwise text are kept.' },
+  'varCond.toValueNotOneParagraph': { fr: 'Seul un bloc d’un seul paragraphe se met dans la phrase. Une liste, un tableau, une image, un titre, un bloc dans le bloc ou plusieurs paragraphes ne tiennent pas dans une ligne.', en: 'Only a block made of a single paragraph can go in the sentence. A list, a table, an image, a heading, a block inside the block or several paragraphs do not fit in a line.' },
+  'varCond.toValueOtherwiseLines': { fr: 'Le sinon de ce bloc a plusieurs lignes, et dans la phrase il n’en a qu’une. Gardez une seule ligne pour pouvoir le mettre dans la phrase.', en: 'This block’s otherwise text has several lines, and in the sentence it has only one. Keep a single line to be able to put it in the sentence.' },
+  'varCond.toValueOtherwiseLong': { fr: 'Le sinon de ce bloc dépasse {max} signes, le maximum d’une valeur dans la phrase. Raccourcissez-le pour pouvoir le mettre dans la phrase.', en: 'This block’s otherwise text is longer than {max} characters, the maximum for a value in the sentence. Shorten it to be able to put it in the sentence.' },
+  'varCond.toValueLostBlock': { fr: 'Le bloc de texte a été déplacé ou supprimé pendant l’édition : il n’a pas été mis dans la phrase.', en: 'The text block was moved or deleted while editing: it was not put in the sentence.' },
   'varCond.clip.pastedStatusBlock': { fr: 'Condition collée. Enregistrez pour l’appliquer au bloc de texte.', en: 'Condition pasted. Save to apply it to the text block.' },
   'condText.tag.none': { fr: 'Texte conditionnel · sans condition', en: 'Conditional text · no condition' },
   'condText.tag.if': { fr: 'Si {condition}', en: 'If {condition}' },
@@ -239,6 +246,11 @@ const I18nTextsVariables = {
   'varCond.unwrapValue': { fr: 'Défaire la valeur', en: 'Unwrap value' },
   'varCond.unwrapValueTitle': { fr: 'Retire le cadre et la condition : le texte de la valeur reste à sa place.', en: 'Removes the frame and the condition: the value’s text stays where it is.' },
   'varCond.unwrapLostValue': { fr: 'La valeur conditionnelle a été déplacée ou supprimée pendant l’édition : elle n’a pas été défaite.', en: 'The conditional value was moved or deleted while editing: it was not unwrapped.' },
+  // « Mettre sur sa ligne » (fenêtre de condition d'une valeur, js/conditional-value.js:toBlock) : l'inverse, la valeur devient un bloc sur sa propre ligne.
+  'varCond.toBlock': { fr: 'Mettre sur sa ligne', en: 'Put on its own line' },
+  'varCond.toBlockTitle': { fr: 'Le texte passe dans un bloc sur sa propre ligne : le paragraphe est coupé avant et après lui. La condition et le sinon sont gardés.', en: 'The text goes into a block on its own line: the paragraph is split before and after it. The condition and the otherwise text are kept.' },
+  'varCond.toBlockNotInParagraph': { fr: 'Cette valeur n’est pas dans un paragraphe simple (titre, bloc de code…) : elle ne peut pas passer dans un bloc.', en: 'This value is not in a plain paragraph (heading, code block…): it cannot go into a block.' },
+  'varCond.toBlockLostValue': { fr: 'La valeur conditionnelle a été déplacée ou supprimée pendant l’édition : elle n’a pas été mise sur sa ligne.', en: 'The conditional value was moved or deleted while editing: it was not put on its own line.' },
   'varCond.clip.pastedStatusValue': { fr: 'Condition collée. Enregistrez pour l’appliquer à la valeur.', en: 'Condition pasted. Save to apply it to the value.' },
 
   // --- Case conditionnelle (menu des variables, onglet Chips ; js/conditional-checkbox.js, js/editor-nodes.js:createConditionalCheckboxNode) :

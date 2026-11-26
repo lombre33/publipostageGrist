@@ -869,7 +869,7 @@
       await h.clickButton('v2-btn-redo');
       await h.sleep(120);
       const redone = Editor.getHTML();
-      const pass = JSON.stringify(opened.footer) === JSON.stringify([I18n.t('varCond.remove'), I18n.t('varCond.unwrapValue'), I18n.t('common.cancel'), I18n.t('common.save')])
+      const pass = JSON.stringify(opened.footer) === JSON.stringify([I18n.t('varCond.remove'), I18n.t('varCond.unwrapValue'), I18n.t('varCond.toBlock'), I18n.t('common.cancel'), I18n.t('common.save')])
         && opened.firstDanger === I18n.t('varCond.remove') && opened.title === I18n.t('varCond.unwrapValueTitle')
         && after.html === '<p>Avant Un <strong>mot</strong>' + inner + ' après</p><p>Fin</p>' && after.closed && after.values === 1 && after.caret && after.focus
         && undone.html === original && JSON.stringify(undone.condition) === JSON.stringify(COND_URGENT) && redone === after.html;
@@ -904,7 +904,7 @@
       await h.sleep(100);
       const afterOuter = afterFirstParagraph(Editor.getHTML());
       const pass = JSON.stringify(forBadge.footer) === JSON.stringify([I18n.t('varCond.remove'), I18n.t('common.cancel'), I18n.t('common.save')]) && forBadge.hidden === true
-        && JSON.stringify(forInner.footer) === JSON.stringify([I18n.t('varCond.unwrapValue'), I18n.t('common.cancel'), I18n.t('common.save')]) && forInner.removeHidden === true && forInner.unwrapHidden === false
+        && JSON.stringify(forInner.footer) === JSON.stringify([I18n.t('varCond.unwrapValue'), I18n.t('varCond.toBlock'), I18n.t('common.cancel'), I18n.t('common.save')]) && forInner.removeHidden === true && forInner.unwrapHidden === false
         && afterInner === '<p>Un ' + val('deux trois') + ' fin</p>' && afterOuter === '<p>Un deux trois fin</p>' && valueNodes().length === 0;
       return { pass, notes: JSON.stringify({ forBadge, forInner, afterInner, afterOuter }) };
     },

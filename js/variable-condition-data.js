@@ -4,7 +4,7 @@ const VariableConditionData = (function () {
   const { shorten } = VariableModal;
 
   // Les phrases de la fenêtre selon le nœud qui porte la condition. Les clés s'écrivent en toutes lettres, pour que la recherche des clés sans usage
-  // (dev-tests/verify-code-hygiene.mjs) les voie. `unwrap` : le bouton « Défaire… », pour les nœuds dont on peut garder le texte.
+  // (dev-tests/verify-code-hygiene.mjs) les voie. `unwrap` : le bouton « Défaire… », pour les nœuds dont on peut garder le texte ; `inline` : le bouton « Mettre dans la phrase » d'un bloc / « Mettre sur sa ligne » d'une valeur (js/conditional-text.js:toValue, js/conditional-value.js:toBlock).
   const TEXTS = {
     varBadge: {
       title: 'varCond.title', intro: 'varCond.intro', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLost', pasted: 'varCond.clip.pastedStatus',
@@ -16,12 +16,14 @@ const VariableConditionData = (function () {
       met: 'varCond.debug.currentMetBlock', notMet: 'varCond.debug.currentNotMetBlock', first: 'varCond.debug.firstBlock',
       notMetOtherwise: 'varCond.debug.currentNotMetBlockOtherwise',
       unwrap: { label: 'varCond.unwrapBlock', title: 'varCond.unwrapBlockTitle', lost: 'varCond.unwrapLostBlock' },
+      inline: { label: 'varCond.toValue', title: 'varCond.toValueTitle' },
     },
     conditionalValue: {
       title: 'varCond.title', intro: 'varCond.introValue', modeBefore: 'varCond.modeBefore', saveLost: 'varCond.saveLostValue', pasted: 'varCond.clip.pastedStatusValue',
       met: 'varCond.debug.currentMetValue', notMet: 'varCond.debug.currentNotMetValue', first: 'varCond.debug.firstBlock',
       notMetOtherwise: 'varCond.debug.currentNotMetValueOtherwise',
       unwrap: { label: 'varCond.unwrapValue', title: 'varCond.unwrapValueTitle', lost: 'varCond.unwrapLostValue' },
+      inline: { label: 'varCond.toBlock', title: 'varCond.toBlockTitle' },
     },
     // L'image d'une colonne Pièces jointes (barre de l'image, js/floating-toolbars.js) : comme un bloc, sans sinon ni « Défaire » - l'image disparaît en lecture quand la condition
     // n'est pas remplie.

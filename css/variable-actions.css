@@ -189,6 +189,8 @@
    ; si les deux groupes ne tiennent pas sur une ligne, le second passe dessous, à droite, entier. */
 .var-condition-modal-content .var-modal-actions { flex-wrap: wrap; row-gap: 8px; }
 .var-modal-actions-start, .var-modal-actions-end { display: flex; align-items: center; gap: 8px; }
+/* Trois boutons de retrait (« Retirer la condition », « Défaire le bloc », « Mettre dans la phrase ») ne tiennent pas dans une fenêtre étroite (360 px) : le dernier passe sur la ligne d'en dessous, entier. */
+.var-modal-actions-start { flex-wrap: wrap; row-gap: 6px; }
 .var-modal-actions-end { margin-left: auto; }
 .var-condition-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: var(--text); }
 .var-condition-mode[hidden] { display: none; }

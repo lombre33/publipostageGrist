@@ -105,12 +105,15 @@ const VariableCondition = (function () {
       // texte (css/variable-actions.css).
       const removeBtn = button('var-modal-danger');
       const unwrapBtn = button('var-modal-danger var-modal-unwrap');
+      // « Mettre dans la phrase » (un bloc) / « Mettre sur sa ligne » (une valeur) : le même texte passe d'un nœud à l'autre. Un bouton de la même famille que « Défaire… » (il ferme la fenêtre
+      // et change le document), grisé avec sa raison quand ce nœud n'a pas d'équivalent.
+      const inlineBtn = button('var-modal-danger var-modal-unwrap var-modal-switch');
       const cancelBtn = button();
       const saveBtn = button('var-modal-primary');
       // Deux groupes - les retraits à gauche, Annuler et Enregistrer à droite - qui passent sur deux lignes, chacun entier, quand les quatre boutons ne
       // tiennent pas côte à côte (le français dans les 480 px de la fenêtre) : « Enregistrer » sortirait de la fenêtre.
       const startGroup = el('div', 'var-modal-actions-start');
-      startGroup.append(removeBtn, unwrapBtn);
+      startGroup.append(removeBtn, unwrapBtn, inlineBtn);
       const endGroup = el('div', 'var-modal-actions-end');
       endGroup.append(cancelBtn, saveBtn);
       ctx.win.actions.append(startGroup, endGroup);
@@ -124,7 +127,7 @@ const VariableCondition = (function () {
       ctx.win.body.append(intro, modeRow, rulesBox, ...Object.values(textOtherwise).map(free => free.row), moreFold.box, previewArea);
       ctx.refs = {
         title: ctx.win.title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, currentLine, countLine,
-        removeBtn, unwrapBtn, cancelBtn, saveBtn,
+        removeBtn, unwrapBtn, inlineBtn, cancelBtn, saveBtn,
         affixRow, moreFold, beforeLabel: beforeField.label, beforeInput: beforeField.input, afterLabel: afterField.label, afterInput: afterField.input, affixHint,
         textOtherwise,
       };
@@ -136,13 +139,14 @@ const VariableCondition = (function () {
       });
       removeBtn.addEventListener('click', () => { if (ctx.state) { applyAttrs(Object.assign({ condition: null }, noOtherwise())); close(); } });
       unwrapBtn.addEventListener('click', unwrapNode);
+      inlineBtn.addEventListener('click', switchNode);
       cancelBtn.addEventListener('click', close);
       saveBtn.addEventListener('click', save);
       copyBtn.addEventListener('click', copyCondition);
       pasteBtn.addEventListener('click', pasteCondition);
       // Toute saisie dans les lignes (colonne, opérateur, valeur, « au moins une ») relance l'aperçu, et dégrise - ou regrise - tout de suite la ligne « Sinon afficher » selon que
       // les règles sont complètes.
-      const edited = () => { syncOtherwiseRow(); ctx.previewRun.schedule(); };
+      const edited = () => { syncOtherwiseRow(); syncInlineButton(); ctx.previewRun.schedule(); };
       ctx.win.box.addEventListener('input', edited);
       ctx.win.box.addEventListener('change', edited);
     }
@@ -160,8 +164,8 @@ const VariableCondition = (function () {
       if (node.type.name === 'conditionalValue') editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, attrs));
       else EditorCore.patchNodeAndReselect(editor, pos, attrs);
     }
-    function save() {
-      if (!ctx.state) return;
+    // Les réglages que « Enregistrer » écrit dans le nœud, tels que la fenêtre les montre (brouillon compris) : `condition`, et selon le nœud `before` / `after`, `otherwise`.
+    function draftPatch() {
       const condition = ConditionRules.plainCondition(ctx.state.working);
       const patch = { condition };
       if (showsValue()) {
@@ -177,7 +181,11 @@ const VariableCondition = (function () {
         // Une bulle garde l'écriture d'avant tant que son sinon dit la même chose (VariableOtherwise.storedOf).
         Object.assign(patch, showsValue() ? VariableOtherwise.storedOf(typed, ctx.state.node.attrs.format) : { otherwise: typed });
       }
-      applyAttrs(patch);
+      return patch;
+    }
+    function save() {
+      if (!ctx.state) return;
+      applyAttrs(draftPatch());
       close();
     }
     // « Défaire le bloc » / « Défaire la valeur » : le cadre et la condition disparaissent, le texte reste (js/conditional-text.js:unwrap,
@@ -189,6 +197,38 @@ const VariableCondition = (function () {
       const { editor, pos } = ctx.state;
       const done = ctx.state.node.type.name === 'conditionalValue' ? ConditionalValue.unwrap(editor, pos) : ConditionalText.unwrap(editor, pos);
       if (!done) alert(I18n.t(unwrap.lost));
+      close();
+    }
+
+    // Pourquoi le nœud de la fenêtre n'a pas d'équivalent (la clé du texte), ou null : un bloc se met dans la phrase s'il tient dans un paragraphe et un sinon d'une ligne - celui que la
+    // fenêtre montre, brouillon compris -, une valeur passe dans un bloc quand elle est dans un paragraphe simple.
+    function switchObstacle() {
+      const { editor, pos, node } = ctx.state;
+      if (node.type.name === 'conditionalValue') return ConditionalValue.blockObstacle(editor.state, pos);
+      return ConditionalText.inlineObstacle(editor.state.doc.nodeAt(pos), Object.assign({}, node.attrs, draftPatch()));
+    }
+    const obstacleText = reason => I18n.t(reason, { max: ConditionalValue.OTHERWISE_MAX });
+    // Le bouton « Mettre dans la phrase » / « Mettre sur sa ligne » : son texte, et grisé avec la raison en info-bulle quand le nœud n'a pas d'équivalent.
+    function syncInlineButton() {
+      const btn = ctx.refs && ctx.refs.inlineBtn;
+      if (!btn) return;
+      const inline = ctx.state && texts().inline;
+      btn.hidden = !inline;
+      if (!inline) return;
+      const reason = switchObstacle();
+      btn.textContent = I18n.t(inline.label);
+      btn.disabled = !!reason;
+      btn.title = reason ? obstacleText(reason) : I18n.t(inline.title);
+    }
+    // « Mettre dans la phrase » / « Mettre sur sa ligne » : le bloc devient une valeur au bout de la ligne d'avant, la valeur un bloc sur sa ligne (js/conditional-text.js:toValue,
+    // js/conditional-value.js:toBlock). Le brouillon de la fenêtre (condition, sinon) est enregistré avec, comme par « Enregistrer ». Quand le nœud n'a plus d'équivalent - un sinon
+    // tapé de plusieurs lignes, un bloc déplacé -, la fenêtre reste ouverte et le dit.
+    function switchNode() {
+      if (!ctx.state || !texts().inline) return;
+      const { editor, pos, node } = ctx.state;
+      const patch = draftPatch();
+      const result = node.type.name === 'conditionalValue' ? ConditionalValue.toBlock(editor, pos, patch) : ConditionalText.toValue(editor, pos, patch);
+      if (!result.ok) { alert(obstacleText(result.reason)); syncInlineButton(); return; }
       close();
     }
 
@@ -251,6 +291,7 @@ const VariableCondition = (function () {
       r.clipStatus.textContent = '';
       renderRules();
       syncOtherwiseRow();
+      syncInlineButton();
       // La barre flottante de la bulle reste masquée tant que la fenêtre est ouverte ; elle est sous le voile de toute façon (--z-floating-toolbar,
       // css/style.css).
       EditorCore.hideFloatingContextToolbars();

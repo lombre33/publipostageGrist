@@ -515,23 +515,23 @@ async function runTheme(theme) {
   await openBlockWindow(index.inner);
   let f = await footer();
   await shot(page, `${theme}-12-fenetre-bloc-sans-condition`);
-  check(`${label} - fenêtre du bloc emboîté (sans condition) : « Défaire le bloc », Annuler et Enregistrer, entiers dans la fenêtre, sur une ligne, sans recouvrement, Enregistrer à droite`,
-    f.buttons.map(b => b.text).join('|') === 'Défaire le bloc|Annuler|Enregistrer' && inside(f) && noOverlap(f) && f.rowOverflow <= 0 && f.rows === 1 && f.buttons.every(b => b.onTop)
-      && Math.abs(f.buttons[2].right - (f.box.right - 20)) <= 1.5 && f.selected && !/Urgent/.test(f.selected), f);
+  check(`${label} - fenêtre du bloc emboîté (sans condition) : « Défaire le bloc », « Mettre dans la phrase », Annuler et Enregistrer, entiers dans la fenêtre, une ou deux lignes, sans recouvrement, Enregistrer à droite`,
+    f.buttons.map(b => b.text).join('|') === 'Défaire le bloc|Mettre dans la phrase|Annuler|Enregistrer' && inside(f) && noOverlap(f) && f.rowOverflow <= 0 && f.rows <= 2 && f.buttons.every(b => b.onTop)
+      && Math.abs(f.buttons[3].right - (f.box.right - 20)) <= 1.5 && f.selected && !/Urgent/.test(f.selected), f);
   await realClick(page, await hitTest(page, '#var-condition-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)'));
   await page.waitForTimeout(250);
 
   await openBlockWindow(index.outer);
   f = await footer();
   await shot(page, `${theme}-13-fenetre-bloc-avec-condition`);
-  // Quatre boutons : sur une ligne s'ils tiennent, sinon les retraits au-dessus et Annuler / Enregistrer dessous, à droite - jamais un bouton hors de la fenêtre ni deux qui se recouvrent.
+  // Cinq boutons : sur une ligne s'ils tiennent, sinon les retraits (et « Mettre dans la phrase ») au-dessus et Annuler / Enregistrer dessous, à droite - jamais un bouton hors de la fenêtre ni deux qui se recouvrent.
   const rowOf = text => f.buttons.find(b => b.text === text).top;
-  check(`${label} - fenêtre du bloc extérieur (avec condition) : « Retirer la condition » puis « Défaire le bloc », puis Annuler et Enregistrer, entiers dans la fenêtre, une ou deux lignes, sans recouvrement, Enregistrer à droite`,
-    f.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire le bloc|Annuler|Enregistrer' && inside(f) && noOverlap(f) && f.rowOverflow <= 0 && f.rows <= 2 && f.buttons.every(b => b.onTop)
-      && rowOf('Retirer la condition') === rowOf('Défaire le bloc') && rowOf('Annuler') === rowOf('Enregistrer') && Math.abs(f.buttons[3].right - (f.box.right - 20)) <= 1.5 && /Urgent/.test(f.selected), f);
+  check(`${label} - fenêtre du bloc extérieur (avec condition) : « Retirer la condition », « Défaire le bloc » puis « Mettre dans la phrase », puis Annuler et Enregistrer, entiers dans la fenêtre, jusqu'à trois lignes, sans recouvrement, Enregistrer à droite`,
+    f.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire le bloc|Mettre dans la phrase|Annuler|Enregistrer' && inside(f) && noOverlap(f) && f.rowOverflow <= 0 && f.rows <= 3 && f.buttons.every(b => b.onTop)
+      && rowOf('Retirer la condition') === rowOf('Défaire le bloc') && rowOf('Annuler') === rowOf('Enregistrer') && Math.abs(f.buttons[4].right - (f.box.right - 20)) <= 1.5 && /Urgent/.test(f.selected), f);
   // Tab et Maj+Tab au vrai clavier : les quatre boutons se suivent dans l'ordre où on les voit (retraits puis Annuler, Enregistrer) - même quand ils sont sur deux lignes - et
   // le focus ne quitte jamais la fenêtre (Tab depuis Enregistrer revient dans le premier champ, Maj+Tab depuis lui retombe sur Enregistrer).
-  const FOOTER = ['Retirer la condition', 'Défaire le bloc', 'Annuler', 'Enregistrer'];
+  const FOOTER = ['Retirer la condition', 'Défaire le bloc', 'Mettre dans la phrase', 'Annuler', 'Enregistrer'];
   const focusFooter = text => page.evaluate(t => Array.from(document.querySelectorAll('#var-condition-modal .var-modal-actions button')).find(b => b.textContent === t).focus(), text);
   const activeInfo = () => page.evaluate(() => {
     const a = document.activeElement;
@@ -549,12 +549,12 @@ async function runTheme(theme) {
   for (let i = 0; i < 3; i++) { await page.keyboard.press('Shift+Tab'); tabBackward.push(await activeInfo()); }
   await page.keyboard.press('Shift+Tab');
   const tabBeforeFirst = await activeInfo();
-  check(`${label} - Tab au clavier : Retirer la condition, Défaire le bloc, Annuler, Enregistrer, puis le focus reste dans la fenêtre (premier champ), et Maj+Tab depuis lui retombe sur Enregistrer`,
+  check(`${label} - Tab au clavier : Retirer la condition, Défaire le bloc, Annuler, Enregistrer (« Mettre dans la phrase », grisé car ce bloc en contient un autre, est sauté), puis le focus reste dans la fenêtre (premier champ), et Maj+Tab depuis lui retombe sur Enregistrer`,
     tabForward.map(a => a.text).join('|') === 'Défaire le bloc|Annuler|Enregistrer' && tabForward.every(a => a.inside) && tabAfterLast.inside && !FOOTER.includes(tabAfterLast.text) && tabBackToLast.text === 'Enregistrer' && tabBackToLast.inside,
     { tabForward, tabAfterLast, tabBackToLast });
-  check(`${label} - Maj+Tab au clavier : Enregistrer, Annuler, Défaire le bloc, Retirer la condition à l'envers, puis le focus reste dans la fenêtre`,
+  check(`${label} - Maj+Tab au clavier : Enregistrer, Annuler, Défaire le bloc, Retirer la condition à l'envers (le bouton grisé est sauté), puis le focus reste dans la fenêtre`,
     tabBackward.map(a => a.text).join('|') === 'Annuler|Défaire le bloc|Retirer la condition' && tabBackward.every(a => a.inside) && tabBeforeFirst.inside && !FOOTER.includes(tabBeforeFirst.text), { tabBackward, tabBeforeFirst });
-  // L'anglais : « Remove condition », « Unwrap block », « Cancel », « Save » tiennent eux aussi dans la fenêtre, sur une ligne.
+  // L'anglais : « Remove condition », « Unwrap block », « Put in the sentence », « Cancel », « Save » tiennent eux aussi dans la fenêtre.
   await realClick(page, await hitTest(page, '#var-condition-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)'));
   await page.waitForTimeout(250);
   await page.evaluate(() => I18n.setLang('en'));
@@ -562,8 +562,8 @@ async function runTheme(theme) {
   await openBlockWindow(index.outer);
   const english = await footerOf(page);
   await shot(page, `${theme}-13b-fenetre-bloc-anglais`);
-  check(`${label} - interface en anglais : « Remove condition », « Unwrap block », « Cancel » et « Save » tiennent dans la fenêtre, sur une ligne, sans recouvrement`,
-    english.buttons.map(b => b.text).join('|') === 'Remove condition|Unwrap block|Cancel|Save' && inside(english) && noOverlap(english) && english.rowOverflow <= 0 && english.rows === 1 && english.buttons.every(b => b.onTop), english);
+  check(`${label} - interface en anglais : « Remove condition », « Unwrap block », « Put in the sentence », « Cancel » et « Save » tiennent dans la fenêtre, sur trois lignes au plus, sans recouvrement`,
+    english.buttons.map(b => b.text).join('|') === 'Remove condition|Unwrap block|Put in the sentence|Cancel|Save' && inside(english) && noOverlap(english) && english.rowOverflow <= 0 && english.rows <= 3 && english.buttons.every(b => b.onTop), english);
   await realClick(page, await hitTest(page, '#var-condition-modal .var-modal-actions button:not(.var-modal-primary):not(.var-modal-danger)'));
   await page.waitForTimeout(250);
   await page.evaluate(() => I18n.setLang('fr'));
@@ -925,7 +925,7 @@ async function runNarrow() {
   });
   check('panneau de 360 px, case de tableau : l\'étiquette d\'une condition longue reste dans le bloc (coupée par « … », entière dans son info-bulle) et la page ne défile pas de côté',
     narrow.tagRight <= narrow.blockRight + 1 && narrow.ellipsis === 'ellipsis' && narrow.truncated && narrow.title && narrow.docOverflowX <= 0, narrow);
-  // La fenêtre de ce bloc à condition dans le même panneau de 360 px : « Retirer la condition », « Défaire le bloc », Annuler et Enregistrer tiennent dans la fenêtre (deux lignes), rien
+  // La fenêtre de ce bloc à condition dans le même panneau de 360 px : « Retirer la condition », « Défaire le bloc », « Mettre dans la phrase », Annuler et Enregistrer tiennent dans la fenêtre (jusqu'à trois lignes), rien
   // ne la dépasse de côté.
   await realClick(page, await hitTest(page, '.tiptap .conditional-text-tag'));
   await page.waitForTimeout(250);
@@ -933,7 +933,7 @@ async function runNarrow() {
   await page.waitForTimeout(300);
   const narrowFooter = await footerOf(page);
   check('panneau de 360 px : la ligne de boutons de la fenêtre d\'un bloc à condition tient dans la fenêtre (retraits au-dessus, Annuler et Enregistrer dessous), sans recouvrement ni débordement',
-    narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire le bloc|Annuler|Enregistrer' && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
+    narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire le bloc|Mettre dans la phrase|Annuler|Enregistrer' && narrowFooter.rows <= 3 && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
   // La ligne « Sinon afficher » du bloc, un champ de plusieurs lignes, dans ce même panneau étroit : atteinte à la molette, entière dans la partie visible, rien ne fait défiler le corps de côté.
   const narrowReach = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-area-row');
   const narrowArea = await areaRowOf(page);

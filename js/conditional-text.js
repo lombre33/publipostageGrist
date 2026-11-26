@@ -277,9 +277,78 @@ const ConditionalText = (function () {
     return insertParagraphAt(view, containerPos + 1);
   }
 
+  // « Mettre dans la phrase » (fenêtre de condition d'un bloc, js/variable-condition.js ; demande du 26/11 : un texte conditionnel qui commence en cours de ligne, sans casser le
+  // texte justifié). Un bloc est un bloc : il coupe le paragraphe d'avant, dont la dernière ligne - jamais étirée en texte justifié - reste courte, dans l'éditeur comme à
+  // l'export. Le pendant en ligne existe depuis le 02/10 (js/conditional-value.js) : le texte du bloc devient une valeur conditionnelle, posée au bout du paragraphe qui
+  // le précède - la phrase continue sur la même ligne et se justifie d'un bout à l'autre. Condition, sinon et mise en forme conditionnelle passent tels quels. L'inverse est
+  // `ConditionalValue.toBlock`.
+  //
+  // Ce qui ne tient pas dans une ligne n'y va pas, le bouton est alors grisé avec sa raison : un bloc qui n'est pas UN paragraphe (liste, tableau, image, titre, plusieurs
+  // paragraphes, bloc emboîté), un sinon de plusieurs lignes ou de plus de 200 signes (le maximum d'une valeur).
+  // `attrs` : les réglages du bloc tels qu'ils seront (ceux du nœud, avec le brouillon de la fenêtre par-dessus).
+  const TO_VALUE_REASONS = {
+    notOneParagraph: 'varCond.toValueNotOneParagraph', otherwiseLines: 'varCond.toValueOtherwiseLines', otherwiseLong: 'varCond.toValueOtherwiseLong', lost: 'varCond.toValueLostBlock',
+  };
+
+  // Le sinon du bloc tel qu'une valeur le garde : `{ stored }` (null sans sinon), ou `{ reason }` quand il ne tient pas dans une ligne.
+  function otherwiseForValue(raw) {
+    const lines = otherwiseItems(raw);
+    if (!lines.length) return { stored: null };
+    if (lines.length > 1) return { reason: TO_VALUE_REASONS.otherwiseLines };
+    if (FieldCodec.serializePlain(lines[0]).length > ConditionalValue.OTHERWISE_MAX) return { reason: TO_VALUE_REASONS.otherwiseLong };
+    return { stored: FieldCodec.toStored(lines[0], { keepSpaces: true }) || null };
+  }
+
+  // Pourquoi ce bloc ne se met pas dans la phrase (la clé du texte de la raison), ou null s'il le peut. Rien d'écrit, rien lu hors de `node` et de `attrs`.
+  function inlineObstacle(node, attrs) {
+    if (!node || node.type.name !== TYPE) return TO_VALUE_REASONS.lost;
+    if (node.childCount !== 1 || node.firstChild.type.name !== 'paragraph') return TO_VALUE_REASONS.notOneParagraph;
+    return otherwiseForValue((attrs || node.attrs).otherwise).reason || null;
+  }
+
+  // Met le bloc qui commence à `pos` dans la phrase, en UNE transaction (un Ctrl+Z rend le bloc). `patch` : les réglages du brouillon de la fenêtre (`condition`, `otherwise`),
+  // posés sur ceux du bloc. Rend `{ ok: true }`, ou `{ ok: false, reason }` - la clé du texte qui dit pourquoi - sans rien changer. Le texte du bloc se pose au bout du paragraphe
+  // qui le précède, après une espace s'il n'y en a pas déjà une (le bloc commençait une ligne : c'était un autre mot) ; sans paragraphe devant lui (début de case, titre ou liste
+  // avant), il prend un paragraphe à lui. Le curseur se pose au bout du texte, dans la valeur.
+  function toValue(editor, pos, patch) {
+    const { state, view } = editor;
+    const node = state.doc.nodeAt(pos);
+    const attrs = node && Object.assign({}, node.attrs, patch);
+    const reason = inlineObstacle(node, attrs);
+    if (reason) return { ok: false, reason };
+    const { schema } = state;
+    const valueType = schema.nodes.conditionalValue;
+    const paragraphType = schema.nodes.paragraph;
+    const inner = node.firstChild;
+    if (!valueType || !valueType.validContent(inner.content)) return { ok: false, reason: TO_VALUE_REASONS.notOneParagraph };
+    const value = valueType.create({ condition: attrs.condition || null, otherwise: otherwiseForValue(attrs.otherwise).stored, condStyle: attrs.condStyle || null }, inner.content);
+    const $pos = state.doc.resolve(pos);
+    const before = $pos.nodeBefore;
+    const tr = state.tr;
+    let valueStart;
+    if (before && before.type === paragraphType) {
+      const last = before.lastChild;
+      const first = inner.firstChild;
+      const needsSpace = !!last && last.type.name !== 'hardBreak' && !(last.isText && /\s$/.test(last.text)) && !(first && first.isText && /^\s/.test(first.text));
+      const at = pos - 1;
+      tr.delete(pos, pos + node.nodeSize);
+      tr.insert(at, needsSpace ? [schema.text(' '), value] : value);
+      valueStart = at + (needsSpace ? 1 : 0);
+    } else {
+      if (!$pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, paragraphType)) return { ok: false, reason: TO_VALUE_REASONS.notOneParagraph };
+      tr.replaceWith(pos, pos + node.nodeSize, paragraphType.create(null, value));
+      valueStart = pos + 1;
+    }
+    tr.setSelection(EditorCore.getTextSelectionClass().create(tr.doc, valueStart + 1 + value.content.size));
+    view.dispatch(tr.scrollIntoView());
+    view.focus();
+    return { ok: true };
+  }
+
   // `takePending` sert aussi à la valeur conditionnelle (js/conditional-value.js) : le texte retenu par le bouton « Insérer une variable » peut être
   // entouré d'un bloc ou, dans un seul paragraphe, d'une valeur.
   return {
     OTHERWISE_MAX, otherwiseText, otherwiseItems, otherwiseLines, otherwiseValueItems, otherwiseLine, resolve, startFromSelection, hasPending, cancelPending, takePending, insertFromPanel, unwrap, addParagraphAfter, addParagraphBefore,
+    inlineObstacle, toValue,
   };
 })();

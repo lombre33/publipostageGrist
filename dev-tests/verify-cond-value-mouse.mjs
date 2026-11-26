@@ -275,8 +275,8 @@ async function runTheme(theme, lang) {
   console.log(`\n=== Valeur conditionnelle à la vraie souris et au vrai clavier, ${WIDTH}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme);
   const T = lang === 'en'
-    ? { entry: 'Conditional value', textEntry: 'Conditional text', placeholder: '"value"', intro: /^This value only appears in Read mode/, shown: /condition met, the value is shown/, unwrap: 'Unwrap value', remove: 'Remove condition', cancel: 'Cancel', save: 'Save', unwrapTitle: /the value’s text stays where it is/ }
-    : { entry: 'Valeur conditionnelle', textEntry: 'Texte conditionnel', placeholder: '"valeur"', intro: /^Cette valeur n’apparaît en lecture/, shown: /condition remplie, la valeur s’affiche/, unwrap: 'Défaire la valeur', remove: 'Retirer la condition', cancel: 'Annuler', save: 'Enregistrer', unwrapTitle: /le texte de la valeur reste à sa place/ };
+    ? { entry: 'Conditional value', textEntry: 'Conditional text', placeholder: '"value"', intro: /^This value only appears in Read mode/, shown: /condition met, the value is shown/, unwrap: 'Unwrap value', toBlock: 'Put on its own line', remove: 'Remove condition', cancel: 'Cancel', save: 'Save', unwrapTitle: /the value’s text stays where it is/ }
+    : { entry: 'Valeur conditionnelle', textEntry: 'Texte conditionnel', placeholder: '"valeur"', intro: /^Cette valeur n’apparaît en lecture/, shown: /condition remplie, la valeur s’affiche/, unwrap: 'Défaire la valeur', toBlock: 'Mettre sur sa ligne', remove: 'Retirer la condition', cancel: 'Annuler', save: 'Enregistrer', unwrapTitle: /le texte de la valeur reste à sa place/ };
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
 
   // Données : la table de la page et l'annuaire lié par la colonne Référence Responsable ; une ligne « Urgent » courante, un document de quatre paragraphes.
@@ -604,9 +604,9 @@ async function runTheme(theme, lang) {
   const f = await footerOf(page);
   await shot(page, `${theme}-${lang}-12-fenetre-valeur-avec-condition`);
   const rowOf = text => f.buttons.find(b => b.text === text).top;
-  check(`${label} - fenêtre d'une valeur à condition : « ${T.remove} », « ${T.unwrap} », « ${T.cancel} », « ${T.save} » entiers dans la fenêtre, sans recouvrement ni débordement, Enregistrer à droite`,
-    f.buttons.map(b => b.text).join('|') === [T.remove, T.unwrap, T.cancel, T.save].join('|') && inside(f) && noOverlap(f) && f.rowOverflow <= 0 && f.rows <= 2 && f.buttons.every(b => b.onTop)
-      && rowOf(T.remove) === rowOf(T.unwrap) && rowOf(T.cancel) === rowOf(T.save) && Math.abs(f.buttons[3].right - (f.box.right - 20)) <= 1.5, f);
+  check(`${label} - fenêtre d'une valeur à condition : « ${T.remove} », « ${T.unwrap} », « ${T.toBlock} », « ${T.cancel} », « ${T.save} » entiers dans la fenêtre, sans recouvrement ni débordement, Enregistrer à droite`,
+    f.buttons.map(b => b.text).join('|') === [T.remove, T.unwrap, T.toBlock, T.cancel, T.save].join('|') && inside(f) && noOverlap(f) && f.rowOverflow <= 0 && f.rows <= 3 && f.buttons.every(b => b.onTop)
+      && rowOf(T.remove) === rowOf(T.unwrap) && rowOf(T.cancel) === rowOf(T.save) && Math.abs(f.buttons[4].right - (f.box.right - 20)) <= 1.5, f);
   const unwrapLook = await page.evaluate(text => {
     const b = Array.from(document.querySelectorAll('#var-condition-modal .var-modal-actions button')).find(x => x.textContent === text);
     const box = document.querySelector('#var-condition-modal .var-modal-content');
@@ -1012,7 +1012,7 @@ async function runNarrow() {
   await page.waitForTimeout(300);
   const narrowFooter = await footerOf(page);
   check('panneau de 360 px : la ligne de boutons de la fenêtre d\'une valeur à condition tient dans la fenêtre (retraits au-dessus, Annuler et Enregistrer dessous), sans recouvrement ni débordement',
-    narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire la valeur|Annuler|Enregistrer' && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
+    narrowFooter.buttons.map(b => b.text).join('|') === 'Retirer la condition|Défaire la valeur|Mettre sur sa ligne|Annuler|Enregistrer' && narrowFooter.rows <= 3 && inside(narrowFooter) && noOverlap(narrowFooter) && narrowFooter.rowOverflow <= 0 && narrowFooter.buttons.every(b => b.onTop), narrowFooter);
   // La ligne « Sinon afficher » de la valeur (la dernière de la fenêtre, que la molette amène) : son champ tient dans la fenêtre étroite, sans faire défiler le corps de côté.
   const narrowReach = await wheelIntoView(page, '#var-condition-modal .var-condition-otherwise-text-row:not([hidden])');
   const narrowRow = await otherwiseRowOf(page);

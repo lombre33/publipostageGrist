@@ -133,5 +133,58 @@ const ConditionalValue = (function () {
     return true;
   }
 
-  return { OTHERWISE_MAX, resolve, insertFromPanel, unwrap };
+  // « Mettre sur sa ligne » (fenêtre de condition d'une valeur, js/variable-condition.js) : l'inverse de `ConditionalText.toValue`. La valeur devient un bloc de texte conditionnel,
+  // et le paragraphe qui la porte est coupé avant et après elle - ce que fait la pose d'un bloc au milieu d'un paragraphe (js/conditional-text.js:insertAroundParagraph). Un texte
+  // d'avant ou d'après, même une espace, garde son paragraphe. Condition, sinon et mise en forme conditionnelle passent tels quels ; le paragraphe du bloc garde l'alignement et le
+  // sens d'écriture du paragraphe d'origine (un texte justifié reste justifié). Seule une valeur dans un paragraphe simple passe : dans un titre ou un bloc de code, le bouton est
+  // grisé avec sa raison.
+  const TO_BLOCK_REASONS = { notInParagraph: 'varCond.toBlockNotInParagraph', lost: 'varCond.toBlockLostValue' };
+  const FLOW_ATTRS = ['textAlign', 'dir'];
+
+  // Pourquoi cette valeur ne passe pas dans un bloc (la clé du texte de la raison), ou null si elle le peut.
+  function blockObstacle(state, pos) {
+    const node = pos >= 0 && pos <= state.doc.content.size ? state.doc.nodeAt(pos) : null;
+    if (!node || node.type.name !== TYPE) return TO_BLOCK_REASONS.lost;
+    const $pos = state.doc.resolve(pos);
+    if ($pos.parent.type.name !== 'paragraph' || $pos.depth < 1 || !state.schema.nodes.conditionalText) return TO_BLOCK_REASONS.notInParagraph;
+    return null;
+  }
+
+  // Met la valeur qui commence à `pos` dans un bloc, en UNE transaction (un Ctrl+Z rend la valeur). `patch` : les réglages du brouillon de la fenêtre (`condition`, `otherwise`),
+  // posés sur ceux de la valeur. Rend `{ ok: true }`, ou `{ ok: false, reason }` sans rien changer. Le curseur se pose au bout du texte, dans le bloc.
+  function toBlock(editor, pos, patch) {
+    const { state, view } = editor;
+    const reason = blockObstacle(state, pos);
+    if (reason) return { ok: false, reason };
+    const node = state.doc.nodeAt(pos);
+    const attrs = Object.assign({}, node.attrs, patch);
+    const { schema } = state;
+    const $pos = state.doc.resolve(pos);
+    const host = $pos.parent;
+    const flow = {};
+    FLOW_ATTRS.forEach(key => { if (key in host.attrs) flow[key] = host.attrs[key]; });
+    // Le sinon d'une valeur est une ligne, celui d'un bloc en compte plusieurs : une ligne, sans les espaces de ses deux bouts.
+    const items = ConditionalText.otherwiseValueItems(attrs.otherwise);
+    const otherwise = items ? FieldCodec.toStoredLines([items]) || null : null;
+    const block = schema.nodes.conditionalText.create({ condition: attrs.condition || null, otherwise, condStyle: attrs.condStyle || null }, schema.nodes.paragraph.create(flow, node.content));
+    const head = host.content.cut(0, $pos.parentOffset);
+    const tail = host.content.cut($pos.parentOffset + node.nodeSize);
+    const pieces = [];
+    if (head.size) pieces.push(host.type.create(host.attrs, head));
+    pieces.push(block);
+    if (tail.size) pieces.push(host.type.create(host.attrs, tail));
+    const container = $pos.node($pos.depth - 1);
+    const index = $pos.index($pos.depth - 1);
+    const fragment = state.doc.content.constructor.from(pieces);
+    if (!container.canReplace(index, index + 1, fragment)) return { ok: false, reason: TO_BLOCK_REASONS.notInParagraph };
+    const from = $pos.before();
+    const tr = state.tr.replaceWith(from, $pos.after(), fragment);
+    const blockStart = from + (head.size ? pieces[0].nodeSize : 0);
+    tr.setSelection(EditorCore.getTextSelectionClass().create(tr.doc, blockStart + 2 + node.content.size));
+    view.dispatch(tr.scrollIntoView());
+    view.focus();
+    return { ok: true };
+  }
+
+  return { OTHERWISE_MAX, resolve, insertFromPanel, unwrap, blockObstacle, toBlock };
 })();
