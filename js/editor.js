@@ -469,9 +469,11 @@ const Editor = (function () {
         return EmailPlainText.isActive() ? cleaned : webImagesAsEditorImages(cleaned);
       },
       // Ne consomme que si le presse-papiers contient réellement une image ; un collage de texte normal suit le traitement natif de ProseMirror.
-      handlePaste(view, event) {
+      handlePaste(view, event, slice) {
         // Un email est du texte brut : pas d'image, le collage suit alors le traitement natif (le texte du presse-papiers, s'il y en a un).
         if (EmailPlainText.isActive()) return false;
+        // Une pastille ou un bloc à condition est choisi et la copie en est une : la cible en prend la condition et garde son contenu (js/variable-condition-clipboard.js:pasteOver).
+        if (VariableCondition.pasteOver(view, slice)) return true;
         const items = Array.from((event.clipboardData && event.clipboardData.items) || []);
         const imageItem = items.find(item => item.kind === 'file' && item.type && item.type.startsWith('image/'));
         if (!imageItem) return false;

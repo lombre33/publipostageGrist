@@ -25,7 +25,7 @@
 // grisée sans règle complète, puisqu'un sinon n'a de sens que pour une condition. Elle est la dernière de la fenêtre, sous l'aperçu : à 700 × 400 la fenêtre défile déjà, et rien
 // de ce qui s'y voyait à l'ouverture (les règles, « Avant » / « Après », l'aperçu) ne doit descendre. L'aperçu dit ce que la ligne sélectionnée écrit, sinon compris ; une case à
 // cocher n'a pas de sinon.
-// Ce fichier est la façade (VariableCondition.openAt, .isOpen, .clearClipboard, .describe) et la fenêtre elle-même (createWindow : sa construction, « Enregistrer », « Défaire », la
+// Ce fichier est la façade (VariableCondition.openAt, .isOpen, .clearClipboard, .describe, .pasteOver, .setHost) et la fenêtre elle-même (createWindow : sa construction, « Enregistrer », « Défaire », la
 // fermeture, l'ouverture sur un nœud) ; le reste est servi par cinq morceaux chargés avant lui : js/variable-condition-data.js (les phrases par nœud, les champs du sinon, le résumé
 // d'une condition), js/variable-condition-rules.js (les lignes de règles), js/variable-condition-clipboard.js (Copier / Coller), js/variable-condition-otherwise.js (la ligne « Sinon
 // afficher ») et js/variable-condition-preview.js (l'aperçu). Une fenêtre partage son état avec eux par `ctx` (ses éléments, son nœud, son recalcul d'aperçu) et ils s'appellent par lui.
@@ -284,5 +284,8 @@ const VariableCondition = (function () {
     windows.forEach(w => w && w.syncClipboard());
   }
 
-  return { openAt, isOpen, clearClipboard, describe: conditionSummary };
+  // Coller sur une pastille choisie (Ctrl+V, js/editor.js:clipboardProps) : la condition d'une pastille ou d'un bloc copiés, sans ouvrir la fenêtre.
+  const { pasteOver, setHost } = VariableConditionClipboard;
+
+  return { openAt, isOpen, clearClipboard, describe: conditionSummary, pasteOver, setHost };
 })();

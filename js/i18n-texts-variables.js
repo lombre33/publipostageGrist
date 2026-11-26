@@ -172,6 +172,9 @@ const I18nTextsVariables = {
   'varCond.clip.pasteEmpty': { fr: 'Rien à coller : copiez d’abord la condition d’une variable avec « Copier ».', en: 'Nothing to paste: first copy a variable’s condition with “Copy”.' },
   'varCond.clip.copiedStatus': { fr: 'Condition copiée.', en: 'Condition copied.' },
   'varCond.clip.pastedStatus': { fr: 'Condition collée. Enregistrez pour l’appliquer à la variable.', en: 'Condition pasted. Save to apply it to the variable.' },
+  // Coller (Ctrl+V) sur une pastille choisie la condition d'une pastille copiée (Ctrl+C) : js/variable-condition-clipboard.js:pasteOver. Le coin d'état le dit, puisque le geste ne change rien d'autre à l'écran qu'un pointillé.
+  'varCond.paste.done': { fr: 'Condition collée : {summary}. Ctrl+Z pour revenir.', en: 'Condition pasted: {summary}. Ctrl+Z to undo.' },
+  'varCond.paste.same': { fr: 'La condition est déjà la même : rien n’a changé.', en: 'The condition is already the same: nothing changed.' },
 
   // --- Bloc de texte conditionnel (menu des variables, onglet Chips ; js/editor-nodes.js:createConditionalTextNode, js/conditional-text.js) :
   // l'entrée du panneau, l'étiquette du bloc dans l'éditeur, et les variantes « bloc » de la barre flottante et de la fenêtre de condition d'une
