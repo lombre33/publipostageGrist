@@ -277,7 +277,18 @@ const OdtImport = (function () {
         case 'draw:frame': { const html = frameHtml(st.ctx, node); if (html) pushRaw(st, html); break; }
         case 'text:page-number':
           // Le numéro de la page où l'on est : celui de l'éditeur ; « la page d'avant » ou « d'après » garde sa dernière valeur.
-          if (!attr(node, 'text:select-page') || attr(node, 'text:select-page') === 'current') { pushRaw(st, pageNumberHtml()); break; }
+          if (!attr(node, 'text:select-page') || attr(node, 'text:select-page') === 'current') {
+            // « 3/12 » : le numéro, une barre oblique, le nombre de pages (ce que l'export écrit pour le format « n/total ») revient en un seul numéro de page « n/total », pas en un « 3 » suivi de « /12 » figé.
+            const slash = node.nextSibling;
+            const total = slash && slash.nextSibling;
+            if (slash && slash.nodeType === 3 && slash.nodeValue === '/' && total && total.nodeType === 1 && name(total) === 'text:page-count') {
+              pushRaw(st, pageNumberHtml().replace('data-format="n"', 'data-format="n-slash-total"'));
+              node = total;
+              break;
+            }
+            pushRaw(st, pageNumberHtml());
+            break;
+          }
           count(st.ctx, 'fields');
           readInline(st, node, props);
           break;

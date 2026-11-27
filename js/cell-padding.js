@@ -38,20 +38,18 @@ const CellPadding = (function () {
   // Les attributs HTML du nœud : rien pour « Normal ».
   const markAttrs = value => (normalize(value) ? { [ATTR]: normalize(value) } : {});
 
-  // La marge d'une case de tableau pour une sortie qui l'écrit : `null` pour « Normal » dans le Word (il garde les marges de Word, comme avant : rien ne s'écrit), les chiffres du niveau sinon. Le Word n'a pas
-  // de marge en haut ni en bas de départ : « Compact » n'y resserre que les côtés, « Large » y ajoute de l'air.
+  // La marge d'une case de tableau dans le Word : les chiffres du niveau, « Normal » compris (4 px en haut et en bas, 6 px sur les côtés, comme l'éditeur, le PDF et l'ODT). Avant la campagne « Fiabiliser les
+  // exports » du 27/11, « Normal » n'écrivait rien et gardait les marges de Word (rien en haut ni en bas, 7,2 px sur les côtés) : chaque ligne était 8 px plus basse que dans l'éditeur et le PDF, et une feuille
+  // d'émargement de 14 lignes tenait 9 lignes sur sa première page en Word, 7 dans le PDF (carte du 27/11 : « comme l'éditeur et le PDF »).
   function wordMargins(level) {
-    const kind = levelOf(level);
-    if (kind === NORMAL) return null;
     const twip = px => Math.round(px * PT_PER_PX * TWIP_PER_PT);
-    const { y, x } = PX[kind];
-    return { top: kind === COMPACT ? 0 : twip(y), bottom: kind === COMPACT ? 0 : twip(y), left: twip(x), right: twip(x) };
+    const { y, x } = PX[levelOf(level)];
+    return { top: twip(y), bottom: twip(y), left: twip(x), right: twip(x) };
   }
-  // La somme des marges gauche et droite que Word met à une case de ce niveau : celle de Word (2 × 108) sans marque.
-  const WORD_DEFAULT_SIDE_TWIP = 216;
+  // La somme des marges gauche et droite d'une case de ce niveau, en twips : ce que la largeur d'une colonne garde pour son texte.
   function wordSideTwip(level) {
     const margins = wordMargins(level);
-    return margins ? margins.left + margins.right : WORD_DEFAULT_SIDE_TWIP;
+    return margins.left + margins.right;
   }
 
   // Les marges d'une case de l'OpenDocument texte, en centimètres (« 0.106cm ») : celles d'avant pour « Normal ».

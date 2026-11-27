@@ -50,10 +50,10 @@
   add('docx_heading_numbering_marker',
     'La numérotation de titres choisie dans l\'éditeur produit le MÊME marqueur littéral que le PDF et le mode Lecture',
     async (h) => {
-      const html = '<div class="heading-numbering-config" data-style="decimal"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>';
+      const html = '<div class="heading-numbering-config" data-style="numeric"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>';
       const parts = await h.exportDocxParts(html);
       const texts = meaningful(h.docxParagraphs(parts.doc)).map(p => p.text);
-      const attendu = HeadingNumbering.markersFor(Array.from(new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html').querySelectorAll('h1,h2')), 'decimal');
+      const attendu = HeadingNumbering.markersFor(Array.from(new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html').querySelectorAll('h1,h2')), 'numeric');
       const pass = texts.length === 3 && texts[0] === attendu[0] + 'Alpha' && texts[1] === attendu[1] + 'Beta' && texts[2] === attendu[2] + 'Gamma';
       return { pass, notes: JSON.stringify({ docx: texts, marqueursAttendus: attendu }) };
     });
@@ -617,13 +617,34 @@
       return { pass: t.gridCols[1] === gouttiere, notes: JSON.stringify({ gridCols: t.gridCols, gouttiereAttendue: gouttiere }) };
     });
 
-  add('docx_two_columns_cells_have_no_inner_margin',
-    'Les cellules du module 2 colonnes n\'ont aucune marge interne : la largeur annoncée EST la largeur du texte (une marge Word par défaut fausserait de ~3.8mm le chiffre en mm choisi par l\'utilisateur)',
+  add('docx_two_columns_cells_keep_the_editor_inset_and_the_zone_margin',
+    'Les cases de la zone 2 colonnes ont les marges de l\'éditeur : 5 px (4 de remplissage, 1 de bordure) entre le bord de la colonne et son texte, 6 px de marge au-dessus et au-dessous de la zone (un paragraphe de cette hauteur avant et après le tableau) ; la gouttière n\'en a pas (campagne « Fiabiliser les exports » du 27/11 : le Word coupait ses lignes 10 px plus large et tenait 22 px de moins)',
     async (h) => {
-      const parts = await h.exportDocxParts('<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><p>G</p></div><div class="two-columns-column"><p>D</p></div></div>');
-      const marges = Array.from(parts.doc.getElementsByTagName('w:tcMar'));
-      const toutesANul = marges.length > 0 && marges.every(m => Array.from(m.children).every(c => c.getAttribute('w:w') === '0'));
-      return { pass: toutesANul, notes: 'blocs <w:tcMar> trouvés : ' + marges.length + (marges.length ? ' - ' + marges.map(m => Array.from(m.children).map(c => c.nodeName + '=' + c.getAttribute('w:w')).join(',')).join(' | ') : '') };
+      const parts = await h.exportDocxParts('<p>Avant</p><div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><p>G</p></div><div class="two-columns-column"><p>D</p></div></div><p>Après</p>');
+      const marges = Array.from(parts.doc.getElementsByTagName('w:tcMar')).map(m => Array.from(m.children).map(c => c.getAttribute('w:w')).join(','));
+      const attendu = ['75,75,75,75', '0,0,0,0', '75,75,75,75'].map(x => x);
+      const norm = m => m.split(',').sort().join(',');
+      const margesOk = marges.length === 3 && marges.map(norm).join('|') === attendu.map(norm).join('|');
+      const body = parts.doc.getElementsByTagName('w:body')[0];
+      const blocs = Array.from(body.children).filter(el => el.nodeName !== 'w:sectPr');
+      const names = blocs.map(el => el.nodeName);
+      const iTable = names.indexOf('w:tbl');
+      const exact = el => { const sp = el && el.getElementsByTagName ? el.getElementsByTagName('w:spacing')[0] : null; return sp ? sp.getAttribute('w:line') + '/' + sp.getAttribute('w:lineRule') : ''; };
+      const avant = exact(blocs[iTable - 1]); const apres = exact(blocs[iTable + 1]);
+      return { pass: margesOk && avant === '90/exact' && apres === '90/exact', notes: JSON.stringify({ marges, names, avant, apres }) };
+    });
+
+  add('docx_two_columns_text_is_narrower_than_the_column_box',
+    'Ce qui s\'écrit dans une colonne l\'est pour la largeur du TEXTE de l\'éditeur (la boîte moins 2 x 5 px), pas celle de la boîte : un encadré dans la colonne tient dans le texte de la colonne',
+    async (h) => {
+      const box = 11906 - 560 - 560; // le contenu de la page A4, en twips
+      const gauche = Math.round(box * 0.5);
+      const colonne = gauche - 2 * 75;
+      const parts = await h.exportDocxParts('<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><div class="callout" data-color="blue" data-icon="info" role="note"><p>Note</p></div></div><div class="two-columns-column"><p>D</p></div></div>');
+      const all = Array.from(parts.doc.getElementsByTagName('w:tbl'));
+      const intern = all.length > 1 ? all[1] : null;
+      const width = intern ? Number(intern.getElementsByTagName('w:tblW')[0].getAttribute('w:w')) : 0;
+      return { pass: !!intern && width > 0 && width <= colonne + 2, notes: JSON.stringify({ width, colonne, gauche }) };
     });
 
   add('docx_two_columns_percentage_width',

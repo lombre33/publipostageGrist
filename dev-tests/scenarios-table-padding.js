@@ -231,8 +231,8 @@
   });
 
   cases.push({
-    id: NS + 'word_export_writes_the_cell_margins_only_for_a_set_table',
-    description: 'L\'export Word : un tableau normal n\'écrit AUCUNE marge de case (celles de Word, comme avant) ; « compact » écrit `w:tblCellMar` (45 twips sur les côtés, aucune en haut ni en bas), « large » 180 twips sur les côtés et 120 en haut et en bas ; la grille et les largeurs de case restent d\'accord, et un tableau pleine largeur reste de la largeur de la page',
+    id: NS + 'word_export_writes_the_cell_margins_of_every_level',
+    description: 'L\'export Word écrit `w:tblCellMar` à chaque niveau, ceux de l\'éditeur et du PDF : « normal » 60 twips en haut et en bas (4 px) et 90 sur les côtés (6 px), « compact » 15 et 45, « large » 120 et 180 (campagne « Fiabiliser les exports » du 27/11 : avant, « normal » gardait les marges de Word et chaque ligne était 8 px plus basse que dans le PDF) ; la grille et les largeurs de case restent d\'accord, et un tableau pleine largeur reste de la largeur de la page',
     run: async (h) => {
       const { bad, expect } = checker();
       const read = async (level) => {
@@ -247,12 +247,13 @@
       const normal = await read(null);
       const compact = await read('compact');
       const large = await read('large');
-      expect('normal : pas de `w:tblCellMar` (les marges de Word, comme avant)', normal.ok && !normal.hasMar, normal);
-      expect('compact : `w:tblCellMar` à 0 en haut et en bas, 45 sur les côtés', compact.hasMar && compact.top === 0 && compact.bottom === 0 && compact.left === 45 && compact.right === 45, compact);
+      expect('normal : `w:tblCellMar` à 60 en haut et en bas (4 px), 90 sur les côtés (6 px)', normal.ok && normal.hasMar && normal.top === 60 && normal.bottom === 60 && normal.left === 90 && normal.right === 90, normal);
+      expect('compact : `w:tblCellMar` à 15 en haut et en bas (1 px), 45 sur les côtés (3 px)', compact.hasMar && compact.top === 15 && compact.bottom === 15 && compact.left === 45 && compact.right === 45, compact);
       expect('large : `w:tblCellMar` à 120 en haut et en bas, 180 sur les côtés', large.hasMar && large.top === 120 && large.bottom === 120 && large.left === 180 && large.right === 180, large);
       [['normal', normal], ['compact', compact], ['large', large]].forEach(([name, got]) => {
         expect(name + ' : les largeurs de case sont celles de la grille', got.widths.slice(0, got.grid.length).every((w, i) => w === got.grid[i]), got);
-        expect(name + ' : le tableau pleine largeur reste de la largeur de la page (la somme de la grille ne bouge pas avec les marges)', got.total === normal.total, { name, total: got.total, normal: normal.total });
+        // « Normal » garde les colonnes de l'éditeur à la lettre (3 px de moins que la page ici, comme à l'écran) ; « compact » et « large » ferment ce petit reste (closeSmallGap) : au plus 3 px d'écart.
+        expect(name + ' : le tableau pleine largeur reste de la largeur de la page (la somme de la grille ne bouge pas avec les marges, à 3 px près)', Math.abs(got.total - normal.total) <= 3 * 15 + 1, { name, total: got.total, normal: normal.total });
       });
       return { pass: !bad.length, notes: bad.join(' | ') };
     },

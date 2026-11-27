@@ -332,6 +332,11 @@ const ExportCommon = (function () {
     return Math.max(0, column.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0));
   }
 
+  // Ce que l'éditeur ajoute autour du texte d'une zone à deux colonnes (css/editor-v2.css : `.two-columns-zone { margin: 6px 0 }`, `.two-columns-column { padding: 4px; border: 1px }`) : 6 px au-dessus et
+  // au-dessous de la zone, 5 px (remplissage et bordure) entre le bord de la colonne et son texte. Le Word et l'ODT les posent aussi (le PDF les mesure) : sans eux, le texte d'une colonne est plus large de
+  // 10 px que dans l'éditeur (d'autres coupures de ligne) et la zone tient 22 px de moins (d'autres coupures de page).
+  const ZONE_PX = { marginY: 6, inset: 5 };
+
   // Un item de liste ou une citation qui porte un tableau (le bouton Tableau le pose dans l'item ou la citation où se trouve le curseur) : un tableau
   // n'est pas du texte, lu comme tel il perd ses cases (« Un itemL1AL1BL2A »).
   const hasTableChild = node => Array.from(node.children).some(child => child.tagName === 'TABLE');
@@ -1000,6 +1005,6 @@ const ExportCommon = (function () {
     return { NAMESPACES, XML_HEAD, namespaceAttrs, escText, escAttr, fixed, attrsOf, textXml };
   })();
 
-  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, anchorFirstPageImages, anchorLaterPageImages, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
+  return { EDITOR_STYLE, taskEntryOf, taskListHtml, codeEntryOf, groupedBlocks, hexOf, cssColorHex, scriptRefusal, loadScriptOnce, ensureJsZipLoaded, zipUnpackedBytes, downloadBlob, attachMeasureHost, anchorFirstPageImages, anchorLaterPageImages, fillEmptyBlocks, fillTrailingBreaks, tableRows, cellsOf, spanOf, placeCells, measuredColumnWidthsPx, zoneColumnWidthPx, ZONE_PX, shownImageWidthPx, gridLinesHidden, rowHeightPx, cellVerticalAlign, cellBorderSides, gridRowSegments, fitColumnWidths, hasTableChild, segmentsAroundTables, isBlankSegment, resolveHeaderFooterVariables,
     resolveRecord, codeLinesOf, calloutMetricsPx, headerRowCount, noteUnreadImage, noteImageWithoutSource, unreadImageCount, outsideImageCount, resetUnreadImages, isMergeImage, Ooxml, Markup, Odf, OdfXml };
 })();

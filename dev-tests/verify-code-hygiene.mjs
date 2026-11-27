@@ -312,8 +312,8 @@ const noCommentsJs = code => code.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[
 // ============================================================================
 {
   // Aperçu paginé de l'éditeur, mode Lecture et export PDF recopiaient « Page n » / « n/total » chacun ; ils appellent PageLayout.pageNumberText.
-  // js/docx-export.js et js/pptx-export.js branchent, eux, sur les mêmes formats pour poser de vrais champs (PAGE/NUMPAGES du Word, numéro de diapositive du PowerPoint) : autre besoin, hors de cette règle.
-  const copies = jsFiles.filter(f => f !== 'js/page-layout.js' && f !== 'js/docx-export.js' && f !== 'js/pptx-export.js' && /===\s*['"]n-slash-total['"]/.test(read(f)));
+  // js/docx-export.js, js/odt-export.js et js/pptx-export.js branchent, eux, sur les mêmes formats pour poser de vrais champs (PAGE/NUMPAGES du Word, numéro et nombre de pages d'OpenDocument, numéro de diapositive du PowerPoint) : autre besoin, hors de cette règle.
+  const copies = jsFiles.filter(f => f !== 'js/page-layout.js' && f !== 'js/docx-export.js' && f !== 'js/odt-export.js' && f !== 'js/pptx-export.js' && /===\s*['"]n-slash-total['"]/.test(read(f)));
   check('numéro de page : le format « n/total » n\'est converti en texte que dans js/page-layout.js', copies.length === 0, copies.join(', '));
   const named = jsFiles.filter(f => /function\s+(?:resolvePageNumberBadgesForPreview|formatPageNumberText)\s*\(/.test(read(f)));
   check('numéro de page : plus de copie locale de la conversion (resolvePageNumberBadgesForPreview, formatPageNumberText)', named.length === 0, named.join(', '));

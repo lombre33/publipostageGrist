@@ -1110,11 +1110,11 @@ const DocxExport = (function () {
     // Un tableau d'une colonne de zone à deux colonnes se règle sur le texte de sa colonne, plus étroit que la page.
     const columnPx = ExportCommon.zoneColumnWidthPx(tableEl);
     const availableTwip = (columnPx > 0 ? Math.min(CONTENT_WIDTH_TWIP, Math.round(columnPx * PX_TO_TWIP)) : CONTENT_WIDTH_TWIP) - indentTwip;
-    // Les marges des cases du tableau (js/cell-padding.js) : rien d'écrit pour « Normal », qui garde celles de Word (2 × 108 twips sur les côtés, aucune en haut ni en bas) ; « Compact » et « Large » posent les leurs sur tout le tableau
-    // (`w:tblCellMar`), et la largeur des colonnes compte leur somme à la place des 216 twips de Word : le contenu mesuré garde sa largeur.
+    // Les marges des cases du tableau (js/cell-padding.js), celles de son niveau - « Normal » compris : 4 px en haut et en bas, 6 px sur les côtés, comme l'éditeur et le PDF (`w:tblCellMar`) -, et la largeur des
+    // colonnes compte leur somme à la place des 216 twips de Word : le contenu mesuré garde sa largeur.
     const cellMargins = CellPadding.wordMargins(tableEl);
     const marginTwip = CellPadding.wordSideTwip(tableEl);
-    const colWidthsTwip = closeSmallGap(tableColumnWidthsTwip(tableEl, columnCount, availableTwip, marginTwip), cellMargins ? availableTwip : 0);
+    const colWidthsTwip = closeSmallGap(tableColumnWidthsTwip(tableEl, columnCount, availableTwip, marginTwip), CellPadding.levelOf(tableEl) !== CellPadding.NORMAL ? availableTwip : 0);
     // Les lignes de titres (cases <th> en tête) : Word les reprend en haut de chaque page où le tableau se poursuit (`tblHeader`), comme le PDF.
     const headerRowCount = ExportCommon.headerRowCount(rows);
     // Où chaque case commence dans la grille du tableau : une case fusionnée sur plusieurs lignes tient sa place dans les lignes d'après, dont les
@@ -1275,7 +1275,7 @@ const DocxExport = (function () {
   // (js/editor-nodes.js:renderHTML), prime sur le pourcentage : conversion directe, sans repasser par un pourcentage arrondi.
   async function twoColumnsBlockFrom(zoneEl, ctx) {
     const cols = Array.from(zoneEl.querySelectorAll(':scope > .two-columns-column'));
-    if (cols.length !== 2) return null;
+    if (cols.length !== 2) return [];
     const leftMm = parseFloat(zoneEl.style.getPropertyValue('--layout-left-mm'));
     let leftTwip;
     if (Number.isFinite(leftMm)) {
@@ -1295,21 +1295,28 @@ const DocxExport = (function () {
     const rightTwip = CONTENT_WIDTH_TWIP - leftTwip - gapTwip;
     const widths = [leftTwip, gapTwip, rightTwip];
     const cells = [];
+    // Le texte d'une colonne de l'éditeur est à 5 px du bord de sa boîte (4 px de remplissage et 1 px de bordure : ExportCommon.ZONE_PX) : la case a les mêmes marges (la largeur annoncée est celle de la boîte,
+    // le chiffre en mm choisi par la personne) et son texte la largeur du texte de l'éditeur, 10 px de moins : sans cela le Word coupait les lignes ailleurs.
+    const insetTwip = Math.round(ExportCommon.ZONE_PX.inset * PX_TO_TWIP);
     for (let i = 0; i < 2; i += 1) {
-      const children = await blocksFromContainer(cols[i], ctx, false, i === 0 ? leftTwip : rightTwip);
+      const boxTwip = i === 0 ? leftTwip : rightTwip;
+      const children = await blocksFromContainer(cols[i], ctx, false, Math.max(200, boxTwip - 2 * insetTwip));
       const cell = new docx.TableCell({
         children: children.length ? children : [new docx.Paragraph('')],
-        width: { size: i === 0 ? leftTwip : rightTwip, type: docx.WidthType.DXA },
+        width: { size: boxTwip, type: docx.WidthType.DXA },
         borders: NO_BORDERS,
-        // Word applique sinon ses marges de cellule par défaut (108 twips de chaque côté) : la largeur annoncée ne serait pas celle du texte, et le
-        // chiffre en mm choisi par la personne serait faux d'environ 3,8 mm par colonne.
-        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        // Word applique sinon ses marges de cellule par défaut (108 twips de chaque côté) : la largeur annoncée ne serait pas celle du texte.
+        margins: { top: insetTwip, bottom: insetTwip, left: insetTwip, right: insetTwip },
       });
       cells.push(cell);
       if (i === 0) cells.push(new docx.TableCell({ children: [new docx.Paragraph('')], width: { size: gapTwip, type: docx.WidthType.DXA }, borders: NO_BORDERS, margins: { top: 0, bottom: 0, left: 0, right: 0 } }));
     }
     // Comme tableBlocksFrom : un columnWidths explicite pour que <w:tblGrid> corresponde aux largeurs des cellules.
-    return new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });
+    const table = new docx.Table({ rows: [new docx.TableRow({ children: cells })], width: { size: CONTENT_WIDTH_TWIP, type: docx.WidthType.DXA }, borders: NO_BORDERS, columnWidths: widths });
+    // La zone a aussi sa marge de 6 px au-dessus et au-dessous (css/editor-v2.css) : un paragraphe de cette hauteur avant et après (un tableau n'a pas d'espace avant, et sans paragraphe entre eux Word fusionne
+    // deux tableaux qui se suivent), comme l'encadré.
+    const spacer = () => new docx.Paragraph({ children: [], spacing: { before: 0, after: 0, line: Math.round(ExportCommon.ZONE_PX.marginY * PX_TO_TWIP), lineRule: 'exact' } });
+    return [spacer(), table, spacer()];
   }
 
   // Encadré (js/callout.js) : un tableau Word d'une ligne et deux cellules, l'icône (un PNG tracé d'après les mêmes dessins que le CSS) à gauche, les
@@ -1946,7 +1953,7 @@ const DocxExport = (function () {
     [node => node.classList.contains('heading-numbering-config'), () => []],
     [node => node.classList.contains('toc-marker'), consumingBreak((node, flow) => (flow.isTopLevel ? [{ __tocPlaceholder: true, pageBreakBefore: flow.pendingPageBreak, options: TocOptions.ofElement(node) }] : []))],
     [node => node.classList.contains('pp-slide-anchor'), (node, flow) => { const entry = flow.isTopLevel ? anchorEntryFor(node) : null; if (entry) flow.ctx.slideAnchor = entry; return []; }],
-    [node => node.classList.contains('two-columns-zone'), carryingBreak(async (node, flow) => optionalBlock(await twoColumnsBlockFrom(node, flow.ctx)))],
+    [node => node.classList.contains('two-columns-zone'), carryingBreak((node, flow) => twoColumnsBlockFrom(node, flow.ctx))],
     [node => node.classList.contains('hf-float-row'), consumingBreak(async (node, flow) => optionalBlock(await floatRowBlockFrom(node, flow.ctx)))],
     [node => node.classList.contains('callout'), consumingBreak((node, flow) => calloutBlocksFrom(node, flow.ctx, flow.widthTwip, flow.pendingPageBreak))],
     [isFrameNode, consumingBreak(frameBlocksFrom, true)],

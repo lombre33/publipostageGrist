@@ -133,6 +133,16 @@ const OdtExport = (function () {
   const safeLink = href => (/^(?:https?:|mailto:|tel:)/i.test(String(href || '').trim()) && !/[\u0000-\u001f\s]/.test(String(href).trim()) ? String(href).trim() : '');
 
   // Les enfants en ligne d'un bloc, en XML de paragraphe. `base` : la taille du texte du bloc (titre ou corps).
+  // Le numéro de page du pied (`data-format` : 'n', 'page-n', 'n-slash-total', comme PageLayout.pageNumberText) : des champs que le traitement de texte remplit à chaque page, le nombre total de pages compris.
+  // Celui d'une diapositive est déjà résolu dans le texte (`data-slide-number`) : le texte même.
+  function pageNumberXml(node, state) {
+    if (node.hasAttribute('data-slide-number')) return textXml(node.textContent || '', state);
+    const format = node.getAttribute('data-format') || 'n';
+    const current = '<text:page-number text:select-page="current">1</text:page-number>';
+    if (format === 'page-n') return textXml('Page ', state) + current;
+    if (format === 'n-slash-total') return current + '/<text:page-count>1</text:page-count>';
+    return current;
+  }
   function inlineXml(nodes, look, state, ctx, base) {
     let out = '';
     nodes.forEach((node) => {
@@ -148,7 +158,7 @@ const OdtExport = (function () {
       if (/^(?:SCRIPT|STYLE|TEMPLATE|INPUT|LABEL|BUTTON)$/.test(tag)) return;
       if (tag === 'IMG') { out += imageXml(ctx, node); return; }
       if (node.classList && node.classList.contains('footnote-ref-marker')) { out += noteXml(ctx, node); return; }
-      if (node.classList && node.classList.contains('page-number-badge')) { out += '<text:page-number text:select-page="current">1</text:page-number>'; return; }
+      if (node.classList && node.classList.contains('page-number-badge')) { out += pageNumberXml(node, state); return; }
       if (tag === 'A') {
         const href = safeLink(node.getAttribute('href'));
         const inner = inlineXml(Array.from(node.childNodes), lookOf(look, node, base), state, ctx, base);
@@ -398,7 +408,7 @@ const OdtExport = (function () {
     if (el.classList.contains('toc-marker')) return tocXml(ctx, el);
     if (/^H[1-6]$/.test(tag)) {
       const level = Number(tag.slice(1));
-      return paragraphXml(ctx, el, Array.from(el.childNodes), { parent: 'Heading_20_' + level, level, base: STYLE.headingPt[tag], inList: opts.inList, anchor: ctx.headings.get(el) });
+      return paragraphXml(ctx, el, Array.from(el.childNodes), { parent: 'Heading_20_' + level, level, base: STYLE.headingPt[tag], inList: opts.inList, anchor: ctx.headings.get(el), prefix: ctx.headingMarkers && ctx.headingMarkers.get(el) });
     }
     if (tag === 'P') return paragraphXml(ctx, el, Array.from(el.childNodes), { inList: opts.inList, parent: opts.parent, base: opts.base });
     if (tag === 'BLOCKQUOTE') {
@@ -418,7 +428,17 @@ const OdtExport = (function () {
       if (ctx.listLevel > 0 && xml) { ctx.deferred.push(xml); return ''; }
       return xml;
     }
-    // Une autre boîte (div, section, encadré, colonnes) : ses blocs sont repris l'un après l'autre.
+    // Une zone à deux colonnes : un tableau sans trait (la colonne de gauche, la gouttière, la colonne de droite), comme le Word.
+    if (el.classList.contains('two-columns-zone')) {
+      const zone = zoneXml(ctx, el);
+      if (zone) return zone;
+    }
+    // Un encadré : un tableau d'une ligne et deux cases (l'icône, puis les blocs), le fond teinté et la barre de couleur à gauche, comme le Word.
+    if (el.classList.contains('callout') && !opts.inList) {
+      const callout = calloutXml(ctx, el);
+      if (callout) return callout;
+    }
+    // Une autre boîte (div, section, encadré) : ses blocs sont repris l'un après l'autre.
     ctx.depth += 1;
     const inner = blocksOf(ctx, el, opts);
     ctx.depth -= 1;
@@ -427,11 +447,22 @@ const OdtExport = (function () {
 
   // --- Le sommaire ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   // Les titres du corps, dans l'ordre : chacun reçoit un signet (`__RefHeading___Toc1`...) que les entrées du sommaire visent. Posés avant d'écrire le texte : le sommaire vient avant ses titres.
+  // La numérotation des titres du corps (le bloc « Numérotation des titres » : `.heading-numbering-config`, `data-style`) : « I) », « 1.2 », « Article 3 »... Un compteur CSS dans l'éditeur, du texte
+  // dans le PDF et le Word (HeadingNumbering.markersFor, les mêmes marques) : le fichier OpenDocument l'écrit aussi, devant le texte du titre et dans le sommaire. Seuls les titres du premier niveau
+  // du document sont numérotés, comme dans le Word.
+  function headingMarkersOf(root) {
+    const config = root.querySelector(':scope > .heading-numbering-config');
+    const style = (config && config.dataset.style) || 'none';
+    const headingEls = Array.from(root.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'));
+    const markers = HeadingNumbering.markersFor(headingEls, style);
+    return new Map(headingEls.map((el, index) => [el, markers[index]]));
+  }
   function collectHeadings(ctx, root) {
+    ctx.headingMarkers = headingMarkersOf(root);
     Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6')).forEach((el) => {
       const anchor = '__RefHeading___Toc' + (ctx.headingList.length + 1);
       ctx.headings.set(el, anchor);
-      ctx.headingList.push({ level: Number(el.tagName.slice(1)), text: (el.textContent || '').replace(/\s+/g, ' ').trim(), anchor });
+      ctx.headingList.push({ level: Number(el.tagName.slice(1)), text: ((ctx.headingMarkers.get(el) || '') + (el.textContent || '')).replace(/\s+/g, ' ').trim(), anchor });
     });
   }
   // Un vrai sommaire OpenDocument (`text:table-of-content`) : ses entrées sont écrites (une par titre des niveaux réglés, avec un lien vers son signet), sans numéro de page - que seul l'éditeur de
@@ -553,6 +584,103 @@ const OdtExport = (function () {
     // Un tableau plus large que la page est ramené à la largeur utile (l'éditeur le fait défiler, le fichier non).
     return total > available ? widths.map(width => width * available / total) : widths;
   }
+  // Une zone à deux colonnes (js/editor-nodes.js : `--layout-left-mm` quand la colonne a été réglée en millimètres, sinon `--layout-left`, un pourcentage) : un tableau d'une ligne et de trois cases sans
+  // trait - la colonne de gauche, une gouttière vide de la largeur exacte de celle de l'éditeur (PageLayout.COLUMN_GAP_PX), la colonne de droite -, avec les marges de l'éditeur (ExportCommon.ZONE_PX) :
+  // 6 px au-dessus et au-dessous, 5 px entre le bord de la colonne et son texte. Chaque colonne garde au moins 10 mm. Rend '' pour une zone qui n'a pas ses deux colonnes : ses blocs sont alors repris
+  // l'un après l'autre, comme avant.
+  // Encadré (js/callout.js) : un tableau d'une ligne et deux cases, comme le Word (js/docx-export.js:calloutBlocksFrom). Celle de gauche porte l'icône (le PNG que le PDF et le Word tracent, rangé dans `Pictures/`),
+  // le fond teinté et, pour seul filet, la barre épaisse de la couleur d'accent ; celle de droite les blocs de l'encadré, sur le même fond. Mêmes mesures que css/callout.css (ExportCommon.calloutMetricsPx),
+  // la marge de dessus et de dessous est celle de la boîte. Un encadré dans un élément de liste n'a pas de tableau possible (OpenDocument n'en met pas dans un item) : ses blocs restent à plat.
+  function calloutPicture(ctx, iconKey, accent) {
+    const key = 'callout:' + iconKey + ':' + accent;
+    if (ctx.pictureNames.has(key)) return ctx.pictureNames.get(key);
+    const url = Callout.iconPng(iconKey, accent, 96);
+    const bin = atob(url.slice(url.indexOf(',') + 1));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    const picture = { path: 'Pictures/image' + (ctx.parts.length + 1) + '.png', mediaType: 'image/png', data: bytes.buffer, ratio: 1 };
+    ctx.parts.push(picture);
+    ctx.pictureNames.set(key, picture);
+    return picture;
+  }
+  function calloutXml(ctx, el) {
+    const m = ExportCommon.calloutMetricsPx(el);
+    const color = Callout.colorOf(el.getAttribute('data-color'));
+    const iconKey = el.getAttribute('data-icon');
+    const total = ctx.contentWidthPt || 450;
+    const leftPt = Math.min(total - 30, Math.max(10, m.padLeftPx * PT_PER_PX));
+    const rightPt = total - leftPt;
+    const breakBefore = takeBreak(ctx);
+    ctx.flow.started = true;
+    const tableStyle = styleNameOf(ctx, 'Tab', JSON.stringify({ callout: Math.round(total * 10), top: m.marginTopPx, bottom: m.marginBottomPx, breakBefore }), name => '<style:style style:name="' + name + '" style:family="table"><style:table-properties style:width="' + centimeters(total)
+      + '" table:align="left" fo:margin-top="' + centimeters(m.marginTopPx * PT_PER_PX) + '" fo:margin-bottom="' + centimeters(m.marginBottomPx * PT_PER_PX) + '"' + (breakBefore ? ' fo:break-before="page"' : '') + '/></style:style>');
+    const cellProps = (left, bar, name) => '<style:style style:name="' + name + '" style:family="table-cell"><style:table-cell-properties fo:background-color="' + color.tint + '"'
+      + ' fo:padding-top="' + centimeters(m.padTopPx * PT_PER_PX) + '" fo:padding-bottom="' + centimeters(m.padBottomPx * PT_PER_PX) + '" fo:padding-left="' + centimeters(left * PT_PER_PX) + '" fo:padding-right="' + centimeters((bar ? 0 : m.padRightPx) * PT_PER_PX) + '"'
+      + ' fo:border-top="none" fo:border-bottom="none" fo:border-right="none" fo:border-left="' + (bar ? fixed(m.barPx * PT_PER_PX, 2) + 'pt solid ' + color.accent : 'none') + '"/></style:style>';
+    const iconCell = styleNameOf(ctx, 'Cell', 'calloutIcon:' + color.tint + color.accent + ':' + m.iconLeftPx + ':' + m.padTopPx, name => cellProps(m.iconLeftPx, true, name));
+    const textCell = styleNameOf(ctx, 'Cell', 'calloutText:' + color.tint + ':' + m.padRightPx + ':' + m.padTopPx, name => cellProps(0, false, name));
+    const picture = calloutPicture(ctx, iconKey, color.accent);
+    const iconPt = Math.max(1, m.iconSizePx * PT_PER_PX);
+    ctx.frames += 1;
+    const frame = '<draw:frame draw:style-name="' + frameStyleOf(ctx, { kind: 'inline' }) + '" draw:name="Image' + ctx.frames + '" text:anchor-type="as-char" svg:width="' + centimeters(iconPt) + '" svg:height="' + centimeters(iconPt) + '" draw:z-index="0">'
+      + '<draw:image xlink:href="' + picture.path + '" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>';
+    const iconParagraph = styleNameOf(ctx, 'P', 'calloutIcon:' + m.iconTopPx + ':' + m.padTopPx, name => '<style:style style:name="' + name + '" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:margin-top="'
+      + centimeters(Math.max(0, m.iconTopPx - m.padTopPx) * PT_PER_PX) + '" fo:margin-bottom="0cm"/></style:style>');
+    ctx.tables += 1;
+    let out = '<table:table table:name="Table' + ctx.tables + '" table:style-name="' + tableStyle + '">';
+    [leftPt, rightPt].forEach((value) => {
+      const columnStyle = styleNameOf(ctx, 'Col', String(Math.round(value * 10)), name => '<style:style style:name="' + name + '" style:family="table-column"><style:table-column-properties style:column-width="' + centimeters(value) + '"/></style:style>');
+      out += '<table:table-column table:style-name="' + columnStyle + '"/>';
+    });
+    const available = ctx.contentWidthPt;
+    ctx.contentWidthPt = Math.max(30, rightPt - m.padRightPx * PT_PER_PX);
+    ctx.depth += 1;
+    const inner = blocksOf(ctx, el, { inList: false }) || '<text:p text:style-name="Standard"/>';
+    ctx.depth -= 1;
+    ctx.contentWidthPt = available;
+    out += '<table:table-row><table:table-cell table:style-name="' + iconCell + '" office:value-type="string"><text:p text:style-name="' + iconParagraph + '">' + frame + '</text:p></table:table-cell>'
+      + '<table:table-cell table:style-name="' + textCell + '" office:value-type="string">' + inner + '</table:table-cell></table:table-row></table:table>';
+    return out;
+  }
+  function zoneXml(ctx, zone) {
+    const columns = Array.from(zone.querySelectorAll(':scope > .two-columns-column'));
+    if (columns.length !== 2) return '';
+    const total = ctx.contentWidthPt || 450;
+    const gap = PageLayout.COLUMN_GAP_PX * PT_PER_PX;
+    const floor = Math.min(10 * PageLayout.MM_TO_PT, Math.max(1, (total - gap) / 2));
+    const leftMm = parseFloat(zone.style.getPropertyValue('--layout-left-mm'));
+    const percent = parseFloat(zone.style.getPropertyValue('--layout-left')) || 50;
+    const wanted = Number.isFinite(leftMm) ? leftMm * PageLayout.MM_TO_PT : total * percent / 100;
+    const left = Math.max(floor, Math.min(total - gap - floor, wanted));
+    const widths = [left, gap, total - gap - left];
+    const inset = ExportCommon.ZONE_PX.inset * PT_PER_PX;
+    const breakBefore = takeBreak(ctx);
+    ctx.flow.started = true;
+    const margin = ExportCommon.ZONE_PX.marginY * PT_PER_PX;
+    const tableStyle = styleNameOf(ctx, 'Tab', JSON.stringify({ zone: Math.round(total * 10), breakBefore }), name => '<style:style style:name="' + name + '" style:family="table"><style:table-properties style:width="' + centimeters(total)
+      + '" table:align="left" fo:margin-top="' + centimeters(margin) + '" fo:margin-bottom="' + centimeters(margin) + '"' + (breakBefore ? ' fo:break-before="page"' : '') + '/></style:style>');
+    const cellStyle = styleNameOf(ctx, 'Cell', 'zone', name => '<style:style style:name="' + name + '" style:family="table-cell"><style:table-cell-properties fo:padding="' + centimeters(inset) + '" fo:border="none"/></style:style>');
+    const gapStyle = styleNameOf(ctx, 'Cell', 'zoneGap', name => '<style:style style:name="' + name + '" style:family="table-cell"><style:table-cell-properties fo:padding="0cm" fo:border="none"/></style:style>');
+    ctx.tables += 1;
+    let out = '<table:table table:name="Table' + ctx.tables + '" table:style-name="' + tableStyle + '">';
+    widths.forEach((value) => {
+      const columnStyle = styleNameOf(ctx, 'Col', String(Math.round(value * 10)), name => '<style:style style:name="' + name + '" style:family="table-column"><style:table-column-properties style:column-width="' + centimeters(value) + '"/></style:style>');
+      out += '<table:table-column table:style-name="' + columnStyle + '"/>';
+    });
+    out += '<table:table-row>';
+    const available = ctx.contentWidthPt;
+    columns.forEach((column, index) => {
+      // Ce qui s'écrit dans la colonne (un tableau, une image) se règle sur le texte de la colonne, pas sur la page.
+      ctx.contentWidthPt = Math.max(30, widths[index * 2] - 2 * inset);
+      ctx.depth += 1;
+      const content = blocksOf(ctx, column, { inList: false }) || '<text:p text:style-name="Standard"/>';
+      ctx.depth -= 1;
+      out += '<table:table-cell table:style-name="' + cellStyle + '" office:value-type="string">' + content + '</table:table-cell>';
+      if (!index) out += '<table:table-cell table:style-name="' + gapStyle + '" office:value-type="string"><text:p text:style-name="Standard"/></table:table-cell>';
+    });
+    ctx.contentWidthPt = available;
+    return out + '</table:table-row></table:table>';
+  }
   function tableXml(ctx, table) {
     const rows = ExportCommon.tableRows(table);
     if (!rows.length) return '';
@@ -575,7 +703,10 @@ const OdtExport = (function () {
     const startOf = new Map(placed.map(cell => [cell.row + ':' + cell.col, cell]));
     const covered = new Set();
     placed.forEach((cell) => { for (let r = 0; r < cell.rowspan; r++) for (let c = 0; c < cell.colspan; c++) if (r || c) covered.add((cell.row + r) + ':' + (cell.col + c)); });
+    // Les lignes de titres (cases <th> en tête : ExportCommon.headerRowCount) : le traitement de texte les reprend en haut de chaque page où le tableau se poursuit, comme le PDF et le Word.
+    const headerRows = ExportCommon.headerRowCount(rows);
     rows.forEach((tr, r) => {
+      if (r === 0 && headerRows) out += '<table:table-header-rows>';
       const height = ExportCommon.rowHeightPx(tr);
       const rowStyle = height ? styleNameOf(ctx, 'Row', String(Math.round(height)), name => '<style:style style:name="' + name + '" style:family="table-row"><style:table-row-properties style:min-row-height="' + centimeters(height * PT_PER_PX) + '"/></style:style>') : '';
       out += '<table:table-row' + (rowStyle ? ' table:style-name="' + rowStyle + '"' : '') + '>';
@@ -589,6 +720,7 @@ const OdtExport = (function () {
         out += '<table:table-cell table:style-name="' + style + '" office:value-type="string"' + (cell.colspan > 1 ? ' table:number-columns-spanned="' + cell.colspan + '"' : '') + (cell.rowspan > 1 ? ' table:number-rows-spanned="' + cell.rowspan + '"' : '') + '>' + content + '</table:table-cell>';
       }
       out += '</table:table-row>';
+      if (r === headerRows - 1) out += '</table:table-header-rows>';
     });
     return out + '</table:table>';
   }

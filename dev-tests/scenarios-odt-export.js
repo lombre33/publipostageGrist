@@ -488,6 +488,144 @@
     return result(bad);
   });
 
+  // ============================================================================================================================================================================================
+  // 4. Ce que le fichier doit montrer comme l'éditeur et le PDF (campagne « Fiabiliser les exports » du 27/11 : le banc des modèles de la galerie rendus par LibreOffice)
+  // ============================================================================================================================================================================================
+  const lengthCm = value => parseFloat(String(value || '').replace('cm', ''));
+  add('odtExport_a_two_column_zone_is_a_borderless_table_with_the_editor_margins', 'une zone à deux colonnes est un tableau sans trait : la colonne de gauche, une gouttière vide de 16 px, la colonne de droite (largeurs à la page : --layout-left ou --layout-left-mm), 5 px entre le bord de la colonne et son texte, 6 px de marge au-dessus et au-dessous ; elle ne perd ni l\'ordre ni le texte, et l\'import la relit en tableau', async () => {
+    const { bad, expect } = checker();
+    const zone = (left) => '<p>Avant</p><div class="two-columns-zone" style="' + left + '"><div class="two-columns-column"><p>Gauche</p></div><div class="two-columns-column"><p>Droite</p></div></div><p>Après</p>';
+    const made = await packageOf(zone('--layout-left: 40%'));
+    const content = await xmlOf(made, 'content.xml');
+    expect('content.xml est du XML bien formé', wellFormed(content));
+    const tables = content.getElementsByTagNameNS('urn:oasis:names:tc:opendocument:xmlns:table:1.0', 'table');
+    expect('un seul tableau', tables.length === 1, tables.length);
+    if (tables.length !== 1) return result(bad);
+    const T = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
+    const cols = Array.from(tables[0].getElementsByTagNameNS(T, 'table-column'));
+    expect('trois colonnes : gauche, gouttière, droite', cols.length === 3, cols.length);
+    const styleByName = {};
+    Array.from(content.getElementsByTagNameNS(NS.style, 'style')).forEach(el => { styleByName[el.getAttributeNS(NS.style, 'name')] = el; });
+    const widthOf = col => lengthCm(styleByName[col.getAttributeNS(T, 'style-name')].getElementsByTagNameNS(NS.style, 'table-column-properties')[0].getAttributeNS(NS.style, 'column-width'));
+    const widths = cols.map(widthOf);
+    const page = 17; // A4 moins 2 x 20 mm : 170 mm
+    expect('la gauche prend 40 % de la page', Math.abs(widths[0] - page * 0.4) < 0.01, widths);
+    expect('la gouttière fait 16 px (0,423 cm)', Math.abs(widths[1] - 16 * 0.75 * 2.54 / 72) < 0.005, widths);
+    expect('les trois colonnes font la largeur de la page', Math.abs(widths[0] + widths[1] + widths[2] - page) < 0.01, widths);
+    const cells = Array.from(tables[0].getElementsByTagNameNS(T, 'table-cell'));
+    expect('trois cases : « Gauche », rien, « Droite »', cells.map(c => c.textContent).join('|') === 'Gauche||Droite', cells.map(c => c.textContent));
+    const cellProps = cell => styleByName[cell.getAttributeNS(T, 'style-name')].getElementsByTagNameNS(NS.style, 'table-cell-properties')[0];
+    const inset = 5 * 0.75 * 2.54 / 72;
+    expect('chaque colonne a 5 px de remplissage et aucun trait', [cells[0], cells[2]].every(c => Math.abs(lengthCm(cellProps(c).getAttribute('fo:padding')) - inset) < 0.002 && cellProps(c).getAttribute('fo:border') === 'none'), cells.map(c => cellProps(c).outerHTML));
+    expect('la gouttière n\'a ni remplissage ni trait', lengthCm(cellProps(cells[1]).getAttribute('fo:padding')) === 0 && cellProps(cells[1]).getAttribute('fo:border') === 'none');
+    const tableProps = styleByName[tables[0].getAttributeNS(T, 'style-name')].getElementsByTagNameNS(NS.style, 'table-properties')[0];
+    const margin = 6 * 0.75 * 2.54 / 72;
+    expect('6 px de marge au-dessus et au-dessous de la zone', Math.abs(lengthCm(tableProps.getAttribute('fo:margin-top')) - margin) < 0.002 && Math.abs(lengthCm(tableProps.getAttribute('fo:margin-bottom')) - margin) < 0.002, tableProps.outerHTML);
+    const body = content.getElementsByTagNameNS(NS.office, 'text')[0];
+    expect('« Avant », le tableau, « Après » : dans cet ordre', Array.from(body.children).map(el => el.localName === 'table' ? 'T' : el.textContent).join('|') === 'Avant|T|Après', Array.from(body.children).map(el => el.localName));
+    expect('rien n\'est resté de côté', !made.built.report.length, made.built.report);
+    const mm = await packageOf(zone('--layout-left-mm: 60'));
+    const mmContent = await xmlOf(mm, 'content.xml');
+    const mmStyles = {};
+    Array.from(mmContent.getElementsByTagNameNS(NS.style, 'style')).forEach(el => { mmStyles[el.getAttributeNS(NS.style, 'name')] = el; });
+    const mmCols = Array.from(mmContent.getElementsByTagNameNS(T, 'table-column')).map(col => lengthCm(mmStyles[col.getAttributeNS(T, 'style-name')].getElementsByTagNameNS(NS.style, 'table-column-properties')[0].getAttributeNS(NS.style, 'column-width')));
+    expect('une colonne réglée en millimètres : 60 mm = 6 cm', Math.abs(mmCols[0] - 6) < 0.01, mmCols);
+    const back = await roundTrip(zone('--layout-left: 40%'));
+    const backTable = dom(back.html).querySelector('table');
+    expect('l\'import relit la zone en tableau : « Gauche » et « Droite » y sont', !!backTable && /Gauche/.test(backTable.textContent) && /Droite/.test(backTable.textContent), back.html.slice(0, 300));
+    return result(bad);
+  });
+
+  add('odtExport_the_header_rows_of_a_table_are_repeated_on_each_page', 'les lignes de titres d\'un tableau (cases <th> en tête) sont écrites en lignes d\'en-tête OpenDocument, que le traitement de texte reprend en haut de chaque page où le tableau se poursuit, comme le PDF et le Word ; un tableau sans titres, ou fait de titres seulement, n\'en a pas', async () => {
+    const { bad, expect } = checker();
+    const T = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
+    const rowsOf = async (html) => {
+      const content = await xmlOf(await packageOf(html), 'content.xml');
+      const headers = Array.from(content.getElementsByTagNameNS(T, 'table-header-rows'));
+      return { headers: headers.length, inHeader: headers.length ? headers[0].getElementsByTagNameNS(T, 'table-row').length : 0, rows: content.getElementsByTagNameNS(T, 'table-row').length, firstIsHeader: headers.length ? headers[0].textContent : '' };
+    };
+    const withTitles = await rowsOf('<table><tbody><tr><th><p>N°</p></th><th><p>Nom</p></th></tr><tr><td><p>1</p></td><td><p>A</p></td></tr><tr><td><p>2</p></td><td><p>B</p></td></tr></tbody></table>');
+    expect('une ligne de titres : un groupe d\'une ligne, sur trois lignes', withTitles.headers === 1 && withTitles.inHeader === 1 && withTitles.rows === 3 && /N°Nom/.test(withTitles.firstIsHeader), withTitles);
+    const two = await rowsOf('<table><tbody><tr><th><p>A</p></th><th><p>B</p></th></tr><tr><th><p>C</p></th><th><p>D</p></th></tr><tr><td><p>1</p></td><td><p>2</p></td></tr></tbody></table>');
+    expect('deux lignes de titres : un groupe de deux lignes', two.headers === 1 && two.inHeader === 2, two);
+    const none = await rowsOf('<table><tbody><tr><td><p>1</p></td><td><p>A</p></td></tr><tr><td><p>2</p></td><td><p>B</p></td></tr></tbody></table>');
+    expect('sans titres : pas de ligne d\'en-tête', none.headers === 0, none);
+    const only = await rowsOf('<table><tbody><tr><th><p>A</p></th><th><p>B</p></th></tr></tbody></table>');
+    expect('un tableau fait de titres seulement n\'en répète rien', only.headers === 0, only);
+    return result(bad);
+  });
+
+  add('odtExport_the_heading_numbering_is_written_before_each_heading_and_in_the_contents', 'la numérotation des titres du document (le bloc « Numérotation des titres ») s\'écrit devant le texte de chaque titre du premier niveau, avec les mêmes marques que le PDF et le Word, et dans le sommaire', async () => {
+    const { bad, expect } = checker();
+    for (const style of ['numeric', 'roman', 'article']) {
+      const html = '<div class="heading-numbering-config" data-style="' + style + '"></div><div class="toc-marker"></div><h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>';
+      const made = await packageOf(html);
+      const content = await xmlOf(made, 'content.xml');
+      const headings = Array.from(content.getElementsByTagNameNS(NS.text, 'h')).map(h => h.textContent.replace(/\s+/g, ' ').trim());
+      const marks = HeadingNumbering.markersFor(Array.from(dom('<h1>Alpha</h1><h2>Beta</h2><h1>Gamma</h1>').querySelectorAll('h1,h2')), style);
+      const expected = ['Alpha', 'Beta', 'Gamma'].map((t, i) => (marks[i] + t).replace(/\s+/g, ' ').trim());
+      expect('style « ' + style + ' » : chaque titre est précédé de sa marque', expected.every((t, i) => headings.indexOf(t) !== -1) && !!marks[0], { headings, expected });
+      const contents = Array.from(content.getElementsByTagNameNS(NS.text, 'table-of-content')[0].getElementsByTagNameNS(NS.text, 'index-body')[0].getElementsByTagNameNS(NS.text, 'p')).map(p => p.textContent.replace(/\s+/g, ' ').trim());
+      expect('style « ' + style + ' » : le sommaire reprend les marques', expected.every(t => contents.indexOf(t) !== -1), { contents, expected });
+    }
+    const none = await packageOf('<h1>Alpha</h1>');
+    const plainHeadings = Array.from((await xmlOf(none, 'content.xml')).getElementsByTagNameNS(NS.text, 'h')).map(h => h.textContent);
+    expect('sans numérotation, le titre est écrit tel quel', plainHeadings.join('|') === 'Alpha', plainHeadings);
+    return result(bad);
+  });
+
+  add('odtExport_the_page_number_field_follows_its_format_and_the_total_is_a_field', 'le numéro de page du pied suit son format : « n » (le champ seul), « Page n » et « n/total » (le champ du nombre de pages, que le traitement de texte remplit) ; l\'import relit « n/total » en un seul numéro de page', async () => {
+    const { bad, expect } = checker();
+    const footer = (format, before) => ({ enabled: true, differentFirstPage: false, header: { default: '' }, footer: { default: '<p>' + (before || '') + '<span class="page-number-badge" data-format="' + format + '">#</span></p>' } });
+    const read = async (format, before) => {
+      const made = await packageOf('<p>Corps</p>', { headerFooterData: footer(format, before) });
+      const styles = await xmlOf(made, 'styles.xml');
+      const footerEl = styles.getElementsByTagNameNS(NS.style, 'footer')[0];
+      return { made, text: footerEl.textContent.replace(/\s+/g, ' ').trim(), numbers: footerEl.getElementsByTagNameNS(NS.text, 'page-number').length, counts: footerEl.getElementsByTagNameNS(NS.text, 'page-count').length };
+    };
+    const plain = await read('n');
+    expect('« n » : le champ du numéro, sans nombre de pages', plain.text === '1' && plain.numbers === 1 && plain.counts === 0, plain);
+    const named = await read('page-n');
+    expect('« Page n » : « Page » puis le champ du numéro', named.text === 'Page 1' && named.numbers === 1 && named.counts === 0, named);
+    const total = await read('n-slash-total', 'Page ');
+    expect('« n/total » : le numéro, une barre oblique, le champ du nombre de pages (« Page 1/1 »)', total.text === 'Page 1/1' && total.numbers === 1 && total.counts === 1, total);
+    const back = await OdtImport.fromBuffer(await total.made.buffer());
+    const badge = /data-format="([^"]+)"/.exec((back.headerFooter && back.headerFooter.footer && back.headerFooter.footer.default) || '');
+    expect('l\'import relit « n/total » en un numéro de page de ce format', !!badge && badge[1] === 'n-slash-total', back.headerFooter && back.headerFooter.footer);
+    return result(bad);
+  });
+
+  add('odtExport_a_callout_is_a_tinted_table_with_its_bar_and_icon', 'un encadré (js/callout.js) n\'est plus aplati en paragraphes : c\'est un tableau d\'une ligne et deux cases comme le Word - l\'icône (un PNG rangé dans `Pictures/`) dans une case, le fond teinté de la couleur de l\'encadré sur les deux cases, la barre à gauche de la couleur d\'accent, les blocs de l\'encadré dans l\'autre case ; trouvé par le banc d\'éprouvettes (verify-export-corpus.mjs --stress : un encadré perdait fond, barre et icône dans un .odt)', async () => {
+    await ready();
+    const { bad, expect } = checker();
+    const callout = (color, icon, body) => '<div class="callout" data-color="' + color + '" data-icon="' + icon + '" role="note">' + body + '</div>';
+    const html = '<p>Avant</p>' + callout('green', 'check', '<p>Premier bloc</p><p>Second bloc</p>') + callout('red', 'warning', '<p>Alerte</p>') + '<p>Après</p>';
+    const made = await packageOf(html);
+    const content = await made.text('content.xml');
+    const doc = new DOMParser().parseFromString(content, 'application/xml');
+    const tables = Array.from(doc.getElementsByTagNameNS('*', 'table')).filter(el => el.localName === 'table');
+    expect('un tableau par encadré', tables.length === 2, tables.length);
+    const green = Callout.colorOf('green'); const red = Callout.colorOf('red');
+    expect('le fond teinté du vert est écrit', content.indexOf('fo:background-color="' + green.tint + '"') >= 0, green.tint);
+    expect('le fond teinté du rouge est écrit', content.indexOf('fo:background-color="' + red.tint + '"') >= 0, red.tint);
+    expect('la barre de gauche est de la couleur d\'accent (3 pt, comme les 4 px du CSS)', new RegExp('fo:border-left="3pt solid ' + green.accent.replace('#', '#?') + '"', 'i').test(content), content.match(/fo:border-left="[^"]*"/g));
+    const first = tables[0];
+    const cells = Array.from(first.childNodes).filter(n => n.localName === 'table-row')[0].childNodes;
+    const cellList = Array.from(cells).filter(n => n.localName === 'table-cell');
+    expect('deux cases : l\'icône, puis les blocs', cellList.length === 2, cellList.length);
+    expect('la première case porte l\'icône (une image)', cellList[0].getElementsByTagNameNS('*', 'image').length === 1);
+    expect('la seconde porte les deux blocs de l\'encadré, dans l\'ordre', Array.from(cellList[1].getElementsByTagNameNS('*', 'p')).map(p => p.textContent).join('|') === 'Premier bloc|Second bloc', cellList[1].textContent);
+    const pictures = made.names.filter(name => /^Pictures\//.test(name));
+    expect('deux icônes rangées dans Pictures/ (une par couleur) et nommées au manifeste', pictures.length === 2 && (await made.text('META-INF/manifest.xml')).indexOf(pictures[0]) >= 0, pictures);
+    expect('le texte avant et après est gardé hors des tableaux', content.indexOf('>Avant<') >= 0 && content.indexOf('>Après<') >= 0);
+    const back = await roundTrip(html);
+    expect('l\'import relit tout le texte', ['Avant', 'Premier bloc', 'Second bloc', 'Alerte', 'Après'].every(word => textOf(back.html).indexOf(word) >= 0), textOf(back.html));
+    // Dans un élément de liste, OpenDocument n'a pas de tableau possible : les blocs restent à plat (rien n'est perdu).
+    const inList = await packageOf('<ul><li><p>Item</p>' + callout('blue', 'info', '<p>Dans la liste</p>') + '</li></ul>');
+    expect('dans une liste, le texte de l\'encadré est gardé', (await inList.text('content.xml')).indexOf('Dans la liste') >= 0);
+    return result(bad);
+  });
+
   add('odtExport_a_big_document_is_written_in_reasonable_time', 'un document de 3 000 paragraphes est écrit en moins de 5 secondes', async () => {
     await ready();
     const { bad, expect } = checker();
