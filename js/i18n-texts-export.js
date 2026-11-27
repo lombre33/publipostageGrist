@@ -718,4 +718,7 @@ const I18nTextsExport = {
   // --- Images qu'un export n'a pas pu lire : leur nombre s'écrit avant l'état de fin d'export (js/main.js:setExportDoneStatus) ---
   'status.imagesUnread': { fr: '{n} {n|image introuvable|images introuvables} (voir la console).', en: '{n} missing {n|image|images} (see console).' },
   'status.imagesOutside': { fr: '{n} {n|image d’un autre site non reprise|images d’un autre site non reprises}.', en: '{n} {n|image from another site left out|images from other sites left out}.' },
+  'status.emailCreatedWebmail': { fr: 'Email créé, ouverture de votre webmail Zimbra dans un nouvel onglet.', en: 'Email created, opening your Zimbra webmail in a new tab.' },
+  'status.emailCreatedWebmailWarningOff': { fr: 'Email créé, ouverture de votre webmail Zimbra dans un nouvel onglet. L’avertissement « Email trop long » ne s’affichera plus : Réglages > Email pour le rallumer.', en: 'Email created, opening your Zimbra webmail in a new tab. The “Email too long” warning will no longer appear: turn it back on in Settings > Email.' },
+  'status.emailCreatedWebmailNoUrl': { fr: 'Email créé. « Webmail Zimbra » n’a pas d’adresse : le lien s’ouvre comme avec « Zimbra ». Donnez-la dans Réglages > Email.', en: 'Email created. “Zimbra webmail” has no address: the link opens as with “Zimbra”. Give it in Settings > Email.' },
 };

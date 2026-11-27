@@ -66,4 +66,9 @@
 /* La case d'une confirmation avec « Ne plus afficher » (Dialogs.confirmWithCheckbox) : sous le message, au-dessus des boutons ; cachée pour toutes les autres demandes. */
 .pp-dialog-check { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text); cursor: pointer; }
 .pp-dialog-check[hidden] { display: none; }
+/* Le lien d'aide d'une confirmation (js/dialogs.js : `helpLabel`, `onHelp`), sous le message : le lien discret des fenêtres (--accent-ink, souligné). */
+.pp-dialog-help { align-self: flex-start; margin: 0 0 10px; padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-ink); text-decoration: underline; cursor: pointer; text-align: left; }
+.pp-dialog-help[hidden] { display: none; }
+.pp-dialog-help:hover { color: var(--accent-hover); }
+.pp-dialog-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .pp-dialog-check input { margin: 0; flex: none; cursor: inherit; }

@@ -154,6 +154,7 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
 #v2-email-fields-row[hidden] { display: none; }
 #btn-create-email[hidden] { display: none; }
 #btn-create-emails[hidden] { display: none; }
+#btn-mail-help[hidden] { display: none; }
 .v2-email-field-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .v2-email-field-input { flex: 0 1 200px; min-width: 120px; }
 .v2-email-field-input.v2-email-field-subject { flex-basis: 300px; }
@@ -192,6 +193,12 @@ html[data-gfs-bar="top"] #v2-title-cluster { max-width: max(88px, calc(var(--gfs
    texte ci-dessus. Taille : celle du ::before générique de `#toolbar-top button` (14 × 14, css/style.css) ; une valeur ici n'y gagnerait pas,
    cette règle étant moins spécifique sur `width` et `height` (seul `mask-image`, qu'aucune autre règle ne fixe, s'applique). */
 #btn-create-email::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'/%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'/%3E%3C/svg%3E"); }
+
+/* Le « ? » à droite de « Créer l'email » (js/mail-help.js : la fenêtre « L'email ne s'ouvre pas ? ») : un bouton à icône seule (cercle et point d'interrogation), carré de 28 px comme ceux du regroupement ; son info-bulle est celle de la barre (`data-tip`), son nom celui de `aria-label`.
+   Caché avec « Créer l'email » (js/main.js), jamais seul ; non verrouillé par les droits d'export : il n'exporte rien, il explique. L'icône passe par #toolbar-top pour l'emporter sur la taille du ::before générique (css/style.css). */
+#toolbar-top #btn-mail-help { width: 28px; padding: 0; justify-content: center; color: var(--text-muted); }
+#toolbar-top #btn-mail-help:hover { color: var(--text); }
+#toolbar-top #btn-mail-help::before { width: 17px; height: 17px; -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E"); }
 
 /* « Tous les emails… » (js/email-drafts.js) : à côté de « Créer l'email », visible en mode email seulement. Bouton texte neutre - l'accent reste à l'action principale - : il garde le style générique de
    `#toolbar-top button` (css/style.css : bordure, hauteur, police), sans icône (son ::before générique s'afficherait en carré plein faute de `mask-image`). */

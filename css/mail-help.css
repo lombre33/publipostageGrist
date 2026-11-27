@@ -1,0 +1,51 @@
+/* Aide « L'email ne s'ouvre pas ? » (js/mail-help.js) : une fenêtre large (ModalBase `lg`) qui se lit de haut en bas : l'introduction, le poste détecté (deux listes à corriger), la question « webmail ou logiciel », les étapes du cas avec leurs
+   captures, puis les encadrés communs (pièces jointes, longueur du lien). Tout est posé sur la surface de la fenêtre ; les couleurs sont celles des jetons (css/style.css), clairs et sombres, jamais écrites en dur : seul le rond bleu des repères
+   reprend, comme celui du guide de la Lecture (css/reader-guide.css), le bleu des repères posés sur les captures (le texte blanc dessus : 4,55:1). */
+.pp-mail-help-box .mail-help { font-family: var(--font-ui); color: var(--text); }
+.pp-mail-help-box .mail-help-intro { margin: 0; font-size: 13px; line-height: 1.5; }
+.pp-mail-help-box .mail-help-section-title { margin: 16px 0 6px; font-size: 14px; line-height: 1.35; font-weight: 700; color: var(--text); }
+.pp-mail-help-box .mail-help-note { margin: 0 0 8px; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+/* Les deux listes du poste côte à côte tant qu'il y a la place ; l'une sous l'autre sinon (panneau de 700 px : la fenêtre est plafonnée à sa largeur). */
+.pp-mail-help-box .mail-help-selects { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.pp-mail-help-box .mail-help-field { flex: 1 1 200px; min-width: 0; }
+.pp-mail-help-box .mail-help-label { display: block; margin: 0 0 3px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.pp-mail-help-box .mail-help-select { box-sizing: border-box; width: 100%; min-width: 0; height: 28px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 13px; }
+.pp-mail-help-box .mail-help-radio { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 6px; font-size: 13px; line-height: 1.4; cursor: pointer; }
+.pp-mail-help-box .mail-help-radio input { flex: none; margin: 2px 0 0; }
+.pp-mail-help-box .mail-help-pick { margin: 14px 0 0; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+/* Les étapes : le même rythme que le guide de la Lecture (filet, texte à gauche, capture à droite quand la place le permet). */
+.pp-mail-help-box .mail-help-steps { list-style: none; margin: 14px 0 0; padding: 0; }
+.pp-mail-help-box .mail-help-step { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 16px; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--border); }
+.pp-mail-help-box .mail-help-step + .mail-help-step { margin-top: 14px; }
+.pp-mail-help-box .mail-help-step-body { flex: 1 1 240px; min-width: 0; }
+.pp-mail-help-box .mail-help-eyebrow { margin: 0 0 2px; font-size: 11px; line-height: 1.3; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.pp-mail-help-box .mail-help-step-title { margin: 0 0 4px; font-size: 14px; line-height: 1.35; font-weight: 700; color: var(--text); }
+.pp-mail-help-box .mail-help-lead { margin: 0 0 8px; font-size: 13px; line-height: 1.45; }
+.pp-mail-help-box .mail-help-marks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.pp-mail-help-box .mail-help-mark-item { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 0; font-size: 13px; line-height: 1.4; }
+.pp-mail-help-box .mail-help-mark { flex: none; box-sizing: border-box; width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; background: #2f6fed; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.pp-mail-help-box .mail-help-shot { flex: 0 1 auto; box-sizing: border-box; max-width: 100%; margin: 0; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-md, 8px); background: #fff; overflow: hidden; cursor: zoom-in; line-height: 0; appearance: none; }
+.pp-mail-help-box .mail-help-shot img { display: block; width: calc(var(--shot-w) * 1px * .66); max-width: 100%; height: auto; }
+.pp-mail-help-box .mail-help-shot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-mail-help-box .mail-help-step.is-zoomed .mail-help-shot { flex-basis: auto; cursor: zoom-out; }
+.pp-mail-help-box .mail-help-step.is-zoomed .mail-help-shot img { width: calc(var(--shot-w) * 1px); }
+/* Les encadrés : discrets, sur le fond enfoncé de la fenêtre ; celui de l'option Zimbra porte la teinte d'accent (c'est la voie qui évite tout réglage du poste), sans couleur d'état (ni rouge, ni ambre : rien n'est cassé). */
+.pp-mail-help-box .mail-help-card { margin: 14px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-sunken); }
+.pp-mail-help-box .mail-help-card-accent { border-color: var(--accent-soft-border); background: var(--accent-soft); }
+.pp-mail-help-box .mail-help-card-title { margin: 0 0 4px; font-size: 13px; line-height: 1.35; font-weight: 700; color: var(--text); }
+.pp-mail-help-box .mail-help-card-text { margin: 0; font-size: 13px; line-height: 1.45; }
+.pp-mail-help-box .mail-help-card-text + .mail-help-card-text { margin-top: 6px; }
+.pp-mail-help-box .mail-help-link { margin: 8px 0 0; padding: 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
+.pp-mail-help-box .mail-help-link:hover { color: var(--accent-hover); }
+.pp-mail-help-box .mail-help-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* Réglages > Email : l'adresse du webmail Zimbra (le gabarit des champs de l'onglet : css/email-link.css) et le lien vers cette aide. */
+.settings-zimbra-url { margin: 10px 0 0; }
+.settings-zimbra-url label { display: block; margin: 0 0 4px; font-family: var(--font-ui); font-size: 12.5px; font-weight: 600; color: var(--text); }
+.settings-zimbra-url input { box-sizing: border-box; width: 100%; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-input, var(--radius-sm)); background: var(--surface); color: var(--text); font-family: var(--font-ui); font-size: 13px; }
+.settings-zimbra-url input:disabled { opacity: .55; }
+.settings-zimbra-url-state { overflow-wrap: anywhere; }
+.settings-zimbra-url-state.is-invalid { color: var(--danger-ink); }
+.settings-mail-help-link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
+.settings-mail-help-link:hover { color: var(--accent-hover); }
+.settings-mail-help-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }

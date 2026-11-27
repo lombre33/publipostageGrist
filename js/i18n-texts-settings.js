@@ -474,7 +474,7 @@ const I18nTextsSettings = {
   },
   'settings.formatLocale.locked': { fr: 'Vous êtes en lecture seule : ce réglage est verrouillé.', en: 'You are read-only: this setting is locked.' },
   'settings.formatLocale.failed': { fr: 'Ce choix n’a pas pu être enregistré dans le document : Grist l’a refusé.', en: 'This choice could not be saved in the document: Grist refused it.' },
-  'settings.mailClient.intro': { fr: 'Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra.', en: 'Mail program that opens the Email mode link. Keep Standard unless your emails open in Zimbra.' },
+  'settings.mailClient.intro': { fr: 'Logiciel de messagerie qui ouvre le lien du mode Email. Gardez Standard, sauf si vos emails s’ouvrent dans Zimbra : « Zimbra » si votre poste est déjà réglé pour l’ouvrir, « Webmail Zimbra » pour l’ouvrir directement dans un onglet, sans rien régler sur le poste.', en: 'Mail program that opens the Email mode link. Keep Standard unless your emails open in Zimbra: “Zimbra” if your computer is already set to open it, “Zimbra webmail” to open it straight in a tab, with nothing to set on the computer.' },
   'settings.mailClient.standard': { fr: 'Standard', en: 'Standard' },
   'settings.mailClient.zimbra': { fr: 'Zimbra', en: 'Zimbra' },
   'settings.mailClient.zimbraNote': {
@@ -877,4 +877,13 @@ const I18nTextsSettings = {
   // Pour une pastille « @ » dont la ligne ou la colonne n'existe plus (js/mention.js:resolve) : en Lecture et dans les exports.
   'reader.mentionMissing': { fr: '[Fiche introuvable]', en: '[Record not found]' },
 
+  'settings.mailClient.zimbraWeb': { fr: 'Webmail Zimbra', en: 'Zimbra webmail' },
+  'settings.mailClient.zimbraWebUrl.label': { fr: 'Adresse de votre webmail Zimbra', en: 'Address of your Zimbra webmail' },
+  'settings.mailClient.zimbraWebUrl.placeholder': { fr: 'https://zimbra.exemple.fr/', en: 'https://zimbra.example.org/' },
+  'settings.mailClient.zimbraWebUrl.hint': { fr: 'Avec « Webmail Zimbra », « Créer l’email » et « Tous les emails… » ouvrent le brouillon dans un nouvel onglet de votre Zimbra : rien à régler dans Windows ni dans le navigateur. Collez l’adresse de la page où vous lisez vos emails (en https).', en: 'With “Zimbra webmail”, “Create email” and “All emails…” open the draft in a new tab of your Zimbra: nothing to set in Windows or in the browser. Paste the address of the page where you read your emails (https).' },
+  'settings.mailClient.zimbraWebUrl.disabled': { fr: 'Servira quand « Webmail Zimbra » sera choisi.', en: 'Used once “Zimbra webmail” is chosen.' },
+  'settings.mailClient.zimbraWebUrl.missing': { fr: 'Indiquez l’adresse de votre webmail : sans elle, le lien s’ouvre comme avec « Zimbra ».', en: 'Give the address of your webmail: without it, the link opens as with “Zimbra”.' },
+  'settings.mailClient.zimbraWebUrl.invalid': { fr: 'Cette adresse n’est pas utilisable : il faut une adresse en https, comme https://zimbra.exemple.fr/.', en: 'This address cannot be used: it must be an https address, such as https://zimbra.example.org/.' },
+  'settings.mailClient.zimbraWebUrl.none': { fr: 'aucune', en: 'none' },
+  'settings.mailClient.help': { fr: 'L’email ne s’ouvre pas ? Voir l’aide', en: 'The email does not open? See the help' },
 };

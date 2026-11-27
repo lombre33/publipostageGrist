@@ -48,6 +48,8 @@
     {"fichier": "css/whats-new.css", "selecteur": "pp-news-exp-menu|pp-news-exp-cut", "categorie": "neutre"},
     {"fichier": "css/reader-guide.css", "selecteur": "reader-guide-mark", "categorie": "repere"},
     {"fichier": "css/reader-guide.css", "selecteur": "reader-guide-shot|reader-guide(?![-\\w])", "categorie": "papier"},
+    {"fichier": "css/mail-help.css", "selecteur": "mail-help-mark", "categorie": "repere"},
+    {"fichier": "css/mail-help.css", "selecteur": "mail-help-shot", "categorie": "papier"},
     {"fichier": "css/toolbar-v2.css", "selecteur": "tpl-preview-body \\.v2-page-sheet", "categorie": "apercu"},
     {"fichier": "css/toolbar-v2.css", "selecteur": "tpl-gallery-card:hover|v2-hf-pill|v2-image-var-picker|data-tip", "categorie": "neutre"},
     {"fichier": "extensions/diapositives/slide-strip.css", "selecteur": "pp-slide-thumb", "categorie": "apercu"},

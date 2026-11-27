@@ -3,8 +3,9 @@
 //  Dialogs.prompt({ title, label?, message?, value?, placeholder?, confirmLabel?, secret? }) -> Promise<string | null> (null : annulé ; '' : champ laissé
 //  vide ; `secret` : le champ masque ce qui s'y tape, un mot de passe)
 //  Dialogs.confirm({ title, message, confirmLabel?, danger? }) -> Promise<boolean>
-//  Dialogs.confirmWithCheckbox({ title, message, confirmLabel?, danger?, checkboxLabel }) -> Promise<{ confirmed, checked }> (la même confirmation, avec une case sous le message - « Ne plus afficher » - décochée à
-//    l'ouverture ; `checked` n'est vrai que si la personne a coché la case ET confirmé : « Annuler » et Échap n'en retiennent rien)
+//  Dialogs.confirmWithCheckbox({ title, message, confirmLabel?, danger?, checkboxLabel, helpLabel?, onHelp? }) -> Promise<{ confirmed, checked }> (la même confirmation, avec une case sous le message - « Ne plus afficher » - décochée à
+//    l'ouverture ; `checked` n'est vrai que si la personne a coché la case ET confirmé : « Annuler » et Échap n'en retiennent rien. `helpLabel` et `onHelp` (facultatifs, ensemble) : un lien sous le message qui ouvre une aide par-dessus la fenêtre,
+//    sans la fermer - la question reste posée derrière l'aide)
 //  Dialogs.choose({ title, message, choices, cancelLabel? }) -> Promise<string | null> (`value` du choix cliqué ; null : annulé, Échap compris)
 //    choices : [{ value, label, primary? }] dans l'ordre d'affichage, à droite de « Annuler » (qui reste le premier bouton) ; le focus arrive sur le
 //    choix `primary`, à défaut sur « Annuler ».
@@ -46,9 +47,13 @@ const Dialogs = (function () {
     checkBox.id = 'pp-dialog-check';
     const checkText = el('span');
     checkRow.append(checkBox, checkText);
-    win.body.append(message, label, input, checkRow);
+    // Le lien d'aide d'une confirmation `confirmWithCheckbox` qui en donne un (`helpLabel`, `onHelp`) : sous le message, avant la case ; caché pour toutes les autres demandes.
+    const help = Dom.button('pp-dialog-help');
+    help.id = 'pp-dialog-help';
+    help.hidden = true;
+    win.body.append(message, label, input, help, checkRow);
     const { cancel, ok } = win.addButtons();
-    refs = { message, label, input, cancel, ok, choices: [], check: { row: checkRow, box: checkBox, text: checkText } };
+    refs = { message, label, input, help, cancel, ok, choices: [], check: { row: checkRow, box: checkBox, text: checkText } };
   }
 
   // Les boutons d'une demande `choose` n'existent que le temps de la fenêtre : retirés à la fermeture, « Valider » reprend sa place pour la demande
@@ -60,7 +65,9 @@ const Dialogs = (function () {
 
   // Ce que la fenêtre montre pour cette demande : titre, message, champ (saisie seulement) et libellés des deux boutons de base.
   function fill(opts, isPrompt, hasChoices, withCheckbox) {
-    const { message, label, input, cancel, ok, check } = refs;
+    const { message, label, input, help, cancel, ok, check } = refs;
+    help.hidden = !(withCheckbox && opts.helpLabel && typeof opts.onHelp === 'function');
+    help.textContent = help.hidden ? '' : opts.helpLabel;
     check.row.hidden = !withCheckbox;
     check.box.checked = false;
     check.text.textContent = withCheckbox ? (opts.checkboxLabel || '') : '';
@@ -119,6 +126,7 @@ const Dialogs = (function () {
       // Une information n'a qu'un bouton, « Fermer » : celui d'« Annuler », sous son nom ; « Valider » est caché comme pour un choix.
       fill(isNotice ? Object.assign({}, opts, { cancelLabel: opts.closeLabel || I18n.t('common.close') }) : opts, isPrompt, !!choices || isNotice, withCheckbox);
       cancel.onclick = () => finish(cancelValue);
+      refs.help.onclick = () => { if (typeof opts.onHelp === 'function') opts.onHelp(); };
       ok.onclick = () => finish(isPrompt ? input.value : (withCheckbox ? { confirmed: true, checked: refs.check.box.checked } : true));
       const firstFocus = choices ? addChoices(choices, finish) : (isPrompt ? input : (isNotice || opts.danger ? cancel : ok));
       input.onkeydown = event => {

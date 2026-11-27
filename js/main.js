@@ -36,6 +36,7 @@
   const emailPjToggle = document.getElementById('v2-btn-toggle-pj');
   const btnCreateEmail = document.getElementById('btn-create-email');
   const btnCreateEmails = document.getElementById('btn-create-emails');
+  const btnMailHelp = document.getElementById('btn-mail-help');
   const emailCharCounter = document.getElementById('v2-email-char-counter');
 
   // Les cinq champs de l'email : leur clé, la même dans les réglages du modèle et dans les valeurs résolues, et leur champ (un champ texte à bulles,
@@ -276,6 +277,7 @@
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = true;
     if (btnCreateEmails) btnCreateEmails.hidden = true;
+    if (btnMailHelp) btnMailHelp.hidden = true;
     Templates.setCurrentId(tpl ? tpl.id : null);
     LiveEntry.changed(); // la ligne « Écriture en direct » du menu suit le modèle ouvert (js/live-entry.js)
     Comments.loadForTemplate(tpl ? tpl.id : null, tpl).catch(e => console.error('[main] chargement des commentaires impossible', e));
@@ -447,6 +449,7 @@
     MainToolbar.syncToolbarState();
     if (btnCreateEmail) btnCreateEmail.hidden = currentTypeModele !== 'email';
     if (btnCreateEmails) btnCreateEmails.hidden = currentTypeModele !== 'email';
+    if (btnMailHelp) btnMailHelp.hidden = currentTypeModele !== 'email';
     setCurrentTemplate(tpl);
     const headingNumberingSelect = document.getElementById('v2-heading-numbering-select');
     if (headingNumberingSelect) headingNumberingSelect.value = Editor.getHeadingNumberingStyle();
@@ -1235,6 +1238,8 @@
     onExportRow('v2-btn-export-xlsx-single', withExportLock(() => onExportBatch('xlsxSingle')));
     if (btnCreateEmail) btnCreateEmail.addEventListener('click', withExportLock(onCreateEmail));
     if (btnCreateEmails) btnCreateEmails.addEventListener('click', withExportLock(onCreateEmails));
+    // Le « ? » à droite de « Créer l'email » (js/mail-help.js) : l'aide ne passe pas par withExportLock, elle n'exporte rien (un compte en lecture seule la lit aussi).
+    if (btnMailHelp) btnMailHelp.addEventListener('click', () => MailHelp.open());
     btnEdit.addEventListener('click', () => { rememberMode('edit'); switchMode('edit'); });
     // Le bouton Mode lecture fait ce que dit la ligne cochée de son menu (js/clean-reading.js), comme Exporter : la Lecture (cochée au départ) ou la Lecture épurée.
     // `detail` à 0 : Entrée, Espace ou Alt+L (qui clique le bouton) - le focus revient au bouton à la sortie de la Lecture épurée. La Lecture épurée est un passage : elle ne change pas le mode que la page
@@ -1273,6 +1278,8 @@
     wirePdfFilenameToggle();
     wireExportMenus();
     Settings.wireSettingsModal({ hasEditsToConfirmBeforeLeaving, askBeforeLeaving }); // changer de langue recharge la page : la question « Enregistrer / Abandonner / Annuler » d'abord
+    // L'aide des emails (js/mail-help.js) : son encadré « Zimbra » mène à Réglages > Email (le même geste que le lien de l'email lié, js/main-email-link.js).
+    MailHelp.wire({ openSettings: () => { const open = document.getElementById('v2-btn-settings'); const tab = document.querySelector('[data-settings-tab="mailClient"]'); if (open) open.click(); if (tab) tab.click(); } });
     RowTemplatePanel.wire();
     ViewTemplate.wirePanel();
     EmailLinkPanel.wire({ setStatus });

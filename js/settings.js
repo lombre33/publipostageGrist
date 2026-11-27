@@ -102,6 +102,13 @@ const Settings = (function () {
     write: value => MailtoExport.setMailClient(value),
     say: said('settings.tab.mailClient', value => I18n.t('settings.mailClient.' + value)),
   };
+  // L'adresse du webmail Zimbra (js/mailto-export.js, qui la garde et la normalise : clé `pp_zimbra_url`) : le champ de l'onglet Email, défait par Ctrl + Z comme les autres choix.
+  const ZIMBRA_URL_SETTING = {
+    read: () => MailtoExport.getZimbraUrl(),
+    // `write` ne sert qu'à défaire et rétablir : le champ reprend alors l'adresse posée (le geste de la personne, lui, laisse le champ tel qu'elle l'a tapé : syncZimbraUrl).
+    write: value => { const url = MailtoExport.setZimbraUrl(value); syncZimbraUrl(true); return url; },
+    say: said('settings.mailClient.zimbraWebUrl.label', value => value || I18n.t('settings.mailClient.zimbraWebUrl.none')),
+  };
   // L'avertissement « Email trop long » (js/mailto-export.js, qui garde la préférence ; la case « Ne plus afficher » de la fenêtre l'éteint) : une case de l'onglet Email, défaite par Ctrl + Z comme les autres choix.
   const EMAIL_LENGTH_SETTING = {
     read: () => (MailtoExport.getLengthWarning() ? 'on' : 'off'),
@@ -267,6 +274,27 @@ const Settings = (function () {
     if (note) note.hidden = !locked;
   }
 
+  // L'adresse du webmail Zimbra (Réglages > Email) : grisée tant que « Webmail Zimbra » n'est pas choisi (la phrase dessous dit pourquoi), signalée quand il est choisi sans adresse utilisable. `fill` : le champ reprend l'adresse en vigueur
+  // (à l'ouverture, après un Ctrl + Z) ; sans lui il garde ce que la personne tape, même une adresse refusée, pour qu'elle la corrige. L'adresse refusée n'est jamais retenue : le champ garde le texte tapé, la phrase le dit.
+  function syncZimbraUrl(fill) {
+    const input = byId('settings-zimbra-url');
+    const state = byId('settings-zimbra-url-state');
+    if (!input || !state) return;
+    const chosen = MailtoExport.getMailClient() === 'zimbraWeb';
+    const url = MailtoExport.getZimbraUrl();
+    if (fill) input.value = url;
+    input.disabled = !chosen;
+    const typed = input.value.trim();
+    const refused = !!typed && !url && !MailtoExport.normalizeWebmailUrl(typed);
+    let key = '';
+    if (!chosen) key = 'settings.mailClient.zimbraWebUrl.disabled';
+    else if (refused) key = 'settings.mailClient.zimbraWebUrl.invalid';
+    else if (!url) key = 'settings.mailClient.zimbraWebUrl.missing';
+    state.textContent = key ? I18n.t(key) : '';
+    state.classList.toggle('is-invalid', key === 'settings.mailClient.zimbraWebUrl.invalid');
+    state.hidden = !key;
+  }
+
   // Ouverture : les choix affichés sont ceux en vigueur (langue, thème, bulles et puces, touche de déclenchement, messagerie, marges) ; fermeture : un simple masquage.
   function wireOpenAndClose(modal, openBtn, closeBtn, marginInputs) {
     const themeRadios = all('input[name="settings-theme"]');
@@ -292,6 +320,7 @@ const Settings = (function () {
       if (wordCountBox) wordCountBox.checked = WordCount.isOn();
       StateMode.syncSettings();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
+      syncZimbraUrl(true);
       if (emailLengthBox) emailLengthBox.checked = MailtoExport.getLengthWarning();
       pdfManyRadios.forEach(r => { r.checked = (r.value === PdfDelivery.manyFiles()); });
       tablePaddingRadios.forEach(r => { r.checked = (r.value === CellPadding.startLevel()); });
@@ -456,7 +485,27 @@ const Settings = (function () {
       SettingsHistory.track(CellPadding.START_SETTING, () => CellPadding.setStartLevel(value));
       all('input[name="settings-table-padding"]').forEach(r => { r.checked = (r.value === CellPadding.startLevel()); });
     });
-    wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
+    wireRadios('settings-mail-client', value => {
+      SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value));
+      syncZimbraUrl(false);
+      const urlInput = byId('settings-zimbra-url');
+      // « Webmail Zimbra » choisi sans adresse : le champ attend la sienne.
+      if (value === 'zimbraWeb' && urlInput && !MailtoExport.getZimbraUrl()) urlInput.focus();
+    });
+    const zimbraUrlInput = byId('settings-zimbra-url');
+    if (zimbraUrlInput) zimbraUrlInput.addEventListener('change', () => {
+      SettingsHistory.track(ZIMBRA_URL_SETTING, () => MailtoExport.setZimbraUrl(zimbraUrlInput.value));
+      // Une adresse retenue s'affiche sous sa forme normalisée (https:// ajouté, requête ôtée) ; une adresse refusée reste telle qu'elle est tapée, avec la phrase qui dit pourquoi.
+      if (MailtoExport.getZimbraUrl()) zimbraUrlInput.value = MailtoExport.getZimbraUrl();
+      syncZimbraUrl(false);
+    });
+    // Un Ctrl + Z (ou Ctrl + Y) qui change la messagerie pendant que Réglages est ouvert : les radios et le champ de l'adresse suivent.
+    document.addEventListener('pp:mailClientChanged', () => {
+      all('input[name="settings-mail-client"]').forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
+      syncZimbraUrl(false);
+    });
+    const mailHelpButton = byId('settings-mail-help');
+    if (mailHelpButton) mailHelpButton.addEventListener('click', () => MailHelp.open());
     const emailLengthBox = byId('settings-email-length-warning');
     if (emailLengthBox) emailLengthBox.addEventListener('change', () => {
       SettingsHistory.track(EMAIL_LENGTH_SETTING, () => MailtoExport.setLengthWarning(emailLengthBox.checked));

@@ -400,6 +400,8 @@ const MainExport = (function () {
           const answer = await Dialogs.confirmWithCheckbox({
             title: I18n.t('dialog.emailTooLong.title'), message: I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }), confirmLabel: I18n.t('common.continue'),
             checkboxLabel: I18n.t('dialog.emailTooLong.dontShowAgain'),
+            // Le lien « Que faire d'un email trop long ? » ouvre l'aide (js/mail-help.js) sur son encadré de la longueur, par-dessus cette fenêtre.
+            helpLabel: I18n.t('dialog.emailTooLong.help'), onHelp: () => MailHelp.open({ section: 'length' }),
           });
           if (!answer.confirmed) {
             setStatus('');
@@ -411,8 +413,13 @@ const MainExport = (function () {
           }
         }
         // Dans le cadre isolé de GFS, le lien s'ouvre dans un nouvel onglet (consigne GFS 011) : MailtoExport.openLink.
+        // « Webmail Zimbra » : le brouillon s'ouvre dans un onglet du webmail (MailtoExport.openLink), le coin d'état le dit ; choisi sans adresse, il s'ouvre comme « Zimbra » et le dit aussi.
+        const webmail = MailtoExport.opensInWebmail();
+        const webmailNoUrl = !webmail && MailtoExport.getMailClient() === 'zimbraWeb';
         MailtoExport.openLink(url);
-        setStatus(I18n.t(warningTurnedOff ? 'status.emailCreatedWarningOff' : 'status.emailCreated'));
+        setStatus(I18n.t(webmailNoUrl ? 'status.emailCreatedWebmailNoUrl'
+          : webmail ? (warningTurnedOff ? 'status.emailCreatedWebmailWarningOff' : 'status.emailCreatedWebmail')
+          : (warningTurnedOff ? 'status.emailCreatedWarningOff' : 'status.emailCreated')));
       } catch (e) {
         console.error('[main] échec de la création de l’email', e);
         setStatus(I18n.t('status.emailCreationError'), true);

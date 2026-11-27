@@ -24,6 +24,8 @@
 //   5) Le texte a les lignes de l'éditeur, une pour une (Zimbra, voir 4, ne garde que les lignes) : un paragraphe vide, deux de suite ou un retour à
 //      la ligne tapé sont des lignes vides du lien, et des paragraphes qui se suivent restent collés. Ce que l'éditeur d'un email permet d'écrire est
 //      borné à ce que le texte porte (js/email-plain-text.js).
+//   6) « Webmail Zimbra » (Réglages > Email) : au lieu de confier le lien au poste (qui exige un logiciel de messagerie ou un gestionnaire de `mailto:` réglé), le brouillon s'ouvre dans un onglet de Zimbra, à l'adresse donnée, par
+//      `<adresse>?view=compose&to=<le lien mailto: encodé>` - le lien même que le gestionnaire de `mailto:` de Zimbra suit (voir 4). Lu dans le code de Zimbra, jamais essayé sur un vrai Zimbra depuis ce dépôt.
 // Une vraie mise en forme demanderait un autre canal que le lien (le presse-papiers) : le choix retenu est « Texte seul », le lien reste le seul
 // canal.
 const MailtoExport = (function () {
@@ -34,9 +36,13 @@ const MailtoExport = (function () {
   // La messagerie qui ouvre le lien : réglage personnel (Réglages > Email), gardé par js/person-store.js (dans ce navigateur, ou chez GFS quand elle héberge le widget). `standard` tant que rien
   // n'est choisi : son lien est celui d'avant ce réglage, à l'octet près.
   const MAIL_CLIENT_STORAGE = 'pp_mail_client';
-  const MAIL_CLIENTS = ['standard', 'zimbra'];
+  // `zimbraWeb` : le webmail Zimbra (demande du 27/11 : des postes sans logiciel de messagerie ni gestionnaire de `mailto:` réglé). Le brouillon n'est plus confié au poste : il s'ouvre dans un onglet de Zimbra lui-même, à l'adresse que la personne a donnée
+  // (`pp_zimbra_url`), par le lien que le gestionnaire de `mailto:` de Zimbra suivrait (voir 4 plus haut : `?view=compose&to=<le lien entier>`, ZmZimbraMail.js). Zimbra lit ce lien comme celui d'un `mailto:` : il est écrit avec les mêmes formes larges que `zimbra`.
+  const MAIL_CLIENTS = ['standard', 'zimbra', 'zimbraWeb'];
   // Aussi gardé en mémoire : si le stockage refuse la clé, le choix vaut au moins jusqu'au rechargement.
   let chosenClient = null;
+  const ZIMBRA_URL_STORAGE = 'pp_zimbra_url';
+  let chosenZimbraUrl = null;
 
   function getMailClient() {
     const stored = PersonStore.get(MAIL_CLIENT_STORAGE);
@@ -49,6 +55,43 @@ const MailtoExport = (function () {
     PersonStore.set(MAIL_CLIENT_STORAGE, chosenClient);
     // Le lien, donc sa longueur, change avec la messagerie : js/main.js écoute cet évènement pour remettre la jauge à jour.
     document.dispatchEvent(new CustomEvent('pp:mailClientChanged'));
+  }
+
+  // L'adresse du webmail Zimbra, telle qu'on la lit dans la barre d'adresse du navigateur : « https://zimbra.exemple.fr/ » ou « zimbra.exemple.fr » (https:// est ajouté). On n'en garde que l'origine et le chemin (ni requête, ni ancre, ni identifiants) : le
+  // gestionnaire de Zimbra reprend la page où il s'est inscrit, requête effacée. Rend '' pour une adresse inutilisable : autre schéma que https (un lien d'email porte le texte du message, pas question de le faire passer en clair), identifiants dans l'adresse,
+  // ou une adresse que le navigateur ne sait pas lire.
+  function normalizeWebmailUrl(raw) {
+    let text = String(raw == null ? '' : raw).trim();
+    if (!text) return '';
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) text = 'https://' + text;
+    let url;
+    try { url = new URL(text); } catch (e) { return ''; }
+    // Le nom du serveur doit en être un : le navigateur accepte « zimbra exemple.fr » en le codant « zimbra%20exemple.fr », qui ne mène nulle part (lettres, chiffres, point, tiret et soulignement ; l'adresse écrite en lettres accentuées arrive ici en ASCII, codée par le navigateur).
+    if (url.protocol !== 'https:' || !/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/i.test(url.hostname) || url.username || url.password) return '';
+    return url.origin + (url.pathname || '/');
+  }
+
+  // L'adresse retenue (celle de ce poste : même stockage que la messagerie) ; '' tant qu'aucune adresse utilisable n'est donnée. Aussi gardée en mémoire, comme le choix de la messagerie.
+  function getZimbraUrl() {
+    const stored = normalizeWebmailUrl(PersonStore.get(ZIMBRA_URL_STORAGE));
+    return stored || normalizeWebmailUrl(chosenZimbraUrl);
+  }
+
+  // Retient l'adresse donnée ; rend celle qui est en vigueur ('' si l'adresse est inutilisable : la clé est alors retirée). La jauge de la barre mesure toujours le lien mailto: ; l'adresse de rédaction de Zimbra (zimbraComposeUrl) l'encode une seconde fois et le dépasse, ce que les serveurs web tolèrent bien au-delà (8 Ko).
+  function setZimbraUrl(value) {
+    chosenZimbraUrl = normalizeWebmailUrl(value);
+    if (chosenZimbraUrl) PersonStore.set(ZIMBRA_URL_STORAGE, chosenZimbraUrl); else PersonStore.remove(ZIMBRA_URL_STORAGE);
+    return getZimbraUrl();
+  }
+
+  // Vrai quand « Webmail Zimbra » est choisi ET que son adresse est donnée : alors le lien s'ouvre dans Zimbra (openLink). Choisi sans adresse, le lien s'ouvre comme celui de Zimbra : rien ne casse, Réglages > Email le dit.
+  const opensInWebmail = () => getMailClient() === 'zimbraWeb' && !!getZimbraUrl();
+
+  // Le lien qui ouvre ce brouillon dans le webmail Zimbra : l'adresse du Zimbra, `?view=compose&to=` et le lien mailto: ENTIER encodé - ce que le navigateur ferait du `%s` du gestionnaire que Zimbra inscrit. null sans adresse ou si ce n'est pas un lien mailto:.
+  function zimbraComposeUrl(mailtoUrl) {
+    const base = getZimbraUrl();
+    if (!base || !/^mailto:/i.test(String(mailtoUrl))) return null;
+    return base + '?view=compose&to=' + encodeURIComponent(mailtoUrl);
   }
 
   // L'avertissement « Email trop long » avant l'ouverture du lien (js/main-export.js:onCreateEmail) : réglage personnel, éteint par la case « Ne plus afficher » de la fenêtre elle-même et rallumé dans Réglages > Email,
@@ -288,9 +331,9 @@ const MailtoExport = (function () {
   const forZimbra = text => text.replace(/[&<>+]/g, sign => String.fromCharCode(ZIMBRA_WIDE_FORMS[sign]));
 
   // L'URL mailto: complète. to, cc, bcc, subject et bodyText arrivent déjà résolus (les #Variable sont substituées en amont, comme côté PDF par
-  // ReaderMode) : cette fonction n'assemble et n'encode que. `client` : 'zimbra' pour Zimbra (voir 4 plus haut), sinon le lien de tous les autres clients.
+  // ReaderMode) : cette fonction n'assemble et n'encode que. `client` : 'zimbra' (ou 'zimbraWeb', le webmail) pour Zimbra (voir 4 plus haut), sinon le lien de tous les autres clients.
   function buildMailtoUrl({ to, cc, bcc, subject, bodyText, client }) {
-    const zimbra = client === 'zimbra';
+    const zimbra = client === 'zimbra' || client === 'zimbraWeb';
     const params = [];
     if (cc) params.push('cc=' + encodeAddressList(cc));
     if (bcc) params.push('bcc=' + encodeAddressList(bcc));
@@ -314,14 +357,16 @@ const MailtoExport = (function () {
   // Ouvre un lien mailto: dans le logiciel de messagerie, par un <a> synthétique plutôt que window.location.href, dont le comportement dans l'iframe sandboxée d'un widget Grist est moins prévisible.
   // Dans le cadre isolé de GFS, un lien mailto: suivi dans le cadre le ferait mourir : nouvel onglet (consigne GFS 011). Seule, rien ne change. `newTab` (facultatif) : toujours dans un nouvel onglet - plusieurs liens ouverts d'un coup (js/email-drafts.js) ne se
   // remplaceraient pas l'un l'autre dans le cadre du widget.
+  // « Webmail Zimbra » (opensInWebmail) : le lien mailto: devient celui de la rédaction de Zimbra (zimbraComposeUrl) et s'ouvre TOUJOURS dans un nouvel onglet - la page du widget ne doit pas être remplacée par le webmail.
   function openLink(url, { newTab = false } = {}) {
     const link = document.createElement('a');
-    link.href = url;
-    if (newTab || GfsLink.opensInNewTab(url)) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    const webmail = opensInWebmail() ? zimbraComposeUrl(url) : null;
+    link.href = webmail || url;
+    if (webmail || newTab || GfsLink.opensInNewTab(url)) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
     document.body.appendChild(link);
     link.click();
     link.remove();
   }
 
-  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient, getLengthWarning, setLengthWarning, addressesOf, looksLikeAddress, openLink };
+  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient, getZimbraUrl, setZimbraUrl, normalizeWebmailUrl, opensInWebmail, zimbraComposeUrl, getLengthWarning, setLengthWarning, addressesOf, looksLikeAddress, openLink };
 })();

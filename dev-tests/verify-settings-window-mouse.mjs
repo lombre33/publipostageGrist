@@ -311,7 +311,8 @@ async function runTheme(theme) {
     await page.waitForTimeout(150);
     const mailBefore = await measure(page);
     const mailChoices = await page.evaluate(() => Array.from(document.querySelectorAll('input[name="settings-mail-client"]')).map(r => ({ value: r.value, checked: r.checked, label: r.closest('label').textContent.trim(), shown: r.getClientRects().length > 0 })));
-    check(`${tag} - Email : deux choix lisibles, « Standard » coché au départ`, mailChoices.length === 2 && mailChoices[0].value === 'standard' && mailChoices[0].checked && !mailChoices[1].checked && mailChoices[0].label === 'Standard' && mailChoices[1].label === 'Zimbra' && mailChoices.every(c => c.shown), mailChoices);
+    // Trois choix depuis le 27/11 : « Webmail Zimbra » (le brouillon s'ouvre dans l'onglet du webmail, js/mailto-export.js:zimbraComposeUrl).
+    check(`${tag} - Email : trois choix lisibles, « Standard » coché au départ, « Webmail Zimbra » en troisième`, mailChoices.length === 3 && mailChoices[0].value === 'standard' && mailChoices[0].checked && !mailChoices[1].checked && !mailChoices[2].checked && mailChoices[0].label === 'Standard' && mailChoices[1].label === 'Zimbra' && mailChoices[2].value === 'zimbraWeb' && mailChoices[2].label === (lang === 'fr' ? 'Webmail Zimbra' : 'Zimbra webmail') && mailChoices.every(c => c.shown), mailChoices);
     const mailScroller = mailBefore.scroller;
     if (mailScroller && mailScroller.scrollHeight > mailScroller.clientHeight + 1) {
       await page.mouse.move(mailScroller.left + mailScroller.width / 2, mailScroller.top + Math.min(20, mailScroller.height / 2), { steps: 3 });

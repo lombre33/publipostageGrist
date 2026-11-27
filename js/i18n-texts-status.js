@@ -424,4 +424,5 @@ const I18nTextsStatus = {
   'perfTrace.title': { fr: 'Rapport de fluidité', en: 'Smoothness report' },
   'perfTrace.saved': { fr: 'Le rapport est enregistré dans « {name} » (dossier des téléchargements). Joignez ce fichier à votre message.', en: 'The report is saved as “{name}” (downloads folder). Attach that file to your message.' },
   'perfTrace.savedAndCopied': { fr: 'Le rapport est copié dans le presse-papiers et enregistré dans « {name} ». Collez-le dans votre message.', en: 'The report is copied to the clipboard and saved as “{name}”. Paste it into your message.' },
+  'dialog.emailTooLong.help': { fr: 'Que faire d’un email trop long ?', en: 'What to do with a long email?' },
 };
