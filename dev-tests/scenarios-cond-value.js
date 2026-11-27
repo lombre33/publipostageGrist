@@ -259,6 +259,44 @@
     },
   });
 
+  // La bulle « Si … » au-dessus du début de la valeur (demande d'Antoine du 27/11, carte « Bulle au-dessus, texte immobile ») : un ::before en position absolue, texte de l'étiquette
+  // d'un bloc, qui ne prend aucune place dans la ligne et n'est jamais enregistré.
+  cases.push({
+    id: 'condvalue_the_condition_bubble_floats_above_the_start_of_the_value_takes_no_room_and_is_never_saved',
+    description: 'Une valeur à condition porte sa bulle (« Si Statut = Urgent », « · sinon » avec un sinon) au début, en position absolue : le texte passe à la ligne au même endroit avec ou sans elle, elle ne reçoit aucun clic, elle n’est ni dans le HTML enregistré ni sur une valeur sans condition ni sur une valeur vide',
+    run: async (h) => {
+      await seed(h);
+      const long = 'mot '.repeat(200);
+      Editor.setHTML(`<p>Début ${val(long, COND_URGENT)} fin</p><p>${val('Un', COND_URGENT, 'ailleurs')} ${val('Deux')} ${val('', COND_URGENT)}</p>`);
+      await h.sleep(500);
+      const els = valueEls();
+      const bubble = el => { const cs = getComputedStyle(el, '::before'); return { content: cs.content, position: cs.position, pointerEvents: cs.pointerEvents, width: parseFloat(cs.width) || 0, height: parseFloat(cs.height) || 0 }; };
+      const first = bubble(els[0]);
+      const withSinon = bubble(els[1]);
+      const none = bubble(els[2]);
+      const empty = bubble(els[3]);
+      const lineCount = () => { const range = document.createRange(); range.selectNodeContents(document.querySelector('.tiptap > p')); return new Set(Array.from(range.getClientRects()).map(r => Math.round(r.top))).size; };
+      const paragraph = document.querySelector('.tiptap > p');
+      const heightWith = paragraph.getBoundingClientRect().height;
+      const linesWith = lineCount();
+      const style = document.createElement('style');
+      style.textContent = '.tiptap .conditional-value::before { content: none !important; }';
+      document.head.appendChild(style);
+      await h.sleep(60);
+      const heightWithout = paragraph.getBoundingClientRect().height;
+      const linesWithout = lineCount();
+      style.remove();
+      const saved = Editor.getHTML();
+      const pass = first.content === '"' + I18n.t('condText.tag.if', { condition: VariableCondition.describe(COND_URGENT, { full: true }) }) + '"' && first.position === 'absolute' && first.pointerEvents === 'none' && first.width > 20 && first.height > 5
+        && withSinon.content === '"' + I18n.t('condText.tag.ifOtherwise', { condition: VariableCondition.describe(COND_URGENT, { full: true }) }) + '"'
+        && (none.content === 'none' || none.content === 'normal') && els[2].getAttribute('data-tag') === null
+        && els[3].getAttribute('data-tag') !== null && !/^"Si/.test(empty.content)
+        && linesWith >= 3 && linesWith === linesWithout && heightWith === heightWithout
+        && !/data-tag/.test(saved) && !/Si Statut/.test(saved);
+      return { pass, notes: JSON.stringify({ first, withSinon, none, empty, linesWith, linesWithout, heightWith, heightWithout }) };
+    },
+  });
+
   cases.push({
     id: 'condvalue_value_goes_in_a_list_item_a_table_cell_a_heading_a_column_and_a_callout_not_in_code',
     description: 'La valeur se pose dans un élément de liste, une case de tableau, un titre, une colonne de zone 2 colonnes et un encadré, dans leur paragraphe ; dans un bloc de code, rien ne se pose (l’appel rend faux et ne change rien)',

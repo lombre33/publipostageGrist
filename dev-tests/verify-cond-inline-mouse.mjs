@@ -264,6 +264,16 @@ async function runTheme(theme, lang, width) {
   await park(page);
   const merged = await linesOf(page);
   check('le texte est justifié d’un bout à l’autre : toutes les lignes sauf la dernière vont jusqu’au bord, sur plus de lignes qu’avant', stretched(merged) && merged.lines.length > before.lines.length, { before, merged });
+  // La bulle « Si … » reste au début de la valeur dans l'éditeur (demande du 27/11) : elle est là, en position absolue, et ne déplace aucune ligne du texte.
+  const bubble = await page.evaluate(() => {
+    const cs = getComputedStyle(document.querySelector('.tiptap .conditional-value'), '::before');
+    return { content: cs.content, position: cs.position, pointerEvents: cs.pointerEvents, width: parseFloat(cs.width) || 0, height: parseFloat(cs.height) || 0 };
+  });
+  const hideBubble = await page.addStyleTag({ content: '.tiptap .conditional-value::before { content: none !important; }' });
+  await page.waitForTimeout(100);
+  const withoutBubble = await linesOf(page);
+  await hideBubble.evaluate(node => node.remove());
+  check('la bulle « Si Statut = Urgent » est au début de la valeur (au-dessus, sans clic) et les lignes du texte sont exactement les mêmes sans elle', /^"(Si|If) /.test(bubble.content) && bubble.position === 'absolute' && bubble.pointerEvents === 'none' && bubble.width > 30 && bubble.height > 5 && JSON.stringify(withoutBubble.lines) === JSON.stringify(merged.lines), { bubble, withoutBubble, merged });
   await shot(page, `3-dans-la-phrase-${theme}-${lang}-${width}`);
 
   // 4) Ctrl+Z du vrai clavier rend le bloc et le problème d'avant.

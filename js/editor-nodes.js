@@ -1328,6 +1328,9 @@ const EditorNodes = (function () {
               const otherwiseShown = otherwise ? ConditionalText.otherwiseLine(otherwise) : '';
               dom.setAttribute('data-placeholder', I18n.t('condValue.placeholder'));
               const described = condition ? VariableCondition.describe(condition, { full: true }) : '';
+              // La bulle « Si Statut = Urgent » au-dessus du début de la valeur (css/conditional-value.css, ::before) : le même texte que l'étiquette d'un bloc (« · sinon » avec un
+              // sinon). Un attribut de la vue, jamais enregistré ni copié ; sans condition, pas de bulle.
+              if (condition) dom.setAttribute('data-tag', I18n.t(otherwise ? 'condText.tag.ifOtherwise' : 'condText.tag.if', { condition: described })); else dom.removeAttribute('data-tag');
               const title = !condition ? I18n.t('condValue.titleNone')
                 : (otherwise ? I18n.t('condValue.titleIfOtherwise', { condition: described, otherwise: otherwiseShown }) : I18n.t('condValue.titleIf', { condition: described }));
               dom.title = title;

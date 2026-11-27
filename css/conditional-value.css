@@ -14,3 +14,11 @@
    dessiné en ombre intérieure donc sans aucune place dans la ligne (le texte du sinon, lui, n'est écrit nulle part dans la phrase : il est dans l'info-bulle de la valeur
    et dans la fenêtre). Sur le voile pâle, #5b7fc0 fait 4:1 : plus que les 3:1 d'un repère graphique. */
 .tiptap .conditional-value.has-otherwise { box-shadow: inset 0 -2px 0 #5b7fc0; }
+/* La bulle de la condition (« Si Statut = Urgent », ou « Si … · sinon »), au-dessus du début de la valeur comme l'étiquette d'un bloc (css/conditional-text.css) : demande du 27/11
+   (« garder la bulle en début de message dans la vue éditeur »), carte « Bulle au-dessus, texte immobile ». Un ::before en position absolue SANS décalage : il garde sa place
+   « statique » - le début de la valeur, sur sa première ligne - mais ne prend aucune largeur ni hauteur dans la ligne, donc la phrase passe à la ligne exactement où elle le
+   fera à l'export. Basse (11 px) elle tient presque dans l'interligne : elle monte d'une hauteur de bulle moins 3 px et ne couvre que le bas de la ligne du dessus ; elle ne reçoit aucun clic (le texte dessous le reçoit).
+   Même bleu que l'étiquette du bloc ; coupée par « … » au-delà de 18 em, le texte entier est dans l'info-bulle de la valeur. Une valeur vide garde son texte d'attente (::before aussi). */
+.tiptap .conditional-value.has-condition[data-tag]:not(:empty)::before { content: attr(data-tag); position: absolute; display: inline-block; box-sizing: border-box; max-width: 18em; padding: 0 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(234, 242, 255, .94); color: #12406b; outline: 1px dashed #5b7fc0; outline-offset: -1px; border-radius: 3px;
+  font: 600 9px/11px var(--font-ui, system-ui, sans-serif); font-style: normal; letter-spacing: .01em; transform: translateY(calc(-100% + 3px)); pointer-events: none; user-select: none; z-index: 1; }
