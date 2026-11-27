@@ -108,6 +108,19 @@ const footerOf = page => page.evaluate(() => {
   });
   return { box: { left: box.left, right: box.right, top: box.top, bottom: box.bottom }, buttons, rowOverflow: actions.scrollWidth - actions.clientWidth, rows: new Set(buttons.map(b => Math.round(b.top))).size };
 });
+// La raison écrite au-dessus des boutons quand « Mettre dans la phrase » est grisé : visible, dans la fenêtre, lisible (contraste au moins 4,5:1).
+const hintOf = page => page.evaluate(() => {
+  const hint = document.querySelector('#var-condition-modal .var-condition-switch-hint');
+  const box = document.querySelector('#var-condition-modal .var-modal-content');
+  if (!hint) return { found: false };
+  const r = hint.getBoundingClientRect();
+  const b = box.getBoundingClientRect();
+  const lum = css => { const [x, y, z] = css.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { const k = v / 255; return k <= 0.03928 ? k / 12.92 : Math.pow((k + 0.055) / 1.055, 2.4); }); return 0.2126 * x + 0.7152 * y + 0.0722 * z; };
+  const [hi, lo] = [lum(getComputedStyle(hint).color), lum(getComputedStyle(box).backgroundColor)].sort((u, v) => v - u);
+  const buttons = Array.from(document.querySelectorAll('#var-condition-modal .var-modal-actions button')).filter(x => !x.hidden);
+  return { found: true, shown: !hint.hidden && r.width > 0 && r.height > 0, text: hint.textContent, inside: r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom, contrast: (hi + 0.05) / (lo + 0.05),
+    aboveButtons: buttons.every(x => x.getBoundingClientRect().top >= r.bottom - 0.5), title: (document.querySelector('#var-condition-modal .var-modal-switch') || {}).title };
+});
 const inside = f => f.buttons.every(b => b.left >= f.box.left && b.right <= f.box.right && b.top >= f.box.top && b.bottom <= f.box.bottom);
 const noOverlap = f => f.buttons.every((b, i) => i === 0 || f.buttons[i - 1].top !== b.top || f.buttons[i - 1].right <= b.left + 0.5);
 
@@ -211,8 +224,8 @@ async function runTheme(theme, lang, width) {
   console.log(`\n=== « Mettre dans la phrase » à la vraie souris et au vrai clavier, ${width}x${HEIGHT}, thème ${label} ===`);
   const { context, page } = await openWidget(theme, width);
   const T = lang === 'en'
-    ? { toValue: 'Put in the sentence', toBlock: 'Put on its own line', unwrapBlock: 'Unwrap block', cancel: 'Cancel', save: 'Save', remove: 'Remove condition', notOne: /^Only a block made of a single paragraph/ }
-    : { toValue: 'Mettre dans la phrase', toBlock: 'Mettre sur sa ligne', unwrapBlock: 'Défaire le bloc', cancel: 'Annuler', save: 'Enregistrer', remove: 'Retirer la condition', notOne: /^Seul un bloc d’un seul paragraphe/ };
+    ? { toValue: 'Put in the sentence', toBlock: 'Put on its own line', unwrapBlock: 'Unwrap block', cancel: 'Cancel', save: 'Save', remove: 'Remove condition', notOne: /^Only a block made of text paragraphs/ }
+    : { toValue: 'Mettre dans la phrase', toBlock: 'Mettre sur sa ligne', unwrapBlock: 'Défaire le bloc', cancel: 'Annuler', save: 'Enregistrer', remove: 'Retirer la condition', notOne: /^Seul un bloc fait de paragraphes de texte/ };
   if (lang === 'en') await page.evaluate(() => I18n.setLang('en'));
   await seedData(page, DOC);
 
@@ -287,12 +300,46 @@ async function runTheme(theme, lang, width) {
   const greyed = footer3.buttons.find(b => b.cls.includes('var-modal-switch'));
   check('la fenêtre d’un bloc qui contient une liste s’ouvre', grey.opened, grey);
   check('le bouton est grisé aux pixels (opacité < 0,6), sa raison est en info-bulle', !!greyed && greyed.disabled && greyed.opacity < 0.6 && T.notOne.test(greyed.title), greyed);
+  const hint = await hintOf(page);
+  check('la raison est aussi écrite dans la fenêtre, au-dessus des boutons, lisible (contraste au moins 4,5:1), la même que l’info-bulle', hint.found && hint.shown && hint.inside && hint.aboveButtons && hint.contrast >= 4.5 && T.notOne.test(hint.text) && hint.text === hint.title, hint);
+  check('tous les boutons restent dans la fenêtre, au premier plan, sans chevauchement, même avec la raison écrite', inside(footer3) && noOverlap(footer3) && footer3.rowOverflow <= 0 && footer3.buttons.every(b => b.onTop), footer3.buttons.map(b => b.text));
   const htmlBefore = (await state(page)).html;
   if (greyed) await realClick(page, greyed);
   await page.waitForTimeout(200);
   const stay = await state(page);
   check('un vrai clic sur le bouton grisé ne change rien et laisse la fenêtre ouverte', stay.html === htmlBefore && stay.windowOpen, { same: stay.html === htmlBefore, open: stay.windowOpen });
   await shot(page, `5-grise-${theme}-${lang}-${width}`);
+
+  // 7) Un bloc de PLUSIEURS paragraphes - le cas d'un vrai courrier (retour d'Antoine du 27/11 : « le bouton est grisé ») : le bouton est actif, aucune raison n'est écrite, le
+  // premier paragraphe continue la ligne d'avant (justifiée jusqu'au bord), les suivants deviennent des retours à la ligne, un Ctrl+Z rend le bloc.
+  const MULTI = `<p style="text-align: justify">${INTRO}</p><div class="conditional-text" data-condition="${COND}"><p style="text-align: justify">${BODY}</p><p style="text-align: justify">Le versement sera effectué après réception des justificatifs.</p><p>Cordialement.</p></div><p>Fin du courrier</p>`;
+  const leave = (await footerOf(page)).buttons.find(b => b.text === T.cancel);
+  if (leave) await realClick(page, leave);
+  await page.waitForTimeout(250);
+  await page.evaluate(({ doc }) => Editor.setHTML(doc), { doc: MULTI });
+  await page.waitForTimeout(500);
+  await park(page);
+  const multiBefore = await linesOf(page);
+  const multi = await openWindow(page, '.tiptap .conditional-text-tag');
+  const multiFooter = await footerOf(page);
+  const multiButton = multiFooter.buttons.find(b => b.cls.includes('var-modal-switch'));
+  const multiHint = await hintOf(page);
+  check('bloc de trois paragraphes : la fenêtre s’ouvre, « ' + T.toValue + ' » est actif (opacité pleine) et aucune raison n’est écrite', multi.opened && !!multiButton && !multiButton.disabled && multiButton.opacity > 0.9 && !multiHint.shown, { multi: multi.opened, multiButton, multiHint });
+  await shot(page, `6-plusieurs-paragraphes-fenetre-${theme}-${lang}-${width}`);
+  if (multiButton) await realClick(page, multiButton);
+  await page.waitForTimeout(300);
+  const multiPlaced = await state(page);
+  await park(page);
+  const multiMerged = await linesOf(page);
+  const breaks = await page.evaluate(() => document.querySelectorAll('.tiptap .conditional-value br').length);
+  check('le clic met les trois paragraphes dans la phrase : une valeur, plus de bloc, deux retours à la ligne, fenêtre fermée', multiPlaced.values === 1 && multiPlaced.blocks === 0 && breaks === 2 && !multiPlaced.windowOpen, { multiPlaced: { values: multiPlaced.values, blocks: multiPlaced.blocks, open: multiPlaced.windowOpen }, breaks });
+  check('la ligne d’avant, qui était courte, va maintenant jusqu’au bord (justifiée) : le bloc commence en cours de ligne', multiBefore.lines.length >= 1 && lastGap(multiBefore) > 25 && Math.abs(multiMerged.lines[0] - multiMerged.contentRight) <= 3 && multiMerged.lines.length > multiBefore.lines.length, { multiBefore, multiMerged });
+  await shot(page, `7-plusieurs-paragraphes-dans-la-phrase-${theme}-${lang}-${width}`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  const multiUndone = await state(page);
+  const multiAgain = await linesOf(page);
+  check('Ctrl+Z rend le bloc de trois paragraphes et la ligne d’avant courte', multiUndone.blocks === 1 && multiUndone.values === 0 && (multiUndone.html.match(/<p/g) || []).length >= 5 && lastGap(multiAgain) > 25, { blocks: multiUndone.blocks, values: multiUndone.values, again: multiAgain });
   await context.close();
 }
 

@@ -283,11 +283,11 @@ const ConditionalText = (function () {
   // le précède - la phrase continue sur la même ligne et se justifie d'un bout à l'autre. Condition, sinon et mise en forme conditionnelle passent tels quels. L'inverse est
   // `ConditionalValue.toBlock`.
   //
-  // Ce qui ne tient pas dans une ligne n'y va pas, le bouton est alors grisé avec sa raison : un bloc qui n'est pas UN paragraphe (liste, tableau, image, titre, plusieurs
-  // paragraphes, bloc emboîté), un sinon de plusieurs lignes ou de plus de 200 signes (le maximum d'une valeur).
+  // Ce qui ne tient pas dans une ligne n'y va pas, le bouton est alors grisé avec sa raison : un bloc qui n'est pas fait de paragraphes de texte (liste, tableau, titre, bloc
+  // emboîté), un sinon de plusieurs lignes ou de plus de 200 signes (le maximum d'une valeur). Plusieurs paragraphes vont dans la phrase : ils y deviennent des retours à la ligne.
   // `attrs` : les réglages du bloc tels qu'ils seront (ceux du nœud, avec le brouillon de la fenêtre par-dessus).
   const TO_VALUE_REASONS = {
-    notOneParagraph: 'varCond.toValueNotOneParagraph', otherwiseLines: 'varCond.toValueOtherwiseLines', otherwiseLong: 'varCond.toValueOtherwiseLong', lost: 'varCond.toValueLostBlock',
+    notParagraphs: 'varCond.toValueNotParagraphs', otherwiseLines: 'varCond.toValueOtherwiseLines', otherwiseLong: 'varCond.toValueOtherwiseLong', lost: 'varCond.toValueLostBlock',
   };
 
   // Le sinon du bloc tel qu'une valeur le garde : `{ stored }` (null sans sinon), ou `{ reason }` quand il ne tient pas dans une ligne.
@@ -299,10 +299,34 @@ const ConditionalText = (function () {
     return { stored: FieldCodec.toStored(lines[0], { keepSpaces: true }) || null };
   }
 
+  // Le contenu du bloc tel que la valeur le prend : le texte de chaque paragraphe, un retour à la ligne entre deux paragraphes (un paragraphe vide devient une ligne vide), sans les
+  // paragraphes vides du début et de la fin (une frappe sur Entrée de trop ne fait pas une ligne vide dans la phrase). `null` quand le bloc n'est pas fait de paragraphes de texte
+  // ou que la valeur n'accepte pas ce contenu.
+  function valueContent(node) {
+    const { schema } = node.type;
+    const valueType = schema.nodes.conditionalValue;
+    const hardBreak = schema.nodes.hardBreak;
+    if (!valueType || node.childCount < 1) return null;
+    const paragraphs = [];
+    let ok = true;
+    node.forEach(child => { if (child.type.name !== 'paragraph') ok = false; else paragraphs.push(child); });
+    if (!ok) return null;
+    while (paragraphs.length > 1 && !paragraphs[paragraphs.length - 1].childCount) paragraphs.pop();
+    while (paragraphs.length > 1 && !paragraphs[0].childCount) paragraphs.shift();
+    if (paragraphs.length > 1 && !hardBreak) return null;
+    const parts = [];
+    paragraphs.forEach((paragraph, index) => {
+      if (index) parts.push(hardBreak.create());
+      paragraph.content.forEach(child => parts.push(child));
+    });
+    const content = node.content.constructor.from(parts);
+    return valueType.validContent(content) ? content : null;
+  }
+
   // Pourquoi ce bloc ne se met pas dans la phrase (la clé du texte de la raison), ou null s'il le peut. Rien d'écrit, rien lu hors de `node` et de `attrs`.
   function inlineObstacle(node, attrs) {
     if (!node || node.type.name !== TYPE) return TO_VALUE_REASONS.lost;
-    if (node.childCount !== 1 || node.firstChild.type.name !== 'paragraph') return TO_VALUE_REASONS.notOneParagraph;
+    if (!valueContent(node)) return TO_VALUE_REASONS.notParagraphs;
     return otherwiseForValue((attrs || node.attrs).otherwise).reason || null;
   }
 
@@ -319,23 +343,23 @@ const ConditionalText = (function () {
     const { schema } = state;
     const valueType = schema.nodes.conditionalValue;
     const paragraphType = schema.nodes.paragraph;
-    const inner = node.firstChild;
-    if (!valueType || !valueType.validContent(inner.content)) return { ok: false, reason: TO_VALUE_REASONS.notOneParagraph };
-    const value = valueType.create({ condition: attrs.condition || null, otherwise: otherwiseForValue(attrs.otherwise).stored, condStyle: attrs.condStyle || null }, inner.content);
+    const content = valueContent(node);
+    if (!valueType || !content) return { ok: false, reason: TO_VALUE_REASONS.notParagraphs };
+    const value = valueType.create({ condition: attrs.condition || null, otherwise: otherwiseForValue(attrs.otherwise).stored, condStyle: attrs.condStyle || null }, content);
     const $pos = state.doc.resolve(pos);
     const before = $pos.nodeBefore;
     const tr = state.tr;
     let valueStart;
     if (before && before.type === paragraphType) {
       const last = before.lastChild;
-      const first = inner.firstChild;
+      const first = content.firstChild;
       const needsSpace = !!last && last.type.name !== 'hardBreak' && !(last.isText && /\s$/.test(last.text)) && !(first && first.isText && /^\s/.test(first.text));
       const at = pos - 1;
       tr.delete(pos, pos + node.nodeSize);
       tr.insert(at, needsSpace ? [schema.text(' '), value] : value);
       valueStart = at + (needsSpace ? 1 : 0);
     } else {
-      if (!$pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, paragraphType)) return { ok: false, reason: TO_VALUE_REASONS.notOneParagraph };
+      if (!$pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, paragraphType)) return { ok: false, reason: TO_VALUE_REASONS.notParagraphs };
       tr.replaceWith(pos, pos + node.nodeSize, paragraphType.create(null, value));
       valueStart = pos + 1;
     }

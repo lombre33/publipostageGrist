@@ -116,7 +116,10 @@ const VariableCondition = (function () {
       startGroup.append(removeBtn, unwrapBtn, inlineBtn);
       const endGroup = el('div', 'var-modal-actions-end');
       endGroup.append(cancelBtn, saveBtn);
-      ctx.win.actions.append(startGroup, endGroup);
+      // La raison d'un « Mettre dans la phrase » / « Mettre sur sa ligne » grisé, écrite au-dessus des boutons : une info-bulle ne se voit pas toujours (ni au toucher, ni sans survol).
+      const switchHint = el('p', 'var-loop-hint var-condition-switch-hint');
+      switchHint.hidden = true;
+      ctx.win.actions.append(switchHint, startGroup, endGroup);
       // Copier / Coller : un seul groupe de nœuds, replacé à chaque tracé des règles sur la ligne de « + Ajouter une condition » (cf. renderRules).
       const copyBtn = button('var-condition-clip-btn');
       const pasteBtn = button('var-condition-clip-btn');
@@ -127,7 +130,7 @@ const VariableCondition = (function () {
       ctx.win.body.append(intro, modeRow, rulesBox, ...Object.values(textOtherwise).map(free => free.row), moreFold.box, previewArea);
       ctx.refs = {
         title: ctx.win.title, intro, modeRow, modeBefore, modeSelect, modeAfter, rulesBox, clip, copyBtn, pasteBtn, clipStatus, currentLine, countLine,
-        removeBtn, unwrapBtn, inlineBtn, cancelBtn, saveBtn,
+        removeBtn, unwrapBtn, inlineBtn, switchHint, cancelBtn, saveBtn,
         affixRow, moreFold, beforeLabel: beforeField.label, beforeInput: beforeField.input, afterLabel: afterField.label, afterInput: afterField.input, affixHint,
         textOtherwise,
       };
@@ -208,17 +211,21 @@ const VariableCondition = (function () {
       return ConditionalText.inlineObstacle(editor.state.doc.nodeAt(pos), Object.assign({}, node.attrs, draftPatch()));
     }
     const obstacleText = reason => I18n.t(reason, { max: ConditionalValue.OTHERWISE_MAX });
-    // Le bouton « Mettre dans la phrase » / « Mettre sur sa ligne » : son texte, et grisé avec la raison en info-bulle quand le nœud n'a pas d'équivalent.
+    // Le bouton « Mettre dans la phrase » / « Mettre sur sa ligne » : son texte, et grisé quand le nœud n'a pas d'équivalent, avec la raison écrite au-dessus des boutons et en info-bulle.
     function syncInlineButton() {
       const btn = ctx.refs && ctx.refs.inlineBtn;
       if (!btn) return;
       const inline = ctx.state && texts().inline;
+      const hint = ctx.refs.switchHint;
       btn.hidden = !inline;
+      hint.hidden = true;
       if (!inline) return;
       const reason = switchObstacle();
       btn.textContent = I18n.t(inline.label);
       btn.disabled = !!reason;
       btn.title = reason ? obstacleText(reason) : I18n.t(inline.title);
+      hint.textContent = reason ? obstacleText(reason) : '';
+      hint.hidden = !reason;
     }
     // « Mettre dans la phrase » / « Mettre sur sa ligne » : le bloc devient une valeur au bout de la ligne d'avant, la valeur un bloc sur sa ligne (js/conditional-text.js:toValue,
     // js/conditional-value.js:toBlock). Le brouillon de la fenêtre (condition, sinon) est enregistré avec, comme par « Enregistrer ». Quand le nœud n'a plus d'équivalent - un sinon

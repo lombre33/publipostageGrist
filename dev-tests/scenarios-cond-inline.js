@@ -231,11 +231,10 @@
 
   cases.push({
     id: 'condinline_blocks_that_do_not_fit_in_a_line_are_refused_with_their_reason_and_the_button_is_greyed',
-    description: 'Un bloc qui n’est pas UN paragraphe (deux paragraphes, titre, liste, tableau, bloc emboîté) ne se met pas dans la phrase : le bouton de la fenêtre est grisé, son info-bulle dit pourquoi, un clic dessus ne change rien ; la fonction refuse aussi, sans rien changer, et rend la raison',
+    description: 'Un bloc qui n’est pas fait de paragraphes de texte (titre, liste, tableau, bloc emboîté) ne se met pas dans la phrase : le bouton de la fenêtre est grisé, sa raison est écrite au-dessus des boutons et en info-bulle, un clic dessus ne change rien ; la fonction refuse aussi, sans rien changer, et rend la raison',
     run: async (h) => {
       await seed(h);
       const variants = {
-        twoParagraphs: '<p>Un</p><p>Deux</p>',
         heading: '<h2>Un</h2>',
         list: '<ul><li><p>Un</p></li></ul>',
         table: '<table><tbody><tr><td><p>Un</p></td></tr></tbody></table>',
@@ -250,7 +249,8 @@
         const unchanged = Editor.getHTML() === html;
         const modal = await openBlockWindow(h, 0);
         const button = switchButton(modal);
-        const state = { disabled: button.disabled, hidden: button.hidden, title: button.title };
+        const hintEl = modal.querySelector('.var-condition-switch-hint');
+        const state = { disabled: button.disabled, hidden: button.hidden, title: button.title, hint: hintEl && !hintEl.hidden && hintEl.getClientRects().length > 0 ? hintEl.textContent : null };
         button.click();
         await h.sleep(60);
         const stillOpen = VariableCondition.isOpen();
@@ -258,10 +258,70 @@
         await h.sleep(40);
         results[key] = { direct, unchanged, state, stillOpen, unchangedAfterClick: Editor.getHTML() === html };
       }
-      const reason = I18n.t('varCond.toValueNotOneParagraph');
-      const pass = Object.values(results).every(r => r.direct.ok === false && r.direct.reason === 'varCond.toValueNotOneParagraph' && r.unchanged && r.state.disabled === true && r.state.hidden === false
-        && r.state.title === reason && r.stillOpen === true && r.unchangedAfterClick);
+      const reason = I18n.t('varCond.toValueNotParagraphs');
+      const pass = Object.values(results).every(r => r.direct.ok === false && r.direct.reason === 'varCond.toValueNotParagraphs' && r.unchanged && r.state.disabled === true && r.state.hidden === false
+        && r.state.title === reason && r.state.hint === reason && r.stillOpen === true && r.unchangedAfterClick);
       return { pass, notes: JSON.stringify(results) };
+    },
+  });
+
+  // === Bloc de plusieurs paragraphes (le cas du courrier d'Antoine du 27/11 : « ça ne marche pas, le bouton est grisé ») ===
+  cases.push({
+    id: 'condinline_a_block_of_several_paragraphs_goes_in_the_sentence_with_line_breaks_between_them_and_one_undo_brings_it_back',
+    description: 'Un bloc de plusieurs paragraphes de texte se met dans la phrase (bouton actif, aucune raison écrite) : le premier paragraphe continue la ligne justifiée d’avant, chaque paragraphe suivant devient un retour à la ligne (un paragraphe vide, une ligne vide), les paragraphes vides du début et de la fin ne comptent pas ; la Lecture rend un seul paragraphe avec ses retours à la ligne ; un Ctrl+Z rend le bloc entier',
+    run: async (h) => {
+      await seed(h);
+      const original = `<p${JUSTIFY}>${FIRST_LINE}</p>` + block(`<p>Premier paragraphe.</p><p>Deuxième ${badgeHtml('Titre')}.</p><p></p><p>Quatrième.</p>`, COND_URGENT, 'à confirmer') + '<p>Fin</p>';
+      Editor.setHTML(original);
+      await h.sleep(650);
+      const before = Editor.getHTML();
+      const modal = await openBlockWindow(h, 0);
+      const button = switchButton(modal);
+      const hintEl = modal.querySelector('.var-condition-switch-hint');
+      const opened = { disabled: button && button.disabled, title: button && button.title, hintShown: !!hintEl && !hintEl.hidden };
+      if (!button) return { pass: false, notes: JSON.stringify({ opened }) };
+      button.click();
+      await h.sleep(120);
+      const after = { outline: tops(), blocks: blockNodes().length, values: valueNodes().length, closed: !VariableCondition.isOpen(), attrs: valueNodes()[0] && attrsOf(valueNodes()[0].node), caret: caret() };
+      const html = Editor.getHTML();
+      const box = await previewBox(html);
+      const paragraphs = Array.from(box.querySelectorAll('p'));
+      const reader = { paragraphs: paragraphs.length, breaks: paragraphs[0] ? paragraphs[0].querySelectorAll('br').length : -1, startsWith: paragraphs[0] ? paragraphs[0].textContent.trim().startsWith('Suite au Comité') : false, hasAll: paragraphs[0] ? /Premier paragraphe\.[\s\S]*Deuxième[\s\S]*Quatrième\./.test(paragraphs[0].textContent) : false };
+      await h.clickButton('v2-btn-undo');
+      await h.sleep(120);
+      const undone = { same: Editor.getHTML() === before, blocks: blockNodes().length, values: valueNodes().length };
+      // Les paragraphes vides du début et de la fin ne font pas de lignes vides dans la phrase.
+      Editor.setHTML('<p>Avant </p>' + block('<p></p><p>Un</p><p>Deux</p><p></p>', COND_URGENT) + '<p>Fin</p>');
+      await h.sleep(300);
+      const trimmedResult = ConditionalText.toValue(ed(), blockNodes()[0].pos, {});
+      const trimmed = { ok: trimmedResult.ok, outline: tops() };
+      const pass = !opened.disabled && !opened.hintShown && opened.title === I18n.t('varCond.toValueTitle')
+        && after.blocks === 0 && after.values === 1 && after.closed && after.outline === `paragraph[justify]("${FIRST_LINE}" conditionalValue("Premier paragraphe." hardBreak "Deuxième " varBadge "." hardBreak hardBreak "Quatrième.")) | paragraph("Fin")`
+        && after.attrs.otherwise && after.attrs.condition && after.caret.parent === 'conditionalValue' && after.caret.atEnd
+        && reader.paragraphs === 2 && reader.breaks === 3 && reader.startsWith && reader.hasAll
+        && undone.same && undone.blocks === 1 && undone.values === 0
+        && trimmed.ok && trimmed.outline === 'paragraph("Avant " conditionalValue("Un" hardBreak "Deux")) | paragraph("Fin")';
+      return { pass, notes: JSON.stringify({ opened, after, reader, undone, trimmed }) };
+    },
+  });
+
+  cases.push({
+    id: 'condinline_a_block_of_several_paragraphs_made_a_value_goes_back_to_one_paragraph_block_with_its_line_breaks',
+    description: 'Bloc de plusieurs paragraphes -> valeur -> « Mettre sur sa ligne » : le texte est entier, dans un bloc d’un paragraphe où les retours à la ligne restent des retours à la ligne ; le bloc se remet dans la phrase sans perdre ni condition ni texte',
+    run: async (h) => {
+      await seed(h);
+      Editor.setHTML('<p>Avant </p>' + block('<p>Un</p><p>Deux</p><p>Trois</p>', COND_URGENT, 'ailleurs') + '<p>Fin</p>');
+      await h.sleep(500);
+      const first = ConditionalText.toValue(ed(), blockNodes()[0].pos, {});
+      const asValue = tops();
+      const back = ConditionalValue.toBlock(ed(), valueNodes()[0].pos, {});
+      const asBlock = tops();
+      const again = ConditionalText.toValue(ed(), blockNodes()[0].pos, {});
+      const pass = first.ok && back.ok && again.ok
+        && asValue === 'paragraph("Avant " conditionalValue("Un" hardBreak "Deux" hardBreak "Trois")) | paragraph("Fin")'
+        && asBlock === 'paragraph("Avant ") | conditionalText(paragraph("Un" hardBreak "Deux" hardBreak "Trois")) | paragraph("Fin")'
+        && tops() === asValue && !!valueNodes()[0].node.attrs.condition && !!valueNodes()[0].node.attrs.otherwise;
+      return { pass, notes: JSON.stringify({ first, back, again, asValue, asBlock, final: tops() }) };
     },
   });
 
@@ -534,7 +594,7 @@
     },
   });
 
-  const KEYS = ['varCond.toValue', 'varCond.toValueTitle', 'varCond.toValueNotOneParagraph', 'varCond.toValueOtherwiseLines', 'varCond.toValueOtherwiseLong', 'varCond.toValueLostBlock',
+  const KEYS = ['varCond.toValue', 'varCond.toValueTitle', 'varCond.toValueNotParagraphs', 'varCond.toValueOtherwiseLines', 'varCond.toValueOtherwiseLong', 'varCond.toValueLostBlock',
     'varCond.toBlock', 'varCond.toBlockTitle', 'varCond.toBlockNotInParagraph', 'varCond.toBlockLostValue'];
   const textsCase = {
     id: 'condinline_french_interface_texts_and_keys',
