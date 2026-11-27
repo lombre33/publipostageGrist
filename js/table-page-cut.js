@@ -115,7 +115,7 @@ const TablePageCut = (function () {
         ranks.push(i);
         forcedCuts.push(true);
         acc = seg;
-      } else if ((i > 0 ? acc : consumedBefore) > 0 && acc + seg > capacity) {
+      } else if ((i > 0 ? acc : consumedBefore) > 0 && acc + seg > capacity - PageLayout.PAGE_FIT_SLACK_PX) {
         if (i === 0) blockBreakBefore = true; else { ranks.push(i); forcedCuts.push(false); }
         acc = seg;
       } else {

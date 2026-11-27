@@ -65,6 +65,13 @@ const PdfExport = (function () {
   // Les paragraphes que le PDF garde d'une pièce (markWhole) : ceux de la construction en cours, colonnes de zone comprises, retenus en fin de construction
   // (settleWholeBlocks). Remis à zéro avec les notes, à l'appel de premier niveau.
   let wholeCandidates = [];
+  // Les coupures de page que la Lecture trace sur le document en cours de construction (readerCutsOf), lues à l'appel de premier niveau et rendues à `null` à sa fin : `opens`, les blocs de
+  // premier niveau qui ouvrent une page (élément -> rang de la page), `zones`, pour chaque zone à deux colonnes coupée par la page, les blocs de chaque colonne qui ouvrent la page suivante
+  // (twoColumnsFrom), `registry` : ce que les blocs qui portent une de ces pages en ont retenu (tagReaderCut), lu par readerCutRule.
+  let readerCuts = null;
+  // Les éléments que la Lecture ouvre sur une page, toutes racines confondues (premier niveau et colonnes) : un paragraphe qui en est un garde son décalage dans ses marges (fitLineBox), c'est
+  // lui que readerCutRule peut passer à la page suivante, et un saut de page ne se pose pas sur le texte d'une enveloppe insécable.
+  let readerOpeners = new Set();
   // Les destinations nommées des titres (headingDestination), numérotées de bout en bout du document pour qu'aucun nom ne serve deux fois (pdfmake refuse
   // deux `id` égaux) : remises à zéro à l'appel de premier niveau, comme les notes.
   let headingDestinationCount = 0;
@@ -1669,14 +1676,17 @@ const PdfExport = (function () {
   // Le contenu de chaque colonne en blocs pdfmake. Séquentiel (pas Promise.all) : footnoteCounter et footnoteEntries sont un état de module, deux
   // appels en parallèle s'entrelaceraient si l'un attend un décodage d'image et corrompraient la numérotation des notes. Deux colonnes au plus :
   // coût négligeable.
-  async function twoColumnsContent(colNodes, widthPt) {
+  async function twoColumnsContent(colNodes, widthPt, cuts) {
     const columns = [];
     for (let colIdx = 0; colIdx < colNodes.length; colIdx += 1) {
       const col = colNodes[colIdx];
       let blocks;
+      // Les blocs de cette colonne que la Lecture ouvre sur une page de la zone (`cuts` : readerCutsOf) : leur rang dans la colonne et leur page.
+      const openPages = new Map((cuts || []).filter(cut => cut.ranks[colIdx] != null).map(cut => [cut.ranks[colIdx], cut.page]));
+      const openRanks = openPages.size ? { pages: openPages, count: col.children.length } : null;
       // La largeur réelle de cette colonne, pour que l'hôte de mesure interne de htmlToPdfContent habille une image flottante à la bonne largeur
       // plutôt qu'à la pleine largeur de page.
-      try { blocks = await htmlToPdfContent(col.innerHTML, false, widthPt[colIdx], { keepWhole: true, zoneColumn: true }); }
+      try { blocks = await htmlToPdfContent(col.innerHTML, false, widthPt[colIdx], { keepWhole: true, zoneColumn: true, openRanks }); }
       catch (e) { console.warn('[PdfExport] contenu de colonne ignoré (structure inattendue), repli en texte brut :', e); blocks = [fallbackTextBlock(col, false)]; }
       // Pas de ré-application de l'alignement ici : blockFrom (via htmlToPdfContent) lit déjà `text-align` de chaque paragraphe, colonne ou non. Le
       // réaffecter par index au « bloc qui s'y trouve » appliquerait `alignment` par-dessus l'`absolutePosition` d'une image en calque seule dans un
@@ -1727,7 +1737,7 @@ const PdfExport = (function () {
     const colNodes = Array.from(node.querySelectorAll(':scope > .two-columns-column')).slice(0, 2);
     if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
     const m = measureTwoColumns(node);
-    const columns = await twoColumnsContent(colNodes, m.widthPt);
+    const columns = await twoColumnsContent(colNodes, m.widthPt, readerCuts && readerCuts.zones.get(node));
     // « En bas de la page » dans une colonne : une sentinelle (0,1 pt, invisible) ferme chaque colonne de la zone, que la mesure de pdfmake lit pour connaître le bas naturel de la zone.
     const columnRuns = columns.map(blocks => blocks._anchorRuns || []);
     let columnAnchors = null;
@@ -3393,7 +3403,23 @@ const PdfExport = (function () {
   }
 
   function fitLineBoxes(blocks, node) {
-    (Array.isArray(blocks) ? blocks : [blocks]).forEach(block => fitLineBox(block, node));
+    if (!Array.isArray(blocks)) { fitLineBox(blocks, node); return; }
+    blocks.forEach((block, i) => { const wrapped = fitLineBox(block, node); if (wrapped) blocks[i] = wrapped; });
+  }
+
+  // Un paragraphe que seul son décalage de ligne de base distingue d'un autre : un bloc de texte nu, sans destination, sans habillage d'image ni rôle dans une suite gardée. Il peut passer dans une
+  // enveloppe (`shiftedBlock`) ; les autres gardent le décalage dans leurs marges.
+  const SHIFT_WRAPPABLE = block => block.id === undefined && !block._floatCarry && !block._floatOverlay && !block._carried && !block._stretch && !block._keepTail && !block._isHeading && !block._headingLeaf && !block._frameMarker && !block._anchorStart && !block._anchorEnd;
+  // Le décalage de `shift` pt d'un bloc de texte, rangé DANS une enveloppe : l'enveloppe porte les marges du bloc, son saut de page et, quand le PDF le garde d'une pièce (markWhole), l'`unbreakable` ;
+  // le texte porte le décalage (marge haute +shift, marge basse -shift : le texte descend, ce qui le suit ne bouge pas). pdfmake mesure un bloc insécable en additionnant ce qui s'y range : le décalage
+  // y est annulé (+shift puis -shift) et le bloc tient dans la page s'il y tient SANS décalage, comme dans la Lecture, qui compte sa boîte et non la place de son texte. En marge du bloc, le décalage
+  // s'ajoutait à la place que pdfmake lui comptait avant de le mesurer : un paragraphe qui tenait au bas de la page passait à la suivante (un texte de 8 pt : 3 px de moins que la Lecture).
+  function shiftedBlock(block, shift) {
+    const wrapper = { stack: [block], _shiftInner: block };
+    if (block.margin !== undefined) wrapper.margin = block.margin;
+    ['pageBreak', 'pageOrientation'].forEach((key) => { if (block[key] !== undefined) { wrapper[key] = block[key]; delete block[key]; } });
+    block.margin = [0, shift, 0, -shift];
+    return wrapper;
   }
 
   function fitLineBox(block, node) {
@@ -3418,12 +3444,21 @@ const PdfExport = (function () {
     const screenBaseline = Math.max(above(parseFloat(cs.fontSize) * PX_TO_PT, strutMetrics), ...inks.map(ink => above(ink.size, ink.metrics)));
     const pdfBaseline = Math.max(...inks.map(ink => ink.metrics.asc * ink.size));
     const tallest = inks.reduce((best, ink) => (ink.size * (ink.metrics.asc + ink.metrics.desc) > best.size * (best.metrics.asc + best.metrics.desc) ? ink : best));
-    block.lineHeight = factor / (tallest.metrics.asc + tallest.metrics.desc);
+    // La ligne du navigateur n'est jamais plus basse que la cale du paragraphe (un texte de 8 pt dans un paragraphe de 10,5 pt a le pas de 10,5 pt : l'interligne est celui de la cale, la ligne de
+    // 8 pt n'y change rien) ; pdfmake, lui, ne compte que ses textes. Le pas des lignes devient celui de la plus grande de la cale et du texte, et un texte plus petit que la cale d'un
+    // paragraphe qui en a un plus grand prend le pas de la cale à lui seul (`lineHeight` par texte, que pdfmake lit pour chaque morceau de la ligne).
+    const strutPt = parseFloat(cs.fontSize) * PX_TO_PT;
+    const natural = ink => ink.size * (ink.metrics.asc + ink.metrics.desc);
+    block.lineHeight = factor * Math.max(strutPt, tallest.size) / natural(tallest);
+    if (tallest.size > strutPt) runs.forEach((run, i) => { if (inks[i].size < strutPt) run.lineHeight = factor * strutPt / natural(inks[i]); });
     // Le texte courant du PDF (10,5 pt, Roboto) est depuis toujours posé 0,8 à 1,3 pt au-dessus de l'éditeur : les citations, les listes, les cases de tableau, les traits et les essais qui les
     // mesurent partent de cette ligne. Seul l'écart EN PLUS de celui du texte courant est donc rattrapé : le texte courant ne bouge pas, un gros titre se range par rapport à lui comme à l'écran.
     // Sous FIT_MIN_PT (2 px) le navigateur arrondit lui-même ses lignes au pixel et les essais qui comparent un titre à l'éditeur (`imageText`) tolèrent 0,6 pt : un titre de 18 pt n'est pas touché.
     const shift = (screenBaseline - pdfBaseline) - (above(STRUT_PT, bodyMetrics) - bodyMetrics.asc * STRUT_PT);
-    if (Math.abs(shift) >= FIT_MIN_PT) { addTopMargin(block, shift); addBottomMargin(block, -shift); }
+    if (Math.abs(shift) < FIT_MIN_PT) return;
+    if (node.tagName === 'P' && SHIFT_WRAPPABLE(block) && !readerOpeners.has(node)) return shiftedBlock(block, shift);
+    addTopMargin(block, shift);
+    addBottomMargin(block, -shift);
   }
 
   // L'interligne, les espaces et les retraits réglés par « Paragraphe… » (js/paragraph-format.js) sur le paragraphe, l'élément de liste ou la citation `node`, posés sur ses blocs pdfmake
@@ -3815,7 +3850,17 @@ const PdfExport = (function () {
       headingDestinationCount = 0;
       anchorElements = anchorElementsOf(root);
       markerWidths.clear();
+      readerCuts = readerCutsOf(root);
+      readerOpeners = new Set();
     }
+    try {
+      return await buildPdfContentFromState(root, headingMarkers, availableWidthPt, isTopLevel, opts);
+    } finally {
+      if (isTopLevel) { readerCuts = null; readerOpeners = new Set(); }
+    }
+  }
+
+  async function buildPdfContentFromState(root, headingMarkers, availableWidthPt, isTopLevel, opts) {
     const st = contentStateFor(root, headingMarkers, availableWidthPt, isTopLevel, opts);
     // Un gros modèle (un diaporama de milliers de cadres) : chaque nœud de premier niveau force la mise en page de toute la zone de mesure, un diaporama sans image n'attend rien de réel
     // (ni décodage ni écriture) et la page restait prise du premier au dernier cadre (11/11 : 24 diapositives de 140 cadres = un arrêt de 31 s) - sans clic, sans coin d'état qui se peint.
@@ -3890,7 +3935,25 @@ const PdfExport = (function () {
       lastBlockBottomPx: null,
       // La pause du premier niveau (buildPdfContentFromRoot) : la page respire entre deux nœuds d'un gros modèle. Nulle ailleurs.
       pace: null,
+      // Les blocs de cette racine que la Lecture ouvre sur une page (élément -> rang de la page) : le premier bloc posé pour chacun en garde la page (tagReaderCut).
+      readerOpens: readerOpensOf(root, isTopLevel, opts),
     };
+  }
+
+  // Les éléments de `root` que la Lecture place en haut d'une page : au premier niveau, ceux de readerCutsOf ; dans la colonne d'une zone coupée, ceux dont le rang est dans `opts.openRanks`
+  // (twoColumnsFrom), pourvu que la colonne ait gardé ses éléments (`count`). Null quand il n'y en a pas.
+  function readerOpensOf(root, isTopLevel, opts) {
+    if (!readerCuts) return null;
+    let opens = null;
+    if (isTopLevel) {
+      opens = readerCuts.opens.size ? readerCuts.opens : null;
+    } else {
+      const open = opts && opts.openRanks;
+      const children = Array.from(root.children);
+      if (open && open.count === children.length) opens = new Map(Array.from(open.pages, ([rank, page]) => [children[rank], page]));
+    }
+    if (opens) opens.forEach((page, el) => readerOpeners.add(el));
+    return opens;
   }
 
   const inFlow = block => !!block && !block._pendingImgNode && !block.absolutePosition;
@@ -3901,7 +3964,78 @@ const PdfExport = (function () {
     if (st.pendingSlotStart != null) { st.slotStarts[st.pendingSlotStart] = st.blocks.length; st.pendingSlotStart = null; }
     if (st.pendingSense && turnPage(block, st.pendingSense)) { st.pageSense = st.pendingSense; st.pendingSense = null; }
     if (st.sectionPage && block && typeof block === 'object') block._page = st.sectionPage;
+    if (st.readerOpens && st.readerOpens.has(node) && inFlow(block)) tagReaderCut(block, st.readerOpens.get(node), st.readerOpens, node);
     st.blocks.push(block); st.sourceNodes.push(node); st.blockSlots.push(st.currentSlot);
+  }
+
+  // Un bloc que la Lecture ouvre sur la page `page` : le PDF doit l'y mettre aussi (readerCutRule). Le premier bloc posé pour son élément retient la page, sous son `id` (celui qu'il porte
+  // déjà, sinon un nom neuf : pdfmake n'appelle la règle qu'avec ce que le nœud porte, `id` compris) ; seul ce bloc d'ouverture en a un, pas chaque paragraphe (une destination de plus
+  // pèse dans le PDF). Un bloc qui porte déjà un saut de page n'a rien à se faire dire.
+  function tagReaderCut(block, page, opens, node) {
+    opens.delete(node);
+    if (!block || typeof block !== 'object' || block.pageBreak === 'before' || !readerCuts) return;
+    // Un paragraphe rangé dans son enveloppe (shiftedBlock) porte l'`id` sur son texte : c'est lui dont pdfmake corrige la page quand il passe un bloc insécable à la suivante.
+    const text = block._shiftInner || block;
+    if (typeof text.id !== 'string') text.id = READER_CUT_ID + readerCuts.registry.size;
+    readerCuts.registry.set(text.id, { page, blocks: text === block ? [block] : [block, text] });
+  }
+  const READER_CUT_ID = 'pp-cut-';
+
+  // Les coupures de page que la Lecture trace sur `root` (ReaderMode.computePageBreakOffsets, la même mesure que l'éditeur, le Word et l'OpenDocument, à la hauteur utile d'une page du PDF, bande
+  // des notes comprise : le PDF ne la déduit que pour un document qui en a, readerCutRule) : le bloc de premier niveau qui ouvre chaque page, et, pour une zone à deux colonnes que la page coupe, le bloc
+  // de chaque colonne qui ouvre la page suivante. `null` quand la Lecture n'a rien à dire de ce document : un macro-modèle aux pages de formats mêlés (sections), des blocs calés « En bas de la page »
+  // (le PDF les cale lui-même), des cadres libres, une page qui n'a pas de hauteur ou une mesure qui échoue - le PDF se coupe alors comme avant.
+  function readerCutsOf(root) {
+    if (!(tablePageHeightPt > 0) || typeof ReaderMode.computePageBreakOffsets !== 'function') return null;
+    const children = Array.from(root.children);
+    if (!children.length || children.some(child => child.classList.contains(SECTION_CLASS) || child.classList.contains(FRAME_CLASS))) return null;
+    try {
+      const offsets = ReaderMode.computePageBreakOffsets(root, (tablePageHeightPt + FOOTNOTE_BAND_PT) / PX_TO_PT);
+      if (offsets.tailAnchor || offsets.some(cut => cut.anchor)) return null;
+      // Le rang de la page (à partir de 1) où le bloc de rang `index` commence : une coupure placée avant lui, au milieu d'un bloc d'avant (une zone, un tableau) ou entre deux blocs.
+      const pageOf = index => 1 + offsets.reduce((n, cut) => n + (cut.afterIndex < index ? 1 : 0), 0);
+      const found = { opens: new Map(), zones: new Map(), registry: new Map() };
+      // Un bloc plus haut que ce que le PDF garde d'une pièce (markWhole) : la Lecture l'ouvre sur une page neuve, le PDF le laisse commencer où il en est et le coupe entre deux lignes (comme avant,
+      // et c'est là qu'une image en calque d'un document sans grille de page se pose, anchorToOverflowingBlock). Ses pages ne sont plus celles de la Lecture : on ne leur dicte plus rien après lui.
+      const oversized = child => child.getBoundingClientRect().height * PX_TO_PT > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt;
+      let adrift = false;
+      offsets.forEach((cut) => {
+        if (adrift || cut.rowIndex !== undefined) return;
+        if (cut.zone) {
+          const zone = children[cut.afterIndex];
+          if (!found.zones.has(zone)) found.zones.set(zone, []);
+          const cuts = found.zones.get(zone);
+          cuts.push({ ranks: cut.zone.ranks, page: pageOf(cut.afterIndex) + 1 + cuts.length });
+          return;
+        }
+        // Le bloc qui ouvre la page : le premier que la coupure ne précède plus, hors un bloc que la Lecture ne montre pas (rien à poser).
+        let index = cut.afterIndex + 1;
+        while (index < children.length && !children[index].getClientRects().length) index += 1;
+        if (index >= children.length || children[index].classList.contains('page-break-marker')) return;
+        if (oversized(children[index])) adrift = true;
+        else found.opens.set(children[index], pageOf(index));
+      });
+      return found;
+    } catch (e) {
+      console.warn('[PdfExport] coupures de la Lecture ignorées :', e);
+      return null;
+    }
+  }
+
+  // « Le PDF est la Lecture » : la Lecture, l'éditeur et le PDF coupent leurs pages avec chacun leur arithmétique (pdfmake, au point près, pour un paragraphe gardé d'une pièce ; au pixel pour la
+  // Lecture), et quand un paragraphe tombe à quelques dixièmes de pixel du bas de la page, ou qu'il s'y empile une hauteur de ligne que le navigateur ne compte pas comme pdfmake, l'un le
+  // garde sur sa page et l'autre l'ouvre à la suivante : tout ce qui suit passe de l'autre côté du saut, ligne à ligne. Rappel `pageBreakBefore` de pdfmake, appelé une fois par nœud après
+  // une mise en page, pour le bloc que la Lecture place en haut d'une page (`id` posé par tagReaderCut) : il demande de le passer à la page suivante tant que le PDF le laisse sur une page
+  // d'avant celle de la Lecture (pdfmake remet alors tout en page, une fois par saut). Un bloc déjà en haut de sa page ne bouge pas : le passer à la suivante n'ajouterait qu'une page blanche.
+  // Un seul paramètre, comme captionKeepRule.
+  function readerCutRule(cuts) {
+    return function (currentNode) {
+      const cut = currentNode && typeof currentNode.id === 'string' ? cuts.get(currentNode.id) : null;
+      const at = cut && currentNode.startPosition;
+      if (!at || at.pageNumber >= cut.page) return false;
+      const ownTopMargin = cut.blocks.reduce((sum, block) => sum + ((block._margin && block._margin[1]) || 0), 0);
+      return at.verticalRatio * at.pageInnerHeight > ownTopMargin + 2;
+    };
   }
 
   // Le sens de la page que ce bloc ouvre : pdfmake lit `pageOrientation` sur le nœud qui porte le `pageBreak: 'before'`, le bloc lui-même ou, quand le
@@ -4200,9 +4334,10 @@ const PdfExport = (function () {
   function markWhole(st, node, produced, { alone, nodePt }) {
     if (!st.keepWhole || !(tablePageHeightPt > 0) || !alone || !WHOLE_TAGS.test(node.tagName) || produced.length !== 1 || produced._floatCarry || produced._carried) return;
     const block = produced[0];
-    if (!block || block.text === undefined || block._pendingImgNode || block.absolutePosition || block._floatOverlay || block._stretch) return;
+    if (!block || (block._shiftInner || block).text === undefined || block._pendingImgNode || block.absolutePosition || block._floatOverlay || block._stretch) return;
     if (KeepWithNext.isKeptElement(node) || Caption.isCaptionElement(node)) return;
-    if (nodePt < 1.5 * DEFAULT_FONT_SIZE * EDITOR_LINE_HEIGHT_RATIO || nodePt > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt) return;
+    // Un paragraphe d'une ligne n'a rien à garder d'une pièce, sauf quand il porte un décalage de ligne de base (shiftedBlock) : seul son `unbreakable` mesure sa boîte, non la place de son texte.
+    if ((nodePt < 1.5 * DEFAULT_FONT_SIZE * EDITOR_LINE_HEIGHT_RATIO && !block._shiftInner) || nodePt > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt) return;
     wholeCandidates.push(block);
   }
 
@@ -4233,7 +4368,7 @@ const PdfExport = (function () {
   // n'a plus : un `id` y ferait inscrire une destination de plus par paragraphe, soit près de 10 % de poids.
   const WHOLE_ID = 'pp-whole-';
   function giveWholeIds(content) {
-    (content._wholeBlocks || []).forEach((block, i) => { if (!block.id) block.id = WHOLE_ID + i; });
+    (content._wholeBlocks || []).forEach((block, i) => { const text = block._shiftInner || block; if (!text.id) text.id = WHOLE_ID + i; });
   }
 
   // Une image habillée qui dépasse encore le bloc d'avant : un paragraphe se range à côté d'elle (carriedFloatBlocksFrom), mais tout autre bloc
@@ -4346,7 +4481,10 @@ const PdfExport = (function () {
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(st.rootRect, blocks, st.sourceNodes, st.blockSlots).concat(st.nestedPendingAll); }
     catch (e) { console.warn('[PdfExport] ancrage des images en calque ignoré :', e); content._pendingImages = st.nestedPendingAll; }
-    if (st.isTopLevel) content._wholeBlocks = settleWholeBlocks(content);
+    if (st.isTopLevel) {
+      content._wholeBlocks = settleWholeBlocks(content);
+      content._readerCuts = readerCuts && readerCuts.registry.size ? readerCuts.registry : null;
+    }
     return content;
   }
 
@@ -4646,7 +4784,15 @@ const PdfExport = (function () {
       defaultStyle: { font: 'Roboto', fontSize: DEFAULT_FONT_SIZE },
       content, info: { title: filename || 'publipostage' },
     };
-    if ((content._captionPairs || []).length) doc.pageBreakBefore = captionKeepRule(content._captionPairs);
+    // Le bloc que la Lecture ouvre sur une page y est mis aussi (readerCutRule) ; pas dans un document à notes (la Lecture ne déduit pas leur bande) ni une suite de pages d'un document aux formats mêlés.
+    const keepRule = (content._captionPairs || []).length ? captionKeepRule(content._captionPairs) : null;
+    const cutRule = content._readerCuts && !hasFootnotes && !run ? readerCutRule(content._readerCuts) : null;
+    if (keepRule || cutRule) {
+      doc.pageBreakBefore = function (currentNode) { return !!((keepRule && keepRule(currentNode)) || (cutRule && cutRule(currentNode))); };
+      // Ce que le rappel sert, pour qui le lit (les essais) : les paires gardées d'une légende ou d'un « Garder avec le suivant », les pages de la Lecture.
+      doc.pageBreakBefore.keepsPairs = !!keepRule;
+      doc.pageBreakBefore.followsReader = !!cutRule;
+    }
     const background = pageBackgroundFor(content, run);
     if (background) doc.background = background;
     if (hf.enabled && (hf.header.default || hf.header.first)) doc.header = pageHeaderFor(hf, run);

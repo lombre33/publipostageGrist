@@ -354,20 +354,25 @@
     run: async () => {
       const problems = [];
       const check = (label, got, want) => { if (!same(got, want)) problems.push(label + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(want)); };
-      const ten = Array(10).fill(20);
-      // Dix blocs de 20 dans une page de 100 : le sixième (bas à 120) ouvre la page suivante, qui porte les cinq derniers.
+      // Un bloc tient quand son bas est au plus à PageLayout.PAGE_FIT_SLACK_PX (0,5 px) du bas de la page : la Lecture, l'éditeur et le PDF s'accordent ainsi au dixième de pixel près (pdfmake, au
+      // point près, garde un paragraphe d'une pièce quand il tient EXACTEMENT). Les blocs de ces essais font donc 18 et non 20 : cinq de 20 finiraient pile au bas d'une page de 100 et n'y tiendraient plus.
+      const ten = Array(10).fill(18);
+      // Dix blocs de 18 dans une page de 100 : le sixième (bas à 108) ouvre la page suivante, qui porte les cinq derniers.
       let plan = ZonePageCut.plan(0, 0, measured(column(ten), column([20, 20, 20])), 100, 0);
       check('deux colonnes, une longue', plan.cuts, [{ ranks: [5, null], lasts: [4, 2] }]);
       check('deux colonnes, rien avant la zone', plan.blockBreakBefore, false);
-      // Pile à la hauteur de la page (5 x 20 = 100) : ça tient, pas de coupure ; l'arrondi d'un demi-pixel ne coupe pas non plus.
+      // Le bas du dernier bloc à 99,5 (la tolérance) : ça tient, pas de coupure. Pile à la hauteur de la page (5 x 20 = 100), ou 0,4 px de trop : le PDF ne le garderait pas sûrement, la Lecture l'ouvre
+      // à la page suivante comme lui.
+      plan = ZonePageCut.plan(0, 0, measured(column([20, 20, 20, 20, 19.5]), column([20])), 100, 0);
+      check('à la tolérance près', plan.cuts, []);
       plan = ZonePageCut.plan(0, 0, measured(column(Array(5).fill(20)), column([20])), 100, 0);
-      check('pile à la page', plan.cuts, []);
+      check('pile à la page', plan.cuts, [{ ranks: [4, null], lasts: [3, 0] }]);
       plan = ZonePageCut.plan(0, 0, measured(column([20, 20, 20, 20, 20.4]), column([20])), 100, 0);
-      check('0,4 px de trop (arrondi)', plan.cuts, []);
+      check('0,4 px de trop (arrondi)', plan.cuts, [{ ranks: [4, null], lasts: [3, 0] }]);
       plan = ZonePageCut.plan(0, 0, measured(column([20, 20, 20, 20, 21]), column([20])), 100, 0);
       check('1 px de trop', plan.cuts, [{ ranks: [4, null], lasts: [3, 0] }]);
       // Cinq pages à gauche (25 blocs), trois à droite (12 blocs) : la colonne droite finit à la page 3 (son dernier bloc, le douzième, est le « dernier gardé » de cette page).
-      plan = ZonePageCut.plan(0, 0, measured(column(Array(25).fill(20)), column(Array(12).fill(20))), 100, 0);
+      plan = ZonePageCut.plan(0, 0, measured(column(Array(25).fill(18)), column(Array(12).fill(18))), 100, 0);
       check('cinq pages', plan.cuts, [
         { ranks: [5, 5], lasts: [4, 4] }, { ranks: [10, 10], lasts: [9, 9] },
         { ranks: [15, null], lasts: [14, 11] }, { ranks: [20, null], lasts: [19, null] },
@@ -385,13 +390,13 @@
     run: async () => {
       const problems = [];
       const check = (label, got, want) => { if (!same(got, want)) problems.push(label + ' : ' + JSON.stringify(got) + ' au lieu de ' + JSON.stringify(want)); };
-      const ten = Array(10).fill(20);
-      // 40 déjà posés + 6 d'écart : il reste 54, soit deux blocs de 20 ; le troisième (bas à 60) ouvre la page suivante.
+      const ten = Array(10).fill(18);
+      // 40 déjà posés + 6 d'écart : il reste 54, soit deux blocs de 18 ; le troisième (bas à 54, sans la tolérance d'un demi-pixel) ouvre la page suivante.
       let plan = ZonePageCut.plan(40, 6, measured(column(ten), column(ten)), 100, 0);
       check('au milieu d\'une page', plan.cuts, [{ ranks: [2, 2], lasts: [1, 1] }, { ranks: [7, 7], lasts: [6, 6] }]);
       check('au milieu d\'une page, le premier bloc tient', plan.blockBreakBefore, false);
       // 90 déjà posés : le premier bloc de chaque colonne (bas à 20) ne tient pas dans les 10 qui restent : la zone commence la page suivante, sans coupure dedans.
-      plan = ZonePageCut.plan(90, 0, measured(column(Array(5).fill(20)), column(Array(5).fill(20))), 100, 0);
+      plan = ZonePageCut.plan(90, 0, measured(column(Array(4).fill(20)), column(Array(4).fill(20))), 100, 0);
       check('plus de place pour un bloc', plan.blockBreakBefore, true);
       check('plus de place pour un bloc, la zone tient sur la page suivante', plan.cuts, []);
       // Une seule colonne dont le premier bloc ne tient pas : l'autre reste sur la page (coupure dans la zone, pas avant).
@@ -415,11 +420,11 @@
       let plan = ZonePageCut.plan(30, 6, measured(column([20, 20, 20], 5), column([20], 5)), 100, 12);
       check('sans coupure', plan.consumedAfter, 30 + 6 + 60 + 5 + 12);
       // Une coupure : la dernière page ne porte que ce que la colonne la plus longue y met (cinq blocs), le bas de colonne et l'écart.
-      plan = ZonePageCut.plan(0, 0, measured(column(Array(10).fill(20), 5), column([20], 5)), 100, 12);
-      check('une coupure', plan.consumedAfter, 100 + 5 + 12);
+      plan = ZonePageCut.plan(0, 0, measured(column(Array(10).fill(18), 5), column([20], 5)), 100, 12);
+      check('une coupure', plan.consumedAfter, 90 + 5 + 12);
       // La colonne qui a le plus de pages décide, pas la plus haute en tout : celle qui finit sur la première page ne compte pas pour la dernière.
-      plan = ZonePageCut.plan(0, 0, measured(column(Array(6).fill(20), 5), column([20, 20], 50)), 100, 0);
-      check('la colonne qui continue décide', plan.consumedAfter, 20 + 5);
+      plan = ZonePageCut.plan(0, 0, measured(column(Array(6).fill(18), 5), column([20, 20], 50)), 100, 0);
+      check('la colonne qui continue décide', plan.consumedAfter, 18 + 5);
       return { pass: problems.length === 0, notes: JSON.stringify({ problems }) };
     },
   });

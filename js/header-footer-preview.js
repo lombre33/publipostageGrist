@@ -592,7 +592,7 @@ const HeaderFooterPreview = (function () {
       const run = KeepWithNext.runFrom(children, index, blankTailStart);
       if (!(consumed > 0 && run)) return;
       const unit = keptRunPx(run);
-      if (unit > pageContentHeightPx - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) { cutAfterLast(); consumed = 0; }
+      if (unit > pageContentHeightPx - PageLayout.PAGE_FIT_SLACK_PX - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) { cutAfterLast(); consumed = 0; }
     };
     const placeCutTable = (block, cuttable) => {
       const { child, index, captions } = block;
@@ -657,7 +657,7 @@ const HeaderFooterPreview = (function () {
       const unitHeight = keeps ? height + captionPx : height;
       const room = pageContentHeightPx - consumed - gap;
       const staysOnPage = !keeps && isSplittableByExport(child) && room > height / 2;
-      if (consumed > 0 && unitHeight > room && !staysOnPage) { cutAfterLast(); consumed = unitHeight; }
+      if (consumed > 0 && unitHeight > room - PageLayout.PAGE_FIT_SLACK_PX && !staysOnPage) { cutAfterLast(); consumed = unitHeight; }
       else { consumed += gap + unitHeight; }
       lastBlock = child;
       if (keeps) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }

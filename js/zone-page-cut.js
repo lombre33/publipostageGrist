@@ -8,7 +8,8 @@
 // l'aperçu). Les aperçus ne touchent jamais au DOM de ProseMirror : le bloc est descendu par une feuille de style (sa marge haute), comme les marges de
 // coupure des blocs de premier niveau, le document enregistré n'en sait rien.
 const ZonePageCut = (function () {
-  // Un bloc qui dépasse de moins que cela la place de la page y tient : l'arrondi des rectangles (zoom de la feuille) ne doit pas ouvrir une page.
+  // Ce qu'une page porte de moins que cela est une page vide : l'arrondi des rectangles (zoom de la feuille) ne doit pas ouvrir une page pour un bloc qui ouvre déjà la zone. La place qu'un
+  // bloc doit laisser au bas de la page pour y tenir, elle, est PageLayout.PAGE_FIT_SLACK_PX.
   const EPSILON_PX = 0.5;
 
   // Les deux colonnes d'une zone (`zoneEl` : l'élément `.two-columns-zone`, l'enfant de l'enveloppe de l'éditeur ou la zone elle-même en Lecture) ; null
@@ -72,7 +73,7 @@ const ZonePageCut = (function () {
         const ranks = [];
         let pageTop = -start;
         column.blocks.forEach((block, j) => {
-          const fits = column.bottoms[j] - pageTop <= capacity + EPSILON_PX;
+          const fits = column.bottoms[j] - pageTop <= capacity - PageLayout.PAGE_FIT_SLACK_PX;
           if (!fits && (j > 0 || consumed > EPSILON_PX)) { ranks.push(j); pageTop = column.tops[j]; }
         });
         const last = column.blocks.length - 1;

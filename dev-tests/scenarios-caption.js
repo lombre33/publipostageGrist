@@ -750,10 +750,12 @@
       const keptTables = tablesOf(withCaption);
       const tail = keptTables[1];
       const tailLine = tail && tail.layout ? { top: tail.layout.hLineWidth(0, { pageBreak: undefined }), moved: tail.layout.hLineWidth(0, { pageBreak: 'before' }), bottom: tail.layout.hLineWidth(1, {}) } : null;
+      // Le rappel `pageBreakBefore` peut servir aussi les pages de la Lecture (readerCutRule) : seul son rôle de garde des paires compte ici (`keepsPairs`).
+      const pairsHook = result => (result.docDefinition.pageBreakBefore && result.docDefinition.pageBreakBefore.keepsPairs ? 'function' : 'undefined');
       const got = {
-        plainTables: plainTables.length, plainHook: typeof plain.docDefinition.pageBreakBefore,
-        keptTables: keptTables.map(t => t.table.body.length), keptHook: typeof withCaption.docDefinition.pageBreakBefore,
-        imageHook: typeof imageOnly.docDefinition.pageBreakBefore, imageCaptionHook: typeof imageCaption.docDefinition.pageBreakBefore, tallHook: typeof tall.docDefinition.pageBreakBefore,
+        plainTables: plainTables.length, plainHook: pairsHook(plain),
+        keptTables: keptTables.map(t => t.table.body.length), keptHook: pairsHook(withCaption),
+        imageHook: pairsHook(imageOnly), imageCaptionHook: pairsHook(imageCaption), tallHook: pairsHook(tall),
         tailLine, tailFlag: !!(tail && tail.table.dontBreakRows),
       };
       const pass = got.plainTables === 1 && got.plainHook === 'undefined' && JSON.stringify(got.keptTables) === '[5,1]' && got.keptHook === 'function' && got.tailFlag

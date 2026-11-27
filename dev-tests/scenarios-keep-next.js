@@ -512,7 +512,8 @@
     description: 'PDF : le rappel pageBreakBefore n\'existe que s\'il y a une suite de paragraphes gardés (ou un paragraphe gardé et le bloc qui le suit) qui tient dans 90 % d\'une page : sans réglage, pour un seul paragraphe gardé en fin de texte ou pour une suite plus haute que la page, il n\'y en a pas',
     run: async (h) => {
       await h.resetEditor();
-      const hook = async html => typeof (await h.exportPdfContent(html)).docDefinition.pageBreakBefore;
+      // Le rappel peut servir aussi les pages de la Lecture (readerCutRule) : seul son rôle de garde des suites compte ici (`keepsPairs`).
+      const hook = async html => { const rule = (await h.exportPdfContent(html)).docDefinition.pageBreakBefore; return rule && rule.keepsPairs ? 'function' : 'undefined'; };
       const long = Array.from({ length: 90 }, (_, i) => KEPT('Ligne ' + i)).join('');
       const got = {
         none: await hook('<p>Avant</p><p>Un</p><p>Deux</p>'),

@@ -1933,15 +1933,16 @@
     id: 'table_page_cut_gap_plan_counts_the_gap_above_the_table_while_it_stays_on_the_page',
     description: 'plan() : l\'écart qui sépare le tableau de ce qui le précède compte dans la place prise tant que le tableau reste sur la page, se perd quand il passe à la suivante, et ne fait jamais couper avant le premier bloc du document',
     run: async () => {
-      // 50 déjà pris, trois lignes de 20, 20 et 10 sur une page de 100 : tout tient sans l'écart (100), la dernière ligne ne tient plus avec 6 px d'écart (106).
-      const without = TablePageCut.plan(50, [20, 20, 10], 100);
-      const withGap = TablePageCut.plan(50, [20, 20, 10], 100, undefined, undefined, 6);
+      // 50 déjà pris, trois lignes de 20, 20 et 9 sur une page de 100 : tout tient sans l'écart (99, la tolérance d'un demi-pixel de PageLayout.PAGE_FIT_SLACK_PX laissée au bas de la page), la dernière
+      // ligne ne tient plus avec 6 px d'écart (105).
+      const without = TablePageCut.plan(50, [20, 20, 9], 100);
+      const withGap = TablePageCut.plan(50, [20, 20, 9], 100, undefined, undefined, 6);
       // Le tableau tout entier passe à la page suivante : l'écart ne le suit pas (la réserve de la page qui finit l'absorbe).
       const moved = TablePageCut.plan(80, [40, 40], 100, undefined, undefined, 6);
       // Premier bloc du document, plus haut que la page : son écart (dans le remplissage de la page) compte, mais rien ne coupe AVANT lui.
       const first = TablePageCut.plan(0, [150, 40], 100, undefined, undefined, 6);
-      const pass = without.cuts.length === 0 && without.consumedAfter === 100
-        && JSON.stringify(withGap.cuts) === '[2]' && !withGap.blockBreakBefore && withGap.consumedAfter === 10
+      const pass = without.cuts.length === 0 && without.consumedAfter === 99
+        && JSON.stringify(withGap.cuts) === '[2]' && !withGap.blockBreakBefore && withGap.consumedAfter === 9
         && moved.blockBreakBefore && moved.cuts.length === 0 && moved.consumedAfter === 80
         && !first.blockBreakBefore && JSON.stringify(first.cuts) === '[1]' && first.consumedAfter === 40;
       return { pass, notes: JSON.stringify({ without, withGap, moved, first }) };

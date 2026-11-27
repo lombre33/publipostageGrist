@@ -162,7 +162,7 @@ const ReaderMode = (function () {
       const run = KeepWithNext.runFrom(children, index, children.length);
       if (!(consumed > 0 && run)) return;
       const unit = keptRunPx(run);
-      if (unit > pageContentHeightPx - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) { cutBefore(top, index); consumed = 0; }
+      if (unit > pageContentHeightPx - PageLayout.PAGE_FIT_SLACK_PX - consumed && KeepWithNext.fits(unit, pageContentHeightPx)) { cutBefore(top, index); consumed = 0; }
     };
     // Un tableau de premier niveau fait exception : il se coupe entre deux lignes (js/table-page-cut.js, comme l'éditeur, le PDF et le Word), les
     // lignes qui ne tiennent pas ouvrent la page suivante. Le décalage porte alors `rowIndex` (rang de la première ligne de la page qui commence) et
@@ -232,7 +232,7 @@ const ReaderMode = (function () {
       const keeps = captions.length > 0 && Caption.fitsWithCaption(height + captionPx, pageContentHeightPx);
       const unitHeight = keeps ? height + captionPx : height;
       const staysOnPage = !keeps && isSplittableByExport(child) && pageContentHeightPx - consumed - gap > height / 2;
-      if (consumed > 0 && consumed + gap + unitHeight > pageContentHeightPx && !staysOnPage) { cutBefore(top, index); consumed = unitHeight; }
+      if (consumed > 0 && consumed + gap + unitHeight > pageContentHeightPx - PageLayout.PAGE_FIT_SLACK_PX && !staysOnPage) { cutBefore(top, index); consumed = unitHeight; }
       else { consumed += gap + unitHeight; }
       if (keeps) counted = index + 1 + captions.length;
     };

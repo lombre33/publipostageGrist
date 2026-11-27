@@ -344,19 +344,22 @@
 
   cases.push({
     id: 'pdf_gap_whole_paragraphs_need_no_page_break_callback',
-    description: 'Garder un paragraphe d\'une pièce ne passe pas par le rappel `pageBreakBefore` de pdfmake (il remet tout le document en page à chaque paragraphe à cheval : plusieurs secondes pour un courrier de dix pages) ; le contenu rendu ne porte aucun `id` de plus',
+    description: 'Garder un paragraphe d\'une pièce ne passe pas par le rappel `pageBreakBefore` de pdfmake (il remet tout le document en page à chaque paragraphe à cheval : plusieurs secondes pour un courrier de dix pages) ; le rappel de la Lecture (readerCutRule) ne nomme que les blocs qui ouvrent une page, un par page au plus, et le contenu rendu ne porte aucun `id` de paragraphe gardé',
     run: h => inPage(h, async c => {
       const problems = [];
       const html = Array.from({ length: Math.round(c.text * 0.7) }, (_, i) => longPara('P' + i + 'x', 60)).join('');
-      const { result } = await pdfView(h, html);
+      const { result, count } = await pdfView(h, html);
       const doc = result.docDefinition;
-      if (typeof doc.pageBreakBefore !== 'undefined') problems.push('la définition du document porte un rappel pageBreakBefore');
       const content = doc.content || [];
       const whole = content.filter(block => block.unbreakable).length;
       if (whole < content.length * 0.9) problems.push('seulement ' + whole + ' paragraphes gardés d\'une pièce sur ' + content.length);
       const withId = content.filter(block => typeof block.id === 'string' && block.id.indexOf('pp-whole-') === 0).length;
       if (withId) problems.push(withId + ' paragraphes portent un id « pp-whole- » dans le PDF rendu (il alourdit le fichier d\'une destination par paragraphe)');
-      return { pass: problems.length === 0, notes: JSON.stringify({ problems, paragraphes: content.length, gardes: whole }) };
+      // Le rappel de pdfmake met le document en page de nouveau chaque fois qu'il répond oui : une fois par bloc qui ouvre une page de la Lecture, jamais une fois par paragraphe.
+      const openers = content.filter(block => typeof block.id === 'string' && block.id.indexOf('pp-cut-') === 0).length;
+      if (openers > count) problems.push(openers + ' blocs portent un id « pp-cut- » pour ' + count + ' pages : le rappel les passerait un par un');
+      if (typeof doc.pageBreakBefore === 'function' && !openers) problems.push('le document porte un rappel pageBreakBefore sans aucun bloc que la Lecture ouvre sur une page');
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems, paragraphes: content.length, gardes: whole, ouvertures: openers, pages: count }) };
     }),
   });
 
