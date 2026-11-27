@@ -871,6 +871,24 @@
   });
 
   cases.push({
+    id: 'paragraphformat_pdf_indents_written_by_the_editor_are_not_counted_twice',
+    description: 'PDF (lu par pdf.js) : le HTML que l\'ÉDITEUR écrit pour un retrait porte l\'attribut ET son style (`data-indent-left="36" style="padding-left: 36pt"`, `text-indent` pour la première ligne) ; le PDF ne compte le retrait qu\'UNE fois (36 pt, 54 pt à la première ligne d\'un retrait de première ligne de 18 pt, 18 pt pour un retrait suspendu), comme l\'éditeur. Les essais d\'avant donnaient au PDF un HTML sans le style : le PDF d\'Antoine doublait tous les retraits (banc d\'éprouvettes, 27/11)',
+    run: async (h) => {
+      await setDoc(h, '<p>Aa<br>Ab</p><p data-indent-left="36">Bb<br>Bc</p><p data-indent-left="36" data-indent-first="18">Cc<br>Cd</p><p data-indent-left="36" data-indent-first="-18">Dd<br>De</p><p data-indent-first="12">Ee<br>Ef</p>');
+      const html = written();
+      const texts = ['Aa', 'Ab', 'Bb', 'Bc', 'Cc', 'Cd', 'Dd', 'De', 'Ee', 'Ef'];
+      const editor = {};
+      texts.forEach((text) => { editor[text] = editorLeft(text); });
+      const pdf = await pdfLefts(h, html, texts);
+      const pdfOffsets = offsets(pdf, 'Aa');
+      const editorOffsets = offsets(editor, 'Aa');
+      const want = { Aa: 0, Ab: 0, Bb: 36, Bc: 36, Cc: 54, Cd: 36, Dd: 18, De: 36, Ee: 12, Ef: 0 };
+      const pass = /padding-left: 36pt/.test(html) && /text-indent: 18pt/.test(html) && sameOffsets(pdfOffsets, want, 0.6) && sameOffsets(editorOffsets, want, 0.4);
+      return { pass, notes: JSON.stringify({ pdfOffsets, editorOffsets, html: html.slice(0, 200) }) };
+    },
+  });
+
+  cases.push({
     id: 'paragraphformat_pdf_indents_follow_the_editor_and_sleep_in_a_list_and_a_quote',
     description: 'PDF (lu par pdf.js : bords gauches peints) : le retrait à gauche (36 pt) pousse les deux lignes d\'un paragraphe, celui de la première ligne (18 pt) s\'y ajoute à la première seule, un retrait suspendu (-18 pt) la fait ressortir, un retrait seul de première ligne (12 pt) ne touche pas la seconde ; les écarts sont ceux de l\'éditeur, au demi-point près ; le paragraphe d\'une case de tableau suit de même ; le retrait d\'un paragraphe de liste ou de citation ne change rien (mêmes positions que sans)',
     run: async (h) => {

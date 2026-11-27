@@ -418,6 +418,18 @@ const PdfExport = (function () {
     // paragraphe : `clear` l'écarte le temps de la mesure.
     const previousClear = node.style.clear;
     node.style.clear = 'both';
+    // Le retrait que « Paragraphe… » écrit sur un paragraphe (`data-indent-left`, `data-indent-first`) est AUSSI dans son style (`padding-left`, `text-indent`) pour que
+    // l'éditeur et la Lecture le montrent : mesuré ici, il serait compté une fois dans la mesure, et une seconde par applyParagraphFormat qui le lit dans l'attribut. Écarté
+    // le temps de la mesure, il ne reste que ce que le paragraphe doit vraiment (le CSS de sa liste ou de sa citation).
+    const ownFormat = mode === 'text' && node.tagName === 'P' ? ParagraphFormat.readOf(node) : null;
+    const neutralised = ownFormat && (ownFormat.indentLeft != null || ownFormat.indentFirst != null)
+      ? ['paddingLeft', 'paddingRight', 'textIndent'].map(key => [key, node.style[key]])
+      : null;
+    if (neutralised) neutralised.forEach(([key]) => { node.style[key] = '0'; });
+    const restore = () => {
+      node.style.clear = previousClear;
+      if (neutralised) neutralised.forEach(([key, value]) => { node.style[key] = value; });
+    };
     let leftPx;
     if (mode === 'box') {
       leftPx = node.getBoundingClientRect().left;
@@ -437,7 +449,7 @@ const PdfExport = (function () {
         },
       });
       const first = walker.nextNode();
-      if (!first) { node.style.clear = previousClear; return 0; }
+      if (!first) { restore(); return 0; }
       // L'alignement du bloc est neutralisé le temps de la mesure : un bloc centré ou aligné à droite pousse son texte loin du bord gauche du large
       // hôte de mesure, ce qui n'est pas un retrait. Celui du paragraphe du premier texte aussi, quand le bloc n'est pas ce paragraphe : l'éditeur
       // pose l'alignement d'une citation sur son paragraphe, et le premier caractère d'un paragraphe centré n'est pas le bord de sa citation.
@@ -459,7 +471,7 @@ const PdfExport = (function () {
       if (alignedParagraph) alignedParagraph.style.textAlign = previousParagraphAlign;
       node.style.textAlign = previousAlign;
     }
-    node.style.clear = previousClear;
+    restore();
     return Math.round(Math.max(0, (leftPx - originLeft) * PX_TO_PT) * 100) / 100;
   }
 
@@ -969,7 +981,8 @@ const PdfExport = (function () {
     });
   }
   // Découpe les enfants directs d'une cellule en "lignes" pdfmake : <p>/<div>/<h1-6> direct = sa propre ligne, comme un trait (<hr>) ; <ul>/<ol>
-  // direct = une ligne par <li> (listLinesOf) ; une citation = sa propre ligne ; tout le reste s'accumule dans un groupe "inline".
+  // direct = une ligne par <li> (listLinesOf) ; une citation = sa propre ligne ; un tableau aussi (cellTableObject : rangé dans le groupe « en ligne », il
+  // devenait une seule ligne de texte, « Interne1Interne2Interne3Interne4 ») ; tout le reste s'accumule dans un groupe "inline".
   function collectCellLines(container, lines) {
     let pending = [];
     function flushPending() { if (pending.length) { lines.push({ inline: pending }); pending = []; } }
@@ -979,6 +992,7 @@ const PdfExport = (function () {
       if (/^(P|DIV|H[1-6]|PRE|HR)$/.test(node.tagName)) { flushPending(); lines.push(node); return; }
       // Une citation est une ligne à elle (retrait, italique, 4 pt de dessus et de dessous, comme dans le flux) ; un trait qui la traverse la coupe : cellRuleSplitObjects.
       if (node.tagName === 'BLOCKQUOTE') { flushPending(); lines.push(node); return; }
+      if (node.tagName === 'TABLE') { flushPending(); lines.push(node); return; }
       if (/^(UL|OL)$/.test(node.tagName)) { flushPending(); listLinesOf(node, lines); return; }
       pending.push(node);
     });
@@ -1092,6 +1106,25 @@ const PdfExport = (function () {
   // principal, quand les lignes ne se lisent pas ainsi (saut de ligne forcé, liste ou tableau dans le bloc) ou quand pdfmake a dû ramener la colonne
   // dans la page (les lignes du navigateur ne sont plus celles de cette largeur).
   const WRAP_NOISE_PT = 0.5;
+  // La largeur que le navigateur donne au texte de `node` (sa boîte moins son rembourrage et ses bordures), en pt : celle que le PDF lui laisse quand rien ne le rétrécit.
+  function browserTextWidthPt(node) {
+    const style = getComputedStyle(node);
+    const insetPx = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, property) => sum + (parseFloat(style[property]) || 0), 0);
+    return (node.getBoundingClientRect().width - insetPx) * PX_TO_PT;
+  }
+  // La marge droite d'un paragraphe ou d'un titre centré ou à droite du texte courant : le calage des cases (cellWrapMarginPt) ; quand le texte porte des retours à la ligne forcés (une adresse),
+  // ses lignes ne se lisent pas comme des coupures du navigateur : aucune ne doit se recouper, la plus large décide (négative quand elle touche le bord, jamais plus d'une espace).
+  function edgeAlignedMarginPt(node) {
+    const spacePt = spaceWidthPt();
+    if (!node.isConnected || node.querySelector('ul, ol, table')) return spacePt;
+    const widthPt = browserTextWidthPt(node);
+    if (!(widthPt > 0)) return spacePt;
+    if (!node.querySelector('br')) return cellWrapMarginPt(node, widthPt);
+    const lines = groupWordsIntoLines(collectWords(node));
+    if (!lines.length) return spacePt;
+    const widestPt = Math.max(...lines.map(line => line.reduce((sum, w) => sum + w.right - w.left, 0) * PX_TO_PT + (line.length - 1) * spacePt));
+    return Math.max(-WRAP_NOISE_PT, Math.min(0, widthPt - widestPt - WRAP_NOISE_PT));
+  }
   function cellWrapMarginPt(node, cellWidthPt) {
     const spacePt = spaceWidthPt();
     if (!(cellWidthPt > 0) || !node.isConnected || node.querySelector('br, ul, ol, table')) return spacePt;
@@ -1157,6 +1190,7 @@ const PdfExport = (function () {
     if (node.tagName === 'PRE') return codeBlockFrom(node, false, true);
     // Un trait : toute la largeur de la case, comme dans l'éditeur.
     if (node.tagName === 'HR') return ruleBlock(false, cellWidthPt);
+    if (node.tagName === 'TABLE') return cellTableObject(node, cellWidthPt, rootRect, nestedPending);
     if (/^(LI|BLOCKQUOTE)$/.test(node.tagName) && hasRuleChild(node)) return cellRuleSplitObjects(node, cellAlign, cellBaseStyle, images, cellWidthPt);
     const floatBlocks = cellFloatBlocksFrom(node, cellWidthPt);
     if (floatBlocks) return floatBlocks;
@@ -1176,6 +1210,16 @@ const PdfExport = (function () {
     const obj = cellTextObject(node, trimEdgeKeepingReturns(node, stripImageMarkers(rawRuns)), cellAlign, cellWidthPt);
     attributeNestedPendingImages(images, before, obj, node, rootRect, nestedPending);
     return obj;
+  }
+  // Un tableau dans une case : un tableau pdfmake dans la pile de la case, à la largeur de la case (ses colonnes mesurées, ramenées dans ce qu'elle laisse), avec ses
+  // traits, ses bords, son fond et ses marges (comme l'éditeur, la Lecture et le Word, où un tableau de case est un tableau). Les images en calque de ses cases
+  // montent avec celles de la case qui le porte ; elles gardent le tableau (`parentArray`) où leur ancre se trouve.
+  function cellTableObject(node, cellWidthPt, rootRect, nestedPending) {
+    const blocks = tableBlocksFrom(node, false, rootRect, false, 0, 0, cellWidthPt);
+    blocks.forEach((block) => {
+      if (block._nestedPending) { nestedPending.push(...block._nestedPending); delete block._nestedPending; }
+    });
+    return blocks;
   }
   // Un <li> ou une citation de case que traverse un trait (<hr>, enfant direct) : le texte d'avant avec la puce, le trait, le texte d'après sans puce, comme
   // ruleSplitBlocks dans le flux. Les sous-listes sont des lignes de la case à part (collectCellLines), pas du texte du <li>. Une citation de case est en
@@ -1199,7 +1243,7 @@ const PdfExport = (function () {
   // La case rendue en stack pdfmake : les images en attente d'une position retrouvent leur tableau parent, et la case garde la liste de ce qui reste à
   // placer.
   function stackCell(finalStack, nestedPending) {
-    nestedPending.forEach(p => { p.parentArray = finalStack; });
+    nestedPending.forEach(p => { if (!p.parentArray) p.parentArray = finalStack; });
     const result = { stack: finalStack };
     if (nestedPending.length) result._nestedPending = nestedPending;
     return result;
@@ -1251,12 +1295,12 @@ const PdfExport = (function () {
   // Ce qui contient un tableau sans que celui-ci passe d'une page à l'autre : une case, une liste, une citation, un encadré, une colonne.
   const PAGE_FLOW_BREAKERS = 'td, th, li, blockquote, .callout, .two-columns-column';
 
-  function tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt) {
+  function tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt, boxWidthPt) {
     const rows = ExportCommon.tableRows(node);
     const rawRows = rows.length ? rows : Array.from(node.querySelectorAll('tr'));
     const columnCount = tableColumnCount(rawRows);
     const pads = cellPaddingsPt(rawRows);
-    const widths = columnWidthsPt(node, columnCount, pads.left + pads.right, indentPt);
+    const widths = columnWidthsPt(node, columnCount, pads.left + pads.right, indentPt, boxWidthPt);
     // Les réglages de la grille (hauteur d'une ligne, alignement vertical, bords, quadrillage, saut de page avant une ligne) se lisent sur la marque
     // de l'enregistrement de tout tableau, grille ou tableau de document : un tableau que personne n'a réglé n'en porte aucune et sort comme avant, sauf
     // la hauteur de ses lignes, qui est celle de l'écran (`rowHeightsPt`).
@@ -1317,11 +1361,12 @@ const PdfExport = (function () {
   // retirés avant de répartir, pour que le total rendu retombe sur la largeur de page. La coupure des lignes de chaque case se règle dans la case
   // (cellWrapMarginPt), pas ici : une largeur retranchée à chaque colonne rétrécissait le tableau (près de 5 % pour sept colonnes) et les en-têtes
   // étroits se coupaient sur une ligne de plus que dans l'éditeur.
-  function columnWidthsPt(node, columnCount, cellPaddingPt, indentPt) {
+  function columnWidthsPt(node, columnCount, cellPaddingPt, indentPt, boxWidthPt) {
     // `indentPt` : le retrait d'un tableau posé dans un item de liste ou une citation, pris sur la largeur de la page. Un tableau d'une colonne de zone à
     // deux colonnes est pris sur la largeur de sa colonne, celle de l'hôte de mesure de son contenu (htmlToPdfContent), plus étroite que la page.
     const zoneHost = node.closest('[data-zone-column]');
-    const boxPt = zoneHost ? Math.min(CONTENT_WIDTH_PT, zoneHost.getBoundingClientRect().width * PX_TO_PT) : CONTENT_WIDTH_PT;
+    // `boxWidthPt` : la largeur que laisse la case d'un tableau qui contient celui-ci (cellTableObject), à la place de celle de la page.
+    const boxPt = boxWidthPt > 0 ? boxWidthPt : (zoneHost ? Math.min(CONTENT_WIDTH_PT, zoneHost.getBoundingClientRect().width * PX_TO_PT) : CONTENT_WIDTH_PT);
     const usablePt = Math.max(MIN_COLUMN_WIDTH_PT * columnCount, boxPt - (indentPt || 0) - columnCount * (cellPaddingPt + TABLE_LINE_PT) - TABLE_LINE_PT);
     const measuredPx = ExportCommon.measuredColumnWidthsPx(node, columnCount);
     const measuredPt = measuredPx ? measuredPx.map(px => px * PX_TO_PT) : null;
@@ -1563,8 +1608,8 @@ const PdfExport = (function () {
     delete tail._nestedPending;
     return [head, tail];
   }
-  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt) {
-    const blocks = cutTableBlocks(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt);
+  function tableBlocksFrom(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt, boxWidthPt) {
+    const blocks = cutTableBlocks(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt, boxWidthPt);
     blocks.forEach(settleUnitEdges);
     return blocks;
   }
@@ -1593,8 +1638,8 @@ const PdfExport = (function () {
     });
   }
 
-  function cutTableBlocks(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt) {
-    const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt);
+  function cutTableBlocks(node, pageBreakBefore, rootRect, inMainFlow, captionPt, indentPt, boxWidthPt) {
+    const table = tableFrom(node, pageBreakBefore, rootRect, inMainFlow, indentPt, boxWidthPt);
     const segments = table._rowSegments;
     delete table._rowSegments;
     if (!segments) return (captionPt > 0 && splitTailRow(table, node, captionPt)) || [table];
@@ -1656,8 +1701,20 @@ const PdfExport = (function () {
     // sans elle, le contenu de la zone serait décalé de ~4.5 pt vers le haut par rapport à l'éditeur. Mesurée ici, tant que zoneClone est attaché
     // à measureHost : getComputedStyle sur un nœud détaché (après le removeChild plus bas) renvoie padding et bordure à 0.
     const zoneCs = getComputedStyle(zoneClone);
+    // Ce que chaque colonne prend de hauteur en plus de son contenu : `min-height: 48px` (css/style.css) fait d'une colonne d'une ou deux lignes une boîte de 48 px dans l'éditeur et la
+    // Lecture, et les colonnes s'étirent à la hauteur de la plus haute ; le PDF, dont la colonne ne prend que son texte, resserrait tout ce qui suit la zone (18 px sur une colonne d'une
+    // ligne). Mesuré avec le plancher ôté et les colonnes libres (non étirées), contre leur hauteur réelle.
+    const actualPx = measuredCols.map(el => el.getBoundingClientRect().height);
+    const zoneAlign = zoneClone.style.alignItems;
+    const columnFloors = measuredCols.map(el => el.style.minHeight);
+    zoneClone.style.alignItems = 'flex-start';
+    measuredCols.forEach((el) => { el.style.minHeight = '0'; });
+    const naturalPx = measuredCols.map(el => el.getBoundingClientRect().height);
+    measuredCols.forEach((el, i) => { el.style.minHeight = columnFloors[i]; });
+    zoneClone.style.alignItems = zoneAlign;
     const measured = {
       widthPt,
+      floorPt: perColumn((el) => { const i = measuredCols.indexOf(el); return Math.max(0, actualPx[i] - naturalPx[i]) * PX_TO_PT; }, () => 0),
       outerWidthPt: perColumn(el => el.getBoundingClientRect().width * PX_TO_PT, i => widthPt[i]),
       zoneChromeLeftPt: chromePt(zoneClone, 'Left'),
       zoneOwnTopPt: chromePt(zoneClone, 'Top') + (parseFloat(zoneCs.marginTop) || 0) * PX_TO_PT,
@@ -1746,7 +1803,7 @@ const PdfExport = (function () {
       columnAnchors = { runs: columnRuns, ends, below: null };
     }
     const block = {
-      columns: columns.map((stack, i) => ({ width: m.outerWidthPt[i], stack: [{ stack, margin: [m.insetLeft[i], m.insetTop[i], m.insetRight[i], m.insetBottom[i]] }] })),
+      columns: columns.map((stack, i) => ({ width: m.outerWidthPt[i], stack: [{ stack, margin: [m.insetLeft[i], m.insetTop[i], m.insetRight[i], m.insetBottom[i] + m.floorPt[i]] }] })),
       columnGap: PageLayout.COLUMN_GAP_PX * PX_TO_PT,
       margin: [m.zoneChromeLeftPt, m.zoneOwnTopPt, 0, m.zoneOwnBottomPt],
     };
@@ -2625,18 +2682,25 @@ const PdfExport = (function () {
   // de texte). `opts` : `nested` (dans une case, une colonne ou un encadré), `maxWidthPt` (la largeur que pdfmake donne au bloc quand elle est plus
   // étroite que celle du navigateur : une case), `baseStyle` (le style que le bloc hérite de sa case), `textAlign` (l'alignement de la case quand le
   // bloc n'a pas le sien).
+  // `opts.edgeLines` (le texte courant et les colonnes, pas les cases) : aussi le paragraphe ou le titre centré ou à droite qui prend plusieurs lignes dans le navigateur. Le navigateur garde l'espace
+  // qui finit chaque ligne coupée (white-space: break-spaces) et pas celle de la dernière : ses lignes sont décalées d'une espace (d'une demi-espace au centre), la dernière est au vrai bord. Un
+  // seul bloc de texte ne le dit pas (la marge d'une espace décale aussi la dernière ligne, son absence aligne les autres au bord) ; une ligne par bloc (lineBlocksFrom) le dit.
   function signLineBlocksFrom(node, pageBreakBefore, opts) {
-    const { nested = false, maxWidthPt, baseStyle, textAlign: containerAlign } = opts || {};
+    const { nested = false, maxWidthPt, baseStyle, textAlign: containerAlign, edgeLines = false } = opts || {};
+    const textAlign = alignment(node) || containerAlign;
+    const edgeAligned = edgeLines && (textAlign === 'center' || textAlign === 'right');
     // Le texte d'abord : mesurer chaque mot d'un paragraphe n'est utile que s'il porte une espace suivie d'un de ces signes. Un saut de ligne forcé
     // (Maj+Entrée) garde le chemin ordinaire : une ligne vide n'a pas de mot, donc pas de ligne ici (elle disparaîtrait), et le navigateur n'étire
     // pas la ligne qui précède un saut.
-    if (!node.isConnected || node.querySelector('br') || !SIGN_AFTER_SPACE.test(node.textContent || '')) return null;
+    if (!node.isConnected || node.querySelector('br') || !(edgeAligned || SIGN_AFTER_SPACE.test(node.textContent || ''))) return null;
+    // Une seule ligne dans le navigateur : rien à partager (edgeAlignedMarginPt la place au bord).
+    const lineHeightPx = parseFloat(getComputedStyle(node).lineHeight);
+    if (edgeAligned && lineHeightPx > 0 && node.getBoundingClientRect().height < lineHeightPx * 1.5) return null;
     const words = collectWords(node);
     const lines = groupWordsIntoLines(words);
     const opensWithSign = line => LINE_START_SIGNS.includes(line[0].textNode.nodeValue.charAt(line[0].start));
-    if (!lines.some((line, li) => li > 0 && opensWithSign(line))) return null;
+    if (!(edgeAligned && lines.length > 1) && !lines.some((line, li) => li > 0 && opensWithSign(line))) return null;
     const { lineWidthPt, slackPt, indentPt } = paragraphBoxPt(node, node.getBoundingClientRect(), nested, maxWidthPt);
-    const textAlign = alignment(node) || containerAlign;
     const blocks = lineBlocksFrom({ node, words, lines, textAlign, indentPt, lineWidthPt, slackPt, cuts: wordCutsOf(words), baseStyle }, 0, lines.length - 1, { endsParagraph: true, leadPt: leadingSpacePt(words[0]) });
     if (pageBreakBefore) blocks[0].pageBreak = 'before';
     return blocks;
@@ -3603,7 +3667,7 @@ const PdfExport = (function () {
     if (runs.rawRuns.some(r => r._imageMarker)) return effectImageBlocks(ctx, runs) || asHeading(imageParagraphBlocks(ctx, runs));
     // Un paragraphe où le navigateur ouvre une ligne par « : » (ou un signe voisin) : une ligne du navigateur par bloc, pdfmake ne coupe pas avant ce
     // signe.
-    const signLines = hasTextEffects(node) ? null : signLineBlocksFrom(node, pageBreakBefore, { nested: availableWidthPt != null });
+    const signLines = hasTextEffects(node) ? null : signLineBlocksFrom(node, pageBreakBefore, { nested: availableWidthPt != null, edgeLines: true });
     return signLines ? asHeading(signLines) : ordinaryBlocks(ctx, runs);
   }
 
@@ -3770,9 +3834,13 @@ const PdfExport = (function () {
     const isHeading = /^H[1-6]$/.test(tag);
     const indentPt = measureIndentPt(node, isHeading ? 'box' : quoteIndentMode(node, tag));
     // Marge verticale nulle entre blocs (mesuré : .tiptap p/h1-6/li/ol/ul { margin: 0 }) - une marge fictive ici dériverait de la vraie mise en page.
-    // Marge droite = spaceWidthPt() : compense white-space:break-spaces.
-    const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, spaceWidthPt(), 0], lineHeight: LINE_HEIGHT_RATIO };
+    // Marge droite = spaceWidthPt() : compense white-space:break-spaces. Sauf pour un paragraphe ou un titre centré ou à droite : sa ligne se place par son bord droit, et cette espace la
+    // décalait vers la gauche (d'une espace à droite, de la moitié au centre : 2,6 pt sur chaque date et chaque adresse alignées à droite, 1 mm) - le calage des cases de tableau, qui ne
+    // bouge rien quand rien ne presse, lui convient (cellWrapMarginPt).
     const align = alignment(node);
+    const edgeAligned = (align === 'right' || align === 'center') && (tag === 'P' || isHeading);
+    const rightMarginPt = edgeAligned && runs.length ? edgeAlignedMarginPt(node) : spaceWidthPt();
+    const block = { text: runs.length ? runs : ' ', margin: [indentPt, 0, rightMarginPt, 0], lineHeight: LINE_HEIGHT_RATIO };
     if (align) block.alignment = align;
     // Une légende vide garde sa hauteur de petite ligne, comme dans l'éditeur (le bloc de repli `text: ' '` n'a aucun run qui porte la taille).
     if (!runs.length && tag === 'P' && node.hasAttribute('data-caption')) block.fontSize = Caption.SIZE_PT;

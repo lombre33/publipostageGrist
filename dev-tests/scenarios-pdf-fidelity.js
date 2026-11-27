@@ -254,6 +254,140 @@
     },
   });
 
+  // Un tableau dans une case (banc d'éprouvettes du 27/11) : le PDF le rangeait avec le texte « en ligne » de la case, et la grille devenait UNE ligne (« Interne1Interne2Interne3Interne4 »)
+  // au lieu de deux lignes de deux cases, comme l'éditeur, la Lecture et le Word.
+  cases.push({
+    id: 'pdffid_table_inside_a_table_cell_is_a_grid_like_in_the_editor',
+    description: 'Un tableau posé dans la case d\'un tableau est peint en grille dans le PDF : ses cases sont rangées en lignes et en colonnes (« Interne 1 » et « Interne 2 » côte à côte, « Interne 3 » dessous), à l\'écart que le navigateur leur donne, et le texte d\'avant et d\'après reste dans la case',
+    run: async (h) => {
+      await h.resetEditor();
+      const inner = '<table><tbody><tr><td><p>Interne 1</p></td><td><p>Interne 2</p></td></tr><tr><td><p>Interne 3</p></td><td><p>Interne 4</p></td></tr></tbody></table>';
+      const html = '<table><tbody><tr><td><p>Case A</p>' + inner + '<p>Après la table</p></td><td><p>Case B</p></td></tr></tbody></table><p>Fin</p>';
+      const result = await h.exportPdfContent(html, null);
+      const ground = (await h.extractPdfGroundTruth(result.base64)).pages[0];
+      // Le texte du PDF rangé par ligne (même ligne de base) puis par morceaux séparés d'un vrai blanc, sans espaces : ce qu'un lecteur y voit.
+      const byBaseline = {};
+      ground.textItems.forEach(it => { (byBaseline[Math.round(it.y / 3)] = byBaseline[Math.round(it.y / 3)] || []).push(it); });
+      const lines = Object.keys(byBaseline).map(Number).sort((a, b) => a - b).map((key) => {
+        const items = byBaseline[key].sort((a, b) => a.x - b.x);
+        const pieces = [];
+        items.forEach((it, i) => {
+          if (i === 0 || it.x - (items[i - 1].x + items[i - 1].width) > 12) pieces.push('');
+          pieces[pieces.length - 1] += it.str.replace(/\s+/g, '');
+        });
+        return pieces;
+      });
+      const wanted = [['CaseA', 'CaseB'], ['Interne1', 'Interne2'], ['Interne3', 'Interne4'], ['Aprèslatable'], ['Fin']];
+      // L'écart de la deuxième case à la première, mesuré dans le navigateur (l'hôte de mesure de l'export) : le PDF le garde.
+      const host = document.createElement('div');
+      const detach = ExportCommon.attachMeasureHost(host, 719.04, 'pdf-measure-host');
+      host.innerHTML = html;
+      const leftOf = (text) => {
+        const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (node.nodeValue.trim() !== text) continue;
+          const range = document.createRange();
+          range.setStart(node, 0);
+          range.setEnd(node, 1);
+          return range.getBoundingClientRect().left;
+        }
+        return NaN;
+      };
+      const browserGapPt = (leftOf('Interne 2') - leftOf('Interne 1')) * 0.75;
+      detach();
+      // Le mot « Interne » de la première ligne de la grille et celui qui le suit sur la même ligne : leur écart.
+      const interne = ground.textItems.filter(it => it.str.startsWith('Interne')).sort((a, b) => a.y - b.y || a.x - b.x);
+      const pdfGapPt = interne.length >= 2 ? interne[1].x - interne[0].x : NaN;
+      const checks = {
+        linesAreTheGrid: JSON.stringify(lines) === JSON.stringify(wanted),
+        gapIsTheBrowsers: Math.abs(pdfGapPt - browserGapPt) < 2.5,
+      };
+      const failed = Object.keys(checks).filter(k => !checks[k]);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, lines, pdfGapPt, browserGapPt }) };
+    },
+  });
+
+  // Une zone à deux colonnes d'une ligne (banc d'éprouvettes du 27/11) : `min-height: 48px` (css/style.css) en fait une boîte de 48 px dans l'éditeur et la Lecture ; le PDF ne lui donnait que la hauteur du texte,
+  // et tout ce qui suit la zone remontait de 18 px.
+  cases.push({
+    id: 'pdffid_two_columns_zone_keeps_the_minimum_height_of_its_columns',
+    description: 'Le texte qui suit une zone à deux colonnes d\'une seule ligne est, dans le PDF, à la même distance du texte de la zone que dans le navigateur (le plancher de 48 px des colonnes), à un point et demi près ; la zone d\'un texte plus haut garde sa hauteur',
+    run: async (h) => {
+      await h.resetEditor();
+      const zone = (left, right) => '<div class="two-columns-zone"><div class="two-columns-column">' + left + '</div><div class="two-columns-column">' + right + '</div></div>';
+      const html = '<p>Avant</p>' + zone('<p>Zone gauche</p>', '<p style="text-align:right">Zone droite</p>') + '<p>Après la zone</p>'
+        + zone('<p>Haute 1</p><p>Haute 2</p><p>Haute 3</p>', '<p>Droite</p>') + '<p>Fin</p>';
+      const result = await h.exportPdfContent(html, null);
+      const ground = (await h.extractPdfGroundTruth(result.base64)).pages[0];
+      // Le premier mot du texte, le dernier de ceux qui le portent (les trois lignes « Haute » : la troisième).
+      const pdfY = (word, last) => { const items = ground.textItems.filter(it => it.str.startsWith(word)).sort((a, b) => a.y - b.y); const item = last ? items[items.length - 1] : items[0]; return item ? item.y : NaN; };
+      const host = document.createElement('div');
+      const detach = ExportCommon.attachMeasureHost(host, 719.04, 'pdf-measure-host');
+      host.innerHTML = html;
+      const browserY = (text) => {
+        const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (node.nodeValue.trim() !== text) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return range.getBoundingClientRect().top * 0.75;
+        }
+        return NaN;
+      };
+      const pairs = [['Zone gauche', 'Zone', 'Après la zone', 'Après'], ['Haute 3', 'Haute', 'Fin', 'Fin']];
+      const gaps = pairs.map(([from, fromWord, to, toWord]) => ({ from, to, browserPt: browserY(to) - browserY(from), pdfPt: pdfY(toWord, false) - pdfY(fromWord, fromWord === 'Haute') }));
+      detach();
+      const failed = gaps.filter(g => !(Math.abs(g.pdfPt - g.browserPt) < 1.5)).map(g => g.from + ' → ' + g.to);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, gaps }) };
+    },
+  });
+
+  // Le texte centré ou à droite (banc d'éprouvettes du 27/11) : le PDF retranchait une espace à droite de chaque bloc (cf. textBlockFrom), et toute ligne centrée ou à droite se retrouvait une espace trop à gauche
+  // (2,6 pt sur chaque date, chaque adresse, chaque titre centré : 1 mm). Dans le navigateur (white-space: break-spaces) seules les lignes COUPÉES gardent leur espace de fin ; la dernière ligne est au vrai bord.
+  cases.push({
+    id: 'pdffid_centered_and_right_aligned_text_sits_where_the_browser_puts_it',
+    description: 'Un paragraphe ou un titre centré ou à droite - d\'une ligne, de plusieurs lignes coupées, d\'une colonne de zone, avec un saut de ligne forcé - commence dans le PDF à la même abscisse que dans le navigateur sur chacune de ses lignes (un demi-point près) : plus d\'espace de trop à gauche',
+    run: async (h) => {
+      await h.resetEditor();
+      const long = ' qui revient à la ligne plusieurs fois parce que son texte est plus long que la largeur de la page entière, vraiment beaucoup plus long, au point de faire au moins deux lignes dans le navigateur comme dans le PDF.';
+      const html = '<p style="text-align:right">Bonjour droite</p><p style="text-align:center">Bonjour centré</p>'
+        + '<p style="text-align:right">Un paragraphe aligné à droite' + long + '</p><p style="text-align:center">Un paragraphe centré' + long + '</p>'
+        + '<h2 style="text-align:right">Titre à droite</h2><h2 style="text-align:center">Titre centré</h2>'
+        + '<p style="text-align:right">Une adresse<br>sur deux lignes</p><p style="text-align:center">Centré<br>deux lignes de longueurs différentes</p>'
+        + '<div class="two-columns-zone"><div class="two-columns-column"><p>Zone gauche</p></div><div class="two-columns-column"><p style="text-align:right">Zone droite</p><p style="text-align:center">Zone centre</p></div></div>';
+      const result = await h.exportPdfContent(html, null);
+      const ground = (await h.extractPdfGroundTruth(result.base64)).pages[0];
+      const marginLeftPt = result.docDefinition.pageMargins[0];
+      const clusters = (values, key) => {
+        const out = [];
+        values.sort((a, b) => key(a) - key(b)).forEach((v) => { const last = out[out.length - 1]; if (last && key(v) - key(last[0]) < 5) last.push(v); else out.push([v]); });
+        return out;
+      };
+      // Le départ de chaque ligne du PDF (sous leur zone, les deux colonnes se lisent sur des lignes de base communes : on garde la plus à droite de chaque rangée, la colonne de droite).
+      const pdfLines = clusters(ground.textItems.slice(), it => it.y).map(row => Math.max(...row.map(it => it.x)));
+      const host = document.createElement('div');
+      const detach = ExportCommon.attachMeasureHost(host, 719.04, 'pdf-measure-host');
+      host.innerHTML = html;
+      const hostLeft = host.getBoundingClientRect().left;
+      const words = [];
+      const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const word of node.nodeValue.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, word.index);
+          range.setEnd(node, word.index + word[0].length);
+          const rect = range.getBoundingClientRect();
+          words.push({ left: rect.left - hostLeft, top: rect.top });
+        }
+      }
+      const browserLines = clusters(words, w => w.top).map(row => (Math.max(...row.map(w => w.left)) * 0.75) + marginLeftPt);
+      detach();
+      const gaps = browserLines.map((x, i) => (pdfLines[i] === undefined ? null : Math.round((pdfLines[i] - x) * 100) / 100));
+      const bad = gaps.map((g, i) => ({ line: i, gap: g })).filter(g => g.gap === null || Math.abs(g.gap) > 0.5);
+      return { pass: pdfLines.length === browserLines.length && bad.length === 0, notes: JSON.stringify({ browser: browserLines.length, pdf: pdfLines.length, bad }) };
+    },
+  });
+
   // L'ancien retrait (une espace et demie de chaque colonne) coupait autrement que le navigateur sur ~12 % des largeurs d'une case : ces largeurs-là, relevées
   // sur deux textes de plusieurs lignes (le second, gras, italique et sur une bordure d'en-tête étroite), plus quelques-unes où il coupait bien.
   cases.push({
