@@ -388,6 +388,46 @@
     },
   });
 
+  // Une ligne de petits caractères sous une ligne de la taille du paragraphe (la désignation de 10,5 pt et sa description de 8 pt d'une ligne de facture, banc d'éprouvettes du 27/11) : la ligne du navigateur
+  // ne descend pas sous la cale du paragraphe (14 px à 1,42), et son texte est sur la ligne de base de la cale. Le PDF des cases de tableau comptait 8 pt pour la ligne et la posait en haut : -4,7 px de pas
+  // pour chaque ligne d'une facture.
+  cases.push({
+    id: 'pdffid_small_text_line_under_a_normal_line_keeps_the_paragraph_pitch_and_baseline',
+    description: 'La description en 8 pt sous une désignation de 10,5 pt (saut de ligne forcé), dans une case de tableau comme dans le texte courant, et un paragraphe entièrement en 8 pt dans une case, sont posés comme dans le navigateur : la ligne de base de chaque ligne et celle du texte qui suit, à un point près',
+    run: async (h) => {
+      await h.resetEditor();
+      const small = t => '<span style="font-size: 8pt">' + t + '</span>';
+      const html = '<table><tbody><tr><td><p>Désignation<br>' + small('Description') + '</p></td><td><p>Autre</p></td></tr>'
+        + '<tr><td><p>' + small('Entièrement petit dans la case, assez long pour prendre plusieurs lignes dans la case du tableau ici') + '</p></td><td><p>Suite</p></td></tr></tbody></table>'
+        + '<p>Texte hors tableau<br>' + small('Petite ligne hors tableau') + '</p><p>Fin</p>';
+      const result = await h.exportPdfContent(html, null);
+      const ground = (await h.extractPdfGroundTruth(result.base64)).pages[0];
+      const pdfBaseline = (word) => { const items = ground.textItems.filter(it => it.str.startsWith(word)).sort((a, b) => a.y - b.y); return items[0] ? items[0].y : NaN; };
+      const host = document.createElement('div');
+      const detach = ExportCommon.attachMeasureHost(host, 719.04, 'pdf-measure-host');
+      host.innerHTML = html;
+      // La ligne de base d'un mot dans le navigateur : le haut de sa boîte plus l'ascendante de Roboto (1900 / 2048 de la taille).
+      const browserBaseline = (text) => {
+        const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.nodeValue.trim().startsWith(text)) continue;
+          const range = document.createRange();
+          range.setStart(node, 0);
+          range.setEnd(node, text.length);
+          return (range.getBoundingClientRect().top + (1900 / 2048) * parseFloat(getComputedStyle(node.parentElement).fontSize)) * 0.75;
+        }
+        return NaN;
+      };
+      // Chaque mot contre « Désignation » (le premier texte du document), dans les deux moteurs.
+      const reference = { browser: browserBaseline('Désignation'), pdf: pdfBaseline('Désignation') };
+      const words = [['Description', 'Description'], ['Entièrement', 'Entièrement'], ['Texte hors', 'Texte'], ['Petite ligne', 'Petite'], ['Fin', 'Fin']];
+      const gaps = words.map(([browserText, pdfWord]) => ({ word: browserText, browserPt: Math.round((browserBaseline(browserText) - reference.browser) * 100) / 100, pdfPt: Math.round((pdfBaseline(pdfWord) - reference.pdf) * 100) / 100 }));
+      detach();
+      const failed = gaps.filter(g => !(Math.abs(g.pdfPt - g.browserPt) < 1.2)).map(g => g.word);
+      return { pass: failed.length === 0, notes: JSON.stringify({ failed, gaps }) };
+    },
+  });
+
   // L'ancien retrait (une espace et demie de chaque colonne) coupait autrement que le navigateur sur ~12 % des largeurs d'une case : ces largeurs-là, relevées
   // sur deux textes de plusieurs lignes (le second, gras, italique et sur une bordure d'en-tête étroite), plus quelques-unes où il coupait bien.
   cases.push({

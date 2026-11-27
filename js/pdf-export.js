@@ -1034,7 +1034,14 @@ const PdfExport = (function () {
   function cellLineToPdfObject(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending, state) {
     const blocks = cellLineBlocks(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending, state);
     // Le réglage « Paragraphe… » d'un paragraphe, d'un élément de liste ou d'une citation de la case (une ligne de la case chacun, sous-listes comprises).
-    return !line.inline && /^(P|LI|BLOCKQUOTE)$/.test(line.tagName) ? applyParagraphFormat(blocks, line) : blocks;
+    if (line.inline || !/^(P|LI|BLOCKQUOTE)$/.test(line.tagName)) return blocks;
+    const placed = applyParagraphFormat(blocks, line);
+    if (line.tagName !== 'P') return placed;
+    // La ligne du PDF contre celle de l'éditeur, comme dans le texte courant (blockFrom) : le pas des lignes d'un paragraphe dont le texte est plus petit que sa cale (un 8 pt dans un paragraphe de
+    // 10,5 pt : la ligne du navigateur ne descend pas sous la cale) et sa police. Une case de facture au texte de description en 8 pt perdait 4,7 px à chaque ligne.
+    const list = Array.isArray(placed) ? placed : [placed];
+    fitLineBoxes(list, line);
+    return list;
   }
   function cellLineBlocks(line, cellAlign, cellBaseStyle, images, cellWidthPt, rootRect, nestedPending, state) {
     const carry = state && state.floatCarry;
@@ -3514,7 +3521,17 @@ const PdfExport = (function () {
     const strutPt = parseFloat(cs.fontSize) * PX_TO_PT;
     const natural = ink => ink.size * (ink.metrics.asc + ink.metrics.desc);
     block.lineHeight = factor * Math.max(strutPt, tallest.size) / natural(tallest);
-    if (tallest.size > strutPt) runs.forEach((run, i) => { if (inks[i].size < strutPt) run.lineHeight = factor * strutPt / natural(inks[i]); });
+    // Chaque texte plus petit que la cale a le pas de la cale à lui seul, que le plus grand soit plus grand qu'elle ou non : une ligne de 8 pt après un saut de ligne forcé, dans un paragraphe dont
+    // l'autre ligne est de 10,5 pt (la désignation et sa description d'une ligne de facture), n'a que ses 8 pt dans la ligne de pdfmake, et perdait 4,7 px.
+    runs.forEach((run, i) => { if (inks[i].size < strutPt - 0.01) run.lineHeight = factor * strutPt / natural(inks[i]); });
+    // pdfmake pose le texte de chaque ligne sur la ligne de base de son plus grand texte, le haut de la ligne étant celui de ce texte : la dernière ligne d'un paragraphe, toute en petits caractères
+    // (la description de 8 pt sous la désignation de 10,5 pt), n'a que ses 8 pt et remontait de 4,7 px. Les lignes qu'un saut de ligne ferme ont celui-là (le saut est de la taille de la cale) ; la
+    // dernière reçoit une espace de la taille de la cale, qui ne s'écrit pas et ne coupe rien.
+    if (Array.isArray(block.text) && tallest.size >= strutPt - 0.01) {
+      const lastBreak = block.text.map(run => run && run.text === '\n').lastIndexOf(true);
+      const lastLine = lastBreak >= 0 ? block.text.slice(lastBreak + 1).filter(run => run && typeof run === 'object' && !run.image && !run.svg) : [];
+      if (lastLine.length && lastLine.every(run => (run.fontSize || block.fontSize || DEFAULT_FONT_SIZE) < strutPt - 0.01)) block.text.push({ text: ' ', fontSize: strutPt });
+    }
     // Le texte courant du PDF (10,5 pt, Roboto) est depuis toujours posé 0,8 à 1,3 pt au-dessus de l'éditeur : les citations, les listes, les cases de tableau, les traits et les essais qui les
     // mesurent partent de cette ligne. Seul l'écart EN PLUS de celui du texte courant est donc rattrapé : le texte courant ne bouge pas, un gros titre se range par rapport à lui comme à l'écran.
     // Sous FIT_MIN_PT (2 px) le navigateur arrondit lui-même ses lignes au pixel et les essais qui comparent un titre à l'éditeur (`imageText`) tolèrent 0,6 pt : un titre de 18 pt n'est pas touché.
