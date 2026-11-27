@@ -108,9 +108,27 @@ const BottomAnchor = (function () {
     return found;
   }
 
+  // La zone à deux colonnes dont la sélection est TOUT ENTIÈRE dans une colonne (le curseur dans un paragraphe d'une colonne, ou des lignes choisies d'une colonne), ou null : la sélection qui
+  // sort de la zone (début avant elle, fin après) ou qui est la zone elle-même (sélection d'objet) vise la zone entière, comme un tableau.
+  function zoneAround(editor) {
+    const { selection } = editor.state;
+    if (selection.node) return null;
+    const { $from, $to } = selection;
+    if ($from.depth < 1 || $from.node(1).type.name !== 'twoColumnsZone') return null;
+    return $to.depth >= 1 && $to.node(1) === $from.node(1) ? $from.node(1) : null;
+  }
+
   // `locked` : la clé de la raison du grisage, ou null ; `active` : tous les blocs visés portent le réglage ; `targets` : ces blocs.
+  // Dans une colonne, le réglage se poserait sur la ZONE ENTIÈRE (le seul bloc de premier niveau qui la porte) : une lettre en deux colonnes, haute d'une page, partait en page 2 (bug du 27/11 : « j'ai mis
+  // l'option sur les 4 dernières lignes de la colonne de gauche ») - la ligne est grisée, avec sa raison, tant que le calage DANS une colonne (le bas de la page pour ces seules lignes, sans toucher au reste des
+  // colonnes) n'existe pas. Une zone déjà calée (un document d'avant ce grisage) garde sa ligne cochée et active : un clic retire le réglage.
   function status(editor) {
-    const targets = HeaderFooterPreview.getHfMode() ? [] : eligibleBlocks(editor);
+    const hfMode = HeaderFooterPreview.getHfMode();
+    const targets = hfMode ? [] : eligibleBlocks(editor);
+    if (targets.length && !hfMode) {
+      const zone = zoneAround(editor);
+      if (zone && !zone.attrs.bottomAnchor) return { targets: [], active: false, locked: 'bottomAnchor.inColumn' };
+    }
     const active = targets.length > 0 && targets.every(t => t.node.attrs.bottomAnchor);
     return { targets, active, locked: targets.length ? null : 'bottomAnchor.notHere' };
   }

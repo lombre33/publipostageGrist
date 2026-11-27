@@ -124,8 +124,8 @@
   });
 
   cases.push({
-    id: 'bottomanchor_menu_row_takes_the_whole_table_or_zone_around_the_cursor_and_the_captions_that_follow',
-    description: 'Le curseur dans une case de tableau (ou dans une colonne du bloc de signature) : la ligne règle le bloc de premier niveau entier ; une légende qui suit l\'image ou le tableau reçoit le réglage avec lui, et le perd avec lui',
+    id: 'bottomanchor_menu_row_takes_the_whole_table_around_the_cursor_and_the_captions_that_follow',
+    description: 'Le curseur dans une case de tableau : la ligne règle le tableau de premier niveau entier ; une légende qui suit l\'image ou le tableau reçoit le réglage avec lui, et le perd avec lui',
     run: async (h) => {
       const out = {};
       await setDoc(h, '<p>Avant</p>' + TABLE + '<p data-caption="true">Légende du tableau</p><p>Après</p>');
@@ -134,12 +134,76 @@
       out.table = anchorList();
       await press();
       out.tableOff = anchorList();
-      await setDoc(h, '<p>Avant</p>' + ZONE + '<p>Après</p>');
-      await cursorIn('Date');
+      const pass = out.table === 'paragraph:Avant|table:Total10*|paragraph:Légende du t*|paragraph:Après' && out.tableOff === 'paragraph:Avant|table:Total10|paragraph:Légende du t|paragraph:Après';
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // Bug du 27/11 (Antoine : « c'est un module 2 colonnes, et sur les 4 lignes de la fin de la colonne de gauche j'ai mis l'option et ça crée ce bug-là ») : la ligne, posée depuis une colonne, réglait la ZONE ENTIÈRE ;
+  // la lettre (une zone presque haute d'une page) partait en page 2 et la page 1 ne gardait que les logos en calque. Désormais la ligne est grisée, avec sa raison, dans une colonne, tant que le calage des seules
+  // lignes choisies n'existe pas ; la zone entière se règle en la sélectionnant en entier.
+  const LETTER = '<div class="two-columns-zone"><div class="two-columns-column"><p>Vice-presidece</p><p></p><p>Adresse postale</p><p>Talence cedex</p></div><div class="two-columns-column"><p>Madame, Monsieur</p><p>Corps du courrier</p></div></div>';
+  cases.push({
+    id: 'bottomanchor_in_a_column_of_a_zone_the_row_is_greyed_with_its_reason_and_the_zone_is_not_anchored',
+    description: 'Le curseur, ou des lignes choisies, dans une colonne d\'une zone à deux colonnes (la colonne de gauche ou celle de droite) : la ligne « En bas de la page » est grisée, avec sa raison dans les deux langues, et un clic ne règle rien (avant, il réglait la zone entière : la lettre d\'Antoine partait en page 2) ; une sélection qui sort de la zone, ou la zone prise en entier, la règle toujours, comme un tableau',
+    run: async (h) => {
+      const out = {};
+      await setDoc(h, '<p>Avant</p>' + LETTER + '<p>Après</p>');
+      const reasonFr = I18n.t('bottomAnchor.inColumn');
+      I18n.setLang('en');
+      const reasonEn = I18n.t('bottomAnchor.inColumn');
+      I18n.setLang('fr');
+      const greyed = s => s.disabled && s.greyed && s.title === reasonFr && s.tab === -1 && !s.checked;
+      await cursorIn('Talence');
+      out.cursorLeft = rowState();
       await press();
-      out.zone = anchorList();
-      const pass = out.table === 'paragraph:Avant|table:Total10*|paragraph:Légende du t*|paragraph:Après' && out.tableOff === 'paragraph:Avant|table:Total10|paragraph:Légende du t|paragraph:Après'
-        && out.zone === 'paragraph:Avant|twoColumnsZone:Nom et signa*|paragraph:Après';
+      out.afterCursorLeft = anchorList();
+      await selectRange('Adresse', 'Talence');
+      out.linesLeft = rowState();
+      await press();
+      out.afterLinesLeft = anchorList();
+      await cursorIn('Corps');
+      out.cursorRight = rowState();
+      await press();
+      out.afterCursorRight = anchorList();
+      const untouched = 'paragraph:Avant|twoColumnsZone:Vice-preside|paragraph:Après';
+      // Une sélection qui va d'avant la zone à après elle : la zone est visée en entier, avec les blocs qu'elle traverse.
+      await selectRange('Avant', 'Après');
+      out.spanning = rowState();
+      await press();
+      out.afterSpanning = anchorList();
+      await press();
+      out.cleared = anchorList();
+      // La zone prise en entier (sélection d'objet).
+      ed().commands.setNodeSelection(positionOf(n => n.type.name === 'twoColumnsZone'));
+      await sleep(150);
+      out.whole = rowState();
+      await press();
+      out.afterWhole = anchorList();
+      out.texts = { reasonFr, reasonEn };
+      const pass = greyed(out.cursorLeft) && greyed(out.linesLeft) && greyed(out.cursorRight)
+        && out.afterCursorLeft === untouched && out.afterLinesLeft === untouched && out.afterCursorRight === untouched
+        && !out.spanning.disabled && out.afterSpanning === 'paragraph:Avant*|twoColumnsZone:Vice-preside*|paragraph:Après*' && out.cleared === untouched
+        && !out.whole.disabled && out.afterWhole === 'paragraph:Avant|twoColumnsZone:Vice-preside*|paragraph:Après'
+        && reasonFr !== reasonEn && /^Inside a column/.test(reasonEn) && /^Dans une colonne/.test(reasonFr);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'bottomanchor_a_zone_already_anchored_keeps_its_row_checked_and_a_click_from_a_column_removes_the_setting',
+    description: 'Une zone déjà calée (un document d\'avant le grisage dans une colonne) : le curseur dans l\'une de ses colonnes montre la ligne cochée et active, et un clic retire le réglage de la zone (la personne n\'est jamais coincée avec un réglage qu\'elle ne peut plus défaire)',
+    run: async (h) => {
+      const out = {};
+      await setDoc(h, '<p>Avant</p>' + withAnchor(LETTER) + '<p>Après</p>');
+      out.start = anchorList();
+      await cursorIn('Talence');
+      out.state = rowState();
+      await press();
+      out.after = anchorList();
+      out.stateAfter = rowState();
+      const pass = out.start === 'paragraph:Avant|twoColumnsZone:Vice-preside*|paragraph:Après' && out.state.checked && !out.state.disabled && !out.state.greyed
+        && out.after === 'paragraph:Avant|twoColumnsZone:Vice-preside|paragraph:Après' && !out.stateAfter.checked && out.stateAfter.disabled && out.stateAfter.greyed;
       return { pass, notes: JSON.stringify(out) };
     },
   });

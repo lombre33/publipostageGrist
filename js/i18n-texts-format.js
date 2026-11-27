@@ -112,6 +112,7 @@ const I18nTextsFormat = {
   'bottomAnchor.row': { fr: 'En bas de la page', en: 'At the bottom of the page' },
   'bottomAnchor.aria': { fr: 'En bas de la page : le bloc se pose au bas de la page où il tombe, quelle que soit la longueur du texte au-dessus', en: 'At the bottom of the page: the block sits at the foot of the page it falls on, however long the text above it' },
   'bottomAnchor.notHere': { fr: 'Seulement pour les blocs du texte (ni un bloc de texte conditionnel, ni un en-tête ou un pied de page, ni un cadre libre ou un sommaire)', en: 'Only for blocks of the text (not a conditional text block, a header or a footer, a free frame or a table of contents)' },
+  'bottomAnchor.inColumn': { fr: 'Dans une colonne, ce réglage n’est pas encore possible : il calerait toute la zone à deux colonnes au bas de la page, pas seulement les lignes choisies. Sélectionnez la zone entière pour la caler, ou un bloc hors de la zone', en: 'Inside a column, this setting is not available yet: it would pin the whole two-column zone to the bottom of the page, not just the chosen lines. Select the whole zone to pin it, or a block outside the zone' },
   // « Paragraphe… » (js/paragraph-format.js) : la ligne du menu Alignement, la raison de son grisage et la fenêtre de l'interligne et des espaces avant et après.
   'paragraphFormat.row': { fr: 'Paragraphe…', en: 'Paragraph…' },
   'paragraphFormat.aria': { fr: 'Paragraphe : interligne, espaces et retraits', en: 'Paragraph: line spacing, spaces and indents' },
