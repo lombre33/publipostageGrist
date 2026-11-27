@@ -112,25 +112,6 @@ async function measure(page, context, tag) {
   return row;
 }
 
-// Un document d'éprouvette : posé dans l'éditeur du widget (marges, format et sens de la page, en-tête et pied), les images dessinées dans la page.
-async function setStressDocument(page, d) {
-  await page.evaluate(async ({ doc }) => {
-    const draw = (w, h) => {
-      const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      const g = ctx.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#1d4ed8'); g.addColorStop(1, '#60a5fa');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#fff'; ctx.font = Math.max(8, Math.round(Math.min(w, h) / 4)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(w + 'x' + h, w / 2, h / 2);
-      return canvas.toDataURL('image/png');
-    };
-    const html = doc.html.replace(/\{\{img:(\d+)x(\d+)\}\}/g, (m, w, h) => draw(Math.max(8, Number(w)), Math.max(8, Number(h))));
-    PageLayout.setMarginsMm({ top: doc.page.top, right: doc.page.right, bottom: doc.page.bottom, left: doc.page.left, orientation: doc.page.orientation, format: doc.page.format });
-    Editor.setHTML(html);
-    Editor.setHeaderFooterData(doc.headerFooter);
-  }, { doc: d });
-  await sleep(500);
-}
-
 if (todo.length) {
   for (const { entry, files } of todo) {
     const started = Date.now();
@@ -172,29 +153,16 @@ if (todo.length) {
 }
 
 if (stressDocs.length) {
-  // Un seul widget pour tous les documents d'éprouvette : un petit modèle de la galerie l'installe (il donne au widget une table et une ligne), puis chaque document remplace son contenu.
+  // Un seul widget pour tous les documents d'éprouvette (kit.openBlankSession) ; chaque document remplace le contenu.
   const started = Date.now();
   let session = null;
   try {
-    const root = join(ROOT, 'templates-gallery');
-    const entry = readJson(join(root, 'catalogue.json')).find((e) => e.pack && e.id === 'attestation') || readJson(join(root, 'catalogue.json')).find((e) => e.pack);
-    const files = entryFiles(root, entry);
-    const family = files.familyTables;
-    const tables = files.pack.tables.map((t) => (typeof t !== 'string' ? t : family.tables.find((x) => x.id === t)));
-    const rows = Object.assign({}, files.familyExemple && files.familyExemple.rows, files.exemple.rows);
-    const imageSpecs = Object.assign({}, files.familyExemple && files.familyExemple.images, files.exemple.images);
-    const images = {};
-    Object.keys(imageSpecs).forEach((id) => { images[id] = kit.makeImage(imageSpecs[id]); });
-    session = await kit.openWidget(browser, images, { extensions: files.exemple.extensions || [] });
-    const { page, context } = session;
-    await kit.installFromGallery(page, entry.name);
-    const main = files.pack.main || tables[0].id;
-    await kit.fillRows(page, tables.map((t) => ({ id: t.id, columns: t.columns })), rows);
-    const rowId = (rows[main] || [])[0].id;
+    session = await kit.openBlankSession(browser);
+    const { page, context, main, rowId } = session;
     for (const d of stressDocs) {
       const tag = d.id;
       try {
-        await setStressDocument(page, d);
+        await kit.setDocument(page, d);
         await kit.fire(page, main, rowId);
         results.push(Object.assign(await measure(page, context, tag), { seed: d.seed }));
       } catch (e) {

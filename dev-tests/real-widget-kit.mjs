@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { entryFiles, readJson } from './gallery-captures-lib.mjs';
 
 export const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
@@ -241,10 +242,53 @@ export async function createKit({ port, viewW = 1100, viewH = 1100, now = new Da
     await exportPdf(page, file);
   }
 
+  // Un widget « vide » pour les documents fabriqués : un petit modèle de la galerie l'installe (il donne au widget une table et une ligne d'exemple, sans quoi rien ne s'affiche), puis le document est remplacé
+  // par setDocument. Rend { page, context, main, rowId, problems }.
+  async function openBlankSession(browser) {
+    const root = join(ROOT, 'templates-gallery');
+    const catalogue = readJson(join(root, 'catalogue.json'));
+    const entry = catalogue.find((e) => e.pack && e.id === 'attestation') || catalogue.find((e) => e.pack);
+    const files = entryFiles(root, entry);
+    const family = files.familyTables;
+    const tables = files.pack.tables.map((t) => (typeof t !== 'string' ? t : family.tables.find((x) => x.id === t)));
+    const rows = Object.assign({}, files.familyExemple && files.familyExemple.rows, files.exemple.rows);
+    const imageSpecs = Object.assign({}, files.familyExemple && files.familyExemple.images, files.exemple.images);
+    const images = {};
+    Object.keys(imageSpecs).forEach((id) => { images[id] = makeImage(imageSpecs[id]); });
+    const session = await openWidget(browser, images, { extensions: files.exemple.extensions || [] });
+    await installFromGallery(session.page, entry.name);
+    const main = files.pack.main || tables[0].id;
+    await fillRows(session.page, tables.map((t) => ({ id: t.id, columns: t.columns })), rows);
+    return Object.assign(session, { main, rowId: (rows[main] || [])[0].id });
+  }
+  // Un document posé dans l'éditeur du widget : son HTML (les images écrites `{{img:LARGEURxHAUTEUR}}` sont dessinées dans la page), les marges, le format et le sens de la page, l'en-tête et le pied de page.
+  // `doc` : { html, page: { orientation, format, top, right, bottom, left }, headerFooter }.
+  async function setDocument(page, doc) {
+    await page.evaluate(({ d }) => {
+      const draw = (w, h) => {
+        const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        const g = ctx.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#1d4ed8'); g.addColorStop(1, '#60a5fa');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#fff'; ctx.font = Math.max(8, Math.round(Math.min(w, h) / 4)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(w + 'x' + h, w / 2, h / 2);
+        return canvas.toDataURL('image/png');
+      };
+      const html = d.html.replace(/\{\{img:(\d+)x(\d+)\}\}/g, (m, w, h) => draw(Math.max(8, Number(w)), Math.max(8, Number(h))));
+      PageLayout.setMarginsMm(d.page);
+      Editor.setHTML(html);
+      Editor.setHeaderFooterData(d.headerFooter || { enabled: false, differentFirstPage: false, header: { default: '' }, footer: { default: '' } });
+    }, { d: doc });
+    await sleep(500);
+  }
+  // Seules les marges changent (le balayage de la limite de page) : le texte du document reste tel quel.
+  async function setMargins(page, margins) {
+    await page.evaluate((m) => { PageLayout.setMarginsMm(m); }, margins);
+    await sleep(150);
+  }
   return {
     work, base: BASE, viewW: VIEW_W, viewH: VIEW_H,
     launch: () => chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] }),
     close: () => server.close(),
-    makeImage, openWidget, rectOf, click, clickMenuRow, installFromGallery, fillRows, fire, exportPdf, chooseExportType, exportAs,
+    makeImage, openWidget, rectOf, click, clickMenuRow, installFromGallery, fillRows, fire, exportPdf, chooseExportType, exportAs, setDocument, setMargins, openBlankSession,
   };
 }
