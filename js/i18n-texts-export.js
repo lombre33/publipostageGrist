@@ -143,6 +143,7 @@ const I18nTextsExport = {
   'confirm.printReady': { fr: 'Le document est prêt. Ouvrir la fenêtre d’impression de votre navigateur ?', en: 'The document is ready. Open your browser’s print window?' },
   'status.emailGenerating': { fr: 'Préparation de l’email…', en: 'Preparing the email…' },
   'status.emailCreated': { fr: 'Email créé, ouverture de votre logiciel de messagerie.', en: 'Email created, opening your mail client.' },
+  'status.emailCreatedWarningOff': { fr: 'Email créé, ouverture de votre logiciel de messagerie. L’avertissement « Email trop long » ne s’affichera plus : Réglages > Email pour le rallumer.', en: 'Email created, opening your mail client. The “Email too long” warning will no longer appear: turn it back on in Settings > Email.' },
   'status.emailCreationError': { fr: 'Erreur lors de la création de l’email.', en: 'Error while creating the email.' },
   'alert.noRecordForEmail': { fr: 'Aucune ligne n’est sélectionnée. Cliquez sur une ligne dans Grist, puis créez l’email.', en: 'No row is selected. Click a row in Grist, then create the email.' },
   'confirm.emailTooLong': { fr: 'Cet email dépasse {length} caractères (limite conseillée : {limit}) : certains logiciels de messagerie (Outlook notamment) tronqueront le message. Continuer quand même ?', en: 'This email is {length} characters long (recommended limit: {limit}): some mail clients (Outlook in particular) will truncate the message. Continue anyway?' },

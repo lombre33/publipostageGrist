@@ -420,6 +420,7 @@ if (has('README.md')) {
     pp_shortcuts: ['raccourcis', 'shortcuts'],
     pp_shortcuts_view: ['vue de leur panneau', 'view of their panel'],
     pp_mail_client: ['messagerie', 'mail program'],
+    pp_email_length_warning: ['avertissement « email trop long »', 'warning “email too long”'],
     pp_autosave_enabled: ['enregistrement automatique', 'autosave'],
     pp_track_format: ['suivre la mise en forme', 'track formatting'],
     pp_sheet_assembly: ['assemblage avant impression', 'sheet assembly before printing'],

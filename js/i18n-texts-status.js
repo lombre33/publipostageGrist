@@ -222,6 +222,7 @@ const I18nTextsStatus = {
   'dialog.newFolder.title': { fr: 'Nouveau dossier', en: 'New folder' },
   'dialog.moveFolder.title': { fr: 'Déplacer vers un dossier', en: 'Move to a folder' },
   'dialog.emailTooLong.title': { fr: 'Email trop long', en: 'Email too long' },
+  'dialog.emailTooLong.dontShowAgain': { fr: 'Ne plus afficher cet avertissement', en: 'Don’t show this warning again' },
   'dialog.batchExport.title': { fr: 'Exporter les lignes', en: 'Export rows' },
   'dialog.batchExport.titleGrid': { fr: 'Exporter les valeurs de la table', en: 'Export table values' },
   // Un tableur de plus de 3 000 lignes ou 300 colonnes (js/grid-table.js) est collé tel quel : la fenêtre le dit une fois le collage fait.

@@ -1,6 +1,6 @@
 // Panneau Réglages : Langue (rechargement de la page, I18n.storeLang), Thème (js/person-store.js + data-theme sur <html>, et le choix « Par défaut » / « Mise en forme » des bulles et des puces de l'éditeur,
 // data-bubble-marks sur <html>, et la case « Éditeur hors ligne » : la clé du navigateur que lit le script de index.html pour démarrer l'éditeur depuis vendor/editeur), Touche de déclenchement (js/person-store.js, relue par
-// Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient), Marges de page (par modèle, avec quatre préréglages, la chaîne qui lie les quatre marges et la
+// Variables.triggerChar), Email (la messagerie qui ouvre le lien du mode Email, gardée par MailtoExport.setMailClient, et la case de l'avertissement « Email trop long », MailtoExport.setLengthWarning), Marges de page (par modèle, avec quatre préréglages, la chaîne qui lie les quatre marges et la
 // mention d'un macro-modèle) et Crédits (statique). Le thème, les bulles et les puces, la touche de déclenchement et la messagerie se défont par Ctrl + Z (js/settings-history.js). Même convention d'ouverture et de fermeture que les autres fenêtres (style.display, pas de fermeture au
 // clic sur le fond). Langue et Touche de déclenchement rechargent la page, qui rouvre le modèle où la personne était (reloadKeepingTemplate, takeReopenId). Hébergée par GFS, la langue est celle de GFS
 // (consigne 019) : les cases de Réglages sont grisées avec la raison (applyLanguageLock) et la page suit un changement fait dans GFS de la même façon (followGfsLanguage).
@@ -101,6 +101,12 @@ const Settings = (function () {
     read: () => MailtoExport.getMailClient(),
     write: value => MailtoExport.setMailClient(value),
     say: said('settings.tab.mailClient', value => I18n.t('settings.mailClient.' + value)),
+  };
+  // L'avertissement « Email trop long » (js/mailto-export.js, qui garde la préférence ; la case « Ne plus afficher » de la fenêtre l'éteint) : une case de l'onglet Email, défaite par Ctrl + Z comme les autres choix.
+  const EMAIL_LENGTH_SETTING = {
+    read: () => (MailtoExport.getLengthWarning() ? 'on' : 'off'),
+    write: value => MailtoExport.setLengthWarning(value === 'on'),
+    say: said('settings.emailLength.title', value => I18n.t('settings.emailLength.' + value)),
   };
 
   const byId = id => document.getElementById(id);
@@ -270,6 +276,7 @@ const Settings = (function () {
     const frenchTypographyBox = byId('settings-french-typography');
     const wordCountBox = byId('settings-word-count');
     const mailClientRadios = all('input[name="settings-mail-client"]');
+    const emailLengthBox = byId('settings-email-length-warning');
     const pdfManyRadios = all('input[name="settings-pdf-many"]');
     const tablePaddingRadios = all('input[name="settings-table-padding"]');
     const triggerSelect = byId('settings-trigger-char');
@@ -285,6 +292,7 @@ const Settings = (function () {
       if (wordCountBox) wordCountBox.checked = WordCount.isOn();
       StateMode.syncSettings();
       mailClientRadios.forEach(r => { r.checked = (r.value === MailtoExport.getMailClient()); });
+      if (emailLengthBox) emailLengthBox.checked = MailtoExport.getLengthWarning();
       pdfManyRadios.forEach(r => { r.checked = (r.value === PdfDelivery.manyFiles()); });
       tablePaddingRadios.forEach(r => { r.checked = (r.value === CellPadding.startLevel()); });
       if (triggerSelect) triggerSelect.value = Variables.triggerChar();
@@ -449,6 +457,11 @@ const Settings = (function () {
       all('input[name="settings-table-padding"]').forEach(r => { r.checked = (r.value === CellPadding.startLevel()); });
     });
     wireRadios('settings-mail-client', value => SettingsHistory.track(MAIL_CLIENT_SETTING, () => MailtoExport.setMailClient(value)));
+    const emailLengthBox = byId('settings-email-length-warning');
+    if (emailLengthBox) emailLengthBox.addEventListener('change', () => {
+      SettingsHistory.track(EMAIL_LENGTH_SETTING, () => MailtoExport.setLengthWarning(emailLengthBox.checked));
+      emailLengthBox.checked = MailtoExport.getLengthWarning();
+    });
     // Stockage refusé (le choix ne serait pas retenu) : les cases reviennent à ce qui est en vigueur, comme celles de la langue.
     wireRadios('settings-pdf-many', value => {
       SettingsHistory.track(PdfDelivery.MANY_SETTING, () => PdfDelivery.chooseMany(value));

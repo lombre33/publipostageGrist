@@ -305,6 +305,88 @@
     },
   });
 
+  // « Ne plus afficher » sur la fenêtre « Email trop long » (demande d'Antoine du 27/11) : la préférence (js/mailto-export.js:getLengthWarning, clé pp_email_length_warning), puis la case que la fenêtre
+  // (Dialogs.confirmWithCheckbox) rend à l'appelant. Le vrai chemin à la souris (le clic sur « Créer l'email », la case, Réglages > Email) : verify-email-too-long-mouse.mjs (groupe emailTooLongMouse).
+  cases.push({
+    id: 'email_length_warning_is_on_by_default_and_the_choice_is_kept',
+    description: 'E-mail trop long, avertissement : allumé tant que rien n\'est choisi (la fenêtre s\'affiche comme avant) ; l\'éteindre est gardé (pp_email_length_warning = off), le rallumer aussi (on) ; une valeur étrangère dans le stockage n\'éteint rien ; stockage refusé : le choix vaut au moins jusqu\'au rechargement',
+    run: async () => {
+      const KEY = 'pp_email_length_warning';
+      const got = {};
+      const realGet = PersonStore.get, realSet = PersonStore.set;
+      try {
+        MailtoExport.setLengthWarning(true);
+        PersonStore.remove(KEY);
+        got.start = MailtoExport.getLengthWarning();
+        MailtoExport.setLengthWarning(false);
+        got.offStored = PersonStore.get(KEY);
+        got.offRead = MailtoExport.getLengthWarning();
+        MailtoExport.setLengthWarning(true);
+        got.onStored = PersonStore.get(KEY);
+        got.onRead = MailtoExport.getLengthWarning();
+        PersonStore.set(KEY, 'peut-etre');
+        got.foreignValue = MailtoExport.getLengthWarning();
+        // Stockage refusé : rien ne se lit ni ne s'écrit, la mémoire de la page garde le dernier choix.
+        PersonStore.get = () => null;
+        PersonStore.set = () => false;
+        MailtoExport.setLengthWarning(false);
+        got.refusedOff = MailtoExport.getLengthWarning();
+        MailtoExport.setLengthWarning(true);
+        got.refusedOn = MailtoExport.getLengthWarning();
+      } finally {
+        PersonStore.get = realGet;
+        PersonStore.set = realSet;
+        MailtoExport.setLengthWarning(true);
+        PersonStore.remove(KEY);
+      }
+      const want = { start: true, offStored: 'off', offRead: false, onStored: 'on', onRead: true, foreignValue: true, refusedOff: false, refusedOn: true };
+      return { pass: JSON.stringify(got) === JSON.stringify(want), notes: JSON.stringify({ got, want }) };
+    },
+  });
+
+  cases.push({
+    id: 'email_confirm_with_checkbox_reports_the_box_only_when_the_person_continues',
+    description: 'Fenêtre avec case (Dialogs.confirmWithCheckbox) : la case est décochée à l\'ouverture ; « Continuer » rend { confirmed: true, checked } selon la case ; « Annuler » et Échap rendent { confirmed: false, checked: false } même case cochée ; une confirmation ordinaire qui suit ne montre pas la case',
+    run: async () => {
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const modal = () => document.getElementById('pp-dialog-modal');
+      const row = () => modal().querySelector('.pp-dialog-check');
+      const box = () => row().querySelector('input');
+      const shown = () => row().getClientRects().length > 0;
+      const button = label => Array.from(modal().querySelectorAll('.pp-modal-actions button')).filter(b => !b.hidden).find(b => b.textContent === label);
+      const ask = () => Dialogs.confirmWithCheckbox({ title: 'Email trop long', message: 'Trop long.', confirmLabel: 'Continuer', checkboxLabel: 'Ne plus afficher cet avertissement' });
+      const got = {};
+      let answer = ask(); await sleep(150);
+      got.opening = { shown: shown(), checked: box().checked, text: row().textContent };
+      box().click(); button('Continuer').click();
+      got.continueChecked = await answer;
+      answer = ask(); await sleep(150);
+      got.reopened = box().checked;
+      button('Continuer').click();
+      got.continueUnchecked = await answer;
+      answer = ask(); await sleep(150);
+      box().click(); button('Annuler').click();
+      got.cancelChecked = await answer;
+      answer = ask(); await sleep(150);
+      box().click();
+      modal().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      got.escapeChecked = await Promise.race([answer, sleep(600).then(() => 'attente : Échap n\'a pas fermé la fenêtre')]);
+      if (typeof got.escapeChecked === 'string') { button('Annuler').click(); await answer; }
+      const plain = Dialogs.confirm({ title: 'Ordinaire', message: 'Ordinaire.', confirmLabel: 'Oui' });
+      await sleep(150);
+      got.plainShowsBox = shown();
+      button('Oui').click();
+      got.plain = await plain;
+      const want = {
+        opening: { shown: true, checked: false, text: 'Ne plus afficher cet avertissement' },
+        continueChecked: { confirmed: true, checked: true }, reopened: false, continueUnchecked: { confirmed: true, checked: false },
+        cancelChecked: { confirmed: false, checked: false }, escapeChecked: { confirmed: false, checked: false },
+        plainShowsBox: false, plain: true,
+      };
+      return { pass: JSON.stringify(got) === JSON.stringify(want), notes: JSON.stringify({ got, want }) };
+    },
+  });
+
   window.EditorTestSuites = window.EditorTestSuites || {};
   window.EditorTestSuites.emailExport = cases;
 })();

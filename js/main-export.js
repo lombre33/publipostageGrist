@@ -394,15 +394,25 @@ const MainExport = (function () {
       try {
         const url = await buildMailtoForRecord(record, tableId);
         const check = MailtoExport.checkUrlLength(url);
-        if (!check.safe && !(await Dialogs.confirm({
-          title: I18n.t('dialog.emailTooLong.title'), message: I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }), confirmLabel: I18n.t('common.continue'),
-        }))) {
-          setStatus('');
-          return;
+        // « Ne plus afficher » (case de la fenêtre, rallumée dans Réglages > Email) : éteint, le lien s'ouvre sans question. La case ne compte que si la personne continue : « Annuler » n'éteint rien.
+        let warningTurnedOff = false;
+        if (!check.safe && MailtoExport.getLengthWarning()) {
+          const answer = await Dialogs.confirmWithCheckbox({
+            title: I18n.t('dialog.emailTooLong.title'), message: I18n.t('confirm.emailTooLong', { length: check.length, limit: check.limit }), confirmLabel: I18n.t('common.continue'),
+            checkboxLabel: I18n.t('dialog.emailTooLong.dontShowAgain'),
+          });
+          if (!answer.confirmed) {
+            setStatus('');
+            return;
+          }
+          if (answer.checked) {
+            MailtoExport.setLengthWarning(false);
+            warningTurnedOff = !MailtoExport.getLengthWarning(); // le stockage refuse la clé : le choix ne vaut que jusqu'au rechargement, le coin d'état le dit quand même
+          }
         }
         // Dans le cadre isolé de GFS, le lien s'ouvre dans un nouvel onglet (consigne GFS 011) : MailtoExport.openLink.
         MailtoExport.openLink(url);
-        setStatus(I18n.t('status.emailCreated'));
+        setStatus(I18n.t(warningTurnedOff ? 'status.emailCreatedWarningOff' : 'status.emailCreated'));
       } catch (e) {
         console.error('[main] échec de la création de l’email', e);
         setStatus(I18n.t('status.emailCreationError'), true);

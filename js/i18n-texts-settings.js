@@ -482,6 +482,15 @@ const I18nTextsSettings = {
     en: 'Zimbra misreads “&”, “<”, “>” and “+” in the link: “&” shows as “&amp;” and “+” becomes a space. With Zimbra, the subject and body write them in full-width form (＆ ＜ ＞ ＋): they display correctly, but the link is a little longer. In the body, a web address containing “&” or an email address containing “+” can no longer be used as is.',
   },
   'settings.mailClient.perBrowser': { fr: 'Ce choix est propre à ce navigateur, comme la langue et le thème.', en: 'This choice is specific to this browser, like the language and the theme.' },
+  // L'avertissement « Email trop long » (js/mailto-export.js:getLengthWarning, js/main-export.js:onCreateEmail) : allumé au départ ; la case « Ne plus afficher » de la fenêtre l'éteint, cette case le rallume.
+  'settings.emailLength.title': { fr: 'Email trop long', en: 'Email too long' },
+  'settings.emailLength.label': { fr: 'Prévenir quand un email est trop long', en: 'Warn when an email is too long' },
+  'settings.emailLength.hint': {
+    fr: 'Quand le lien de l’email dépasse la limite conseillée (la jauge de la barre devient rouge), « Créer l’email » demande confirmation : certains logiciels de messagerie, Outlook notamment, tronquent un message trop long. Éteint (par la case « Ne plus afficher cet avertissement » de la fenêtre « Email trop long »), le lien s’ouvre sans question ; la jauge reste rouge et le brouillon s’ouvre tel quel.',
+    en: 'When the email link goes over the recommended limit (the gauge in the bar turns red), “Create email” asks for confirmation: some mail clients, Outlook in particular, truncate a message that is too long. Off (by the “Don’t show this warning again” box of the “Email too long” window), the link opens without a question; the gauge stays red and the draft opens as it is.',
+  },
+  'settings.emailLength.on': { fr: 'allumé', en: 'on' },
+  'settings.emailLength.off': { fr: 'éteint', en: 'off' },
   'settings.triggerKey.intro': { fr: 'Caractère à taper dans le texte pour ouvrir la liste des variables et des Puces.', en: 'Character to type in the text to open the list of variables and Chips.' },
   'settings.triggerKey.name': { fr: 'Caractère d’insertion', en: 'Insert character' },
   'settings.pageMargins.intro': { fr: 'Marges de page (mm) : propres à ce modèle, appliquées à l’aperçu et aux exports PDF et DOCX.', en: 'Page margins (mm): specific to this template, applied to the preview and to PDF and DOCX exports.' },

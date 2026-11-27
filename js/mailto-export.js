@@ -7,7 +7,7 @@
 //      couleur, surlignage, police, taille, alignement) ne survit donc dans le corps. Seuls l'exposant et l'indice passent, en caractères Unicode
 //      (« m³ », « H₂O », js/script-marks.js:toUnicode) : ce sont des caractères du texte, pas une mise en forme du client.
 //   2) La longueur de l'URL est limitée (~2000 caractères, tous champs encodés compris, selon le navigateur et le client ; Outlook bureau est le plus
-//      strict), d'où SAFE_URL_LENGTH. Le dépassement est un avertissement (jauge rouge, confirmation avant d'ouvrir le lien), jamais un blocage.
+//      strict), d'où SAFE_URL_LENGTH. Le dépassement est un avertissement (jauge rouge, confirmation avant d'ouvrir le lien - que la personne peut éteindre, getLengthWarning), jamais un blocage.
 //   3) Aucune pièce jointe via un lien `mailto:` : le besoin est de préremplir un brouillon (destinataires, objet, corps texte).
 //   4) Zimbra, lu dans son code (Zimbra/zm-web-client, branche develop) : il s'inscrit comme gestionnaire de `mailto:` dans le navigateur
 //      (`?view=compose&to=<le lien entier>`, js/zimbraMail/core/ZmZimbraMail.js) et lit le lien dans ZmMailApp `_parseComposeUrl` /
@@ -49,6 +49,23 @@ const MailtoExport = (function () {
     PersonStore.set(MAIL_CLIENT_STORAGE, chosenClient);
     // Le lien, donc sa longueur, change avec la messagerie : js/main.js écoute cet évènement pour remettre la jauge à jour.
     document.dispatchEvent(new CustomEvent('pp:mailClientChanged'));
+  }
+
+  // L'avertissement « Email trop long » avant l'ouverture du lien (js/main-export.js:onCreateEmail) : réglage personnel, éteint par la case « Ne plus afficher » de la fenêtre elle-même et rallumé dans Réglages > Email,
+  // gardé comme la messagerie par js/person-store.js (clé `pp_email_length_warning`, « on » ou « off »). Allumé tant que rien n'est choisi : la fenêtre s'affiche comme avant. Éteint, le lien s'ouvre sans question ;
+  // la jauge de la barre (updateEmailLengthGauge), elle, reste rouge au-delà de la limite et le brouillon part tel quel. Aussi gardé en mémoire : si le stockage refuse la clé, le choix vaut jusqu'au rechargement.
+  const LENGTH_WARNING_STORAGE = 'pp_email_length_warning';
+  let chosenLengthWarning = null;
+
+  function getLengthWarning() {
+    const stored = PersonStore.get(LENGTH_WARNING_STORAGE);
+    if (stored === 'on' || stored === 'off') return stored === 'on';
+    return chosenLengthWarning === null ? true : chosenLengthWarning;
+  }
+
+  function setLengthWarning(on) {
+    chosenLengthWarning = !!on;
+    PersonStore.set(LENGTH_WARNING_STORAGE, chosenLengthWarning ? 'on' : 'off');
   }
 
   // Puces d'une liste : les mêmes signes que ceux que l'éditeur et le PDF montrent (css/editor-v2.css, `li::marker` ; js/pdf-export.js,
@@ -306,5 +323,5 @@ const MailtoExport = (function () {
     link.remove();
   }
 
-  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient, addressesOf, looksLikeAddress, openLink };
+  return { plainTextFromHtml, buildMailtoUrl, checkUrlLength, getMailClient, setMailClient, getLengthWarning, setLengthWarning, addressesOf, looksLikeAddress, openLink };
 })();

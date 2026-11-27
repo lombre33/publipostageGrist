@@ -322,6 +322,9 @@ async function runTheme(theme) {
     const mailHint = await lastHintOf(page);
     check(`${tag} - Email : la note sur Zimbra se lit en entier (${mailScroller ? mailScroller.scrollHeight : '?'}px pour ${mailScroller ? Math.round(mailScroller.clientHeight) : '?'}px), « Fermer » ne bouge pas`,
       !!mailHint && mailHint.inside && Math.abs(mailAfter.close.top - mailBefore.close.top) < 1 && mailAfter.closeTouched, { mailHint, closeBefore: mailBefore.close.top, closeAfter: mailAfter.close.top, scroller: mailScroller });
+    // La dernière ligne de l'onglet est celle de la case « Prévenir quand un email est trop long » (27/11) : le défilement jusqu'en bas a laissé les deux choix de la messagerie au-dessus ; on les ramène à l'écran avant de cliquer.
+    await page.evaluate(() => document.querySelector('input[name="settings-mail-client"][value="zimbra"]').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(250);
     await realClick(page, 'input[name="settings-mail-client"][value="zimbra"]');
     const chosen = await page.evaluate(() => ({ client: MailtoExport.getMailClient(), stored: localStorage.getItem('pp_mail_client'), zimbra: document.querySelector('input[name="settings-mail-client"][value="zimbra"]').checked, standard: document.querySelector('input[name="settings-mail-client"][value="standard"]').checked }));
     check(`${tag} - Email : un vrai clic sur « Zimbra » le choisit à l'instant et le garde dans le navigateur`, chosen.client === 'zimbra' && chosen.stored === 'zimbra' && chosen.zimbra && !chosen.standard, chosen);
