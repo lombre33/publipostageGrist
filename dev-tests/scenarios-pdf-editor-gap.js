@@ -206,6 +206,27 @@
     }),
   });
 
+  // Garde-fou (la Lecture, quand elle coupe, impose déjà la page : ce cas ne tombe pas sur l'ancien code). Le même paragraphe, centré ou à droite : le PDF le pose ligne à ligne (signLineBlocksFrom) ; rangées à part, ses lignes se coupaient
+  // entre deux lignes au bas de la page, alors que l'éditeur, la Lecture et l'impression le passent en entier.
+  cases.push({
+    id: 'pdf_gap_centered_or_right_paragraph_across_the_page_end_moves_whole_like_the_editor',
+    description: 'Un paragraphe centré, ou aligné à droite, de plusieurs lignes qui ne tient plus au bas de la page passe en entier sur la suivante (dans le texte courant comme dans une colonne de zone) : mêmes pages et mêmes mots dans l\'éditeur, la Lecture, l\'impression et le PDF',
+    run: h => inPage(h, async c => {
+      const problems = []; const summary = { capacites: c };
+      for (const align of ['right', 'center']) {
+        const para = '<p style="text-align: ' + align + '">' + tokens('Long', 120) + '</p>';
+        for (const back of [2, 5]) {
+          const { pdf } = await compareEngines(h, align + ' : ' + (c.text - back) + ' lignes puis un paragraphe de 120 mots', rows(c.text - back, 'Alpha') + para + FIN, problems, summary);
+          if (pdf.count !== 2 || pdf.words[0].some(word => word.indexOf('Long') === 0)) problems.push(align + ' à ' + back + ' lignes du bas : le paragraphe doit commencer la page 2 du PDF (' + sigs(pdf) + ')');
+        }
+        const inColumn = zone(rows(c.zone - 3, 'Gauche') + para.replace(/Long/g, 'LongG') + rows(2, 'Suite'), rows(6, 'Droite')) + FIN;
+        const col = await compareEngines(h, align + ' : paragraphe de colonne à 3 lignes du bas', inColumn, problems, summary);
+        if (col.pdf.words[0] && col.pdf.words[0].some(word => word.indexOf('LongG') === 0)) problems.push(align + ' : le paragraphe de la colonne ne doit pas commencer sur la page 1 du PDF');
+      }
+      return { pass: problems.length === 0, notes: JSON.stringify({ problems: compact(problems), summary }) };
+    }),
+  });
+
   cases.push({
     id: 'pdf_gap_long_document_has_the_same_pages_in_every_engine',
     description: 'Un long courrier de paragraphes de longueurs variées (cinq pages environ) : à chaque bas de page, le PDF passe le paragraphe à cheval en entier, mêmes mots sur chaque page que l\'éditeur, la Lecture et l\'impression, aucun mot perdu ni doublé',

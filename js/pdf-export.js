@@ -1172,7 +1172,7 @@ const PdfExport = (function () {
     const isQuote = node.tagName === 'BLOCKQUOTE';
     const align = alignment(node) || cellAlign;
     if (isLi && isTaskListItem(node)) {
-      return { columns: taskListColumns(node, taskListRuns(node, runs), align), margin: taskIndentMargin(node, measureIndentPt(node, 'box')) };
+      return { columns: taskListColumns(node, taskListRuns(node, runs), align), columnGap: 0, margin: taskIndentMargin(node, measureIndentPt(node, 'box')) };
     }
     const marker = isLi && !continued ? listMarkerFor(node) : '';
     const look = marker ? markerLookOf(node) : null;
@@ -1182,7 +1182,7 @@ const PdfExport = (function () {
     // et non celle (nulle quand rien ne presse) qui ne sert qu'à couper les lignes là où le navigateur les coupe.
     const wrapMarginPt = !runs.length ? 0 : (isLi || hasRuleChild(node) || (isQuote && align && align !== 'left') ? spaceWidthPt() : cellWrapMarginPt(node, cellWidthPt - indentPt));
     const quoteGapPt = isQuote && !rulePart ? 4 : 0;
-    if (marker && runs.length && align && align !== 'left') return { columns: listMarkerColumns(marker, runs, align, look), margin: [indentPt - markerWidthPt(marker, look.sizePt), 0, 0, 0] };
+    if (marker && runs.length && align && align !== 'left') return { columns: listMarkerColumns(marker, runs, align, look), columnGap: 0, margin: [indentPt - markerWidthPt(marker, look.sizePt), 0, 0, 0] };
     const obj = { text, margin: [indentPt, quoteGapPt, wrapMarginPt, quoteGapPt] };
     if (isQuote) obj.italics = true;
     if (align) obj.alignment = align;
@@ -1709,9 +1709,9 @@ const PdfExport = (function () {
     // à measureHost : getComputedStyle sur un nœud détaché (après le removeChild plus bas) renvoie padding et bordure à 0.
     const zoneCs = getComputedStyle(zoneClone);
     // Ce que chaque colonne prend de hauteur en plus de son contenu : `min-height: 48px` (css/style.css) fait d'une colonne d'une ou deux lignes une boîte de 48 px dans l'éditeur et la
-    // Lecture, et les colonnes s'étirent à la hauteur de la plus haute ; le PDF, dont la colonne ne prend que son texte, resserrait tout ce qui suit la zone (18 px sur une colonne d'une
-    // ligne). Mesuré avec le plancher ôté et les colonnes libres (non étirées), contre leur hauteur réelle.
-    const actualPx = measuredCols.map(el => el.getBoundingClientRect().height);
+    // Lecture ; le PDF, dont la colonne ne prend que son texte, resserrait tout ce qui suit la zone (18 px sur une colonne d'une ligne). Seul le plancher compte : une colonne courte à côté d'une
+    // colonne haute s'étire dans le navigateur, mais n'ajoute rien à la zone. Le contenu est mesuré plancher ôté et colonnes libres (non étirées).
+    const columnFloorPx = measuredCols.map(el => parseFloat(getComputedStyle(el).minHeight) || 0);
     const zoneAlign = zoneClone.style.alignItems;
     const columnFloors = measuredCols.map(el => el.style.minHeight);
     zoneClone.style.alignItems = 'flex-start';
@@ -1721,7 +1721,7 @@ const PdfExport = (function () {
     zoneClone.style.alignItems = zoneAlign;
     const measured = {
       widthPt,
-      floorPt: perColumn((el) => { const i = measuredCols.indexOf(el); return Math.max(0, actualPx[i] - naturalPx[i]) * PX_TO_PT; }, () => 0),
+      floorPt: perColumn((el) => { const i = measuredCols.indexOf(el); return Math.max(0, columnFloorPx[i] - naturalPx[i]) * PX_TO_PT; }, () => 0),
       outerWidthPt: perColumn(el => el.getBoundingClientRect().width * PX_TO_PT, i => widthPt[i]),
       zoneChromeLeftPt: chromePt(zoneClone, 'Left'),
       zoneOwnTopPt: chromePt(zoneClone, 'Top') + (parseFloat(zoneCs.marginTop) || 0) * PX_TO_PT,
@@ -2654,11 +2654,23 @@ const PdfExport = (function () {
     // sur une seule ligne. On lui laisse même de la place en plus, pour qu'une largeur de pdfmake un peu plus grande que celle du navigateur ne la
     // renvoie pas à la ligne.
     const LEFT_LINE_ROOM_PT = 2;
-    const blockOf = (runs, lead, last, stretched) => {
+    // L'espace qui finit une ligne coupée d'un paragraphe centré ou à droite a la largeur que le navigateur lui donne, celle de la police et de la taille du texte qui la porte (un titre de 36 pt : 9 px de
+    // décalage, non les 2,6 pt d'une espace du corps) : lue sur le caractère lui-même, qui est le premier de ce qui suit le dernier mot de la ligne ; à défaut (le mot finit un texte), l'espace du corps.
+    const trailPtOf = (li) => {
+      const word = lines[li][lines[li].length - 1];
+      const value = word && word.textNode ? word.textNode.nodeValue : '';
+      if (!word || !/\s/.test(value.charAt(word.end))) return spaceWidthPt();
+      const range = document.createRange();
+      range.setStart(word.textNode, word.end);
+      range.setEnd(word.textNode, word.end + 1);
+      const widthPx = range.getBoundingClientRect().width;
+      return widthPx > 0 ? widthPx * PX_TO_PT : spaceWidthPt();
+    };
+    const blockOf = (runs, lead, last, stretched, li) => {
       const left = indentPt + shiftLeftPt + lead;
       const margin = last && trailsNoSpace
         ? [left - LAST_LINE_ROOM_PT, 0, shiftRightPt - slackPt - (textAlign === 'center' ? LAST_LINE_ROOM_PT : 0), 0]
-        : [left, 0, (trailsNoSpace || stretched ? spaceWidthPt() : -LEFT_LINE_ROOM_PT) + shiftRightPt - slackPt, 0];
+        : [left, 0, (trailsNoSpace ? trailPtOf(li) : (stretched ? spaceWidthPt() : -LEFT_LINE_ROOM_PT)) + shiftRightPt - slackPt, 0];
       const block = { text: runs.length ? runs : ' ', margin, lineHeight: LINE_HEIGHT_RATIO };
       if (textAlign) block.alignment = textAlign;
       if (runs.stretch) { block._stretch = runs.stretch; stretchedBlocks.push(block); }
@@ -2673,7 +2685,7 @@ const PdfExport = (function () {
       const runs = stretch
         ? buildJustifiedLine(node, lines[li], cuts.before(startOf(li)), cuts.after(endOf(li)), widthPt - spaceWidthPt() - lead, baseStyle)
         : extractRunsBetween(node, cuts.before(startOf(li)), cuts.after(endOf(li)), baseStyle);
-      out.push(blockOf(runs, lead, endsParagraph && li === to, stretch));
+      out.push(blockOf(runs, lead, endsParagraph && li === to, stretch, li));
     }
     return out;
   }
@@ -2710,7 +2722,18 @@ const PdfExport = (function () {
     const { lineWidthPt, slackPt, indentPt } = paragraphBoxPt(node, node.getBoundingClientRect(), nested, maxWidthPt);
     const blocks = lineBlocksFrom({ node, words, lines, textAlign, indentPt, lineWidthPt, slackPt, cuts: wordCutsOf(words), baseStyle }, 0, lines.length - 1, { endsParagraph: true, leadPt: leadingSpacePt(words[0]) });
     if (pageBreakBefore) blocks[0].pageBreak = 'before';
+    if (edgeAligned) blocks._edgeLines = true;
     return blocks;
+  }
+
+  // Les lignes d'un paragraphe centré ou à droite (signLineBlocksFrom, `_edgeLines`), rangées dans UN bloc comme celles d'un paragraphe ordinaire : le PDF peut alors le garder d'une pièce (markWhole), comme
+  // l'éditeur, la Lecture et l'impression qui ne coupent jamais un paragraphe entre deux lignes - rangées une à une, ses lignes se coupaient là où la page finit. L'enveloppe porte le saut de page et
+  // l'orientation du premier bloc (comme shiftedBlock), le texte du premier bloc l'`id`.
+  function edgeLinesEnvelope(lines) {
+    const first = lines[0];
+    const wrapper = { stack: lines, _shiftInner: first._shiftInner || first };
+    ['pageBreak', 'pageOrientation'].forEach((key) => { if (first[key] !== undefined) { wrapper[key] = first[key]; delete first[key]; } });
+    return wrapper;
   }
 
   // Image dans le flux (dans la ligne, « bloc », centrée). pdfmake ne sait pas poser une image dans une ligne de texte : un `text` n'en accepte pas,
@@ -2729,7 +2752,11 @@ const PdfExport = (function () {
     const insetRightPx = (parseFloat(nodeStyle.borderRightWidth) || 0) + (parseFloat(nodeStyle.paddingRight) || 0);
     const domWidthPt = Math.max(0, (nodeRect.width - insetLeftPx - insetRightPx) * PX_TO_PT);
     const lineWidthPt = maxWidthPt > 0 ? Math.min(domWidthPt, maxWidthPt) : domWidthPt;
-    const indentPt = nested ? Math.max(0, (nodeRect.left + insetLeftPx - flowOriginLeftPx(node)) * PX_TO_PT) : measureIndentPt(node, 'box');
+    // Le retrait que « Paragraphe… » écrit sur un paragraphe est AUSSI son `padding-left` : compté dans la mesure, il le serait une seconde fois par applyParagraphFormat, qui le lit dans l'attribut
+    // et le pose en marge de chaque bloc. Il ne reste dans le retrait que ce que le paragraphe doit au reste (le bord de sa case, de sa colonne, de sa liste).
+    const format = node.tagName === 'P' ? ParagraphFormat.readOf(node) : null;
+    const ownIndentPx = format && format.indentLeft ? Math.min(parseFloat(nodeStyle.paddingLeft) || 0, format.indentLeft / PX_TO_PT) : 0;
+    const indentPt = nested ? Math.max(0, (nodeRect.left + insetLeftPx - ownIndentPx - flowOriginLeftPx(node)) * PX_TO_PT) : measureIndentPt(node, 'box');
     return { lineWidthPt, slackPt: domWidthPt - lineWidthPt, indentPt };
   }
 
@@ -3433,6 +3460,8 @@ const PdfExport = (function () {
     // les blocs suivants sont ceux de leurs sous-listes, le posent sur leur seul bloc de texte (textBlockFrom).
     const placed = tag === 'P' ? applyParagraphFormat(blocks, node) : blocks;
     if (tag === 'P' || /^H[1-6]$/.test(tag)) fitLineBoxes(placed, node);
+    // Les lignes d'un paragraphe centré ou à droite se rangent dans un seul bloc, y compris quand la Lecture l'ouvre sur une page (tagReaderCut pose alors l'`id` sur le texte de la première ligne) : rangées une à une dans la pile d'une colonne, à côté de cases à cocher, elles faisaient glisser la suite de la colonne de deux pages (une page blanche).
+    if (tag === 'P' && Array.isArray(placed) && placed._edgeLines && placed.length > 1) return [edgeLinesEnvelope(placed)];
     return placed;
   }
 
@@ -3892,7 +3921,8 @@ const PdfExport = (function () {
   function marginFreeRow(block, row, leftPt) {
     delete block.text;
     delete block.alignment; // porté sur la colonne de texte, cf. listMarkerColumns et taskListColumns
-    block.columns = [{ width: '*', columns: row, margin: [leftPt, 0, 0, 0] }];
+    // `columnGap: 0` : pdfmake fait hériter à une rangée de colonnes l'écart de la zone à deux colonnes qui la contient (12 pt) ; sans lui, le texte de chaque case à cocher, puce ou numéro aligné d'une colonne de zone était décalé de 12 pt.
+    block.columns = [{ width: '*', columns: row, columnGap: 0, margin: [leftPt, 0, 0, 0] }];
     block.margin = [0, 0, 0, 0];
   }
 
