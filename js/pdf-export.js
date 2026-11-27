@@ -3847,6 +3847,8 @@ const PdfExport = (function () {
     const runs = trimEdgeKeepingReturns(node, rawRuns.filter(r => !r._imageMarker));
     const effect = effectBlockFrom(node, tag, headingMarkers, ctx.rulePart);
     const block = effect || textBlockFrom(node, tag, runs, headingMarkers, ctx.rulePart);
+    // Le bloc de texte d'un élément de liste, que markListWhole peut garder d'une pièce.
+    if (tag === 'LI' && !effect && !ctx.rulePart) listItemOfBlock.set(block, node);
     // Le dessin d'un texte à effet porte déjà ses images du flux : seules celles en calque restent des blocs à part.
     if (effect) images = images.filter(img => img._pendingImgNode);
     const blocks = [];
@@ -4115,7 +4117,7 @@ const PdfExport = (function () {
       const oversized = child => child.getBoundingClientRect().height * PX_TO_PT > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt;
       let adrift = false;
       offsets.forEach((cut) => {
-        if (adrift || cut.rowIndex !== undefined) return;
+        if (adrift || cut.rowIndex !== undefined || cut.itemIndex !== undefined) return;
         if (cut.zone) {
           const zone = children[cut.afterIndex];
           if (!found.zones.has(zone)) found.zones.set(zone, []);
@@ -4447,6 +4449,7 @@ const PdfExport = (function () {
   // servent d'ancre à une image.
   const WHOLE_TAGS = /^(P|BLOCKQUOTE)$/;
   function markWhole(st, node, produced, { alone, nodePt }) {
+    if (node.tagName === 'LI') { markListWhole(st, produced, alone); return; }
     if (!st.keepWhole || !(tablePageHeightPt > 0) || !alone || !WHOLE_TAGS.test(node.tagName) || produced.length !== 1 || produced._floatCarry || produced._carried) return;
     const block = produced[0];
     if (!block || (block._shiftInner || block).text === undefined || block._pendingImgNode || block.absolutePosition || block._floatOverlay || block._stretch) return;
@@ -4454,6 +4457,23 @@ const PdfExport = (function () {
     // Un paragraphe d'une ligne n'a rien à garder d'une pièce, sauf quand il porte un décalage de ligne de base (shiftedBlock) : seul son `unbreakable` mesure sa boîte, non la place de son texte.
     if ((nodePt < 1.5 * DEFAULT_FONT_SIZE * EDITOR_LINE_HEIGHT_RATIO && !block._shiftInner) || nodePt > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt) return;
     wholeCandidates.push(block);
+  }
+
+  // Les éléments d'une liste, comme les paragraphes : le texte d'un élément (tout ce qu'il porte avant sa première sous-liste) passe d'une pièce à la page suivante quand il ne tient pas dans ce qui reste de la page,
+  // au lieu d'être coupé entre deux de ses lignes là où la page finit. C'est la règle de l'éditeur et de la Lecture (TablePageCut.measureList : leur grain est le texte d'un élément, à toute profondeur) ; le PDF
+  // posait déjà un bloc par élément, il ne coupait que ceux de plusieurs lignes. Même plafond qu'un paragraphe : un texte plus haut que MAX_ROW_RATIO d'une page se coupe comme avant, et la Lecture laisse alors la
+  // liste d'une pièce.
+  const listItemOfBlock = new WeakMap();
+  function markListWhole(st, produced, alone) {
+    if (!st.keepWhole || !(tablePageHeightPt > 0) || !alone || produced._floatCarry || produced._carried) return;
+    produced.forEach(block => {
+      const item = block && listItemOfBlock.get(block);
+      if (!item) return;
+      if ((block.text === undefined && !block.columns) || block._pendingImgNode || block.absolutePosition || block._floatOverlay || block._stretch || block._shiftInner) return;
+      const itemPt = (TablePageCut.itemBottom(item) - item.getBoundingClientRect().top) * PX_TO_PT;
+      if (itemPt < 1.5 * DEFAULT_FONT_SIZE * EDITOR_LINE_HEIGHT_RATIO || itemPt > TablePageCut.MAX_ROW_RATIO * tablePageHeightPt) return;
+      wholeCandidates.push(block);
+    });
   }
 
   // Les candidats que le PDF garde d'une pièce, rendus par `content._wholeBlocks` : tous sauf ceux qu'une image en calque prend pour ancre (le haut de

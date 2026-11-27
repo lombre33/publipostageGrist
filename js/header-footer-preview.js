@@ -522,6 +522,10 @@ const HeaderFooterPreview = (function () {
     const table = el.querySelector(':scope > table');
     return table ? TablePageCut.measure(el, table, zoom, pageContentHeightPx, row => appliedRowPad.get(row), captionPx) : null;
   }
+  // Les tranches de hauteur d'une liste de premier niveau que TablePageCut sait couper entre deux éléments, `null` pour tout autre bloc.
+  function cuttableList(el, pageContentHeightPx, zoom) {
+    return el.tagName === 'UL' || el.tagName === 'OL' ? TablePageCut.measureList(el, el, zoom, pageContentHeightPx, item => appliedItemPad.get(item)) : null;
+  }
   // Les coupures de page de l'aperçu : accumule la hauteur des blocs de premier niveau de .tiptap, un `.page-break-marker` étant une coupure forcée.
   // Le grain est le bloc, jamais coupé en deux (pdfmake coupe au pixel). Rend, pour chaque coupure, le bloc après lequel elle tombe (`afterEl`). Un
   // bloc qui ne tient pas passe entier à la page suivante, sauf pour ne pas afficher une coupure que l'export ni la Lecture n'ont :
@@ -602,6 +606,16 @@ const HeaderFooterPreview = (function () {
       consumed = tablePlan.consumedAfter;
       lastBlock = child;
       if (cuttable.keepsTail) { counted = index + 1 + captions.length; lastBlock = captions[captions.length - 1]; }
+    };
+    // Une liste de premier niveau se coupe entre deux éléments (TablePageCut.measureList), comme le PDF et le Word : la coupure porte `itemIndex` (rang du premier élément de la nouvelle page) et `afterEl`
+    // est la liste. Un élément ne se coupe jamais en deux ; une liste qu'on ne sait pas couper ainsi suit la règle des blocs que l'export coupe.
+    const placeCutList = (block, cuttable) => {
+      const { child } = block;
+      const listPlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, null, leadGap(child), cuttable.trails);
+      if (listPlan.blockBreakBefore) cutAfterLast();
+      listPlan.cuts.forEach(itemIndex => breaks.push({ afterEl: child, itemIndex, forced: false, remainingPx: 0 }));
+      consumed = listPlan.consumedAfter;
+      lastBlock = child;
     };
     // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme le PDF : sa colonne la plus longue continue sur
     // la page suivante, l'autre finit sur la première si elle y tient. L'écart avec le bloc d'avant (la marge de la zone) compte dans la place prise, sauf
@@ -691,8 +705,10 @@ const HeaderFooterPreview = (function () {
       const captionPx = captions.length > 0 ? heightBelow(child, captions[captions.length - 1]) : 0;
       const block = { child, index, height, captions, captionPx };
       const cuttable = cuttableTable(child, pageContentHeightPx, zoom, captionPx);
-      const cuttableZ = cuttable ? null : cuttableZone(child, index);
+      const cuttableL = cuttable || captions.length > 0 ? null : cuttableList(child, pageContentHeightPx, zoom);
+      const cuttableZ = cuttable || cuttableL ? null : cuttableZone(child, index);
       if (cuttable) placeCutTable(block, cuttable);
+      else if (cuttableL) placeCutList(block, cuttableL);
       else if (cuttableZ) placeCutZone(block, cuttableZ);
       else placeBlock(block);
     });
@@ -735,7 +751,7 @@ const HeaderFooterPreview = (function () {
   function onPaginated(fn) { paginatedListeners.add(fn); return () => paginatedListeners.delete(fn); }
   // Les coupures de la dernière pagination, dans l'ordre : { afterEl, forced, inner } (`afterEl`, l'enfant de `.tiptap` après lequel la page change ; `forced`, vrai pour un saut de page ; `inner`, vrai pour une
   // coupure qui tombe dans un bloc, entre deux lignes d'un tableau ou entre deux blocs d'une colonne de zone : elle n'est pas entre deux blocs de `.tiptap`, aucun saut de page ne peut s'y poser).
-  function pageBreaks() { return lastBreaks.map(b => ({ afterEl: b.afterEl, forced: !!b.forced, inner: b.rowIndex != null || !!b.zone })); }
+  function pageBreaks() { return lastBreaks.map(b => ({ afterEl: b.afterEl, forced: !!b.forced, inner: b.rowIndex != null || b.itemIndex != null || !!b.zone })); }
   // La page (rang depuis 0) de la dernière pagination où tombe `el`, un élément de l'éditeur. Null sans pagination (Aperçu éteint, en-tête ou pied en cours d'écriture, Lecture), quand elle n'est plus
   // celle du document (le bloc d'une coupure n'y est plus) et quand `el` est dans une zone à deux colonnes que la coupure traverse : sa page dépend de la colonne et du bloc. Un élément d'un tableau coupé
   // entre deux lignes est de la page de sa ligne, comme pageStartFromBreaks.
@@ -761,7 +777,7 @@ const HeaderFooterPreview = (function () {
         const afterIdx = afterRanks[k];
         if (afterIdx < 0) return null;
         if (brk.zone && elIdx === afterIdx) return null;
-        if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankOf(brk.afterEl, el) >= brk.rowIndex)) pageIndex++; else break;
+        if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankOf(brk.afterEl, el) >= brk.rowIndex) || (brk.itemIndex != null && elIdx === afterIdx && itemRankOf(brk.afterEl, el) >= brk.itemIndex)) pageIndex++; else break;
       }
       return pageIndex;
     };
@@ -863,6 +879,8 @@ const HeaderFooterPreview = (function () {
   // Ligne de tableau -> hauteur ajoutée à son rembourrage haut pour la descendre sous une couture (règle de la feuille ci-dessus). Remise à zéro avec
   // la feuille : une mesure faite règle posée retranche ce que la règle a ajouté, une mesure faite feuille vide n'a rien à retrancher.
   let appliedRowPad = new WeakMap();
+  // Élément de liste -> ce que la pagination a ajouté à sa marge haute pour le descendre sous une couture (TablePageCut.listPadRule) ; remis à zéro avec la feuille, comme appliedRowPad.
+  let appliedItemPad = new WeakMap();
   // Ce rembourrage (pixels de mise en page) fait partie de la hauteur rendue d'une ligne, pas de la sienne : les bandeaux d'un tableau de document le retirent
   // (js/grid-editor.js:measureTable) pour lire la hauteur qu'une poignée règle, et pour laisser un vide devant le numéro de la ligne qui ouvre une page.
   function rowPadOf(row) { return appliedRowPad.get(row) || 0; }
@@ -870,6 +888,7 @@ const HeaderFooterPreview = (function () {
     if (paginationMarginStyleEl) paginationMarginStyleEl.textContent = '';
     if (paginationSteps) paginationSteps.clear();
     appliedRowPad = new WeakMap();
+    appliedItemPad = new WeakMap();
   }
   // Les règles de la pagination en cours (EditorCore.createStepSheets) : retirées avec la feuille des marges, au cas où un calcul s'interromprait en
   // route.
@@ -1242,6 +1261,13 @@ const HeaderFooterPreview = (function () {
     while (rows && row && rows.indexOf(row) < 0) row = row.parentElement && row.parentElement.closest('tr');
     return rows && row ? rows.indexOf(row) : -1;
   }
+  // Le rang, parmi les éléments de la liste `list`, de celui qui contient `el` (-1 s'il n'est dans aucun) : un élément dans une liste coupée entre deux éléments est sur la page de son élément.
+  function itemRankOf(list, el) {
+    const items = TablePageCut.listItemsOf(list);
+    let item = el.closest('li');
+    while (items && item && items.indexOf(item) < 0) item = item.parentElement && item.parentElement.closest('li');
+    return items && item ? items.indexOf(item) : -1;
+  }
   function pageStartFromBreaks(tiptapEl, topLevelEl, el, pageContentHeightPx, zoom, firstPageTop, capacityOf) {
     const breaks = computePageBreaks(tiptapEl, pageContentHeightPx, capacityOf);
     const children = Array.from(tiptapEl.children);
@@ -1253,7 +1279,7 @@ const HeaderFooterPreview = (function () {
     let lastBreak = null;
     for (const brk of breaks) {
       const afterIdx = children.indexOf(brk.afterEl);
-      if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankIn(brk.afterEl) >= brk.rowIndex)) { pageIndex++; lastBreak = brk; } else break;
+      if (elIdx > afterIdx || (brk.rowIndex != null && elIdx === afterIdx && rowRankIn(brk.afterEl) >= brk.rowIndex) || (brk.itemIndex != null && elIdx === afterIdx && itemRankOf(brk.afterEl, el) >= brk.itemIndex)) { pageIndex++; lastBreak = brk; } else break;
     }
     let pageStartTop = firstPageTop;
     if (lastBreak && lastBreak.rowIndex != null) {
@@ -1261,6 +1287,10 @@ const HeaderFooterPreview = (function () {
       // mesure feuille posée et ne le compte pas ; renderPaginationOverlay vient de la poser, ou de la retirer : la ligne n'a alors rien reçu).
       const row = (TablePageCut.rowsOf(lastBreak.afterEl.querySelector(':scope > table')) || [])[lastBreak.rowIndex];
       if (row) pageStartTop = row.getBoundingClientRect().top + (appliedRowPad.get(row) || 0) * zoom;
+    } else if (lastBreak && lastBreak.itemIndex != null) {
+      // La page commence à l'élément qui l'ouvre : son haut, la marge que la règle de coupure lui a ajoutée comprise (la couture est au-dessus d'elle, sous la marge).
+      const item = (TablePageCut.listItemsOf(lastBreak.afterEl) || [])[lastBreak.itemIndex];
+      if (item) pageStartTop = item.getBoundingClientRect().top;
     } else if (lastBreak) {
       // Le margin-bottom de coupure est déjà dans le DOM (ensurePaginationMarginStyle) : le frère suivant est déjà poussé au début de la page
       // suivante.
@@ -1681,6 +1711,10 @@ const HeaderFooterPreview = (function () {
     const tableRows = tableEl ? (TablePageCut.rowsOf(tableEl) || []) : [];
     const rowAbove = tableRows[brk.rowIndex - 1] || null;
     const rowOpening = rowAbove ? tableRows[brk.rowIndex] : null;
+    // Coupure entre deux éléments d'une liste (brk.itemIndex, TablePageCut.measureList) : même principe, le bas de la page qui finit est celui de l'élément qui précède celui qui ouvre la page.
+    const listItems = brk.itemIndex != null ? (TablePageCut.listItemsOf(brk.afterEl) || []) : [];
+    const itemAbove = listItems[brk.itemIndex - 1] || null;
+    const itemOpening = itemAbove ? listItems[brk.itemIndex] : null;
     const nthChild = tiptapChildren.indexOf(brk.afterEl) + 1;
     // Coupure dans une zone à deux colonnes (brk.zone, js/zone-page-cut.js) : le bas de la page qui finit est le plus bas des derniers blocs que les deux
     // colonnes y gardent, et c'est le bloc qui ouvre la page suivante, dans chaque colonne qui continue, qui descend sous la couture.
@@ -1689,7 +1723,7 @@ const HeaderFooterPreview = (function () {
     }) : null;
     // Bas du contenu de la page qui finit, lu après les réserves déjà posées : la coupure suivante doit voir leur effet avant de mesurer sa propre
     // position.
-    const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove || brk.afterEl).getBoundingClientRect().bottom;
+    const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (itemAbove && !rowAbove ? TablePageCut.itemBottom(itemAbove) : (rowAbove || brk.afterEl).getBoundingClientRect().bottom);
     const afterBottomRel = (afterBottomScreen - tiptapRect.top) / zoom;
     const remaining = Math.max(0, pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
     if (brk.anchor) pass.anchorShifts.push(anchorShiftOf(pass, brk.anchor, brk.afterEl, pageContentHeightPx));
@@ -1709,10 +1743,15 @@ const HeaderFooterPreview = (function () {
       if (!tableStrips.has(nthChild)) tableStrips.set(nthChild, []);
       tableStrips.get(nthChild).push({ top: stripTop + 1, bottom: stripTop + remaining + seamHeight });
       addTableSeamCaps(seam, tableEl, pageSheet, zoom);
+    } else if (itemOpening) {
+      // L'élément qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (sa marge haute, jamais un style sur le nœud) ; le reste de la liste le suit.
+      const gapBefore = Math.max(0, (itemOpening.getBoundingClientRect().top - afterBottomScreen) / zoom);
+      marginRules.push(TablePageCut.listPadRule('#editor-container .tiptap > *:nth-child(' + nthChild + ')', brk.afterEl, itemOpening, seamHeight + remaining));
+      appliedItemPad.set(itemOpening, seamHeight + remaining - gapBefore);
     } else {
       marginRules.push(placeReserve(pass, brk.afterEl, nthChild, seamHeight + remaining, afterBottomRel + remaining + seamHeight));
     }
-    if (rowOpening) paginationSteps.add(marginRules[marginRules.length - 1]);
+    if (rowOpening || itemOpening) paginationSteps.add(marginRules[marginRules.length - 1]);
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -1745,7 +1784,7 @@ const HeaderFooterPreview = (function () {
   // une) sont dans le document : la lecture les voit.
   function placeSimpleSeamsAtOnce(pass, breaks, start) {
     let count = 0;
-    while (start + count < breaks.length && breaks[start + count].rowIndex == null && !breaks[start + count].zone && !breaks[start + count].anchor) count++;
+    while (start + count < breaks.length && breaks[start + count].rowIndex == null && breaks[start + count].itemIndex == null && !breaks[start + count].zone && !breaks[start + count].anchor) count++;
     if (count < 2) return 0;
     const { geometry, totalPages, mPx, footAreaPx, headAreaPx, sheetLeft, sheetWidth, zoom, tiptapRect, toLayoutY, tiptapChildren, marginRules, pages } = pass;
     const { enabled, differentFirstPage, headerForPage, footerForPage } = geometry;

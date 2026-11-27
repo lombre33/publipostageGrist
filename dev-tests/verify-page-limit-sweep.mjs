@@ -21,7 +21,7 @@ import { readerSnapshotInPage, readPdf, readerPages, pdfPages } from './export-t
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const i = args.indexOf('--' + name); return i === -1 ? fallback : args[i + 1]; };
-const KINDS_ALL = ['paragraph', 'heading', 'list', 'table', 'zone', 'image', 'callout'];
+const KINDS_ALL = ['paragraph', 'paragraphSpaced', 'heading', 'list', 'listNested', 'listMulti', 'listSpaced', 'table', 'zone', 'image', 'callout'];
 const KINDS = String(option('kinds', KINDS_ALL.join(','))).split(',').map((s) => s.trim()).filter((k) => KINDS_ALL.indexOf(k) !== -1);
 const TOL = Number(option('tol', 0.5));
 const COARSE = Number(option('coarse', 4));
@@ -40,8 +40,14 @@ const SENTENCE = 'Le conseil se réunit le douze octobre à neuf heures trente, 
 const filler = (n) => `<p>Ligne de remplissage ${n}.</p>`;
 const BLOCKS = {
   paragraph: () => `<p>Repère. ${SENTENCE} ${SENTENCE} ${SENTENCE}</p>`,
+  // De l'espace après le paragraphe (« Paragraphe… », 10 pt, écrit en `padding-bottom`) : le PDF et Word n'en demandent pas pour garder le paragraphe sur la page.
+  paragraphSpaced: () => `<p data-space-after="10" style="padding-bottom: 10pt">Repère. ${SENTENCE} ${SENTENCE} ${SENTENCE}</p>`,
   heading: () => `<h2>Titre du repère</h2><p>Le paragraphe qui suit le titre et qui tient sur une seule ligne.</p>`,
   list: () => `<ul>${Array.from({ length: 6 }, (_, i) => `<li><p>Élément ${i + 1} du repère de la liste à puces</p></li>`).join('')}</ul>`,
+  // Des éléments qui portent une sous-liste, deux paragraphes, de l'espace après (« Paragraphe… ») : un élément passe d'une pièce, ses sous-éléments ne se séparent pas du sien.
+  listNested: () => `<ul>${Array.from({ length: 4 }, (_, i) => `<li><p>Élément ${i + 1} du repère</p><ul><li><p>Sous-élément ${i + 1}.1</p></li><li><p>Sous-élément ${i + 1}.2</p></li></ul></li>`).join('')}</ul>`,
+  listMulti: () => `<ul>${Array.from({ length: 5 }, (_, i) => `<li><p>Élément ${i + 1}, premier paragraphe</p><p>Élément ${i + 1}, second paragraphe</p></li>`).join('')}</ul>`,
+  listSpaced: () => `<ul>${Array.from({ length: 6 }, (_, i) => `<li><p data-space-after="10" style="padding-bottom: 10pt">Élément ${i + 1} du repère, espacé</p></li>`).join('')}</ul>`,
   table: () => `<table><tbody>${Array.from({ length: 6 }, (_, r) => `<tr>${Array.from({ length: 3 }, (_, c) => `<td colwidth="${[200, 200, 242][c]}"><p>Case ${r + 1}.${c + 1}</p></td>`).join('')}</tr>`).join('')}</tbody></table>`,
   zone: () => `<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column">${Array.from({ length: 4 }, (_, i) => `<p>Gauche ${i + 1}, une ligne.</p>`).join('')}</div><div class="two-columns-column">${Array.from({ length: 4 }, (_, i) => `<p>Droite ${i + 1}, une ligne.</p>`).join('')}</div></div>`,
   image: () => `<p><img class="editor-image" src="{{img:300x150}}" style="width: 300px" alt="Image du repère"></p>`,

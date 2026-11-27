@@ -177,6 +177,16 @@ const ReaderMode = (function () {
       consumed = tablePlan.consumedAfter;
       if (cuttable.keepsTail) counted = index + 1 + block.captions.length;
     };
+    // Une liste de premier niveau se coupe entre deux éléments (TablePageCut.measureList), comme l'éditeur, le PDF et le Word : le décalage porte `itemIndex` (rang du premier élément de la page qui
+    // commence) et `afterIndex` est celui de la liste. Un élément ne se coupe jamais en deux ; une liste qu'on ne sait pas couper ainsi suit la règle des autres blocs.
+    const placeCutList = (block, cuttable) => {
+      const { child, index, top } = block;
+      const listPlan = TablePageCut.plan(consumed, cuttable.segs, pageContentHeightPx, cuttable.starts, null, leadGap(child), cuttable.trails);
+      placedAny = true;
+      if (listPlan.blockBreakBefore) cutBefore(top, index);
+      listPlan.cuts.forEach((itemIndex, k) => offsets.push({ top: top + cuttable.segs.slice(0, listPlan.ranks[k]).reduce((sum, seg) => sum + seg, 0), afterIndex: index, itemIndex, remainingPx: 0 }));
+      consumed = listPlan.consumedAfter;
+    };
     // Une zone à deux colonnes se coupe entre deux blocs de chaque colonne (js/zone-page-cut.js), comme dans l'éditeur : l'écart avec ce qui la précède (sa
     // marge) compte dans la place prise, sauf en haut d'une page ouverte par une coupure, dont la réserve absorbe cette marge. Le HTML de la Lecture a
     // déjà perdu les lignes vides au bas des colonnes de sa dernière zone (trimTrailingBlankBlocks).
@@ -260,8 +270,10 @@ const ReaderMode = (function () {
       const captionPx = captions.length > 0 ? heightBelow(child, captions[captions.length - 1]) : 0;
       const block = { child, index, top, height, captions, captionPx };
       const cuttable = child.tagName === 'TABLE' ? TablePageCut.measure(child, child, zoom, pageContentHeightPx, null, captionPx) : null;
-      const cuttableZ = cuttable ? null : cuttableZone(child);
+      const cuttableL = cuttable || captions.length > 0 ? null : TablePageCut.measureList(child, child, zoom, pageContentHeightPx, null);
+      const cuttableZ = cuttable || cuttableL ? null : cuttableZone(child);
       if (cuttable) placeCutTable(block, cuttable);
+      else if (cuttableL) placeCutList(block, cuttableL);
       else if (cuttableZ) placeCutZone(block, cuttableZ);
       else placeBlock(block);
     });
@@ -666,12 +678,16 @@ const ReaderMode = (function () {
     const tableRows = offset.rowIndex != null ? (TablePageCut.rowsOf(el) || []) : [];
     const rowAbove = tableRows[offset.rowIndex - 1] || null;
     const rowOpening = rowAbove ? tableRows[offset.rowIndex] : null;
+    // Coupure entre deux éléments d'une liste (offset.itemIndex, TablePageCut.measureList) : même principe, le bas de la page qui finit est celui de l'élément qui précède celui qui ouvre la page.
+    const listItems = offset.itemIndex != null ? (TablePageCut.listItemsOf(el) || []) : [];
+    const itemAbove = listItems[offset.itemIndex - 1] || null;
+    const itemOpening = itemAbove ? listItems[offset.itemIndex] : null;
     // Coupure dans une zone à deux colonnes (offset.zone, js/zone-page-cut.js) : le bas de la page qui finit est le plus bas des derniers blocs que les
     // deux colonnes y gardent, et c'est le bloc qui ouvre la page suivante, dans chaque colonne qui continue, qui descend sous la couture.
     const zoneCut = offset.zone && el ? ZonePageCut.place(offset.zone, el, offset.zone.blocks, {
       rootTop: wrapperRect.top, zoom, bodyTopRel: pass.bodyTopRel, pageContentHeightPx: geometry.pageContentHeightPx, seamHeight, selector: sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ')',
     }) : null;
-    const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove ? rowAbove.getBoundingClientRect().bottom : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom));
+    const afterBottomScreen = zoneCut ? zoneCut.afterBottomScreen : (rowAbove ? rowAbove.getBoundingClientRect().bottom : (itemAbove ? TablePageCut.itemBottom(itemAbove) : (el ? el.getBoundingClientRect().bottom : wrapperRect.top + offset.top * zoom)));
     const afterBottomRel = (afterBottomScreen - wrapperRect.top) / zoom;
     const remaining = Math.max(0, geometry.pageContentHeightPx - (afterBottomRel - pass.bodyTopRel));
     if (offset.anchor) pass.anchorShifts.push(anchorShiftOf(pass, offset.anchor, el));
@@ -693,6 +709,9 @@ const ReaderMode = (function () {
       cap.style.left = ((tableRect.left - wrapperRect.left) / zoom) + 'px';
       cap.style.width = (tableRect.width / zoom) + 'px';
       seam.appendChild(cap);
+    } else if (itemOpening) {
+      // L'élément qui ouvre la page descend de la réserve de la page qui finit, puis de la couture (sa marge haute) : la liste est le bloc des deux pages, rien d'autre ne bouge.
+      marginRules.push(TablePageCut.listPadRule(sheetSel + ' > *:nth-child(' + (offset.afterIndex + 1) + ')', el, itemOpening, seamHeight + remaining));
     } else if (el) {
       // Sélecteur préfixé de #reader-container : `#reader-container p { margin: 0 }` (css/editor-v2.css) est plus spécifique qu'un simple
       // `.reader-content > *:nth-child(N)` et écraserait la réserve dès que le dernier bloc d'une page est un paragraphe : la gouttière
@@ -708,7 +727,7 @@ const ReaderMode = (function () {
       marginRules.push(sheet.textContent);
     }
     // Posée tout de suite : la frontière suivante doit voir l'effet des marges déjà posées avant de mesurer sa propre position.
-    if (rowOpening) steps.add(marginRules[marginRules.length - 1]);
+    if (rowOpening || itemOpening) steps.add(marginRules[marginRules.length - 1]);
     const seamTop = toLayoutY(afterBottomScreen) + remaining;
     seam.style.top = seamTop + 'px';
     pass.bodyTopRel = afterBottomRel + remaining + seamHeight;
@@ -760,7 +779,7 @@ const ReaderMode = (function () {
     // document : la lecture les voit.
     const { zones, geometry, totalPages, wrapperChildren, wrapperRect, wrapperLeft, wrapperWidth, zoom, toLayoutY, overlay, steps, marginRules, pages, footAreaPx, headAreaPx, sheetSel } = pass;
     let count = 0;
-    while (start + count < offsets.length && offsets[start + count].rowIndex == null && !offsets[start + count].zone && !offsets[start + count].anchor && wrapperChildren[offsets[start + count].afterIndex]) count++;
+    while (start + count < offsets.length && offsets[start + count].rowIndex == null && offsets[start + count].itemIndex == null && !offsets[start + count].zone && !offsets[start + count].anchor && wrapperChildren[offsets[start + count].afterIndex]) count++;
     if (count < 2) return 0;
     const built = [];
     for (let i = 0; i < count; i++) {

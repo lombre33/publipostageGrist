@@ -1,4 +1,4 @@
-// Coupure d'un tableau entre deux lignes, au saut de page. Une ligne de tableau ne se coupe jamais en deux : le PDF (dontBreakRows de pdfmake) et le
+// Coupure d'un tableau entre deux lignes, au saut de page (et, en fin de fichier, d'une liste entre deux éléments). Une ligne de tableau ne se coupe jamais en deux : le PDF (dontBreakRows de pdfmake) et le
 // Word (cantSplit) la passent en entier à la page suivante quand elle ne tient pas, et l'aperçu de l'éditeur (js/header-footer-preview.js) comme la
 // Lecture (js/reader-mode.js) posent la couture à cet endroit, entre deux lignes, au lieu de la laisser recouvrir une ligne ou de laisser le tableau
 // déborder en bas de sa page. Une case fusionnée sur plusieurs lignes lie les siennes : elles forment un groupe (`unitsOf`) que la page ne sépare
@@ -96,7 +96,7 @@ const TablePageCut = (function () {
   // tranches de `measure` ; `capacity` : la hauteur utile d'une page ; `starts` : les rangs de lignes que `measure` rend (omis, une tranche est une
   // ligne) ; `forced` : les tranches qui ouvrent une page quoi qu'il reste de place (omis, aucune) ; `gapAbove` : l'écart qui sépare le tableau de ce
   // qui le précède (sa marge, que le bloc ne porte pas : EditorCore.gapAbove), compté dans la place prise tant que le tableau reste sur cette page, perdu
-  // s'il passe à la suivante (omis : 0). Une ligne (un groupe de lignes) qui ne tient pas dans la place restante ouvre la page suivante, avec tout ce
+  // s'il passe à la suivante (omis : 0) ; `trails` : pour chaque tranche, l'espace vide qui la termine, que le test de place ne compte pas (omis : 0, un tableau n'en a pas ; cf. measureList). Une ligne (un groupe de lignes) qui ne tient pas dans la place restante ouvre la page suivante, avec tout ce
   // qui la suit. Rend
   //  - blockBreakBefore : même la première ligne ne tient pas, le tableau entier passe à la page suivante (coupure avant le tableau, comme pour tout
   //    autre bloc) ;
@@ -105,7 +105,7 @@ const TablePageCut = (function () {
   //  - forcedCuts : pour chaque coupure de `cuts`, vrai quand un saut de page avant la ligne l'a voulue (faux : la place manquait) ;
   //  - consumedAfter : ce que la dernière page du tableau porte, pour le bloc suivant.
   // Une ligne seule en haut de page qui dépasse la page reste là et déborde : il n'y a rien de mieux à faire (rowsFit l'écarte déjà du plan).
-  function plan(consumedBefore, segs, capacity, starts, forced, gapAbove) {
+  function plan(consumedBefore, segs, capacity, starts, forced, gapAbove, trails) {
     const ranks = [];
     const forcedCuts = [];
     let blockBreakBefore = false;
@@ -115,7 +115,7 @@ const TablePageCut = (function () {
         ranks.push(i);
         forcedCuts.push(true);
         acc = seg;
-      } else if ((i > 0 ? acc : consumedBefore) > 0 && acc + seg > capacity - PageLayout.PAGE_FIT_SLACK_PX) {
+      } else if ((i > 0 ? acc : consumedBefore) > 0 && acc + seg - ((trails && trails[i]) || 0) > capacity - PageLayout.PAGE_FIT_SLACK_PX) {
         if (i === 0) blockBreakBefore = true; else { ranks.push(i); forcedCuts.push(false); }
         acc = seg;
       } else {
@@ -164,5 +164,83 @@ const TablePageCut = (function () {
     return isFinite(pad) ? pad : 4;
   }
 
-  return { MAX_ROW_RATIO, rowsOf, unitsOf, forcedOf, rowsFit, measure, plan, padRule, fixedHeightPx, clipRule, restingPadTop };
+  // --- LES LISTES (27/11 : « aucune différence entre l'éditeur, la Lecture et le PDF ») ---
+  // Une liste à puces, numérotée ou de tâches se coupe entre deux éléments, comme un tableau entre deux lignes : le PDF (pdfmake) et Word le font déjà, au pixel, là où l'élément suivant ne tient plus ;
+  // l'éditeur et la Lecture la gardaient d'une pièce (elle dépassait dans la marge du bas dès que plus de la moitié y tenait). Le grain est le TEXTE d'un élément, à toute profondeur : tout ce que l'élément
+  // porte avant sa première sous-liste (ses paragraphes, ses lignes) passe d'une pièce, jamais coupé en deux - un paragraphe n'est coupé nulle part -, et chaque élément d'une sous-liste est un grain à son tour,
+  // dans l'ordre du document. Rien n'exige plusieurs éléments de chaque côté (le PDF, Word et les tableaux n'en exigent pas).
+  const isListEl = el => !!el && (el.tagName === 'UL' || el.tagName === 'OL');
+
+  // Les sous-listes d'un élément : ses enfants directs, ou ceux du corps d'une tâche (<li data-type="taskItem"><label>…</label><div>…</div></li>).
+  function ownListsOf(item) {
+    const lists = [];
+    Array.from(item.children).forEach(child => {
+      if (isListEl(child)) lists.push(child);
+      else if (child.tagName === 'DIV') Array.from(child.children).filter(isListEl).forEach(list => lists.push(list));
+    });
+    return lists;
+  }
+
+  // Les éléments d'une liste qu'on sait couper, dans l'ordre du document (un élément, puis ceux de ses sous-listes) ; null sinon (la liste reste alors un bloc d'une pièce, que l'export coupe au pixel) : au
+  // moins deux éléments, tous des <li> (un élément proposé en suivi des modifications est enveloppé dans un <ins> ou un <del>).
+  function listItemsOf(list) {
+    if (!isListEl(list)) return null;
+    const items = [];
+    let sound = true;
+    const walk = ul => Array.from(ul.children).forEach(child => {
+      if (child.tagName !== 'LI') { sound = false; return; }
+      items.push(child);
+      ownListsOf(child).forEach(walk);
+    });
+    walk(list);
+    return sound && items.length >= 2 ? items : null;
+  }
+
+  // Le bas du texte d'un élément (pixels écran) : le haut de sa première sous-liste, sinon le bas de sa boîte. C'est là que finit la page qui se coupe devant l'élément suivant.
+  function itemBottom(item) {
+    const own = ownListsOf(item)[0];
+    return (own || item).getBoundingClientRect()[own ? 'top' : 'bottom'];
+  }
+
+  // L'espacement après le dernier paragraphe du texte d'un élément (son `padding-bottom`, pixels de mise en page : ParagraphFormat l'écrit ainsi) : de la place vide, que le PDF et Word ne demandent pas
+  // pour garder l'élément sur la page (un paragraphe tient quand ses lignes tiennent).
+  function trailingPadOf(item) {
+    const paragraphs = Array.from(item.querySelectorAll('p')).filter(p => p.closest('li') === item);
+    const last = paragraphs[paragraphs.length - 1];
+    return last ? (parseFloat(getComputedStyle(last).paddingBottom) || 0) : 0;
+  }
+
+  // Mesure une liste pour `plan` (mêmes unités et même forme que `measure`) : { items, starts, forced, segs, heights, trails } ou null si la liste ne se coupe pas entre deux éléments (le texte d'un élément plus
+  // haut que MAX_ROW_RATIO d'une page : il se coupe alors entre deux lignes de texte dans le PDF, la liste reste un bloc d'une pièce). `segs[i]` : du haut de l'élément i au haut du suivant (l'écart entre les
+  // deux compris), la première reprend ce qui est au-dessus d'elle, la dernière ce qui est au-dessous. `trails[i]` : l'espace vide qui termine l'élément i (l'espacement après son dernier paragraphe, l'écart avec le
+  // suivant) : la page le passe sous silence quand l'élément suivant ne tient pas, le PDF (pdfmake) et Word ne le comptent pas dans la place qu'il faut à l'élément. `padOf(élément)` : ce que la pagination a
+  // ajouté AU-DESSUS de l'élément pour le descendre sous une couture (sa marge haute, `listPadRule` ; 0 s'il n'y en a pas) - il fait partie de la tranche de l'élément d'avant, et une mesure faite après la pose
+  // des coupures ne doit pas le compter.
+  function measureList(blockEl, list, zoom, pageHeightPx, padOf) {
+    const items = listItemsOf(list);
+    if (!items) return null;
+    const blockRect = blockEl.getBoundingClientRect();
+    const rects = items.map(item => item.getBoundingClientRect());
+    const pads = items.map(item => (padOf && padOf(item)) || 0);
+    const heights = items.map((item, i) => (itemBottom(item) - rects[i].top) / zoom);
+    if (!rowsFit(heights, pageHeightPx)) return null;
+    const tops = rects.map(rect => (rect.top - blockRect.top) / zoom);
+    const total = blockRect.height / zoom;
+    const segs = tops.map((top, i) => ((i + 1 < tops.length ? tops[i + 1] : total) - top) - (i + 1 < tops.length ? pads[i + 1] : 0));
+    segs[0] += tops[0] - pads[0];
+    const trails = segs.map((seg, i) => (i + 1 < segs.length ? Math.max(0, seg - heights[i] - (i === 0 ? tops[0] - pads[0] : 0)) : 0) + trailingPadOf(items[i]));
+    return { items, starts: items.map((item, i) => i), forced: null, segs, heights, trails };
+  }
+
+  // Règle CSS qui descend l'élément `item` de la liste `list` de `padPx` : sa marge haute. Elle s'ajoute à celle que l'élément et les paragraphes qu'il contient ont déjà (les marges de frères se fondent : c'est la
+  // plus grande qui compte, et `padPx` - la réserve de la page qui finit et la couture - dépasse tout écart entre éléments), donc l'élément commence exactement `padPx` sous le bas du texte de l'élément d'avant.
+  // `listSelector` désigne le <ul> ou l'<ol>, l'élément est visé par son chemin (le rang de chaque nœud parmi les enfants de son parent : une sous-liste, le corps d'une tâche). `!important` : un style en
+  // ligne ne doit pas l'annuler.
+  function listPadRule(listSelector, list, item, padPx) {
+    const path = [];
+    for (let node = item; node && node !== list; node = node.parentElement) path.unshift(':nth-child(' + (Array.prototype.indexOf.call(node.parentElement.children, node) + 1) + ')');
+    return listSelector + ' > ' + path.join(' > ') + ' { margin-top: ' + padPx + 'px !important; }';
+  }
+
+  return { MAX_ROW_RATIO, rowsOf, unitsOf, forcedOf, rowsFit, measure, plan, padRule, fixedHeightPx, clipRule, restingPadTop, listItemsOf, itemBottom, measureList, listPadRule };
 })();

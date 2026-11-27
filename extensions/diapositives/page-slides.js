@@ -57,7 +57,7 @@ const PageSlides = (function () {
       const kids = Array.from(host.children);
       return HeaderFooterPreview.breaksOf(host)
         .filter(brk => !brk.zone && kids.indexOf(brk.afterEl) >= 0)
-        .map(brk => (Number.isFinite(brk.rowIndex) ? { after: kids.indexOf(brk.afterEl), row: brk.rowIndex } : { after: kids.indexOf(brk.afterEl) }));
+        .map(brk => (Number.isFinite(brk.rowIndex) ? { after: kids.indexOf(brk.afterEl), row: brk.rowIndex } : (Number.isFinite(brk.itemIndex) ? { after: kids.indexOf(brk.afterEl), item: brk.itemIndex } : { after: kids.indexOf(brk.afterEl) })));
     } finally {
       host.remove();
     }
@@ -88,21 +88,58 @@ const PageSlides = (function () {
     });
   }
 
+  // Une liste coupée devant les éléments `items` (rang, dans l'ordre du document, du premier élément de chaque nouvelle partie : TablePageCut.listItemsOf, une sous-liste comprise) : une liste par partie, même
+  // balise et mêmes attributs. Une coupure dans une sous-liste reprend les éléments qui la portent, vides et sans puce (« list-style: none »), pour que la suite garde son retrait ; une liste numérotée reprend
+  // sa numérotation (`start`) où la partie d'avant s'est arrêtée.
+  function listParts(block, items) {
+    const all = TablePageCut.listItemsOf(block) || [];
+    const cuts = Array.from(new Set(items.filter(item => item > 0 && item < all.length))).sort((a, b) => b - a);
+    if (!cuts.length) return [block];
+    const tails = cuts.map(rank => splitListAt(block, all[rank]));
+    return [block].concat(tails.reverse());
+  }
+
+  // Ce qui suit, dans la liste `root`, le début de l'élément `item` (lui compris), rangé dans une liste neuve ; ce qui précède reste dans `root`.
+  function splitListAt(root, item) {
+    const chain = [];
+    for (let node = item; node && node !== root; node = node.parentElement) chain.unshift(node);
+    const tail = root.cloneNode(false);
+    tail.removeAttribute(SLICE_ATTR);
+    let into = tail;
+    let from = root;
+    chain.forEach((el) => {
+      const following = [];
+      for (let next = el.nextSibling; next; next = next.nextSibling) following.push(next);
+      if (from.tagName === 'OL' && el.tagName === 'LI') into.setAttribute('start', String((parseInt(from.getAttribute('start') || '1', 10) || 1) + Array.from(from.children).filter(child => child.tagName === 'LI').indexOf(el)));
+      if (el === item) {
+        into.append(el, ...following);
+        return;
+      }
+      const continuation = el.cloneNode(false);
+      if (el.tagName === 'LI') continuation.style.listStyle = 'none';
+      into.append(continuation, ...following);
+      into = continuation;
+      from = el;
+    });
+    return tail;
+  }
+
   // Les diapositives de `holder` : la liste des nœuds de chacune, les blocs rangés dans l'ordre, coupés aux `cuts`.
   function slidesOf(holder, cuts) {
     const blocks = Array.from(holder.children);
     const slides = [[]];
     blocks.forEach((block, index) => {
       const rows = cuts.filter(cut => cut.after === index && Number.isFinite(cut.row)).map(cut => cut.row).sort((a, b) => a - b);
-      if (rows.length) {
-        tableParts(block, rows).forEach((part, i) => {
+      const items = cuts.filter(cut => cut.after === index && Number.isFinite(cut.item)).map(cut => cut.item).sort((a, b) => a - b);
+      if (rows.length || items.length) {
+        (rows.length ? tableParts(block, rows) : listParts(block, items)).forEach((part, i) => {
           if (i) slides.push([]);
           slides[slides.length - 1].push(part);
         });
       } else {
         slides[slides.length - 1].push(block);
       }
-      if (cuts.some(cut => cut.after === index && !Number.isFinite(cut.row))) slides.push([]);
+      if (cuts.some(cut => cut.after === index && !Number.isFinite(cut.row) && !Number.isFinite(cut.item))) slides.push([]);
     });
     return slides.filter(nodes => nodes.length);
   }

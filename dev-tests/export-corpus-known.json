@@ -178,9 +178,7 @@
   "dy": 5
  },
  "listes-profondes": {
-  "lines": 3,
-  "text": 43,
-  "dx": 1
+  "text": 2
  },
  "marges-etroites-paysage": {
   "gap": 2,
@@ -238,7 +236,7 @@
   "gap": 8,
   "dy": 10,
   "dx": 5,
-  "text": 283,
+  "text": 292,
   "images": 5,
   "docx:pages": 1,
   "docx:content": 4,

@@ -1217,7 +1217,9 @@
   });
 
   // Un point centré que la fin de la page coupe, un point d'après avec sa sous-liste à droite, un paragraphe justifié, un autre à droite : tout se juge, le décor étant choisi pour que le saut de page tombe dans un point (au 43e et au 45e paragraphe de remplissage il tombe dans « Suite », puis dans « Coupe »).
-  const BREAK_FILLERS = [43, 45];
+  // Depuis le 27/11 un élément de liste de plusieurs lignes que la page couperait passe en entier à la suivante (le PDF le garde d'une pièce, comme l'éditeur et la Lecture : TablePageCut.measureList, markListWhole) : pour qu'une page coupe encore un élément, celui-ci est plus haut que 90 % d'une page (TablePageCut.MAX_ROW_RATIO), le seul que le PDF coupe entre deux lignes.
+  const CUT_ITEM_REPEAT = 30;
+  const BREAK_FILLERS = [4, 43];
   cases.push({
     id: 'pdf_gap_aligned_list_item_cut_by_a_page_keeps_its_lines_and_leaves_what_follows_alone',
     description: 'Un point de liste centré que la fin de la page coupe, suivi d\'un point centré avec une sous-liste à droite, d\'un paragraphe justifié et d\'un paragraphe à droite : aucune ligne ne change de mot d\'ouverture ni de place par rapport à l\'éditeur, y compris derrière la coupe (pdfmake 0.2.7 élargit sinon ce qui suit la rangée coupée de la marge de la rangée)',
@@ -1229,7 +1231,7 @@
         for (const fillers of BREAK_FILLERS) {
           const name = fillers + ' paragraphes de remplissage';
           const html = '<p>Titre</p>' + rows(fillers, 'Remplissage')
-            + '<ul>' + alignedItem('center', 'Coupe ' + LIST_LONG + ' ' + LIST_LONG, true)
+            + '<ul>' + alignedItem('center', 'Coupe' + (' ' + LIST_LONG).repeat(CUT_ITEM_REPEAT), false)
             + '<li><p style="text-align: center">Suite ' + LIST_LONG + '</p><ul>' + alignedItem('right', 'Sous', true) + '</ul></li></ul>'
             + '<p style="text-align: justify">Apres ' + LIST_LONG + ' ' + LIST_LONG + '</p><p style="text-align: right">Dernier ' + LIST_LONG + '</p><p>Fin</p>';
           const wanted = await textLinesInEditor(h, html, firsts);
@@ -1400,7 +1402,7 @@
   });
 
   // Un élément centré que la fin de la page coupe, un élément d'après coché et aligné à droite, un paragraphe justifié, un autre à droite : tout se juge, le saut de page tombant (au 44e et au 48e paragraphe de remplissage) dans « Suite », puis dans « Coupe ».
-  const TASK_BREAK_FILLERS = [44, 48];
+  const TASK_BREAK_FILLERS = [4, 44];
   cases.push({
     id: 'pdf_gap_task_list_item_cut_by_a_page_keeps_its_lines_and_leaves_what_follows_alone',
     description: 'Un élément de liste de tâches centré que la fin de la page coupe, suivi d\'un élément à droite, d\'un paragraphe justifié et d\'un paragraphe à droite : aucune ligne ne change de mot d\'ouverture ni de place par rapport à l\'éditeur, y compris derrière la coupe (pdfmake 0.2.7 élargit sinon de la marge de l\'élément tout ce qui le suit).',
@@ -1412,7 +1414,7 @@
         for (const fillers of TASK_BREAK_FILLERS) {
           const name = fillers + ' paragraphes de remplissage';
           const html = '<p>Titre</p>' + rows(fillers, 'Remplissage')
-            + taskListOf('', taskOf(false, 'Coupe', 'center', 2) + taskOf(true, 'Suite', 'right'))
+            + taskListOf('', taskOf(false, 'Coupe', 'center', CUT_ITEM_REPEAT) + taskOf(true, 'Suite', 'right'))
             + '<p style="text-align: justify">Apres ' + LIST_LONG + ' ' + LIST_LONG + '</p><p style="text-align: right">Dernier ' + LIST_LONG + '</p><p>Fin</p>';
           const wanted = await textLinesInEditor(h, html, firsts);
           const got = await textLinesInPdf(h, html, firsts);
