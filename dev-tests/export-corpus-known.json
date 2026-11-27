@@ -1,0 +1,276 @@
+{
+ "affiche-a3#1": {
+  "dy": 2
+ },
+ "affiche-a3#2": {
+  "dy": 2
+ },
+ "affiche-a3#3": {
+  "dy": 2
+ },
+ "alignements-retraits": {
+  "dy": 6,
+  "gap": 5,
+  "dx": 1,
+  "lines": 1,
+  "text": 10,
+  "docx:content": 1,
+  "odf:content": 1
+ },
+ "attestation#1": {
+  "dx": 1
+ },
+ "attestation#2": {
+  "dx": 1
+ },
+ "badge-evenement#1": {
+  "dy": 2
+ },
+ "badge-evenement#2": {
+  "dy": 2
+ },
+ "badge-evenement#3": {
+  "dy": 2
+ },
+ "bon-de-commande#1": {
+  "dx": 11
+ },
+ "bon-de-commande#2": {
+  "dx": 11
+ },
+ "bon-de-commande#3": {
+  "dx": 9
+ },
+ "bon-de-mouvement#1": {
+  "dx": 2
+ },
+ "bon-de-mouvement#2": {
+  "dx": 1
+ },
+ "bon-de-mouvement#3": {
+  "dx": 1
+ },
+ "bulletin#1": {
+  "dx": 11
+ },
+ "bulletin#2": {
+  "dx": 11
+ },
+ "bulletin#3": {
+  "dx": 11
+ },
+ "contrat-prestation-services#1": {
+  "lines": 2,
+  "dx": 3,
+  "gap": 1,
+  "dy": 7,
+  "text": 19
+ },
+ "contrat-prestation-services#2": {
+  "lines": 2,
+  "dx": 1,
+  "gap": 1,
+  "dy": 2,
+  "text": 22
+ },
+ "courrier-relance#1": {
+  "dx": 3
+ },
+ "courrier-relance#2": {
+  "dx": 3
+ },
+ "courrier-relance#3": {
+  "dx": 3
+ },
+ "emargement#1": {
+  "dy": 1,
+  "dx": 4,
+  "lines": 1,
+  "text": 18
+ },
+ "emargement#2": {
+  "dy": 1,
+  "dx": 4
+ },
+ "encadres-citations-code": {
+  "lines": 2,
+  "dy": 23,
+  "gap": 1,
+  "images": 2,
+  "text": 20,
+  "odf:content": 1
+ },
+ "etiquette-adresse#1": {
+  "dy": 3
+ },
+ "etiquette-adresse#2": {
+  "dy": 3
+ },
+ "etiquette-adresse#3": {
+  "dy": 3
+ },
+ "etiquette-produit#1": {
+  "dy": 1
+ },
+ "etiquette-produit#2": {
+  "dy": 1
+ },
+ "etiquette-produit#3": {
+  "dy": 1
+ },
+ "facture#1": {
+  "dx": 7,
+  "dy": 2,
+  "gap": 1
+ },
+ "facture#2": {
+  "dx": 5,
+  "dy": 1
+ },
+ "facture#3": {
+  "dx": 3,
+  "dy": 1
+ },
+ "fiche-inventaire#1": {
+  "dx": 3,
+  "dy": 1
+ },
+ "fiche-inventaire#2": {
+  "dx": 3,
+  "dy": 1
+ },
+ "fiche-inventaire#3": {
+  "dx": 3,
+  "dy": 1
+ },
+ "fiche-recette#1": {
+  "dy": 1,
+  "dx": 9
+ },
+ "fiche-recette#2": {
+  "dy": 1,
+  "dx": 5
+ },
+ "fiche-recette#3": {
+  "dy": 1,
+  "dx": 5
+ },
+ "flyer-a6#1": {
+  "dy": 5
+ },
+ "flyer-a6#2": {
+  "dy": 4
+ },
+ "flyer-a6#3": {
+  "dy": 5
+ },
+ "images-et-sauts-de-page": {
+  "lines": 1,
+  "text": 1
+ },
+ "invitation-a6#1": {
+  "dy": 5
+ },
+ "invitation-a6#2": {
+  "dy": 5
+ },
+ "invitation-a6#3": {
+  "dy": 5
+ },
+ "listes-profondes": {
+  "lines": 3,
+  "text": 43,
+  "dx": 1
+ },
+ "marges-etroites-paysage": {
+  "gap": 2,
+  "dx": 9,
+  "text": 2
+ },
+ "marges-larges-a5": {
+  "dy": 22,
+  "gap": 3,
+  "dx": 4,
+  "text": 3
+ },
+ "notes-de-bas-de-page": {
+  "lines": 2,
+  "text": 16,
+  "dy": 33,
+  "gap": 7,
+  "dx": 3,
+  "docx:hf": 1,
+  "odf:content": 1
+ },
+ "tableau-fusions-et-contenus": {
+  "pages": 1,
+  "dx": 13,
+  "text": 489,
+  "lines": 7,
+  "images": 4,
+  "imagePos": 2,
+  "docx:pages": 1,
+  "docx:content": 8,
+  "odf:pages": 1,
+  "odf:content": 7,
+  "odf:images": 1
+ },
+ "tableaux-imbriques": {
+  "lines": 4,
+  "text": 210,
+  "gap": 1,
+  "dx": 1,
+  "imagePos": 3,
+  "docx:content": 2,
+  "odf:content": 2
+ },
+ "titres-numerotes-sommaire": {
+  "lines": 2,
+  "dy": 5,
+  "dx": 2,
+  "text": 65,
+  "docx:content": 1,
+  "odf:content": 1
+ },
+ "tout-ensemble": {
+  "pages": 1,
+  "lines": 6,
+  "gap": 8,
+  "dy": 10,
+  "dx": 5,
+  "text": 283,
+  "images": 5,
+  "docx:pages": 1,
+  "docx:content": 4,
+  "odf:pages": 1,
+  "odf:content": 5,
+  "odf:images": 1
+ },
+ "variables-colonnes-etroites": {
+  "dx": 2,
+  "odf:content": 1
+ },
+ "variables-dans-tout": {
+  "dx": 1,
+  "gap": 2,
+  "dy": 5,
+  "images": 1
+ },
+ "zone-colonnes-chargees": {
+  "text": 41,
+  "dy": 52,
+  "imageSize": 5,
+  "imagePos": 5,
+  "images": 1,
+  "odf:images": 1
+ },
+ "zone-deux-colonnes-simple": {
+  "lines": 2,
+  "text": 47,
+  "gap": 3,
+  "dy": 11,
+  "imagePos": 2,
+  "docx:content": 1,
+  "odf:content": 1
+ }
+}

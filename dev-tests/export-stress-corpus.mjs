@@ -179,6 +179,23 @@ const doc = (id, seed, page, build, hf) => {
 const blocks = (...b) => b.join('');
 const many = (n, fn) => Array.from({ length: n }, (_, k) => fn(k)).join('');
 
+// ---- Les variables (le banc ouvre le modèle « attestation » de la galerie : tables Entreprise et Attestations, avec leurs lignes d'exemple) ----
+const V = (table, column, format) => `<span class="var-badge" data-table="${table}" data-column="${column}" data-key="${table}.${column}"${format ? ` data-format="${format}"` : ''}></span>`;
+const DATE = '{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;d_mmmm_yyyy&quot;}';
+const DATE_WORDS = '{&quot;type&quot;:&quot;date&quot;,&quot;preset&quot;:&quot;d_mmmm_yyyy&quot;,&quot;words&quot;:true}';
+const Ent = (column, format) => V('Entreprise', column, format);
+const Att = (column, format) => V('Attestations', column, format);
+const when = (type, inner) => `<div class="conditional-text" data-condition="{&quot;mode&quot;:&quot;all&quot;,&quot;rules&quot;:[{&quot;column&quot;:&quot;Type&quot;,&quot;operator&quot;:&quot;=&quot;,&quot;value&quot;:&quot;${type}&quot;}]}">${inner}</div>`;
+const identity = `${Att('Civilite')} ${Att('Prenom')} <strong>${Att('Nom')}</strong>`;
+const claim = (r) => `<p>Je soussigné(e), <strong>${Ent('Signataire')}</strong>, ${Ent('Qualite')} de ${Ent('Nom')}, atteste que ${identity}, né(e) le ${Att('Naissance', DATE_WORDS)}, ${Att('Intitule')} à ${Att('Lieu')} depuis le ${Att('DateDebut', DATE)}. ${text(r, 2)}</p>`;
+// Un document à variables : comme `doc`, avec l'en-tête (`o.header`) qui porte des variables.
+const withVariables = (id, seed, page, build, o = {}) => {
+  const d = doc(id, seed, page, build);
+  d.needsData = true;
+  if (o.header) d.headerFooter = Object.assign({}, d.headerFooter, { enabled: true, header: { default: o.header } });
+  return d;
+};
+
 export const FIXED = [
   doc('marges-etroites-paysage', 101, { orientation: 'landscape', format: 'A4', top: 10, right: 10, bottom: 10, left: 10 }, (r) => blocks(heading(r, 1, 'Marges étroites en paysage'), many(10, () => para(r, { sentences: 3 })))),
   doc('marges-larges-a5', 102, { orientation: 'portrait', format: 'A5', top: 40, right: 30, bottom: 40, left: 30 }, (r) => blocks(heading(r, 1, 'Marges larges sur A5'), many(12, () => para(r, { sentences: 2 })))),
@@ -193,6 +210,33 @@ export const FIXED = [
   doc('titres-numerotes-sommaire', 111, { format: 'A4' }, (r) => blocks('<div class="heading-numbering-config" data-style="article"></div><div class="toc-marker"></div>', many(8, (i) => blocks(heading(r, 1 + (i % 3), `Titre ${i + 1}`), para(r, { sentences: 3 }), i % 3 === 2 ? list(r, 2) : '')))),
   doc('images-et-sauts-de-page', 112, { format: 'A4' }, (r) => blocks(image(300, 160, 'center'), para(r), pageBreak(), image(200, 100, 'left'), para(r, { sentences: 3 }), pageBreak(), image(120, 120, 'right'), para(r))),
   doc('tout-ensemble', 113, { format: 'A4', top: 20, right: 20, bottom: 20, left: 20 }, (r) => blocks(heading(r, 1, 'Tout ensemble'), zone(r, { leftPct: 50 }), table(r, { cols: 4, rows: 10, nest: 1 }), list(r, 3), callout(r), para(r, { sentences: 4 }), zone(r), quote(r), table(r, { cols: 3, rows: 8, header: 2 }), para(r, { sentences: 3 }))),
+  // Avec des variables : le banc ouvre la table « Attestations » du modèle de la galerie, avec ses lignes d'exemple (Entreprise : une adresse sur deux lignes, un logo ; Attestations : des dates, des intitulés).
+  // Les variables sont dans tous les contenants - titre, zone, case de tableau (et tableau dans une case), liste, citation, encadré, paragraphe justifié -, avec leur mise en forme (date en lettres), des
+  // textes conditionnels et le nom de l'entreprise en en-tête.
+  withVariables('variables-dans-tout', 120, { format: 'A4', top: 20, right: 20, bottom: 20, left: 20 }, (r) => blocks(
+    `<h1>Attestation ${Att('Numero')} — ${Ent('Nom')}</h1>`,
+    `<div class="two-columns-zone" style="--layout-left: 50%"><div class="two-columns-column"><p><strong>${Ent('Nom')}</strong></p><p>${Ent('Adresse')}</p></div><div class="two-columns-column"><p style="text-align: right">${Ent('Email')}</p><p style="text-align: right">${Ent('Telephone')}</p><p style="text-align: center">${Ent('Signataire')}, ${Ent('Qualite')}</p></div></div>`,
+    `<p style="text-align: right">Fait à ${Att('Lieu')}, le ${Att('DateEtablissement', DATE)}</p>`,
+    when('Emploi', '<p style="text-align: center"><span style="font-size: 20pt"><strong>ATTESTATION D’EMPLOI</strong></span></p>'),
+    when('Stage', '<p style="text-align: center"><span style="font-size: 20pt"><strong>ATTESTATION DE STAGE</strong></span></p>'),
+    claim(r), claim(r),
+    `<table><tbody><tr><th><p><strong>Personne</strong></p></th><th><p><strong>Intitulé</strong></p></th><th><p style="text-align: right"><strong>Depuis le</strong></p></th></tr>`
+      + `<tr><td><p>${identity}</p></td><td><p>${Att('Intitule')}</p><ul><li><p>${Ent('Nom')}</p></li><li><p>${Att('Lieu')}</p></li></ul></td><td><p style="text-align: right">${Att('DateDebut', DATE)}</p></td></tr>`
+      + `<tr><td><p>${Ent('Adresse')}</p></td><td><table><tbody><tr><td><p>${Att('Prenom')}</p></td><td><p>${Att('Nom')}</p></td></tr></tbody></table></td><td><p style="text-align: center">${Att('Numero')}</p></td></tr></tbody></table>`,
+    `<ul><li><p>${Att('Civilite')} ${Att('Nom')}, ${Att('Intitule')}</p><ul><li><p>${Ent('Signataire')}, ${Ent('Qualite')}</p></li></ul></li><li><p>${text(r, 1)} ${Att('Numero')}</p></li></ul>`,
+    `<blockquote><p>${Ent('Nom')} certifie l’exactitude de ces informations pour ${identity}.</p></blockquote>`,
+    `<div class="callout" data-color="blue" data-icon="info" role="note"><p>Pièce n° ${Att('Numero')} établie le ${Att('DateEtablissement', DATE_WORDS)} par ${Ent('Signataire')}.</p></div>`,
+    claim(r), pageBreak(), claim(r), claim(r),
+  ), { header: `<p>${Ent('Nom')} — ${Att('Numero')}</p>` }),
+  withVariables('variables-colonnes-etroites', 121, { format: 'A5', top: 15, right: 15, bottom: 15, left: 15 }, (r) => blocks(
+    '<div class="heading-numbering-config" data-style="numeric"></div>',
+    `<h1>${Ent('Nom')}</h1>`,
+    `<div class="two-columns-zone" style="--layout-left: 30%"><div class="two-columns-column"><p>${Ent('Signataire')}</p><p>${Ent('Qualite')}</p><p>${Ent('Adresse')}</p></div><div class="two-columns-column"><p style="text-align: justify">${claim(r).slice(3, -4)}</p></div></div>`,
+    `<h2>${Att('Intitule')}</h2>`,
+    `<table><tbody><tr><td><p>${Att('Prenom')}</p></td><td><p>${Att('Nom')}</p></td><td><p style="text-align: right">${Att('Naissance', DATE)}</p></td><td><p style="text-align: center">${Att('Numero')}</p></td></tr></tbody></table>`,
+    `<ol><li><p>${Att('Intitule')} — ${Ent('Nom')}</p><ol><li><p>${Att('Lieu')}, ${Att('DateDebut', DATE_WORDS)}</p></li></ol></li></ol>`,
+    claim(r), claim(r), claim(r), `<p style="text-align: right">${Ent('Signataire')},<br>${Ent('Qualite')}</p>`,
+  )),
 ];
 
 // ---- Les documents tirés au hasard ----

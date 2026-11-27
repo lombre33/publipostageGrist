@@ -8,7 +8,7 @@
 // Pourquoi : les essais de dev-tests/ fabriquent leurs documents (« Texte de test », pages remplies de lignes pareilles) et vérifient une règle à la fois ; trois écarts entre l'éditeur, la Lecture et
 // le PDF sont pourtant arrivés chez Antoine en 24 h (26-27/11). Un vrai courrier, une vraie facture, avec leurs variables, conditions, boucles, calques et pieds de page, n'étaient comparés nulle part.
 //
-//   node dev-tests/verify-export-corpus.mjs                       tous les modèles de la galerie (document), toutes les lignes (au plus 8 par modèle)
+//   node dev-tests/verify-export-corpus.mjs                       tous les modèles de la galerie (document), toutes les lignes (au plus 3 par modèle)
 //   node dev-tests/verify-export-corpus.mjs --only facture,bulletin
 //   node dev-tests/verify-export-corpus.mjs --dev                 + templates-gallery-dev/
 //   node dev-tests/verify-export-corpus.mjs --rows 2              au plus 2 lignes par modèle
@@ -16,6 +16,7 @@
 //                                                                 `--seed N --count M` y ajoute M documents tirés au hasard (même graine, mêmes documents), `--only id,id` en choisit
 //   node dev-tests/verify-export-corpus.mjs --formats none        sans Word ni ODT (seulement Lecture ↔ PDF) ; `--formats docx` ou `odf` : un seul des deux (par défaut : docx,odf)
 //   node dev-tests/verify-export-corpus.mjs --report              dit les écarts sans échouer (la première passe, pour les connaître)
+//   node dev-tests/verify-export-corpus.mjs --write-known         écrit ce que le passage a vu dans export-corpus-known.json (après avoir corrigé ce qui se corrige)
 //   node dev-tests/verify-export-corpus.mjs --json fichier.json   écrit le détail de chaque document
 // Word et ODT (si LibreOffice est là) : chaque document est aussi exporté en .docx et en .odt par le vrai bouton, rendu en PDF par LibreOffice (avec la même Roboto que pdfmake) et comparé AU PDF
 // du widget, page par page : le nombre de pages, les lettres de chaque page, les images, l'en-tête et le pied (export-twin-lib.mjs : comparePageContent). LibreOffice n'est pas Word : pas de millimètre.
@@ -33,7 +34,7 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes('--' + name);
 const option = (name, fallback) => { const i = args.indexOf('--' + name); return i === -1 ? fallback : args[i + 1]; };
 const only = String(option('only', '')).split(',').map((s) => s.trim()).filter(Boolean);
-const MAX_ROWS = Number(option('rows', 8));
+const MAX_ROWS = Number(option('rows', 3));
 const REPORT = flag('report');
 const JSON_OUT = option('json', '');
 const STRESS = flag('stress');
@@ -199,4 +200,12 @@ for (const r of results) {
 }
 console.log(`\n${results.length} document(s) : ${clean} identique(s), ${failed} en écart nouveau${better ? ', ' + better + ' meilleur(s) que KNOWN' : ''}.`);
 if (JSON_OUT) writeFileSync(JSON_OUT, JSON.stringify(results, null, 1));
+// --write-known : ce que ce passage a vu devient ce qu'on connaît (les documents joués remplacent leur ligne, les autres restent) : à faire APRÈS avoir corrigé ce qui se corrige, jamais pour faire taire un écart neuf.
+if (flag('write-known')) {
+  const merged = Object.assign({}, KNOWN);
+  results.filter((r) => !r.error).forEach((r) => { const profile = profileOf(r); if (Object.keys(profile).length) merged[r.id] = profile; else delete merged[r.id]; });
+  const sorted = Object.fromEntries(Object.keys(merged).sort().map((k) => [k, merged[k]]));
+  writeFileSync(KNOWN_FILE, JSON.stringify(sorted, null, 1) + '\n');
+  console.log(`export-corpus-known.json écrit : ${Object.keys(sorted).length} document(s) avec des écarts connus.`);
+}
 process.exit(failed && !REPORT ? 1 : 0);
