@@ -622,6 +622,28 @@ const ReaderMode = (function () {
     });
     return rules;
   }
+  // « En bas de la page » DANS une colonne d'une zone à deux colonnes (BottomAnchor.columnShifts) : les blocs calés d'une colonne descendent par un `transform` VISUEL, posé comme celui des blocs de premier
+  // niveau, une fois les coupures de la zone placées. Une zone déjà calée en entier ne se double pas. Rend les règles.
+  function columnAnchorRules(pass) {
+    const rules = [];
+    const { wrapperChildren, wrapperRect, zoom, geometry } = pass;
+    const topRel = el => (el.getBoundingClientRect().top - wrapperRect.top) / zoom;
+    const bottomRel = el => (el.getBoundingClientRect().bottom - wrapperRect.top) / zoom;
+    const wrapperTopLayout = pass.toLayoutY(wrapperRect.top);
+    const bodies = pass.pages.map(page => page.bodyTop - wrapperTopLayout);
+    const pageOf = (rel) => { let found = 0; bodies.forEach((top, index) => { if (top <= rel + 1) found = index; }); return found; };
+    wrapperChildren.forEach((zone, zoneIndex) => {
+      if (!zone.classList || !zone.classList.contains('two-columns-zone') || BottomAnchor.isAnchoredElement(zone)) return;
+      const columns = ZonePageCut.columnsOf(zone);
+      if (!columns) return;
+      let below = null;
+      for (let next = zone.nextElementSibling; next; next = next.nextElementSibling) { if (next.getBoundingClientRect().height > 0) { below = next; break; } }
+      BottomAnchor.columnShifts({ columns, below, topRel, bottomRel, pageOf, bodyBottomOf: page => bodies[page] + geometry.pageContentHeightPx }).forEach((shift) => {
+        rules.push(pass.sheetSel + ' > *:nth-child(' + (zoneIndex + 1) + ') > .two-columns-column:nth-child(' + (shift.column + 1) + ') > *:nth-child(n+' + shift.lo + '):nth-child(-n+' + shift.hi + ') { transform: translateY(' + shift.px + 'px); }');
+      });
+    });
+    return rules;
+  }
   function placeSeam(pass, offset, i) {
     // Pose la couture qui sépare la page `i + 1` de la suivante : sa bande, la réserve sous le dernier bloc de la page qui finit, et la page qui
     // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
@@ -878,6 +900,7 @@ const ReaderMode = (function () {
     // « En bas de la page » : la suite de la dernière page descend aussi (jusqu'au dernier bloc du texte), puis toutes les suites se décalent d'un coup, une fois les coupures placées.
     if (offsets.tailAnchor && ctx.wrapperChildren.length) pass.anchorShifts.push(anchorShiftOf(pass, offsets.tailAnchor, ctx.wrapperChildren[ctx.wrapperChildren.length - 1]));
     anchorShiftRules(pass).forEach(rule => marginRules.push(rule));
+    columnAnchorRules(pass).forEach(rule => marginRules.push(rule));
     pass.tableStrips.forEach((strips, index) => marginRules.push(TablePageCut.clipRule(pass.sheetSel + ' > *:nth-child(' + (index + 1) + ')', strips)));
     // Les marges posées en ligne le temps du calcul s'en vont, et la feuille des mêmes règles les remplace : une seule écriture de feuille, une seule relecture.
     if (pass.inline) pass.inline.restoreAll();

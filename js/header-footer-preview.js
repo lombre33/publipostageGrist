@@ -1635,6 +1635,30 @@ const HeaderFooterPreview = (function () {
     });
     return rules;
   }
+  // « En bas de la page » DANS une colonne d'une zone à deux colonnes (BottomAnchor.columnShifts) : les blocs calés d'une colonne descendent par un `transform` visuel, posé comme celui des blocs de
+  // premier niveau, une fois les coupures placées (la zone, son autre colonne et ce qui suit ne bougent pas). Une zone déjà calée en entier ne se double pas.
+  function columnAnchorRules(pass) {
+    const rules = [];
+    const { tiptapChildren, tiptapRect, zoom } = pass;
+    const topRel = el => (el.getBoundingClientRect().top - tiptapRect.top) / zoom;
+    const bottomRel = el => (el.getBoundingClientRect().bottom - tiptapRect.top) / zoom;
+    const tiptapTopLayout = pass.toLayoutY(tiptapRect.top);
+    const bodies = pass.pages.map(page => page.bodyTop - tiptapTopLayout);
+    const pageOf = (rel) => { let found = 0; bodies.forEach((top, index) => { if (top <= rel + 1) found = index; }); return found; };
+    // Les lignes vides qui terminent le document (que l'éditeur garde) ne sont pas du texte sous la zone : la Lecture et les exports les retirent (trailingBlankStart).
+    const tailStart = trailingBlankStart(tiptapChildren);
+    tiptapChildren.forEach((wrapper, index) => {
+      if (BottomAnchor.isAnchoredElement(wrapper)) return;
+      const columns = ZonePageCut.columnsOf(wrapper.querySelector(':scope > .two-columns-zone'));
+      if (!columns) return;
+      let below = null;
+      for (let next = index + 1; next < tailStart; next++) { if (tiptapChildren[next].getBoundingClientRect().height > 0) { below = tiptapChildren[next]; break; } }
+      BottomAnchor.columnShifts({ columns, below, topRel, bottomRel, pageOf, bodyBottomOf: page => bodies[page] + pass.capacityOfPage(page) }).forEach((shift) => {
+        rules.push(SHEET + ' > *:nth-child(' + (index + 1) + ') > .two-columns-zone > .two-columns-column:nth-child(' + (shift.column + 1) + ') > *:nth-child(n+' + shift.lo + '):nth-child(-n+' + shift.hi + ') { transform: translateY(' + shift.px + 'px); }');
+      });
+    });
+    return rules;
+  }
   // Pose la couture qui sépare la page `i + 1` de la suivante : sa bande, la réserve sous le dernier bloc de la page qui finit, la page qui
   // commence. `pass` porte les mesures de la pagination et son état courant (haut du corps de page, règles de marge, rognages, pages).
   function placePaginationSeam(pass, brk, i) {
@@ -1830,6 +1854,7 @@ const HeaderFooterPreview = (function () {
     // se décalent d'un coup, une fois les coupures placées (le décalage ne change aucune mesure, mais celles des coupures se lisent feuille nue).
     if (breaks.tailAnchor && pass.tiptapChildren.length) pass.anchorShifts.push(anchorShiftOf(pass, breaks.tailAnchor, pass.tiptapChildren[pass.tiptapChildren.length - 1], pass.capacityOfPage(totalPages - 1)));
     anchorShiftRules(pass).forEach(rule => marginRules.push(rule));
+    columnAnchorRules(pass).forEach(rule => marginRules.push(rule));
     pass.tableStrips.forEach((strips, nth) => marginRules.push(TablePageCut.clipRule('#editor-container .tiptap > *:nth-child(' + nth + ')', strips)));
     // Une zone coupée par une couture est rognée sur la bande que la couture recouvre : son liseré et les bordures de ses colonnes (au survol) s'arrêtent sous
     // le dernier bloc de la page qui finit et reprennent en haut de la page suivante, au lieu de traverser les marges blanches de la couture.

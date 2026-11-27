@@ -165,7 +165,6 @@ const LockBarCauses = (function () {
   });
   const PLACE = {
     'keepNext.notHere': placeFinding('lockBubble.bar.chk.noParagraph', 'lockBubble.bar.fix.place.paragraph'),
-    'bottomAnchor.inColumn': placeFinding('lockBubble.bar.chk.inZoneColumn', 'lockBubble.bar.fix.place.outOfColumn'),
     'bottomAnchor.notHere': placeFinding('lockBubble.bar.chk.notTopBlock', 'lockBubble.bar.fix.place.topBlock'),
     'paragraphFormat.notHere': placeFinding('lockBubble.bar.chk.noParagraph', 'lockBubble.bar.fix.place.paragraph'),
     'textDirection.notHere': placeFinding('lockBubble.bar.chk.noText', 'lockBubble.bar.fix.place.text'),

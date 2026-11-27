@@ -140,59 +140,75 @@
   });
 
   // Bug du 27/11 (Antoine : « c'est un module 2 colonnes, et sur les 4 lignes de la fin de la colonne de gauche j'ai mis l'option et ça crée ce bug-là ») : la ligne, posée depuis une colonne, réglait la ZONE ENTIÈRE ;
-  // la lettre (une zone presque haute d'une page) partait en page 2 et la page 1 ne gardait que les logos en calque. Désormais la ligne est grisée, avec sa raison, dans une colonne, tant que le calage des seules
-  // lignes choisies n'existe pas ; la zone entière se règle en la sélectionnant en entier.
+  // la lettre (une zone presque haute d'une page) partait en page 2 et la page 1 ne gardait que les logos en calque. Désormais la ligne règle les seuls blocs de la colonne que la sélection touche ; la zone entière se
+  // règle en la sélectionnant en entier (de son début à sa fin, ou en objet).
   const LETTER = '<div class="two-columns-zone"><div class="two-columns-column"><p>Vice-presidece</p><p></p><p>Adresse postale</p><p>Talence cedex</p></div><div class="two-columns-column"><p>Madame, Monsieur</p><p>Corps du courrier</p></div></div>';
+  // Les blocs des deux colonnes de la première zone du texte, avec « * » pour ceux qui portent le réglage : « gauche[...] droite[...] ».
+  const columnList = () => {
+    const out = [];
+    ed().state.doc.descendants((node) => {
+      if (node.type.name !== 'twoColumnsZone') return true;
+      node.forEach((column) => { const items = []; column.forEach(block => items.push(block.textContent.slice(0, 8) + (block.attrs.bottomAnchor ? '*' : ''))); out.push(items.join(',')); });
+      return false;
+    });
+    return out.join(' | ');
+  };
   cases.push({
-    id: 'bottomanchor_in_a_column_of_a_zone_the_row_is_greyed_with_its_reason_and_the_zone_is_not_anchored',
-    description: 'Le curseur, ou des lignes choisies, dans une colonne d\'une zone à deux colonnes (la colonne de gauche ou celle de droite) : la ligne « En bas de la page » est grisée, avec sa raison dans les deux langues, et un clic ne règle rien (avant, il réglait la zone entière : la lettre d\'Antoine partait en page 2) ; une sélection qui sort de la zone, ou la zone prise en entier, la règle toujours, comme un tableau',
+    id: 'bottomanchor_in_a_column_of_a_zone_the_row_sets_only_the_blocks_of_the_column_that_the_selection_touches',
+    description: 'Le curseur, ou des lignes choisies, dans une colonne d\'une zone à deux colonnes : la ligne « En bas de la page » règle les seuls blocs de CETTE colonne que la sélection touche (jamais la zone entière, ni l\'autre colonne), un clic suivant les retire, un Annuler les défait ; une sélection qui va d\'une colonne à l\'autre règle les blocs des deux ; une sélection qui sort de la zone, ou la zone prise en entier, la règle toujours, comme un tableau (avant, un réglage posé depuis une colonne calait la zone entière : la lettre d\'Antoine partait en page 2)',
     run: async (h) => {
       const out = {};
       await setDoc(h, '<p>Avant</p>' + LETTER + '<p>Après</p>');
-      const reasonFr = I18n.t('bottomAnchor.inColumn');
-      I18n.setLang('en');
-      const reasonEn = I18n.t('bottomAnchor.inColumn');
-      I18n.setLang('fr');
-      const greyed = s => s.disabled && s.greyed && s.title === reasonFr && s.tab === -1 && !s.checked;
+      const untouched = 'paragraph:Avant|twoColumnsZone:Vice-preside|paragraph:Après';
+      const plain = 'Vice-pre,,Adresse ,Talence  | Madame, ,Corps du';
       await cursorIn('Talence');
       out.cursorLeft = rowState();
       await press();
-      out.afterCursorLeft = anchorList();
+      out.afterCursorLeft = { top: anchorList(), columns: columnList() };
+      await press();
+      out.cleared = columnList();
       await selectRange('Adresse', 'Talence');
       out.linesLeft = rowState();
       await press();
-      out.afterLinesLeft = anchorList();
+      out.afterLinesLeft = { top: anchorList(), columns: columnList() };
+      ed().commands.undo();
+      await sleep(150);
+      out.undone = columnList();
       await cursorIn('Corps');
-      out.cursorRight = rowState();
       await press();
-      out.afterCursorRight = anchorList();
-      const untouched = 'paragraph:Avant|twoColumnsZone:Vice-preside|paragraph:Après';
+      out.afterCursorRight = { top: anchorList(), columns: columnList() };
+      await press();
+      await selectRange('Talence', 'Madame');
+      await press();
+      out.acrossColumns = { top: anchorList(), columns: columnList() };
+      await press();
       // Une sélection qui va d'avant la zone à après elle : la zone est visée en entier, avec les blocs qu'elle traverse.
       await selectRange('Avant', 'Après');
       out.spanning = rowState();
       await press();
-      out.afterSpanning = anchorList();
+      out.afterSpanning = { top: anchorList(), columns: columnList() };
       await press();
-      out.cleared = anchorList();
+      out.spanningCleared = anchorList();
       // La zone prise en entier (sélection d'objet).
       ed().commands.setNodeSelection(positionOf(n => n.type.name === 'twoColumnsZone'));
       await sleep(150);
       out.whole = rowState();
       await press();
-      out.afterWhole = anchorList();
-      out.texts = { reasonFr, reasonEn };
-      const pass = greyed(out.cursorLeft) && greyed(out.linesLeft) && greyed(out.cursorRight)
-        && out.afterCursorLeft === untouched && out.afterLinesLeft === untouched && out.afterCursorRight === untouched
-        && !out.spanning.disabled && out.afterSpanning === 'paragraph:Avant*|twoColumnsZone:Vice-preside*|paragraph:Après*' && out.cleared === untouched
-        && !out.whole.disabled && out.afterWhole === 'paragraph:Avant|twoColumnsZone:Vice-preside*|paragraph:Après'
-        && reasonFr !== reasonEn && /^Inside a column/.test(reasonEn) && /^Dans une colonne/.test(reasonFr);
+      out.afterWhole = { top: anchorList(), columns: columnList() };
+      const idle = s => !s.disabled && !s.greyed && !s.checked;
+      const pass = idle(out.cursorLeft) && out.afterCursorLeft.top === untouched && out.afterCursorLeft.columns === 'Vice-pre,,Adresse ,Talence * | Madame, ,Corps du' && out.cleared === plain
+        && idle(out.linesLeft) && out.afterLinesLeft.top === untouched && out.afterLinesLeft.columns === 'Vice-pre,,Adresse *,Talence * | Madame, ,Corps du' && out.undone === plain
+        && out.afterCursorRight.top === untouched && out.afterCursorRight.columns === 'Vice-pre,,Adresse ,Talence  | Madame, ,Corps du*'
+        && out.acrossColumns.top === untouched && out.acrossColumns.columns === 'Vice-pre,,Adresse ,Talence * | Madame, *,Corps du'
+        && !out.spanning.disabled && out.afterSpanning.top === 'paragraph:Avant*|twoColumnsZone:Vice-preside*|paragraph:Après*' && out.afterSpanning.columns === plain && out.spanningCleared === untouched
+        && !out.whole.disabled && out.afterWhole.top === 'paragraph:Avant|twoColumnsZone:Vice-preside*|paragraph:Après' && out.afterWhole.columns === plain;
       return { pass, notes: JSON.stringify(out) };
     },
   });
 
   cases.push({
     id: 'bottomanchor_a_zone_already_anchored_keeps_its_row_checked_and_a_click_from_a_column_removes_the_setting',
-    description: 'Une zone déjà calée (un document d\'avant le grisage dans une colonne) : le curseur dans l\'une de ses colonnes montre la ligne cochée et active, et un clic retire le réglage de la zone (la personne n\'est jamais coincée avec un réglage qu\'elle ne peut plus défaire)',
+    description: 'Une zone déjà calée en entier (un document d\'avant le calage dans une colonne) : le curseur dans l\'une de ses colonnes montre la ligne cochée et active, et un clic retire le réglage de la zone (elle reste visée en entier : la personne n\'est jamais coincée avec un réglage qu\'elle ne peut plus défaire)',
     run: async (h) => {
       const out = {};
       await setDoc(h, '<p>Avant</p>' + withAnchor(LETTER) + '<p>Après</p>');
@@ -203,7 +219,7 @@
       out.after = anchorList();
       out.stateAfter = rowState();
       const pass = out.start === 'paragraph:Avant|twoColumnsZone:Vice-preside*|paragraph:Après' && out.state.checked && !out.state.disabled && !out.state.greyed
-        && out.after === 'paragraph:Avant|twoColumnsZone:Vice-preside|paragraph:Après' && !out.stateAfter.checked && out.stateAfter.disabled && out.stateAfter.greyed;
+        && out.after === 'paragraph:Avant|twoColumnsZone:Vice-preside|paragraph:Après' && !out.stateAfter.checked && !out.stateAfter.disabled && !out.stateAfter.greyed;
       return { pass, notes: JSON.stringify(out) };
     },
   });
@@ -613,6 +629,147 @@
         && JSON.stringify(out.manual) === JSON.stringify(['frame:SIGNATURE', 'p:SUITE+']) && JSON.stringify(out.before) === JSON.stringify(['frame:SIGNATURE+', 'p:APRES+'])
         && f.anchor === 'paragraph' && f.hasBox && /vertical-pos=bottom/.test(f.style) && /vertical-rel=page-content/.test(f.style) && /wrap=none/.test(f.style) && /^[\d.]+cm$/.test(f.width)
         && out.plain === 0 && out.plainBreaks === 0 && out.zoneInFrame && out.tableInFrame;
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  // === 5) DANS une colonne d'une zone à deux colonnes (demande d'Antoine du 27/11) =======================================================================================
+  // « Le comportement souhaité : la sélection va tout en bas de la page, mais sans influencer le reste des éléments des colonnes » et, « s'il reste du texte sous la zone, ça ne pourra pas aller en bas de page ».
+  const col = (items) => '<div class="two-columns-column">' + items.join('') + '</div>';
+  const lines = (tag, n) => Array.from({ length: n }, (_, i) => '<p>' + tag + ' ' + i + '</p>');
+  const ZONE_COLUMNS = (left, right) => '<div class="two-columns-zone">' + col(left) + col(right) + '</div>';
+  // Les blocs d'une colonne (la 0 = gauche, la 1 = droite) : texte, haut, bas (pixels de mise en page depuis le haut de la feuille) et décalage `transform`.
+  function readColumns(root) {
+    const z = zoomOf(root);
+    const rect = root.getBoundingClientRect();
+    const px = v => Math.round(v / z * 100) / 100;
+    const zone = root.querySelector('.two-columns-zone');
+    return Array.from(zone.querySelectorAll(':scope > .two-columns-column')).map(column => Array.from(column.children).filter(k => k.tagName !== 'STYLE').map((k) => {
+      const r = k.getBoundingClientRect();
+      const m = /matrix\([^)]*,\s*([-\d.]+)\)$/.exec(getComputedStyle(k).transform);
+      return { text: k.textContent.trim(), top: px(r.top - rect.top), bottom: px(r.bottom - rect.top), shift: m ? parseFloat(m[1]) : 0 };
+    }));
+  }
+  const cell = (columns, c, text) => columns[c].find(b => b.text === text);
+  const sameSpot = (a, b) => a && b && a.top === b.top && a.bottom === b.bottom;
+  // L'éditeur paginé puis la Lecture du même HTML : pour chacun, ce que montrent les colonnes de la zone et les blocs de premier niveau, avec le haut du corps de la première page.
+  const bothColumns = async (h, html) => {
+    await h.resetEditor();
+    h.setA4Preview(true);
+    PageLayout.setMarginsMm(null);
+    Editor.setHTML(html);
+    await sleep(450);
+    const saved = Editor.getHTML();
+    setPageContentHeight(H);
+    Editor.refreshPaginationPreview();
+    await sleep(450);
+    const bodyTop = HeaderFooterPreview.pageBodyTops()[0];
+    const editor = { columns: readColumns(h.tiptap()), page: readPage(h.tiptap(), '#editor-container'), bodyTop };
+    const wrapper = await h.renderReaderMode(saved);
+    await sleep(450);
+    return { saved, editor, reader: { columns: readColumns(wrapper), page: readPage(wrapper, '#reader-container'), bodyTop } };
+  };
+  const SURFACES = ['editor', 'reader'];
+
+  cases.push({
+    id: 'bottomanchor_editor_and_reader_put_the_anchored_lines_of_a_column_at_the_foot_of_the_page_and_touch_nothing_else',
+    description: 'Éditeur et Lecture : les lignes calées d\'une colonne (l\'adresse en bas de la colonne de gauche) descendent tout en bas du corps de la page, empilées ; le reste de la colonne, l\'autre colonne, la hauteur de la zone et du document restent EXACTEMENT où ils sont sans le réglage ; le HTML enregistré garde l\'attribut sur les seuls blocs de la colonne',
+    run: async (h) => {
+      try {
+        const left = (anchored) => [...lines('Gauche', 3), '<p' + (anchored ? ' data-bottom-anchor="true"' : '') + '>Adresse 1</p>', '<p' + (anchored ? ' data-bottom-anchor="true"' : '') + '>Adresse 2</p>'];
+        const right = lines('Droite', 6);
+        const plain = await bothColumns(h, '<p>Titre</p>' + ZONE_COLUMNS(left(false), right));
+        const set = await bothColumns(h, '<p>Titre</p>' + ZONE_COLUMNS(left(true), right));
+        const out = { saved: (set.saved.match(/data-bottom-anchor="true"/g) || []).length === 2 && /<\/p><p data-bottom-anchor="true">Adresse 1/.test(set.saved) };
+        SURFACES.forEach((k) => {
+          const now = set[k], before = plain[k];
+          out[k] = {
+            bottom: cell(now.columns, 0, 'Adresse 2').bottom, want: now.bodyTop + H,
+            stacked: Math.abs(cell(now.columns, 0, 'Adresse 1').bottom - cell(now.columns, 0, 'Adresse 2').top) <= 1,
+            shifts: [cell(now.columns, 0, 'Adresse 1').shift, cell(now.columns, 0, 'Adresse 2').shift, cell(now.columns, 0, 'Gauche 0').shift, cell(now.columns, 1, 'Droite 0').shift],
+            leftRest: ['Gauche 0', 'Gauche 1', 'Gauche 2'].every(t => sameSpot(cell(now.columns, 0, t), cell(before.columns, 0, t)) && cell(now.columns, 0, t).shift === 0),
+            rightSame: now.columns[1].every(b => sameSpot(b, cell(before.columns, 1, b.text)) && b.shift === 0),
+            pageSame: JSON.stringify(now.page.blocks.map(b => [b.top, b.bottom])) === JSON.stringify(before.page.blocks.map(b => [b.top, b.bottom])) && now.page.bands.length === 0,
+          };
+        });
+        const pass = out.saved && SURFACES.every(k => Math.abs(out[k].bottom - out[k].want) <= 1 && out[k].stacked && out[k].shifts[0] > 0 && out[k].shifts[1] > 0 && out[k].shifts[2] === 0 && out[k].shifts[3] === 0 && out[k].leftRest && out[k].rightSame && out[k].pageSame);
+        return { pass, notes: JSON.stringify(out) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  cases.push({
+    id: 'bottomanchor_editor_and_reader_stop_the_anchored_lines_of_a_column_above_the_text_that_follows_the_zone_on_the_same_page',
+    description: 'Éditeur et Lecture : quand du texte suit la zone sur la même page, les lignes calées de la colonne ne vont pas sur lui (elles s\'arrêtent au bas de la colonne la plus longue : la zone ne grandit pas) ; quand ce texte est sur la page d\'après (zone coupée par la page), elles vont au bas de la page ; un bloc qui les suit dans leur colonne les arrête aussi',
+    run: async (h) => {
+      try {
+        const left = lines('Gauche', 2).concat(['<p data-bottom-anchor="true">Adresse 1</p>']);
+        const right = lines('Droite', 4);
+        const withText = await bothColumns(h, '<p>Titre</p>' + ZONE_COLUMNS(left, right) + '<p>Après la zone</p>');
+        const overflow = await bothColumns(h, '<p>Titre</p>' + ZONE_COLUMNS(left, lines('Droite', 34)) + '<p>Après la zone</p>');
+        const inColumn = await bothColumns(h, '<p>Titre</p>' + ZONE_COLUMNS(['<p data-bottom-anchor="true">Adresse 1</p>', '<p>Suite de la colonne</p>'], right) + '<p>Après la zone</p>');
+        const out = {};
+        SURFACES.forEach((k) => {
+          const follower = cell(inColumn[k].columns, 0, 'Suite de la colonne');
+          out[k] = {
+            withText: { bottom: cell(withText[k].columns, 0, 'Adresse 1').bottom, longest: cell(withText[k].columns, 1, 'Droite 3').bottom, afterTop: blockOf(withText[k].page, 'Après la zone').top, shift: cell(withText[k].columns, 0, 'Adresse 1').shift },
+            overflow: { bottom: cell(overflow[k].columns, 0, 'Adresse 1').bottom, want: overflow[k].bodyTop + H, afterTop: blockOf(overflow[k].page, 'Après la zone').top, shift: cell(overflow[k].columns, 0, 'Adresse 1').shift },
+            inColumn: { bottom: cell(inColumn[k].columns, 0, 'Adresse 1').bottom, followerTop: follower.top, followerShift: follower.shift },
+          };
+        });
+        const pass = SURFACES.every(k => Math.abs(out[k].withText.bottom - out[k].withText.longest) <= 1 && out[k].withText.bottom < out[k].withText.afterTop && out[k].withText.shift > 0
+          && Math.abs(out[k].overflow.bottom - out[k].overflow.want) <= 1 && out[k].overflow.afterTop > out[k].overflow.want && out[k].overflow.shift > 0
+          && Math.abs(out[k].inColumn.bottom - out[k].inColumn.followerTop) <= 1 && out[k].inColumn.followerShift === 0);
+        return { pass, notes: JSON.stringify(out) };
+      } finally { restoreLayout(); }
+    },
+  });
+
+  // --- PDF (lu par pdf.js) : les lignes calées d'une colonne ---
+  const words = (tag, n) => Array.from({ length: n }, (_, i) => '<p>' + tag + i + '</p>');
+  const anchoredWord = text => '<p data-bottom-anchor="true">' + text + '</p>';
+  cases.push({
+    id: 'bottomanchor_pdf_puts_the_anchored_lines_of_a_column_at_the_foot_of_the_page_and_touches_nothing_else',
+    description: 'PDF (lu par pdf.js) : les lignes calées d\'une colonne (l\'adresse au bas de la colonne de gauche) tombent au bas du corps de la page, empilées ; le reste de la colonne, l\'autre colonne et le texte qui suit la zone gardent EXACTEMENT leur place sans le réglage ; une seule page, aucune page blanche',
+    run: async (h) => {
+      await h.resetEditor();
+      const left = anchored => [...words('GAUCHE', 3), anchored ? anchoredWord('ADRESSEUN') : '<p>ADRESSEUN</p>', anchored ? anchoredWord('ADRESSEDEUX') : '<p>ADRESSEDEUX</p>'];
+      const right = words('DROITE', 6);
+      const plain = await pdfOf(h, '<p>TITRE</p>' + ZONE_COLUMNS(left(false), right));
+      const set = await pdfOf(h, '<p>TITRE</p>' + ZONE_COLUMNS(left(true), right));
+      const bottom = pdfBottom(set);
+      const out = {
+        pages: set.pages.length, blank: blankPages(set), bottom,
+        adresse: [yOfStr(set, 'ADRESSEUN'), yOfStr(set, 'ADRESSEDEUX')], before: [yOfStr(plain, 'ADRESSEUN'), yOfStr(plain, 'ADRESSEDEUX')],
+        rest: ['TITRE', 'GAUCHE0', 'GAUCHE1', 'GAUCHE2', 'DROITE0', 'DROITE3', 'DROITE5'].map(t => [yOfStr(set, t), yOfStr(plain, t)]),
+      };
+      const sameSpot = ([a, b]) => a != null && b != null && Math.abs(a - b) <= 0.6;
+      const pass = out.pages === 1 && out.blank === 0 && out.adresse[1] <= bottom && bottom - out.adresse[1] <= 6 && out.adresse[1] - out.adresse[0] > 8 && out.adresse[1] - out.adresse[0] < 30
+        && out.before[0] < bottom - 100 && out.rest.every(sameSpot);
+      return { pass, notes: JSON.stringify(out) };
+    },
+  });
+
+  cases.push({
+    id: 'bottomanchor_pdf_stops_the_anchored_lines_of_a_column_above_the_text_that_follows_the_zone_and_cuts_the_run_with_the_page',
+    description: 'PDF (lu par pdf.js) : quand du texte suit la zone sur la même page, les lignes calées de la colonne ne vont pas sur lui (elles s\'arrêtent au bas de la colonne la plus longue, la zone ne grandit pas) ; quand ce texte est sur la page d\'après, elles vont au bas de la page 1 ; un bloc qui les suit dans leur colonne les arrête aussi ; aucune ligne perdue',
+    run: async (h) => {
+      await h.resetEditor();
+      const left = [...words('GAUCHE', 2), anchoredWord('ADRESSEUN')];
+      const withText = await pdfOf(h, '<p>TITRE</p>' + ZONE_COLUMNS(left, words('DROITE', 4)) + '<p>APRESLAZONE</p>');
+      const withoutSetting = await pdfOf(h, '<p>TITRE</p>' + ZONE_COLUMNS(left.map(x => x.replace(' data-bottom-anchor="true"', '')), words('DROITE', 4)) + '<p>APRESLAZONE</p>');
+      const overflow = await pdfOf(h, '<p>TITRE</p>' + ZONE_COLUMNS(left, words('DROITE', 70)) + '<p>APRESLAZONE</p>');
+      const follower = await pdfOf(h, '<p>TITRE</p>' + ZONE_COLUMNS([anchoredWord('ADRESSEUN'), '<p>SUITE</p>'], words('DROITE', 4)) + '<p>APRESLAZONE</p>');
+      const bottom = pdfBottom(withText);
+      const out = {
+        withText: { pages: withText.pages.length, adresse: yOfStr(withText, 'ADRESSEUN'), droite3: yOfStr(withText, 'DROITE3'), apres: yOfStr(withText, 'APRESLAZONE'), apresBefore: yOfStr(withoutSetting, 'APRESLAZONE') },
+        overflow: { pages: overflow.pages.length, adresse: yOfStr(overflow, 'ADRESSEUN'), adressePage: pageOfStr(overflow, 'ADRESSEUN'), apres: pageOfStr(overflow, 'APRESLAZONE'), lost: Array.from({ length: 70 }, (_, i) => pageOfStr(overflow, 'DROITE' + i)).filter(p => p < 0).length },
+        follower: { adresse: yOfStr(follower, 'ADRESSEUN'), suite: yOfStr(follower, 'SUITE') },
+        bottom,
+      };
+      const pass = out.withText.pages === 1 && out.withText.adresse < out.withText.apres && Math.abs(out.withText.adresse - out.withText.droite3) <= 2 && Math.abs(out.withText.apres - out.withText.apresBefore) <= 0.6
+        && out.overflow.pages >= 2 && out.overflow.adressePage === 0 && out.overflow.adresse <= bottom && bottom - out.overflow.adresse <= 6 && out.overflow.apres === out.overflow.pages - 1 && out.overflow.lost === 0
+        && out.follower.suite > out.follower.adresse && out.follower.suite - out.follower.adresse < 30;
       return { pass, notes: JSON.stringify(out) };
     },
   });

@@ -1728,6 +1728,13 @@ const PdfExport = (function () {
     if (colNodes.length < 2) return fallbackTextBlock(node, pageBreakBefore);
     const m = measureTwoColumns(node);
     const columns = await twoColumnsContent(colNodes, m.widthPt);
+    // « En bas de la page » dans une colonne : une sentinelle (0,1 pt, invisible) ferme chaque colonne de la zone, que la mesure de pdfmake lit pour connaître le bas naturel de la zone.
+    const columnRuns = columns.map(blocks => blocks._anchorRuns || []);
+    let columnAnchors = null;
+    if (columnRuns.some(runs => runs.length)) {
+      const ends = columns.map((blocks) => { const end = { text: ' ', fontSize: ANCHOR_END_PT, lineHeight: 1, margin: [0, 0, 0, 0], _zoneEnd: true }; blocks.push(end); return end; });
+      columnAnchors = { runs: columnRuns, ends, below: null };
+    }
     const block = {
       columns: columns.map((stack, i) => ({ width: m.outerWidthPt[i], stack: [{ stack, margin: [m.insetLeft[i], m.insetTop[i], m.insetRight[i], m.insetBottom[i]] }] })),
       columnGap: PageLayout.COLUMN_GAP_PX * PX_TO_PT,
@@ -1736,6 +1743,7 @@ const PdfExport = (function () {
     if (pageBreakBefore) block.pageBreak = 'before';
     const nestedPending = columnPendingImages(columns, colNodes, node, rootRect);
     if (nestedPending.length) block._nestedPending = nestedPending;
+    if (columnAnchors) block._columnAnchors = columnAnchors;
     return block;
   }
 
@@ -3813,16 +3821,18 @@ const PdfExport = (function () {
     // (ni décodage ni écriture) et la page restait prise du premier au dernier cadre (11/11 : 24 diapositives de 140 cadres = un arrêt de 31 s) - sans clic, sans coin d'état qui se peint.
     // Au premier niveau, la boucle rend donc la main entre deux nœuds quand la tranche dure plus de 40 ms (js/work-pacer.js) ; rien ailleurs (une colonne, un encadré, un cadre sont petits).
     if (isTopLevel && typeof WorkPacer !== 'undefined') st.pace = WorkPacer.create();
+    // « En bas de la page » : les blocs calés du premier niveau, et ceux d'une colonne de zone à deux colonnes (la colonne se cale elle-même, columnAnchorSpacers).
+    const keepsRuns = isTopLevel || !!(opts && opts.zoneColumn);
     for (const child of Array.from(root.childNodes)) {
-      if (isTopLevel) closeAnchorRunBefore(st, child);
-      const anchored = isTopLevel && BottomAnchor.isAnchoredElement(child);
+      if (keepsRuns) closeAnchorRunBefore(st, child);
+      const anchored = keepsRuns && BottomAnchor.isAnchoredElement(child);
       if (anchored) openAnchorRun(st, child);
       const from = st.blocks.length;
       await visitNode(st, child);
       if (anchored) extendAnchorRun(st, from, child);
       if (st.pace) await st.pace();
     }
-    if (isTopLevel) closeAnchorRun(st, null);
+    if (keepsRuns) closeAnchorRun(st, null);
     closeKeepRun(st, st.keepRun);
     st.keepRun = null;
     fillTocBlocks(st.tocBlocks, st.headingBlocks);
@@ -3874,6 +3884,8 @@ const PdfExport = (function () {
       keepRun: null, keepHeadCount: 0,
       // « En bas de la page » (js/bottom-anchor.js) : les suites de blocs calés du texte, dans l'ordre (`anchorRuns`, { blocks, end }) et celle qui se poursuit (`anchorRun`). Voir closeAnchorRun.
       anchorRuns: [], anchorRun: null, anchorAfter: null,
+      // Les zones à deux colonnes du texte dont une colonne porte des blocs calés (columnAnchorSpacers), et celle dont le bloc d'après est attendu (`zoneBelow`).
+      columnAnchorZones: [], zoneBelow: null,
       // Le bas, dans l'hôte de mesure, du dernier bloc posé.
       lastBlockBottomPx: null,
       // La pause du premier niveau (buildPdfContentFromRoot) : la page respire entre deux nœuds d'un gros modèle. Nulle ailleurs.
@@ -3885,6 +3897,7 @@ const PdfExport = (function () {
 
   function pushBlock(st, block, node) {
     if (st.anchorAfter && !block._anchorEnd) { st.anchorAfter.next = block; st.anchorAfter = null; }
+    if (st.zoneBelow && inFlow(block) && !block._anchorStart && !block._anchorEnd && !block._frameMarker) { st.zoneBelow.below = block; st.zoneBelow = null; }
     if (st.pendingSlotStart != null) { st.slotStarts[st.pendingSlotStart] = st.blocks.length; st.pendingSlotStart = null; }
     if (st.pendingSense && turnPage(block, st.pendingSense)) { st.pageSense = st.pendingSense; st.pendingSense = null; }
     if (st.sectionPage && block && typeof block === 'object') block._page = st.sectionPage;
@@ -3945,7 +3958,7 @@ const PdfExport = (function () {
     if (st.anchorRun) return;
     const start = { text: ' ', fontSize: ANCHOR_END_PT, lineHeight: 1, margin: [0, 0, 0, 0], _anchorStart: true };
     pushBlock(st, start, node);
-    st.anchorRun = { start, blocks: [], end: null, node: null, next: null };
+    st.anchorRun = { start, blocks: [], end: null, node: null, next: null, container: st.blocks };
     st.anchorRuns.push(st.anchorRun);
   }
   function extendAnchorRun(st, from, node) {
@@ -3968,7 +3981,7 @@ const PdfExport = (function () {
     run.end = { text: ' ', fontSize: ANCHOR_END_PT, lineHeight: 1, margin: [0, 0, 0, 0], _anchorEnd: true };
     pushBlock(st, run.end, run.node);
     const manualBreak = !!next && next.nodeType === Node.ELEMENT_NODE && next.classList.contains('page-break-marker');
-    if (next && !manualBreak) { st.pendingPageBreak = true; st.anchorAfter = run; }
+    if (next && !manualBreak) { if (st.isTopLevel) st.pendingPageBreak = true; st.anchorAfter = run; }
   }
   const ANCHOR_END_PT = 0.1;
   // Le bas de la suite se pose au bas de la page : le dernier bloc ne garde pas la marge du dessous (la sentinelle suit, et l'éditeur n'en laisse aucune), et la place mesurée s'ajoute
@@ -4100,6 +4113,7 @@ const PdfExport = (function () {
     try { block = await build(node, st.pendingPageBreak, st.rootRect); }
     catch (e) { console.warn('[PdfExport] ' + skipped + ' (structure inattendue), repli en texte brut :', e); block = fallbackTextBlock(node, st.pendingPageBreak); }
     if (block && block._nestedPending) { st.nestedPendingAll.push(...block._nestedPending); delete block._nestedPending; }
+    if (block && block._columnAnchors) { st.columnAnchorZones.push(block._columnAnchors); }
     // Note(s) trouvée(s) n'importe où dans le bloc : rattachées au bloc top-level englobant, suffisant pour savoir sur quelle page placer le texte de la
     // note.
     if (footnoteEntries.length > footnoteCheckpoint) st.footnoteBlocks.push(...footnoteEntries.slice(footnoteCheckpoint).map(fe => ({ block, number: fe.number, text: fe.text })));
@@ -4109,6 +4123,7 @@ const PdfExport = (function () {
   async function visitZone(st, node, run) {
     const zoneBlock = await containerBlockFrom(st, node, 'zone 2 colonnes ignorée', twoColumnsFrom);
     pushWithSlideAnchor(st, zoneBlock, node);
+    if (zoneBlock && zoneBlock._columnAnchors && st.isTopLevel) st.zoneBelow = zoneBlock._columnAnchors;
     closeKeepRun(st, run, zoneBlock, node.getBoundingClientRect().height * PX_TO_PT);
     st.pendingPageBreak = false;
     st.floatCarry = null;
@@ -4326,6 +4341,7 @@ const PdfExport = (function () {
     content._captionPairs = st.captionPairs;
     content._frames = st.frames;
     content._anchorRuns = st.anchorRuns;
+    content._columnAnchorZones = st.columnAnchorZones;
     content._stretchedBlocks = stretchedBlocks;
     // Repli : images en calque laissées à leur placeholder plutôt que de faire échouer tout l'export si l'ancrage échoue.
     try { content._pendingImages = resolvePendingImageAnchors(st.rootRect, blocks, st.sourceNodes, st.blockSlots).concat(st.nestedPendingAll); }
@@ -4936,10 +4952,12 @@ const PdfExport = (function () {
     const floatBreaks = new Set();
     // « En bas de la page » : ce que la mesure apprend de chaque suite de blocs calés, dans l'ordre du texte - { breakBefore, spacerPt } (settleAnchorRuns).
     const anchorPlans = [];
+    const columnAnchorPlans = [];
     const buildContent = async () => {
       const built = await htmlToPdfContent(inlinedHtml, true);
       floatAnchorsOf(built).forEach((anchor, i) => { const target = floatMovesWith(anchor); if (target && floatBreaks.has(i)) target.pageBreak = 'before'; });
       applyAnchorPlans(built, anchorPlans);
+      applyColumnAnchorPlans(built, columnAnchorPlans);
       return built;
     };
     stretchExtra = new Map();
@@ -4969,10 +4987,10 @@ const PdfExport = (function () {
     // de la passe de mesure.
     const hasFloatOverlays = floatAnchorsOf(content).length > 0;
     // Un contenu qui mêle des formats de page est mesuré lui aussi : le nombre de pages de chaque suite (`_runPages`) donne à l'en-tête et au pied la numérotation du document entier.
-    if (hasFootnotes || hasFloatOverlays || (content._anchorRuns || []).length > 0 || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0 || runsOf(content) || pageBadgesOf(content).length > 0) {
+    if (hasFootnotes || hasFloatOverlays || anchorRunCount(content) > 0 || (content._tocBlocks || []).length > 0 || (content._pendingImages || []).length > 0 || (content._frames || []).length > 0 || runsOf(content) || pageBadgesOf(content).length > 0) {
       // Marges de cette passe : identiques à celles de la passe réelle, pour que la pagination mesurée ici corresponde exactement au document final.
       const { topMarginPt, bottomMarginPt } = pageMarginsPt(headerFooterChunks, hasFootnotes);
-      content = await relocateMeasured(content, { buildContent, measure, floatBreaks, anchorPlans, hasFloatOverlays, topMarginPt, bottomMarginPt });
+      content = await relocateMeasured(content, { buildContent, measure, floatBreaks, anchorPlans, columnAnchorPlans, hasFloatOverlays, topMarginPt, bottomMarginPt });
     }
     // Filet de sécurité résiduel : une image dont ni bracket ni container n'a pu être résolu garderait sinon son absolutePosition placeholder (0,0)
     // indéfiniment, coincée au coin de la page. Repli : aucune position absolue, rendue en flux normal - pas au pixel près, mais visible au bon
@@ -4987,7 +5005,7 @@ const PdfExport = (function () {
     const { buildContent, measure, hasFloatOverlays, topMarginPt, bottomMarginPt } = pass;
     await measure(content);
     if (hasFloatOverlays) content = await settleFloatBreaks(content, pass);
-    if ((content._anchorRuns || []).length) content = await settleAnchorRuns(content, pass);
+    if (anchorRunCount(content)) content = await settleAnchorRuns(content, pass);
     const measured = measuredLayoutOf(content);
     const runPages = content._runPages;
     content = await buildContent();
@@ -5022,6 +5040,7 @@ const PdfExport = (function () {
       await measure(content);
     }
     let spaced = false;
+    if (spaceColumnRuns(content, pass)) spaced = true;
     (content._anchorRuns || []).forEach((run, i) => {
       const plan = planOf(i);
       const head = headOf(run);
@@ -5044,6 +5063,88 @@ const PdfExport = (function () {
   }
   const ANCHOR_SAFETY_PT = 0.5;
   const roundHalfPt = pt => Math.floor(pt * 100) / 100;
+
+  // « En bas de la page » DANS une colonne d'une zone à deux colonnes (demande du 27/11 : « la sélection va tout en bas de la page, mais sans influencer le reste des éléments des colonnes »). Les suites de
+  // blocs calés d'une colonne se mesurent comme celles du premier niveau (une sentinelle les ferme) : la place qui reste sous la suite jusqu'au bas du corps de la page devient une marge au-dessus de son
+  // premier bloc, dans SA colonne - l'autre colonne ne bouge pas. Une suite suivie d'un bloc de sa colonne sur la même page ne bouge pas ; quand du texte suit la zone sur cette page, elle ne descend
+  // que jusqu'au bas naturel de la zone (le plus bas des deux fonds de colonne, lu sur les sentinelles de fin), « ça ne pourra pas aller en bas de page ». Une zone coupée par la page se cale page par page.
+  const columnRunsOf = (content) => {
+    const list = [];
+    (content._columnAnchorZones || []).forEach(zone => zone.runs.forEach((runs, column) => runs.forEach(run => list.push({ run, zone, column }))));
+    return list;
+  };
+  const anchorRunCount = content => (content._anchorRuns || []).length + columnRunsOf(content).length;
+  const bottomMarginOf = (block) => {
+    const m = block && block.margin;
+    if (Array.isArray(m) && m.length === 4) return m[3];
+    if (Array.isArray(m) && m.length === 2) return m[1];
+    return typeof m === 'number' ? m : 0;
+  };
+  // Ce que la marge posée d'une suite a changé du bas de ses blocs : la marge du dessous du dernier bloc part (la sentinelle suit), la place mesurée s'ajoute au-dessus du premier.
+  const columnNetShiftPt = plan => (plan && plan.spacerPt > 0 ? plan.spacerPt - plan.marginPt : 0);
+  function applyColumnAnchorPlans(content, plans) {
+    columnRunsOf(content).forEach(({ run }, i) => {
+      const plan = plans[i];
+      if (!plan || !(plan.spacerPt > 0)) return;
+      const last = run.blocks[run.blocks.length - 1];
+      const m = last.margin;
+      if (Array.isArray(m) && m.length === 4) last.margin = [m[0], m[1], m[2], 0];
+      else if (Array.isArray(m) && m.length === 2) last.margin = [m[0], m[1], m[0], 0];
+      else if (typeof m === 'number') last.margin = [m, m, m, 0];
+      addTopMargin(run.blocks[0], plan.spacerPt);
+    });
+  }
+  // Le bloc de la colonne qui suit la suite, dans le flux (la sentinelle de fin de zone n'en est pas un).
+  function columnFollowerOf(run) {
+    const list = run.container || [];
+    for (let i = list.indexOf(run.end) + 1; i > 0 && i < list.length; i++) {
+      if (inFlow(list[i]) && !list[i]._zoneEnd && !list[i]._anchorStart && !list[i]._anchorEnd) return list[i];
+    }
+    return null;
+  }
+  // Rend vrai quand une marge a changé : le contenu se reconstruit alors et se mesure de nouveau.
+  function spaceColumnRuns(content, pass) {
+    const { columnAnchorPlans, bottomMarginPt } = pass;
+    const entries = columnRunsOf(content);
+    let changed = false;
+    entries.forEach(({ run, zone, column }, i) => {
+      const plan = columnAnchorPlans[i] || (columnAnchorPlans[i] = { spacerPt: 0, marginPt: null });
+      const last = run.blocks[run.blocks.length - 1];
+      // La marge du dessous du dernier bloc se lit sur la première mesure, avant qu'elle ne soit retirée.
+      if (plan.marginPt == null) plan.marginPt = plan.spacerPt > 0 ? 0 : bottomMarginOf(last);
+      const end = firstPosition(run.end);
+      let spacerPt = 0;
+      if (end) {
+        const follower = columnFollowerOf(run);
+        const followerPos = follower ? firstPosition(firstTextOf(follower) || follower) : null;
+        // Ce qui la suit dans sa colonne, sur la même page : elle ne descend pas.
+        if (!(followerPos && followerPos.pageNumber === end.pageNumber)) {
+          const endBase = end.top - columnNetShiftPt(plan);
+          let limit = pageHeightAt(end) - bottomMarginPt - ANCHOR_SAFETY_PT;
+          const below = zone.below ? firstPosition(firstTextOf(zone.below) || zone.below) : null;
+          if (below && below.pageNumber === end.pageNumber) {
+            // Du texte suit la zone sur cette page : le bas naturel de la zone, sans la marge que les suites des colonnes ont posée.
+            let natural = -Infinity;
+            zone.ends.forEach((zoneEnd, c) => {
+              const pos = firstPosition(zoneEnd);
+              if (!pos || pos.pageNumber !== end.pageNumber) return;
+              let shift = 0;
+              entries.forEach((other, j) => {
+                const otherEnd = other.zone === zone && other.column === c ? firstPosition(other.run.end) : null;
+                if (otherEnd && otherEnd.pageNumber === end.pageNumber) shift += columnNetShiftPt(columnAnchorPlans[j]);
+              });
+              natural = Math.max(natural, pos.top - shift);
+            });
+            limit = Math.min(limit, natural);
+          }
+          const slack = limit - endBase;
+          if (slack > 0.5) spacerPt = roundHalfPt(slack + plan.marginPt);
+        }
+      }
+      if (Math.abs(spacerPt - plan.spacerPt) > 0.01) { plan.spacerPt = spacerPt; changed = true; }
+    });
+    return changed;
+  }
 
   // Une image habillée qui ne tient pas dans ce qui reste de sa page (elle serait coupée par le bord, ou le texte à côté d'elle passerait à la page
   // suivante sans elle) : son ancre ouvre la page suivante, avec elle. Ce qui précède reste en place, ce qui suit se range à côté d'elle comme avant.
