@@ -259,6 +259,59 @@
     },
   });
 
+  // Retour d'Antoine du 27/11 : dans un modèle d'e-mail, « Porteur_2 » n'apparaissait pas sous « Projet_Porteur_2 non vide » alors que la ligne a bien un porteur ;
+  // la colonne « Projet_Porteur_2 » n'existe pas dans la table (renommée ou saisie à la main), la fenêtre l'avait rouverte en saisie avancée SANS le dire, et la règle
+  // la lit comme vide : « condition non remplie » sans cause visible. La ligne d'indication sous la règle nomme maintenant la colonne ou la table qui manque.
+  cases.push({
+    id: 'colsearch_condition_unknown_column_is_flagged_under_the_rule_when_typed_and_when_reopened',
+    description: 'Une colonne saisie à la main (ou gardée d’une règle plus ancienne) que le document n’a pas est signalée sous la règle - la colonne absente de la table de la page, de la table nommée, ou la table absente -, au fil de la frappe et à la réouverture de la fenêtre ; une colonne qui existe, nue ou d’une autre table, n’est pas signalée ; en choisir une dans la liste efface l’avertissement',
+    run: async (h) => {
+      await seed(h);
+      let modal = await openConditionWindow(h);
+      const trigger = triggerIn(modal);
+      trigger.click();
+      await h.sleep(30);
+      panelOf(trigger).querySelector('.ss-option.is-pinned').click();
+      await h.sleep(40);
+      const free = modal.querySelector('.macro-rule-column-advanced');
+      const hintIn = root => root.querySelector('.macro-rule-row .macro-rule-column-type');
+      const read = root => ({ text: hintIn(root).textContent, warn: hintIn(root).classList.contains('is-warning') });
+      const typed = {};
+      for (const [key, value] of [['bareMissing', 'Projet_Titre'], ['bareKnown', 'Titre'], ['otherKnown', 'CsAnnuaire.Telephone'], ['otherMissing', 'CsAnnuaire.Tel'], ['noTable', 'CsInconnue.Colonne'], ['emptied', '']]) {
+        setInput(free, value);
+        typed[key] = read(modal);
+      }
+      setInput(free, 'Projet_Titre');
+      setInput(modal.querySelector('.macro-rule-value'), 'x');
+      await h.sleep(20);
+      saveButton(modal).click();
+      await h.sleep(80);
+      await selectBadge(h, 'CsDossiers.Titre');
+      pressToolbarButton('var-condition');
+      await h.sleep(60);
+      modal = conditionModal();
+      const reopened = Object.assign({ free: modal.querySelector('.macro-rule-column-advanced').value }, read(modal));
+      const again = triggerIn(modal);
+      again.click();
+      await h.sleep(30);
+      const known = Array.from(panelOf(again).querySelectorAll('.ss-option')).find(o => o.querySelector('.ss-name').textContent === 'Titre');
+      if (known) known.click();
+      await h.sleep(40);
+      const picked = read(modal);
+      dismiss(modal);
+      const missing = (column, table) => I18n.t('macro.modal.columnUnknown', { column, table });
+      const pass = typed.bareMissing.warn && typed.bareMissing.text === missing('Projet_Titre', 'CsDossiers')
+        && !typed.bareKnown.warn && typed.bareKnown.text === ''
+        && !typed.otherKnown.warn && typed.otherKnown.text === ''
+        && typed.otherMissing.warn && typed.otherMissing.text === missing('Tel', 'CsAnnuaire')
+        && typed.noTable.warn && typed.noTable.text === I18n.t('macro.modal.tableUnknown', { table: 'CsInconnue' })
+        && !typed.emptied.warn && typed.emptied.text === ''
+        && reopened.free === 'Projet_Titre' && reopened.warn && reopened.text === missing('Projet_Titre', 'CsDossiers')
+        && !!known && !picked.warn && picked.text === '';
+      return { pass, notes: JSON.stringify({ typed, reopened, picked, foundTitle: !!known }) };
+    },
+  });
+
   cases.push({
     id: 'colsearch_condition_unlinked_table_cancel_puts_the_previous_column_back_in_the_field',
     description: 'Colonne d’une table pas encore liée choisie dans la liste : le choix de la clé s’ouvre ; Annuler remet la colonne précédente dans le <select> ET dans le champ visible, Valider garde la nouvelle',

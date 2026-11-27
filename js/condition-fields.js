@@ -194,6 +194,22 @@ const ConditionFields = (function () {
     return { col, table, linkTable, type, missingFromRecord: !!(col && record && !(col in record)) };
   }
 
+  function unknownColumnWarning(value, tableId) {
+    // L'avertissement d'une colonne saisie à la main (ou gardée d'une règle plus ancienne) que le document n'a pas : sa table n'existe pas, ou la table n'a pas cette
+    // colonne - nue (colonne de `tableId`, la table de la page), « Table.Colonne » ou « Table.Référence.Colonne » (la première colonne du chemin). Vide quand tout
+    // existe, que le schéma n'est pas encore lu, ou que le premier maillon est une ligne voisine (GristAPI.stepOf) : rien n'est affirmé sans preuve.
+    const text = String(value || '').trim();
+    const tables = GristAPI.getTables();
+    if (!text || !tables.length) return '';
+    const ref = ConditionRules.parseColumnRef(text, tableId);
+    if (!ref.table) return '';
+    const first = String(ref.column).split('.')[0];
+    if (!first || first === 'id' || GristAPI.stepOf(first)) return '';
+    if (!tables.includes(ref.table)) return I18n.t('macro.modal.tableUnknown', { table: ref.table });
+    const columns = GristAPI.getColumns(ref.table);
+    return columns.length && !columns.includes(first) ? I18n.t('macro.modal.columnUnknown', { column: first, table: ref.table }) : '';
+  }
+
   // Liste des colonnes réelles, plus une option « avancé » (jamais retirée) qui révèle un champ texte pour une colonne absente de la liste
   // (« Table.Colonne », js/condition-rules.js:parseColumnRef). `onTypeChange(type, colonne, table, tableDuLien)` prévient le champ Valeur de la colonne
   // choisie, pour son placeholder et ses choix (pour un chemin, la colonne et la table où il aboutit ; `tableDuLien` est celle d'où il part). Renvoie `{ wrap, typeHint }` : l'appelant place `typeHint` hors de `wrap` (voir plus bas). `options` :
@@ -226,15 +242,24 @@ const ConditionFields = (function () {
     // du widget, que grist.onRecord ne transmet pas (js/grist-api.js:includeColumns), si bien qu'une règle « = » échouerait sans rien dire
     // (js/condition-rules.js:matches le signale aussi dans le journal). Seule la table de la page est concernée : c'est la seule que grist.onRecord
     // transmet.
-    function updateTypeHint() {
-      const facts = columnFacts(select.value === ADVANCED_COLUMN_VALUE ? null : select.value, baseTable);
+    // Ce que la ligne d'indication dit pour la colonne choisie ou saisie : le type, ou l'avertissement - colonne absente de la ligne affichée, ou colonne
+    // saisie à la main (ou gardée d'avant) que le document n'a pas / plus. Une colonne enregistrée qui n'existe plus rouvre la fenêtre sur la saisie
+    // avancée (showSavedChoice) : sans cet avertissement, la règle la lit comme vide en silence et « non vide » n'est jamais remplie.
+    function showHint(facts) {
+      const advanced = select.value === ADVANCED_COLUMN_VALUE;
       const label = facts.type && !opts.warningOnly ? friendlyTypeLabel(facts.type) : '';
-      typeHint.textContent = facts.missingFromRecord ? I18n.t('macro.modal.columnMissingFromRecord') : label;
-      typeHint.classList.toggle('is-warning', facts.missingFromRecord);
+      const unknown = advanced ? unknownColumnWarning(advancedInput.value, baseTable()) : '';
+      const warning = facts.missingFromRecord ? I18n.t('macro.modal.columnMissingFromRecord') : unknown;
+      typeHint.textContent = warning || label;
+      typeHint.classList.toggle('is-warning', !!warning);
       // `typeAsTitle` (les fenêtres de bulle) : le type se lit dans l'info-bulle de la colonne, pas sous chaque règle ; seul l'avertissement « colonne absente » reste écrit.
       if (opts.typeAsTitle) wrap.title = label;
       // Une ligne d'indication confiée par l'appelant n'occupe de place sous la règle que quand elle dit quelque chose.
       if (opts.typeHint) typeHint.hidden = !typeHint.textContent;
+    }
+    function updateTypeHint() {
+      const facts = columnFacts(select.value === ADVANCED_COLUMN_VALUE ? null : select.value, baseTable);
+      showHint(facts);
       if (onTypeChange) onTypeChange(facts.type, facts.col, facts.table, facts.linkTable);
     }
 
@@ -279,7 +304,8 @@ const ConditionFields = (function () {
         restoreAdopted();
       });
     });
-    advancedInput.addEventListener('input', () => { rule[prop] = advancedInput.value; });
+    // La frappe change la colonne de la règle et l'avertissement « colonne inconnue » ; le type et le champ Valeur, eux, ne bougent pas à chaque lettre.
+    advancedInput.addEventListener('input', () => { rule[prop] = advancedInput.value; showHint(columnFacts(null, baseTable)); });
 
     wrap.append(select, advancedInput);
     // L'indice de type est dit dans la liste ouverte, pas dans le champ fermé : il reste sous le champ (typeHint). Si le composant échoue, le

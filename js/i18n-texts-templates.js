@@ -532,6 +532,8 @@ const I18nTextsTemplates = {
   'macro.modal.typeRef': { fr: 'référence', en: 'reference' },
   'macro.modal.typeNumeric': { fr: 'nombre', en: 'number' },
   'macro.modal.typeChoice': { fr: 'choix', en: 'choice' },
+  'macro.modal.columnUnknown': { fr: 'La colonne « {column} » n’existe pas dans « {table} » (renommée ou supprimée dans Grist ?) : la règle la lit comme vide. Choisissez-la de nouveau dans la liste.', en: 'Column “{column}” doesn’t exist in “{table}” (renamed or deleted in Grist?): the rule reads it as empty. Pick it again from the list.' },
+  'macro.modal.tableUnknown': { fr: 'La table « {table} » n’existe pas (renommée ou supprimée dans Grist ?) : la règle lit sa colonne comme vide. Choisissez la colonne de nouveau dans la liste.', en: 'Table “{table}” doesn’t exist (renamed or deleted in Grist?): the rule reads its column as empty. Pick the column again from the list.' },
   'macro.modal.columnMissingFromRecord': { fr: 'Cette colonne n’est pas transmise au widget : cochez-la dans les colonnes du widget (panneau de droite de Grist).', en: 'This column isn’t passed to the widget: check it in the widget’s columns (Grist’s right-hand panel).' },
   'macro.modal.compareToColumn': { fr: 'Comparer à une autre colonne', en: 'Compare with another column' },
   'macro.modal.valuePlaceholder': { fr: 'Valeur', en: 'Value' },
