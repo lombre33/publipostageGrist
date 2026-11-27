@@ -33,19 +33,11 @@
 //   "reading"  la Lecture photographiée (le défaut d'un e-mail ou d'une grille) : `selector` (un élément, `.reader-content` au départ) ou `clip` (des groupes de sélecteurs
 //              photographiés ensemble puis posés l'un sous l'autre, comme la barre Objet / À / Cc et le texte d'un e-mail, élargis de `pad` px : un nombre, [haut, droite, bas,
 //              gauche] ou une liste de ces formes, une par groupe) ; `viewport` [largeur, hauteur] change la fenêtre le temps de la photo.
-import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, mkdtempSync, copyFileSync } from 'node:fs';
-import { extname, join, resolve, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { entryFiles, inputsHash, pngSize, readJson, CAPTURE_VERSION } from './gallery-captures-lib.mjs';
+import { createKit, ROOT, sh, sleep } from './real-widget-kit.mjs';
 
-const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const CACHE = join(ROOT, 'dev-tests', '.offline-cache');
-const GFS_STUB = join(ROOT, 'dev-tests', 'gfs-stub.js');
 const PORT = Number(process.env.GALLERY_CAPTURES_PORT || 8921);
 const args = process.argv.slice(2);
 const flag = (name) => args.includes('--' + name);
@@ -63,7 +55,6 @@ const defaultWidth = (widthMm) => Math.max(440, Math.min(700, Math.round(widthMm
 const THUMB_W = 240;
 const THUMB_H = 320;
 
-const sh = (cmd, cmdArgs, options) => spawnSync(cmd, cmdArgs, Object.assign({ encoding: 'utf8' }, options));
 for (const tool of ['pdftoppm', 'pdfinfo', 'convert']) {
   if (sh('which', [tool]).status !== 0) { console.error(`Il manque « ${tool} » (poppler-utils, ImageMagick).`); process.exit(2); }
 }
@@ -89,207 +80,10 @@ for (const gallery of galleries) {
 }
 if (!todo.length) { console.log('Rien à faire.'); process.exit(0); }
 
-// ---- Le serveur : le dépôt tel quel, avec une page de harnais fabriquée à la volée (rien n'est écrit dans le dépôt) ----
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
-  '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
-};
-const harness = readFileSync(join(ROOT, 'index.html'), 'utf8').replace('<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>', '<script src="dev-tests/grist-stub.js"></script>');
-const server = createServer(async (req, res) => {
-  try {
-    const urlPath = decodeURIComponent(req.url.split('?')[0]);
-    if (urlPath === '/_captures.html') { res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' }); res.end(harness); return; }
-    const filePath = join(ROOT, normalize(urlPath).replace(/^(\.\.[/\\])+/, ''));
-    if (!filePath.startsWith(ROOT)) { res.writeHead(403).end(); return; }
-    const info = await stat(filePath);
-    const target = info.isDirectory() ? join(filePath, 'index.html') : filePath;
-    res.writeHead(200, { 'Content-Type': MIME[extname(target)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-    res.end(await readFile(target));
-  } catch { res.writeHead(404).end('not found'); }
-});
-await new Promise((ok, ko) => server.listen(PORT, '127.0.0.1', ok).on('error', ko));
-const BASE = `http://127.0.0.1:${PORT}`;
+// ---- Le widget réel : dev-tests/real-widget-kit.mjs (serveur, ouverture, installation d'un modèle, lignes d'exemple, export du PDF) ----
+const kit = await createKit({ port: PORT, viewW: VIEW_W, viewH: VIEW_H, now: CAPTURE_NOW, workName: 'gallery-captures-' });
+const { work, makeImage, openWidget, click, clickMenuRow, installFromGallery, fillRows, fire, exportPdf } = kit;
 
-const OFFLINE = existsSync(join(CACHE, 'umd'));
-const UMD_ROUTES = OFFLINE ? [
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/pdfmake\.min\.js$/, 'umd/pdfmake.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfmake@[\d.]+\/build\/vfs_fonts\.js$/, 'umd/vfs_fonts.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.min\.js$/, 'umd/pdf.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@[\d.]+\/build\/pdf\.worker\.min\.js$/, 'umd/pdf.worker.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@[\d.]+\/dist\/jszip\.min\.js$/, 'umd/jszip.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/pdf-lib@[\d.]+\/dist\/pdf-lib\.min\.js$/, 'umd/pdf-lib.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/qrcode-generator@[\d.]+\/qrcode\.js$/, 'umd/qrcode.min.js'],
-  [/^https:\/\/cdn\.jsdelivr\.net\/npm\/docx@.*$/, 'umd/docx.iife.js'],
-  ...(existsSync(join(CACHE, 'umd/echarts.min.js')) ? [[/^https:\/\/cdn\.jsdelivr\.net\/npm\/echarts@[\d.]+\/dist\/echarts\.min\.js$/, 'umd/echarts.min.js']] : []),
-] : [];
-
-const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/opt/node22/lib/node_modules/playwright');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const work = mkdtempSync(join(tmpdir(), 'gallery-captures-'));
-process.on('exit', () => { try { rmSync(work, { recursive: true, force: true }); } catch (e) { /* le dossier de travail reste dans /tmp */ } });
-
-// Une image de remplacement par pièce jointe de l'exemple : un dégradé et son libellé (ImageMagick). Le widget la demande comme à un vrai Grist.
-function makeImage(spec) {
-  const file = join(work, 'img-' + Math.random().toString(36).slice(2) + '.png');
-  const w = spec.width || 480;
-  const h = spec.height || 320;
-  const r = sh('convert', ['-size', `${w}x${h}`, `gradient:${spec.from || '#1d4ed8'}-${spec.to || '#60a5fa'}`, '-gravity', 'center', '-fill', spec.color || 'white', '-pointsize', String(spec.pointsize || Math.round(Math.min(w, h) / 6)), '-annotate', '0', spec.label || '', file]);
-  if (r.status !== 0) throw new Error('convert : ' + r.stderr);
-  return readFileSync(file);
-}
-
-// `slides` : le modèle est une présentation ; le widget s'ouvre hébergé par le GFS simulé, l'extension « diapositives » active (sans elle, la galerie ne la crée pas).
-async function openWidget(browser, images, { slides = false, extensions = [] } = {}) {
-  const context = await browser.newContext({ viewport: { width: VIEW_W, height: VIEW_H }, acceptDownloads: true });
-  const page = await context.newPage();
-  const problems = [];
-  page.on('pageerror', (e) => problems.push('pageerror : ' + e.message));
-  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push('console.error : ' + m.text()); });
-  page.on('dialog', async (d) => { problems.push('boîte native (' + d.type() + ') : ' + d.message()); await d.dismiss(); });
-  if (OFFLINE) {
-    for (const [re, rel] of UMD_ROUTES) {
-      await page.route(re, async (route) => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'Access-Control-Allow-Origin': '*' }, body: await readFile(join(CACHE, rel), 'utf8') }));
-    }
-    await page.addInitScript(() => { Object.defineProperty(HTMLScriptElement.prototype, 'integrity', { configurable: true, get: () => '', set: () => {} }); });
-  }
-  await page.route('**://fonts.googleapis.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
-  await page.route('**://fonts.gstatic.com/**', (route) => route.fulfill({ status: 200, body: '' }));
-  await page.route('**://docs.getgrist.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
-  await page.route('**/attachments/*/download*', async (route) => {
-    const id = (route.request().url().match(/attachments\/(\d+)\/download/) || [])[1];
-    const body = images[id];
-    if (!body) return route.fulfill({ status: 404, body: 'pas de pièce jointe ' + id });
-    route.fulfill({ status: 200, contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*' }, body });
-  });
-  await page.addInitScript(() => { try { localStorage.setItem('pp_theme', 'light'); localStorage.setItem('pp_lang', 'fr'); } catch (e) { /* stockage refusé */ } });
-  // « Aujourd'hui » des captures est toujours le même jour : la date du jour d'un modèle (bulle prête à poser) ne change pas d'une régénération à l'autre.
-  await page.clock.setFixedTime(CAPTURE_NOW);
-  if (slides) {
-    await page.addInitScript({ path: GFS_STUB });
-    await page.addInitScript((list) => { window.__gfsStub.extensions = list; }, ['diapositives'].concat(extensions.filter(id => id !== 'diapositives')));
-  } else if (extensions.length) {
-    await page.addInitScript({ path: GFS_STUB });
-    await page.addInitScript((list) => { window.__gfsStub.extensions = list; }, extensions);
-  }
-  await page.goto(`${BASE}/_captures.html?${slides ? 'gfs=0&' : ''}dev`, { waitUntil: 'load' });
-  await page.waitForFunction(() => typeof EditorCore !== 'undefined' && EditorCore.getEditor && EditorCore.getEditor(), null, { timeout: 60000 });
-  await page.waitForFunction(() => { const el = document.getElementById('status-msg'); return !!el && /prêt|ready/i.test(el.textContent || ''); }, null, { timeout: 90000 });
-  return { context, page, problems };
-}
-
-// ---- Les gestes, à la vraie souris ----
-const rectOf = (page, sel) => page.evaluate((s) => {
-  const e = document.querySelector(s); if (!e) return null;
-  e.scrollIntoView({ block: 'center', inline: 'nearest' });
-  const r = e.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
-}, sel);
-async function click(page, sel, wait = 200) {
-  const c = await rectOf(page, sel);
-  if (!c) throw new Error('introuvable : ' + sel);
-  await page.mouse.move(c.x - 14, c.y - 6, { steps: 2 }); await page.mouse.move(c.x, c.y, { steps: 4 }); await sleep(80);
-  await page.mouse.click(c.x, c.y); await sleep(wait);
-}
-async function clickMenuRow(page, buttonSel, rowSel) {
-  const from = await rectOf(page, buttonSel);
-  await page.mouse.move(from.x - 14, from.y - 6, { steps: 2 }); await page.mouse.move(from.x, from.y, { steps: 4 }); await sleep(250);
-  const to = await rectOf(page, rowSel);
-  if (!to) throw new Error('ligne de menu introuvable : ' + rowSel);
-  await page.mouse.move(from.x, to.y, { steps: 12 }); await page.mouse.move(to.x, to.y, { steps: 4 }); await sleep(150);
-  await page.mouse.click(to.x, to.y); await sleep(500);
-  await page.mouse.move(VIEW_W / 2, VIEW_H - 40, { steps: 6 });
-}
-
-// « Créer à partir d'un modèle… », la carte du modèle, « Créer avec ses tables », puis « Créer » dans la question : le parcours d'un utilisateur.
-async function installFromGallery(page, name) {
-  await clickMenuRow(page, '#btn-new', '#v2-btn-new-from-template');
-  await page.waitForFunction(() => document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card').length > 0, null, { timeout: 10000 });
-  const card = await page.evaluate((n) => {
-    const el = Array.from(document.querySelectorAll('#tpl-gallery-grid .tpl-gallery-card')).find((c) => c.querySelector('.tpl-gallery-card-name').textContent === n);
-    if (!el) return null;
-    el.scrollIntoView({ block: 'center' });
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }, name);
-  if (!card) throw new Error('la carte « ' + name + ' » n’est pas dans la galerie');
-  await page.mouse.move(card.x - 10, card.y - 5, { steps: 2 }); await page.mouse.move(card.x, card.y, { steps: 3 }); await page.mouse.click(card.x, card.y);
-  await page.waitForFunction(() => { const b = document.getElementById('tpl-preview-use-pack'); return b && !b.hidden && getComputedStyle(document.getElementById('template-preview-modal')).display !== 'none'; }, null, { timeout: 15000 });
-  await sleep(400);
-  await click(page, '#tpl-preview-use-pack', 500);
-  const confirm = await page.evaluate(() => {
-    const ov = document.getElementById('pp-dialog-modal');
-    if (!ov || getComputedStyle(ov).display === 'none') return null;
-    const b = Array.from(ov.querySelectorAll('.pp-modal-actions button')).find((x) => x.textContent === 'Créer');
-    if (!b) return { error: Array.from(ov.querySelectorAll('.pp-modal-actions button')).map((x) => x.textContent).join(' | ') + ' : ' + (ov.querySelector('.pp-dialog-message') || {}).textContent };
-    const r = b.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  });
-  if (!confirm || confirm.error) throw new Error('la question « Créer les tables du modèle ? » n’est pas là' + (confirm ? ' : ' + confirm.error : ''));
-  await page.mouse.move(confirm.x - 8, confirm.y, { steps: 2 }); await page.mouse.click(confirm.x, confirm.y);
-  await page.waitForFunction(() => getComputedStyle(document.getElementById('template-gallery-modal')).display === 'none' && Templates.getCurrentId() != null, null, { timeout: 30000 });
-  await sleep(900);
-}
-
-// Les lignes d'exemple dans les tables que l'installation vient de créer (vides) : valeurs, colonnes d'aide des Références, listes.
-async function fillRows(page, tables, rows) {
-  await page.evaluate(({ tables, rows }) => {
-    const stub = window.__gristStub;
-    const day = (s) => Math.floor(Date.parse(s.length === 10 ? s + 'T00:00:00Z' : s + (/Z$|[+-]\d\d:\d\d$/.test(s) ? '' : 'Z')) / 1000);
-    const byId = {}; tables.forEach((t) => { byId[t.id] = t; });
-    tables.forEach((t) => {
-      const list = (rows[t.id] || []).map((r) => {
-        const out = { id: r.id };
-        t.columns.forEach((c) => {
-          let v = r[c.id]; if (v === undefined || (v === '' && c.type !== 'Text' && c.type !== 'Choice')) v = null; // une date, un nombre ou une liste vides sont `null` dans Grist
-          const ref = /^Ref:(.+)$/.exec(c.type);
-          const refl = /^RefList:(.+)$/.exec(c.type);
-          if (v !== null) {
-            if (c.type === 'Date' || c.type === 'DateTime') v = typeof v === 'string' ? day(v) : v;
-            else if (c.type === 'ChoiceList' || c.type === 'Attachments' || refl) v = ['L'].concat(v);
-          }
-          out[c.id] = v;
-          if (ref || refl) {
-            const targetRows = rows[(ref || refl)[1]] || [];
-            const shown = (id) => { const row = targetRows.find((x) => x.id === id); const value = row ? row[c.show] : ''; return value == null ? '' : value; };
-            // La colonne d'aide que le vrai Grist (et le stub) a rangée pour cette Référence : gristHelper_Display, gristHelper_Display2... (le nom que l'installateur a obtenu).
-            const helper = ((stub.state.displayCols || {})[t.id] || {})[c.id] || ('gristHelper_Display' + c.id);
-            out[helper] = v === null ? '' : (refl ? ['L'].concat(r[c.id].map(shown)) : shown(v));
-          }
-        });
-        return out;
-      });
-      stub.setRows(t.id, list);
-    });
-  }, { tables, rows });
-  await sleep(300);
-}
-
-// Le widget reçoit la ligne comme grist.onRecord la livre : une Référence vaut sa valeur affichée, une liste ses valeurs affichées, sans le marqueur « L ».
-async function fire(page, table, rowId) {
-  await page.evaluate(({ table, rowId }) => {
-    const stub = window.__gristStub; const st = stub.state;
-    const raw = stub.getRow(table, rowId);
-    if (!raw) throw new Error('pas de ligne ' + rowId + ' dans ' + table);
-    const display = st.displayCols[table] || {};
-    const rec = { id: rowId };
-    Object.keys(st.columns[table] || {}).forEach((col) => {
-      if (col.indexOf('gristHelper_') === 0) return;
-      if (display[col]) { const shown = raw[display[col]]; rec[col] = Array.isArray(shown) && shown[0] === 'L' ? shown.slice(1) : shown; }
-      else rec[col] = raw[col];
-      const type = String((st.columns[table] || {})[col] || '');
-      if (/^(ChoiceList|Attachments|RefList)/.test(type) && Array.isArray(rec[col]) && rec[col][0] === 'L') rec[col] = rec[col].slice(1);
-    });
-    stub.fireRecord(rec, table);
-  }, { table, rowId });
-  await sleep(600);
-}
-
-async function exportPdf(page, file) {
-  const [download] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), click(page, '#btn-export-pdf', 100)]);
-  await download.saveAs(file);
-}
 
 // L'option « Assemblage avant impression » du menu Exporter, cochée puis lancée par le bouton Exporter : les pages de toutes les lignes posées sur des feuilles A4 (les emplacements au
 // maximum, traits de coupe à la demande), par le vrai menu et la vraie fenêtre. L'option est remise sur « une seule ligne » aussitôt après (la liste cachée).
@@ -343,7 +137,7 @@ function writeThumb(src, dest) {
 }
 
 // ---- Un modèle ----
-const browser = await chromium.launch({ args: ['--no-sandbox', '--font-render-hinting=none'] });
+const browser = await kit.launch();
 let failures = 0;
 for (const job of todo) {
   const { entry, files, root } = job;
@@ -472,6 +266,6 @@ for (const job of todo) {
   }
 }
 await browser.close();
-server.close();
+kit.close();
 console.log(failures ? `${failures} modèle(s) en échec.` : 'Captures à jour.');
 process.exit(failures ? 1 : 0);
