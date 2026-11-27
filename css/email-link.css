@@ -36,5 +36,5 @@
 .settings-emaillink-remove:disabled { opacity: .55; cursor: default; }
 .settings-emaillink-reason, .settings-emaillink-gone { font-size: 12.5px; color: var(--text-muted); margin: 8px 0 0; overflow-wrap: anywhere; }
 .settings-emaillink-gone { color: var(--danger-ink); }
-/* « Messagerie » : le titre de ce qui était déjà dans l'onglet ; la marge du dessus le sépare de la section du lien (css/text-expansion.css remet à 0 celle de tous les titres de section, d'où le sélecteur plus précis). */
-h4.settings-section-title.settings-mailclient-title { margin: 20px 0 6px; }
+/* « Messagerie » et « Email trop long » : les titres de ce qui suit la section du lien dans l'onglet ; la marge du dessus le sépare de la section du lien (css/text-expansion.css remet à 0 celle de tous les titres de section, d'où le sélecteur plus précis). */
+h4.settings-section-title.settings-mailclient-title, h4.settings-section-title.settings-emaillength-title { margin: 20px 0 6px; }

@@ -125,7 +125,7 @@
 <link rel="stylesheet" href="css/import-placing.css?v=0.1">
 <link rel="stylesheet" href="css/import-report.css?v=0.1">
 <link rel="stylesheet" href="css/email-drafts.css?v=0.1">
-<link rel="stylesheet" href="css/email-link.css?v=0.1">
+<link rel="stylesheet" href="css/email-link.css?v=0.2">
 <link rel="stylesheet" href="css/variable-actions.css?v=0.54">
 <link rel="stylesheet" href="css/emoji-chip.css?v=0.1">
 <link rel="stylesheet" href="css/loop-marks.css?v=0.2" media="not all" id="pp-loop-marks-css">
@@ -1285,7 +1285,7 @@
         <p class="settings-access-hint" data-i18n="settings.mailClient.zimbraNote">Zimbra lit mal « &amp; », « &lt; », « &gt; » et « + » dans le lien : « &amp; » s’y affiche « &amp;amp; » et « + » devient une espace. Avec Zimbra, l’objet et le corps les écrivent en forme large (＆ ＜ ＞ ＋) : ils s’affichent bien, mais le lien est un peu plus long. Dans le corps, une adresse web contenant « &amp; » ou une adresse email contenant « + » n’est plus utilisable telle quelle.</p>
         <p class="settings-access-hint" data-i18n="settings.mailClient.perBrowser">Ce choix est propre à ce navigateur, comme la langue et le thème.</p>
         <!-- L'avertissement « Email trop long » (js/mailto-export.js:getLengthWarning) : allumé au départ ; la case « Ne plus afficher » de la fenêtre l'éteint, cette case le rallume (js/settings.js). -->
-        <h4 class="settings-section-title" data-i18n="settings.emailLength.title">Email trop long</h4>
+        <h4 class="settings-section-title settings-emaillength-title" data-i18n="settings.emailLength.title">Email trop long</h4>
         <label class="settings-alt-reminder" for="settings-email-length-warning"><input type="checkbox" id="settings-email-length-warning" aria-describedby="settings-email-length-warning-hint"><span data-i18n="settings.emailLength.label">Prévenir quand un email est trop long</span></label>
         <p class="settings-access-hint" id="settings-email-length-warning-hint" data-i18n="settings.emailLength.hint">Quand le lien de l’email dépasse la limite conseillée (la jauge de la barre devient rouge), « Créer l’email » demande confirmation : certains logiciels de messagerie, Outlook notamment, tronquent un message trop long. Éteint (par la case « Ne plus afficher cet avertissement » de la fenêtre « Email trop long »), le lien s’ouvre sans question ; la jauge reste rouge et le brouillon s’ouvre tel quel.</p>
       </div>
