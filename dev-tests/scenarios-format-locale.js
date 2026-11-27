@@ -676,7 +676,7 @@
     });
 
   scenario('fl_a_variable_added_takes_the_style_grist_gives_its_column_as_its_first_style',
-    'Une variable ajoutée par la liste « # » sur une colonne dont Grist règle l\'affichage reprend ce style comme premier format (une devise à deux décimales, une date « DD/MM/YYYY », une heure à 24 heures) : la Lecture l\'écrit comme Grist, le bouton « Comme dans Grist » est grisé (« déjà écrite ainsi ») ; une colonne sans réglage, un format que le widget ne sait pas écrire ou dont l\'ordre du jour et du mois n\'est pas celui de la région, une colonne Texte : aucun format, la bulle écrit comme le document',
+    'Une variable ajoutée par la liste « # » sur une colonne dont Grist règle l\'affichage reprend ce style comme premier format (une devise à deux décimales, une date « DD/MM/YYYY », une heure à 24 heures ; la date « YYYY-MM-DD » que Grist met à toute colonne Date n\'en fait pas partie) : la Lecture l\'écrit comme Grist, le bouton « Comme dans Grist » est grisé (« déjà écrite ainsi ») ; une colonne sans réglage, un format que le widget ne sait pas écrire ou dont l\'ordre du jour et du mois n\'est pas celui de la région, une colonne Texte : aucun format, la bulle écrit comme le document',
     async (h) => {
       await seed(h);
       stub().setColumnFormats(TABLE, { Montant: { numMode: 'currency', currency: 'EUR', decimals: 2 }, Jour: { dateFormat: 'DD/MM/YYYY' }, Rdv: { dateFormat: 'YYYY-MM-DD', timeFormat: 'HH:mm' }, Premier: { dateFormat: 'MM/DD/YYYY' } });
@@ -691,7 +691,8 @@
       const expected = {
         Montant: { locale: 'fr-FR', format: { type: 'number', currency: '€', decimals: 2 } },
         Jour: { locale: 'fr-FR', format: { type: 'date', preset: 'dmy_slash_full' } },
-        Rdv: { locale: 'fr-FR', format: { type: 'date', preset: 'iso', time: 'colon' } },
+        // « YYYY-MM-DD » est le format que Grist met à toute colonne Date : ce n'est pas un choix, la date garde l'écriture de la région ; l'heure à 24 heures, elle, est reprise.
+        Rdv: { locale: 'fr-FR', format: { type: 'date', time: 'colon' } },
         // « MM/DD/YYYY » dans un document en France : le jour et le mois se liraient à l'envers, le widget ne pose pas de format.
         Premier: { locale: 'fr-FR', format: null },
         Nom: { locale: null, format: null },
@@ -700,7 +701,7 @@
       // Ce que la Lecture écrit : comme Grist.
       const record = asOnRecord(ROW);
       const written = await readText(['Montant', 'Jour', 'Rdv'].map(c => bubble(c, 'fr-FR', expected[c].format)).join(' ; '), record);
-      if (!same(written.map(t => t.replace(/[  ]/g, ' ')), ['1 234,50 €', '12/09/2026', '2026-09-12 23:30'])) bad.push({ written });
+      if (!same(written.map(t => t.replace(/[  ]/g, ' ')), ['1 234,50 €', '12/09/2026', '12/09/2026 23:30'])) bad.push({ written });
       // La barre : « Comme dans Grist » dit que la variable s'écrit déjà ainsi (grisé) ; sur « Premier », il dit pourquoi il ne sait pas.
       Editor.setHTML('<p>' + bubble('Montant', 'fr-FR', expected.Montant.format) + ' ' + bubble('Premier', 'fr-FR') + '</p>'); await h.sleep(150);
       await selectBubble(h, 0);
@@ -713,6 +714,38 @@
       Editor.setHTML('<p>' + bubble('Montant', 'fr-FR') + '</p>'); await h.sleep(150);
       if (badgeNodes()[0].node.attrs.format) bad.push({ legacyChanged: badgeNodes()[0].node.attrs.format });
       return { pass: bad.length === 0, notes: JSON.stringify({ bad, kept }) };
+    });
+
+  scenario('fl_a_date_column_left_on_the_default_format_of_grist_is_written_in_the_region_of_the_document',
+    'Retour du 27/11 (« en ajoutant une date le format par défaut n\'est pas bon : ça affiche français mais le format n\'est pas le français ») : une colonne Date que Grist laisse sur son format de départ (« YYYY-MM-DD », ce que l\'interface de Grist écrit dans toute colonne Date créée, avec l\'heure « h:mma » pour Date et heure) n\'impose pas « 2026-09-12 » à la variable ajoutée : sa liste de dates part sur « 12/09/2026 » dans un document en France (« 09/12/2026 » aux États-Unis) ; un format que la personne a choisi dans Grist (« D MMMM YYYY ») est repris',
+    async (h) => {
+      await seed(h);
+      stub().setColumnFormats(TABLE, { Jour: { dateFormat: 'YYYY-MM-DD' }, Rdv: { dateFormat: 'YYYY-MM-DD', timeFormat: 'h:mma' }, Premier: { dateFormat: 'D MMMM YYYY' } });
+      await GristAPI.refreshColumnTypes();
+      const bad = [];
+      const seen = {};
+      for (const region of ['fr-FR', 'en-US']) {
+        await setDocument(region);
+        for (const column of ['Jour', 'Rdv', 'Premier']) {
+          const nodes = await addByList(h, TABLE + '.' + column);
+          seen[region + '/' + column] = nodes.length === 1 ? { locale: nodes[0].node.attrs.locale, format: nodes[0].node.attrs.format } : nodes.length;
+        }
+      }
+      for (const region of ['fr-FR', 'en-US']) {
+        if (!same(seen[region + '/Jour'], { locale: region, format: null })) bad.push({ region, Jour: seen[region + '/Jour'] });
+        if (!same(seen[region + '/Rdv'], { locale: region, format: null })) bad.push({ region, Rdv: seen[region + '/Rdv'] });
+        if (!same(seen[region + '/Premier'], { locale: region, format: { type: 'date', preset: 'd_mmmm_yyyy' } })) bad.push({ region, Premier: seen[region + '/Premier'] });
+      }
+      // La barre de la variable ajoutée dit ce que le document écrit : « 12/09/2026 » en tête, choisie.
+      await setDocument('fr-FR');
+      await addByList(h, TABLE + '.Jour');
+      await selectBubble(h, 0);
+      const picked = bar().querySelector('select[data-role="date-preset"]');
+      const first = optionTexts('select[data-role="date-preset"]')[0];
+      if (picked.value !== 'dmy_slash_full' || first !== 'dmy_slash_full=12/09/2026') bad.push({ bar: picked.value, first });
+      const written = await readText(bubble('Jour', badgeNodes()[0].node.attrs.locale, badgeNodes()[0].node.attrs.format), asOnRecord(ROW));
+      if (!same(written, ['12/09/2026'])) bad.push({ written });
+      return { pass: bad.length === 0, notes: JSON.stringify({ bad, seen }) };
     });
 
   scenario('fl_the_style_of_the_column_is_read_in_the_region_the_variable_keeps',

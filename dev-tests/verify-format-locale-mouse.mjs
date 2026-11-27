@@ -7,7 +7,8 @@
 // reste là, grisée et inerte, la phrase de verrou lisible). Les contrastes de la phrase et du verrou sont mesurés (≥ 4,5:1).
 // Puis la liste « Région » de la barre d'UNE variable (réponse du 26/11 à la carte « Les deux ») : un vrai clic sur la bulle d'une date l'ouvre, la liste est entière et au premier plan dans la fenêtre,
 // sans défilement de côté, et la barre d'un nombre ou d'une date reste sur UNE ligne ; un vrai clic et le clavier choisissent « États-Unis » (la région de la bulle change, la voisine ne bouge pas, la barre dit « 09/12/2026 ») ; Ctrl + Z au vrai
-// clavier la remet ; une colonne Texte n'a pas la liste ; le contraste de la liste est mesuré (≥ 4,5:1).
+// clavier la remet ; une colonne Texte n'a pas la liste ; le contraste de la liste est mesuré (≥ 4,5:1). Puis la date AJOUTÉE au vrai clavier sur une colonne que Grist laisse sur son format de départ
+// (« YYYY-MM-DD ») : sa liste de dates part sur « 12/09/2026 » dans un document en France, pas sur « 2026-09-12 » (retour du 27/11).
 // Lancé par run-headless.mjs (groupe Node "formatLocaleMouse", cf. NODE_SCRIPTS), ou seul : node dev-tests/verify-format-locale-mouse.mjs
 // (FORMAT_LOCALE_SHOTS=<dossier> y range une capture par étape, à regarder - aucune vérification n'en dépend).
 import { createServer } from 'node:http';
@@ -334,7 +335,7 @@ const regionState = page => page.evaluate(() => {
   return {
     bar: true, shown: !panel.hidden && select.getClientRects().length > 0, value: select.value, title: select.title,
     inViewport: r.left >= 0 && r.top >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5, onTop: !!top && (top === select || select.contains(top)),
-    barHeight: bar.getBoundingClientRect().height, barRight: bar.getBoundingClientRect().right, barLeft: bar.getBoundingClientRect().left, firstDate: preset && !preset.closest('[hidden]') && preset.options[0] ? preset.options[0].textContent : null,
+    presetValue: preset && !preset.closest('[hidden]') ? preset.value : null, barHeight: bar.getBoundingClientRect().height, barRight: bar.getBoundingClientRect().right, barLeft: bar.getBoundingClientRect().left, firstDate: preset && !preset.closest('[hidden]') && preset.options[0] ? preset.options[0].textContent : null,
     overflowX: document.documentElement.scrollWidth - innerWidth,
   };
 });
@@ -392,12 +393,49 @@ async function bubblePass(colorScheme, lang) {
   await context.close();
 }
 
+async function addedDatePass(colorScheme, lang) {
+  const tag = `${colorScheme} ${lang} : date ajoutée`;
+  const { context, page } = await openWidget(colorScheme, lang);
+  // Le document est en France ; la colonne Jour est celle d'une colonne Date créée dans Grist : « YYYY-MM-DD » est écrit dans ses réglages sans que personne l'ait choisi.
+  await page.evaluate(async () => {
+    window.__gristStub.setColumnFormats('Clients', { Jour: { dateFormat: 'YYYY-MM-DD' } });
+    await GristAPI.refreshColumnTypes();
+    await Templates.updateDocumentSettings({ formatLocale: 'fr-FR' });
+  });
+  await page.waitForTimeout(300);
+  const before = (await bubbleLocales(page)).length;
+  const para = await hitTest(page, '.tiptap p');
+  await page.mouse.click(para.right - 6, para.y);
+  await page.keyboard.press('End');
+  await page.keyboard.type(' #Clients.Jour', { delay: 25 });
+  await page.waitForSelector('.ac-item', { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(150);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  const after = await bubbleLocales(page);
+  check(`${tag} : la variable ajoutée au clavier (liste « # ») est là et garde la région du document`, after.length === before + 1 && after[after.length - 1].column === 'Jour' && after[after.length - 1].locale === 'fr-FR', after);
+  const added = await page.evaluate(() => { let last = null; EditorCore.getEditor().state.doc.descendants(n => { if (n.type.name === 'varBadge' && n.attrs.column === 'Jour') last = n.attrs.format; }); return last; });
+  check(`${tag} : aucun format de Grist n'est repris (le « YYYY-MM-DD » de départ n'est pas un choix)`, added === null, added);
+  const boxes = await page.evaluate(() => Array.from(document.querySelectorAll('.tiptap .var-badge[data-column="Jour"]')).map(e => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }));
+  const target = boxes[boxes.length - 1];
+  await page.mouse.click(target.x, target.y);
+  await page.waitForTimeout(400);
+  const state = await regionState(page);
+  check(`${tag} : sa liste de dates part sur « 12/09/2026 » (le français), pas sur « 2026-09-12 », et la liste « Région » dit France`,
+    state.bar && state.presetValue === 'dmy_slash_full' && state.firstDate === '12/09/2026' && state.value === 'fr-FR', state);
+  await shot(page, `${colorScheme}-${lang}-6-date-ajoutee`);
+  await context.close();
+}
+
 await pass('light', 'fr');
 await pass('dark', 'fr');
 await pass('light', 'en');
 await bubblePass('light', 'fr');
 await bubblePass('dark', 'fr');
 await bubblePass('light', 'en');
+await addedDatePass('light', 'fr');
+await addedDatePass('dark', 'fr');
+await addedDatePass('light', 'en');
 
 check('aucune erreur JavaScript pendant le parcours', pageErrors.length === 0, pageErrors);
 await browser.close();

@@ -540,15 +540,26 @@ const Variables = (function () {
       return { locale: VariableFormat.formatLocale() };
     }
     // Le premier style de la bulle : celui que Grist donne à la colonne (demande du 26/11 : « une fois la variable ajoutée ça ne rechange pas, à voir comment on définit le style la première fois, peut-être via le style
-    // de Grist de la colonne »). Seulement quand la colonne a un réglage d'affichage dans Grist (un widgetOptions qui dit le format de la date, les décimales, la devise...) et que le widget sait l'écrire : le même
-    // texte que le bouton « Comme dans Grist » de la barre, lu dans la région que la bulle garde. Sinon (colonne sans réglage, format que le widget ne sait pas écrire, ordre du jour et du mois qui n'est pas celui
-    // de la région), la bulle part sans format et écrit comme le document.
+    // de Grist de la colonne »). Seulement ce que la personne a choisi dans Grist : un widgetOptions qui dit les décimales, la devise, un format de date que Grist n'écrit pas de lui-même - et que le widget sait écrire : le même
+    // texte que le bouton « Comme dans Grist » de la barre, lu dans la région que la bulle garde. Le format de départ de Grist n'est pas un choix : « YYYY-MM-DD » est ce que son interface écrit dans toute colonne Date
+    // créée, « h:mma » l'heure de toute colonne Date et heure ; les reprendre imposait « 2026-09-12 » et « 11:30pm » à un document en France (retour du 27/11 : « en ajoutant une date le format par défaut n'est pas bon :
+    // ça affiche français mais le format n'est pas le français »). La date, ou l'heure, que Grist laisse sur son départ garde l'écriture de la région ; « Comme dans Grist », lui, l'écrit toujours si on le demande. Sans rien
+    // de choisi, avec un format que le widget ne sait pas écrire ou dont l'ordre du jour et du mois n'est pas celui de la région, la bulle part sans format et écrit comme le document.
+    const GRIST_DATE_START = 'YYYY-MM-DD';
+    const GRIST_TIME_START = 'h:mma';
     function columnStyle(item, locale) {
       const options = GristAPI.getColumnFormatOptions(item.table, item.column);
       if (!options || !Object.keys(options).length) return null;
-      const result = VariableFormat.withRegion(locale, () => VariableFormat.gristColumnFormat(GristAPI.getColumnType(item.table, item.column), options,
+      const type = GristAPI.getColumnType(item.table, item.column);
+      const result = VariableFormat.withRegion(locale, () => VariableFormat.gristColumnFormat(type, options,
         VariableFormat.documentCurrency(GristAPI.getDocumentSettings()), VariableFormat.formatLocale()));
-      return result.refusal ? null : VariableFormat.applyGristFormat(null, result.format);
+      if (result.refusal) return null;
+      const format = VariableFormat.applyGristFormat(null, result.format);
+      if (format.type !== 'date') return format;
+      // Une colonne Date ou Date et heure : ce que Grist n'a pas choisi (son format de départ) ne se reprend pas ; sans rien d'autre, aucun format.
+      if (!options.dateFormat || options.dateFormat === GRIST_DATE_START) ['preset', 'day', 'month', 'year'].forEach((key) => { delete format[key]; });
+      if (options.timeFormat == null || options.timeFormat === GRIST_TIME_START) delete format.time;
+      return Object.keys(format).length > 1 ? format : null;
     }
     // Ce qu'une bulle de variable reçoit en plus de sa colonne, à son ajout : la région qu'elle garde et, quand Grist règle l'affichage de la colonne, ce style comme premier format.
     function bubbleStamp(editor, item) {
